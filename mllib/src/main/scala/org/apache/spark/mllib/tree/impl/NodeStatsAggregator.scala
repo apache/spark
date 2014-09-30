@@ -153,5 +153,4 @@ private[tree] class NodeStatsAggregator(
     }
     this
   }
-
 }

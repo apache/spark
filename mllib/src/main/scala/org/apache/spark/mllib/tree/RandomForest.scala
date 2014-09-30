@@ -171,8 +171,8 @@ private class RandomForest (
 
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
-      DecisionTree.findBestSplits(baggedInput,
-        metadata, topNodes, nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures, splits, bins, nodeQueue, timer)
+      DecisionTree.findBestSplits(baggedInput,metadata, topNodes, nodesForGroup,
+        treeToNodeToIndexInfo, nodeToFeatures, splits, bins, nodeQueue, timer)
       timer.stop("findBestSplits")
     }
 

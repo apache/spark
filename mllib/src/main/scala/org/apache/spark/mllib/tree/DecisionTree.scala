@@ -520,33 +520,32 @@ object DecisionTree extends Serializable with Logging {
     // Calculate best splits for all nodes in the group
     timer.start("chooseSplits")
 
-    val nodeToBestSplits: Map[Int, (Split, InformationGainStats, Predict)] = input.mapPartitions(points => {
-      val numNodes = nodeToFeatures.keys.size
-      val nodeStatsAggregators = new Array[NodeStatsAggregator](numNodes)
-      var nodeIndex = 0
-      while (nodeIndex < numNodes) {
-        nodeStatsAggregators(nodeIndex) = new NodeStatsAggregator(metadata, nodeToFeatures(nodeIndex))
-        nodeIndex += 1
-      }
+    val nodeToBestSplits: Map[Int, (Split, InformationGainStats, Predict)] =
+      input.mapPartitions(points => {
+        val numNodes = nodeToFeatures.keys.size
+        val nodeStatsAggregators = new Array[NodeStatsAggregator](numNodes)
+        var nodeIndex = 0
+        while (nodeIndex < numNodes) {
+          nodeStatsAggregators(nodeIndex) =
+            new NodeStatsAggregator(metadata, nodeToFeatures(nodeIndex))
+          nodeIndex += 1
+        }
 
-      points.foreach(binSeqOp(nodeStatsAggregators, _))
-      nodeStatsAggregators.zipWithIndex.map(t => {
-        (t._2, t._1)
-      }).iterator
-    }).reduceByKey((a, b) => a.merge(b))
-      .map(t => {
-        val nodeIndex = t._1
-        val aggStats = t._2
-        val featuresForNode = nodeToFeatures(nodeIndex)
-        val (split: Split, stats: InformationGainStats, predict: Predict) =
-          binsToBestSplit(aggStats, splits, featuresForNode, metadata)
-        (nodeIndex, (split, stats, predict))
-      }).collectAsMap().toMap
+        points.foreach(binSeqOp(nodeStatsAggregators, _))
+        nodeStatsAggregators.zipWithIndex.map(t => {
+          (t._2, t._1)
+        }).iterator
+      }).reduceByKey((a, b) => a.merge(b))
+        .map(t => {
+          val nodeIndex = t._1
+          val aggStats = t._2
+          val featuresForNode = nodeToFeatures(nodeIndex)
+          val (split: Split, stats: InformationGainStats, predict: Predict) =
+            binsToBestSplit(aggStats, splits, featuresForNode, metadata)
+          (nodeIndex, (split, stats, predict))
+        }).collectAsMap().toMap
 
     timer.stop("chooseSplits")
-
-
-
 
     // Iterate over all nodes in this group.
     nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
