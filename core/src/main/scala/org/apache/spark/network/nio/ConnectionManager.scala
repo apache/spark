@@ -526,7 +526,7 @@ private[nio] class ConnectionManager(
     if (waitingConn.isSaslComplete()) {
       logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
       connectionsAwaitingSasl -= waitingConn.connectionId
-      waitingConn.registerAfterAuth
+      waitingConn.registerAfterAuth()
       wakeupSelector()
       return
     } else {
@@ -536,7 +536,7 @@ private[nio] class ConnectionManager(
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
-          waitingConn.registerAfterAuth
+          waitingConn.registerAfterAuth()
           wakeupSelector()
           return
         }
