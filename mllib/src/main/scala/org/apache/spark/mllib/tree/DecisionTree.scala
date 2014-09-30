@@ -544,7 +544,7 @@ object DecisionTree extends Serializable with Logging {
           binsToBestSplit(aggStats, splits, featuresForNode, metadata)
         (nodeIndex, (split, stats, predict))
       }
-    ).collectAsMap()
+    ).collectAsMap().toMap
 
 //      .map(case (nodeIndex: Int, aggStats: NodeStatsAggregator) => {
 //      val featuresForNode = nodeToFeatures(nodeIndex)
