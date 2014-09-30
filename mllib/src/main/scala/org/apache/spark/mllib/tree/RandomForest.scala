@@ -380,13 +380,19 @@ object RandomForest extends Serializable with Logging {
    *
    * @param nodeQueue  Queue of nodes to split.
    * @param maxMemoryUsage  Bound on size of aggregate statistics.
-   * @return  (nodesForGroup, treeToNodeToIndexInfo).
+   * @return  (nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures).
    *          nodesForGroup holds the nodes to split: treeIndex --> nodes in tree.
+   *
    *          treeToNodeToIndexInfo holds indices selected features for each node:
    *            treeIndex --> (global) node index --> (node index in group, feature indices).
    *          The (global) node index is the index in the tree; the node index in group is the
    *           index in [0, numNodesInGroup) of the node in this group.
    *          The feature indices are None if not subsampling features.
+   *
+   *          nodeToFeatures holds the feature indices for a node:
+   *            node index in group --> features indices.
+   *          This is a short cut to find feature indices a node given node index in group,
+   *          which is needed to construct nodeStatsAggregator.
    */
   private[tree] def selectNodesToSplit(
       nodeQueue: mutable.Queue[(Int, Node)],

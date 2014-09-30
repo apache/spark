@@ -19,6 +19,14 @@ package org.apache.spark.mllib.tree.impl
 
 import org.apache.spark.mllib.tree.impurity._
 
+
+
+/**
+ * DecisionTree statistics aggregator for a node.
+ * This holds a flat array of statistics for a set of (features, bins)
+ * and helps with indexing.
+ * This class is abstract to support learning with and without feature subsampling.
+ */
 private[tree] class NodeStatsAggregator(
     val metadata: DecisionTreeMetadata,
     featureSubset: Option[Array[Int]]) extends Serializable {
@@ -36,7 +44,7 @@ private[tree] class NodeStatsAggregator(
   /**
    * Number of elements (Double values) used for the sufficient statistics of each bin.
    */
-  val statsSize: Int = impurityAggregator.statsSize
+  private val statsSize: Int = impurityAggregator.statsSize
 
   /**
    * Number of bins for each feature.  This is indexed by the feature index.
@@ -49,15 +57,12 @@ private[tree] class NodeStatsAggregator(
     }
   }
 
-  val numFeatures: Int = numBins.size
-
   /**
    * Offset for each feature for calculating indices into the [[allStats]] array.
    */
   private val featureOffsets: Array[Int] = {
     numBins.scanLeft(0)((total, nBins) => total + statsSize * nBins)
   }
-
 
   /**
    * Indicator for each feature of whether that feature is an unordered feature.
@@ -68,20 +73,22 @@ private[tree] class NodeStatsAggregator(
   /**
    * Total number of elements stored in this aggregator
    */
-  val allStatsSize: Int = featureOffsets.last
+  private val allStatsSize: Int = featureOffsets.last
 
   /**
    * Flat array of elements.
-   * Index for start of stats for a (node, feature, bin) is:
-   *   index = nodeIndex * nodeStride + featureOffsets(featureIndex) + binIndex * statsSize
+   * Index for start of stats for a (feature, bin) is:
+   *   index = featureOffsets(featureIndex) + binIndex * statsSize
    * Note: For unordered features, the left child stats have binIndex in [0, numBins(featureIndex))
    *       and the right child stats in [numBins(featureIndex), 2 * numBins(featureIndex))
    */
-  val allStats: Array[Double] = new Array[Double](allStatsSize)
+  private val allStats: Array[Double] = new Array[Double](allStatsSize)
+
 
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
-   * @param featureOffset
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   *                           from [[getNodeFeatureOffset]].
    *                           For unordered features, this is a pre-computed
    *                           (node, feature, left/right child) offset from
    *                           [[getLeftRightNodeFeatureOffsets]].
@@ -91,7 +98,7 @@ private[tree] class NodeStatsAggregator(
   }
 
   /**
-   * Update the stats for a given (node, feature, bin) for ordered features, using the given label.
+   * Update the stats for a given (feature, bin) for ordered features, using the given label.
    */
   def update(featureIndex: Int, binIndex: Int, label: Double, instanceWeight: Double): Unit = {
     val i = featureOffsets(featureIndex) + binIndex * statsSize
@@ -101,10 +108,10 @@ private[tree] class NodeStatsAggregator(
   /**
    * Faster version of [[update]].
    * Update the stats for a given (feature, bin), using the given label.
-   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed feature offset
    *                           from [[getNodeFeatureOffset]].
    *                           For unordered features, this is a pre-computed
-   *                           (node, feature, left/right child) offset from
+   *                           (feature, left/right child) offset from
    *                           [[getLeftRightNodeFeatureOffsets]].
    */
   def nodeFeatureUpdate(
@@ -120,7 +127,7 @@ private[tree] class NodeStatsAggregator(
    * Pre-compute feature offset for use with [[nodeFeatureUpdate]].
    * For ordered features only.
    */
-  def getNodeFeatureOffset(featureIndex: Int): Int = {
+  def getFeatureOffset(featureIndex: Int): Int = {
     require(!isUnordered(featureIndex),
       s"DTStatsAggregator.getNodeFeatureOffset is for ordered features only, but was called" +
         s" for unordered feature $featureIndex.")
@@ -128,10 +135,10 @@ private[tree] class NodeStatsAggregator(
   }
 
   /**
-   * Pre-compute (node, feature) offset for use with [[nodeFeatureUpdate]].
+   * Pre-compute feature offset for use with [[nodeFeatureUpdate]].
    * For unordered features only.
    */
-  def getLeftRightNodeFeatureOffsets(featureIndex: Int): (Int, Int) = {
+  def getLeftRightFeatureOffsets(featureIndex: Int): (Int, Int) = {
     require(isUnordered(featureIndex),
       s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
         s" but was called for ordered feature $featureIndex.")
@@ -140,16 +147,16 @@ private[tree] class NodeStatsAggregator(
   }
 
   /**
-   * For a given (node, feature), merge the stats for two bins.
-   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   * For a given feature, merge the stats for two bins.
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed feature offset
    *                           from [[getNodeFeatureOffset]].
    *                           For unordered features, this is a pre-computed
-   *                           (node, feature, left/right child) offset from
+   *                           (feature, left/right child) offset from
    *                           [[getLeftRightNodeFeatureOffsets]].
    * @param binIndex  The other bin is merged into this bin.
    * @param otherBinIndex  This bin is not modified.
    */
-  def mergeForNodeFeature(featureOffset: Int, binIndex: Int, otherBinIndex: Int): Unit = {
+  def mergeForFeature(featureOffset: Int, binIndex: Int, otherBinIndex: Int): Unit = {
     impurityAggregator.merge(allStats, featureOffset + binIndex * statsSize,
       featureOffset + otherBinIndex * statsSize)
   }
