@@ -740,7 +740,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   }
 
   private def makeMapStatus(host: String, reduces: Int): MapStatus =
-   new MapStatus(makeBlockManagerId(host), Array.fill[Byte](reduces)(2))
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(2))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

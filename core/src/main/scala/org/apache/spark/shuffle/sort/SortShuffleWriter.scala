@@ -70,8 +70,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     val partitionLengths = sorter.writePartitionedFile(blockId, context, outputFile)
     shuffleBlockManager.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
 
-    mapStatus = new MapStatus(blockManager.blockManagerId,
-      partitionLengths.map(MapOutputTracker.compressSize))
+    mapStatus = MapStatus(blockManager.blockManagerId, partitionLengths)
   }
 
   /** Close this writer, passing along whether the map completed */
