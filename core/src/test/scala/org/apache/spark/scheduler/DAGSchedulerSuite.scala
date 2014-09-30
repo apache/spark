@@ -738,7 +738,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(scheduler.sc.dagScheduler === null)
   }
 
-  test("accumulator not allowing duplication is not calculated for resubmitted stage") {
+  test("accumulator not calculated for resubmitted shuffle stage") {
     //just for register
     val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
     val shuffleOneRdd = new MyRDD(sc, 2, Nil)
@@ -764,6 +764,18 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     completeWithAccumulator(accum.id, taskSets(5), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assert(Accumulators.originals(accum.id).value === 5)
+    assertDataStructuresEmpty
+  }
+
+  test("accumulator not calculated for resubmitted result stage") {
+    //just for register
+    val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
+    val finalRdd = new MyRDD(sc, 1, Nil)
+    submit(finalRdd, Array(0))
+    completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
+    completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assert(Accumulators.originals(accum.id).value === 1)
     assertDataStructuresEmpty
   }
 
