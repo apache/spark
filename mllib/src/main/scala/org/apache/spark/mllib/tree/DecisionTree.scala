@@ -517,10 +517,8 @@ object DecisionTree extends Serializable with Logging {
       agg
     }
 
-    // Calculate bin aggregates.
-    timer.start("aggregation")
-
-
+    // Calculate best splits for all nodes in the group
+    timer.start("chooseSplits")
 
     val nodeToBestSplits: Map[Int, (Split, InformationGainStats, Predict)] = input.mapPartitions(points => {
       val numNodes = nodeToFeatures.keys.size
@@ -535,29 +533,20 @@ object DecisionTree extends Serializable with Logging {
       nodeStatsAggregators.zipWithIndex.map(t => {
         (t._2, t._1)
       }).iterator
-    }).reduceByKey((a, b) => a.merge(b)).
-      map(t => {
+    }).reduceByKey((a, b) => a.merge(b))
+      .map(t => {
         val nodeIndex = t._1
         val aggStats = t._2
         val featuresForNode = nodeToFeatures(nodeIndex)
         val (split: Split, stats: InformationGainStats, predict: Predict) =
           binsToBestSplit(aggStats, splits, featuresForNode, metadata)
         (nodeIndex, (split, stats, predict))
-      }
-    ).collectAsMap().toMap
+      }).collectAsMap().toMap
 
-//      .map(case (nodeIndex: Int, aggStats: NodeStatsAggregator) => {
-//      val featuresForNode = nodeToFeatures(nodeIndex)
-//      val (split: Split, stats: InformationGainStats, predict: Predict) =
-//        binsToBestSplit(aggStats, splits, featuresForNode, metadata)
-//      (nodeIndex, (split, stats, predict))
-//    })
+    timer.stop("chooseSplits")
 
 
-    timer.stop("aggregation")
 
-    // Calculate best splits for all nodes in the group
-    timer.start("chooseSplits")
 
     // Iterate over all nodes in this group.
     nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
@@ -590,7 +579,7 @@ object DecisionTree extends Serializable with Logging {
         }
       }
     }
-    timer.stop("chooseSplits")
+
   }
 
   /**
