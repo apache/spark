@@ -169,39 +169,13 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       finalStatus = status
       finalMsg = msg
       finished = true
-      if (Thread.currentThread() != reporterThread && Option(reporterThread).isDefined) {
+      if (Thread.currentThread() != reporterThread && reporterThread != null) {
         logDebug("shutting down reporter thread")
-        try {
-          reporterThread.interrupt()
-        } catch {
-          case e => {
-            logError("Exception trying to shutdown report thread", e)
-            // since main thread (client mode) could be waiting on this to finish
-            // just exit here
-            System.exit(ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION)
-          }
-        }
+        reporterThread.interrupt()
       }
-      if (Thread.currentThread() != userClassThread && Option(userClassThread).isDefined) {
-        val sc = sparkContextRef.get()
-        if (sc != null) {
-          logInfo("Invoking sc stop from finish")
-          sc.stop()
-        }
+      if (Thread.currentThread() != userClassThread && userClassThread != null) {
         logDebug("shutting down user thread")
-        try {
-          // since we don't know what the user thread is doing at the time
-          // of interrupt catch exception so we still exit. For instance
-          // we could get a java.nio.channels.ClosedByInterruptException.
-          userClassThread.interrupt()
-        } catch {
-          case e => {
-            logError("Exception trying to shutdown user thread", e)
-            // since main thread (cluster mode) could be waiting on this to finish
-            // just exit here
-            System.exit(ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION)
-          }
-        }
+        userClassThread.interrupt()
       }
     }
   }
@@ -284,10 +258,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val t = new Thread {
       override def run() {
         var failureCount = 0
-
         while (!finished && !Thread.currentThread().isInterrupted()) {
           try {
-
             if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
@@ -449,7 +421,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
         try {
           // Note this security manager applies to the entire process, not
-          // just this thread. Its here to handle the case if the user code
+          // just this thread. It's here to handle the case if the user code
           // does System.exit
           System.setSecurityManager(new java.lang.SecurityManager() {
             override def checkExit(paramInt: Int) {
