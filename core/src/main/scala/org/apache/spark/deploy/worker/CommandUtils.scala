@@ -30,16 +30,13 @@ import org.apache.spark.util.Utils
 private[spark]
 object CommandUtils extends Logging {
   def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
+    val runner = sys.env.get("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++ Seq(command.mainClass) ++
       command.arguments
   }
-
-  private def getEnv(key: String, command: Command): Option[String] =
-    command.environment.get(key).orElse(Option(System.getenv(key)))
 
   /**
    * Attention: this must always be aligned with the environment variables in the run scripts and
