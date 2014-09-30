@@ -52,7 +52,7 @@ object DecisionTreeRunner {
 
   case class Params(
       input: String = null,
-      testInput: String = null,
+      testInput: String = "",
       dataFormat: String = "libsvm",
       algo: Algo = Classification,
       maxDepth: Int = 5,
@@ -236,7 +236,11 @@ object DecisionTreeRunner {
           minInfoGain = params.minInfoGain)
     if (params.numTrees == 1) {
       val model = DecisionTree.train(training, strategy)
-      println(model)
+      if (model.numNodes < 20) {
+        println(model.toDebugString) // Print full model.
+      } else {
+        println(model) // Print model summary.
+      }
       if (params.algo == Classification) {
         val trainAccuracy =
           new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label)))
@@ -257,7 +261,11 @@ object DecisionTreeRunner {
       if (params.algo == Classification) {
         val model = RandomForest.trainClassifier(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
-        println(model)
+        if (model.totalNumNodes < 30) {
+          println(model.toDebugString) // Print full model.
+        } else {
+          println(model) // Print model summary.
+        }
         val trainAccuracy =
           new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label)))
             .precision
@@ -269,7 +277,11 @@ object DecisionTreeRunner {
       if (params.algo == Regression) {
         val model = RandomForest.trainRegressor(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
-        println(model)
+        if (model.totalNumNodes < 30) {
+          println(model.toDebugString) // Print full model.
+        } else {
+          println(model) // Print model summary.
+        }
         val trainMSE = meanSquaredError(model, training)
         println(s"Train mean squared error = $trainMSE")
         val testMSE = meanSquaredError(model, test)
