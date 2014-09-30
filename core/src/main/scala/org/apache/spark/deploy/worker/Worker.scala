@@ -18,15 +18,18 @@
 package org.apache.spark.deploy.worker
 
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import akka.actor._
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
@@ -202,9 +205,20 @@ private[spark] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
       val cleanupFuture = concurrent.future {
         logInfo("Cleaning up oldest application directories in " + workDir + " ...")
-        Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
-          .foreach(Utils.deleteRecursively)
+        val appDirs = workDir.listFiles()
+        if (appDirs == null) {
+          throw new IOException("ERROR: Failed to list files in " + appDirs)
+        }
+        appDirs.filter { dir => {
+          // the directory is used by an application - check that the application is not running
+          // when cleaning up
+          val appIdFromDir = dir.getName
+          val isAppStillRunning = executors.values.map(_.appId).contains(appIdFromDir)
+          dir.isDirectory && !isAppStillRunning &&
+          !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
+        } }.foreach(Utils.deleteRecursively)
       }
+
       cleanupFuture onFailure {
         case e: Throwable =>
           logError("App dir cleanup failed: " + e.getMessage, e)
@@ -233,8 +247,15 @@ private[spark] class Worker(
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+
+          // Create the executor's working directory
+          val executorDir = new File(workDir, appId + "/" + execId)
+          if (!executorDir.mkdirs()) {
+            throw new IOException("Failed to create directory " + executorDir)
+          }
+
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host, sparkHome, workDir, akkaUrl, conf, ExecutorState.LOADING)
+            self, workerId, host, sparkHome, executorDir, akkaUrl, conf, ExecutorState.LOADING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
