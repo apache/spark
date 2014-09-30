@@ -465,9 +465,8 @@ private[spark] object SparkSubmitArguments {
     val altConfDir: Option[String] = sys.env.get(ENV_ALT_SPARK_CONF_PATH)
     val confDir: Option[String] = altConfDir.orElse(baseConfDir)
     val confPath =  confDir.map(path => path + File.separator + FILENAME_SPARK_DEFAULTS_CONF)
-    var retval: Map[String, String] = Map.empty
     try {
-      retval = confPath.flatMap { getFileIfExists }
+      confPath.flatMap { getFileIfExists }
         .map{ loadPropFile }
         .getOrElse(Map.empty)
     } catch {
@@ -475,7 +474,7 @@ private[spark] object SparkSubmitArguments {
       case e: IOException => throw new IOException("IOException reading spark-defaults.conf file at " +
         confPath.getOrElse("unknown address"), e)
     }
-    retval
+
   }
 
   /**
@@ -549,14 +548,12 @@ private[spark] object SparkSubmitArguments {
    * @throws IOException if file exists but is not accessible
    */
   def loadPropFile(propFile: File): Map[String, String] = {
-    var propValues: Map[String, String] = Map.empty
     var isr: InputStreamReader = new InputStreamReader(new FileInputStream(propFile), CharEncoding.UTF_8)
     try {
-      propValues = getPropertyValuesFromStream(isr)
+      getPropertyValuesFromStream(isr)
     } finally {
       isr.close()
     }
-    propValues
   }
 
   /**
@@ -564,7 +561,7 @@ private[spark] object SparkSubmitArguments {
    * @param r Reader to load property file from
    * @return Map[PropName->PropValue]
    */
-  def getPropertyValuesFromStream(r: Reader ) = {
+  def getPropertyValuesFromStream(r: Reader) = {
     val prop = new Properties()
     prop.load(r)
     prop.asInstanceOf[java.util.Map[String, String]]
