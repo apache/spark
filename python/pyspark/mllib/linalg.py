@@ -305,7 +305,7 @@ class SparseVector(Vector):
                 results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
                 return np.array(results)
             elif other.ndim > 2:
-                raise ValueError("Cannot call dot with %d-dimentaional array" % other.ndim)
+                raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
 
         assert len(self) == _vector_size(other), "dimension mismatch"
 
@@ -534,8 +534,7 @@ class DenseMatrix(Matrix):
         array([[ 0.,  2.],
                [ 1.,  3.]])
         """
-        return np.ndarray((self.numRows, self.numCols), np.float64,
-                          order='F', buffer=self.values.tostring())
+        return np.reshape(self.values, (self.numRows, self.numCols), order='F')
 
 
 def _test():
