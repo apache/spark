@@ -535,14 +535,17 @@ object DecisionTree extends Serializable with Logging {
       nodeStatsAggregators.zipWithIndex.map(t => {
         (t._2, t._1)
       }).iterator
-    }).reduceByKey((a, b) => a.merge(b)).map {
-      (nodeIndex: Int, aggStats: NodeStatsAggregator) => {
+    }).reduceByKey((a, b) => a.merge(b)).
+      map(t => {
+        val nodeIndex = t._1
+        val aggStats = t._2
         val featuresForNode = nodeToFeatures(nodeIndex)
         val (split: Split, stats: InformationGainStats, predict: Predict) =
           binsToBestSplit(aggStats, splits, featuresForNode, metadata)
         (nodeIndex, (split, stats, predict))
       }
-    }.collectAsMap()
+    ).collectAsMap()
+
 //      .map(case (nodeIndex: Int, aggStats: NodeStatsAggregator) => {
 //      val featuresForNode = nodeToFeatures(nodeIndex)
 //      val (split: Split, stats: InformationGainStats, predict: Predict) =
