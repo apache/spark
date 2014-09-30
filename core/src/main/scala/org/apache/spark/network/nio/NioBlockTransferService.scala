@@ -201,10 +201,9 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   private def getBlock(blockId: String): ByteBuffer = {
     val startTimeMs = System.currentTimeMillis()
     logDebug("GetBlock " + blockId + " started from " + startTimeMs)
-    // TODO(rxin): propagate error back to the client?
     val buffer = blockDataManager.getBlockData(blockId)
     logDebug("GetBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " and got buffer " + buffer)
-    if (buffer == null) null else buffer.nioByteBuffer()
+    buffer.nioByteBuffer()
   }
 }
