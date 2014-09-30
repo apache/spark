@@ -187,13 +187,13 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
           master = "yarn-cluster"
        case _ =>
     }
+
     // Set name from main class if not given.
     // Todo: test main spark app name alternatives
     name = conf.get(SPARK_APP_NAME)
       .orElse( conf.get(SPARK_APP_CLASS))
       .orElse( conf.get(SPARK_APP_PRIMARY_RESOURCE).map(x => Utils.stripDirectory(x)) )
       .orNull
-
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
@@ -442,7 +442,7 @@ private[spark] object SparkSubmitArguments {
    * Function returns the spark submit default config map (Map[configName->ConfigValue])
    * Function is over-writable to allow for easier debugging
    */
-  private[spark] var getDefaultValues: () => Map[String, String] = () => {
+  private[spark] var getHardCodedDefaultValues: () => Map[String, String] = () => {
     DEFAULTS
   }
 
@@ -467,11 +467,8 @@ private[spark] object SparkSubmitArguments {
     val confPath =  confDir.map(path => path + File.separator + FILENAME_SPARK_DEFAULTS_CONF)
     var retval: Map[String, String] = Map.empty
     try {
-      retval = confPath.flatMap { path: String =>
-        val file = new File(path)
-        if (file.exists) Some(file) else None
-      }
-        .map(confFile => loadPropFile(confFile))
+      retval = confPath.flatMap { getFileIfExists }
+        .map{ loadPropFile }
         .getOrElse(Map.empty)
     } catch {
       // If an IOException occurs, report which file we were trying to open.
@@ -494,7 +491,7 @@ private[spark] object SparkSubmitArguments {
    * @return Map[propName->propFile] containing values merged from all sources in order of priority.
    */
   def mergeSparkProperties(additionalConfigs: Seq [Map[String,String]]) = {
-    val hardCodedDefaultConfig: Map[String,String] = getDefaultValues()
+    val hardCodedDefaultConfig: Map[String,String] = getHardCodedDefaultValues()
 
     // Read in configuration from the spark defaults conf file if it exists.
     val sparkDefaultConfig = getSparkDefaultFileConfig()
@@ -516,6 +513,20 @@ private[spark] object SparkSubmitArguments {
       sparkDefaultConfig,
       hardCodedDefaultConfig
     ))
+  }
+
+  /**
+   * Returns an Optional File if it exists
+   * @param filePath Path to create a file object on
+   * @return Some(File) if file exists in file system None otherwise
+   */
+  def getFileIfExists(filePath: String): Option[File] = {
+    val File = new File(filePath)
+    if (File.exists) {
+      Some(File)
+    } else {
+      None
+    }
   }
 
   /**

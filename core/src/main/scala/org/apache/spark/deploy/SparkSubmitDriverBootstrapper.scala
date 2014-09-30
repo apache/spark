@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.File
 
 import scala.collection.JavaConversions._
-import scala.collection._
+import scala.collection.mutable.HashMap
 import org.apache.spark.util.{RedirectThread, Utils}
 import org.apache.spark.deploy.ConfigConstants._
 
@@ -57,28 +57,37 @@ private[spark] object SparkSubmitDriverBootstrapper {
     // list of environment variables that override differently named properties
     val envOverides = Map( "OUR_JAVA_MEM" -> SPARK_DRIVER_MEMORY,
       "SPARK_SUBMIT_DEPLOY_MODE" -> SPARK_DEPLOY_MODE,
-      "SPARK_SUBMIT_PROPERTIES_FILE" -> SPARK_PROPERTIES_FILE,
       "SPARK_SUBMIT_DRIVER_MEMORY" -> SPARK_DRIVER_MEMORY,
       "SPARK_SUBMIT_LIBRARY_PATH" -> SPARK_DRIVER_EXTRA_LIBRARY_PATH,
       "SPARK_SUBMIT_CLASSPATH" -> SPARK_DRIVER_EXTRA_CLASSPATH,
       "SPARK_SUBMIT_OPTS" -> SPARK_DRIVER_EXTRA_JAVA_OPTIONS
     )
 
-    // SPARK_SUBMIT environment variables are treated as the highest priority source
-    //  of config information for their respective config variable (as listed in envOverrides)
-    val submitEnvVars = new mutable.HashMap() ++ envOverides
+    /* SPARK_SUBMIT environment variables are treated as the highest priority source
+     *  of config information for their respective config variable (as listed in envOverrides)
+     */
+    val submitEnvVars = new HashMap() ++ envOverides
       .map { case(varName, propName) => (sys.env.get(varName), propName) }
-      .filter { case(varVariable, _) => varVariable.isDefined }
-      .map { case(varVariable, propName) => propName->varVariable.get }
+      .filter { case(variable, _) => variable.isDefined }
+      .map { case(variable, propName) => propName -> variable.get }
+
+    // Property file loading comes after all SPARK* env variables are processed and should not
+    // overwrite existing SPARK env variables
+    sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE")
+    .flatMap ( SparkSubmitArguments.getFileIfExists )
+    .map ( SparkSubmitArguments.loadPropFile )
+    .getOrElse(Map.empty)
+    .foreach { case(k,v) =>
+      submitEnvVars.getOrElseUpdate(k,v)
+    }
 
      /* See docco for SparkSubmitArguments to see the various config sources and their priority.
       * Of note here is that we are explicitly treating SPARK_SUBMIT* environment vars
-      * as the highest priority source
-      * Followed by any property files located at SPARK_SUBMIT_PROPERTIES_FILE
-      * Followed by the standard priorities specified by the docco un SparkSubmitArguments
+      * as the highest priority source, Followed by props loaded from a specified
+      * SPARK_SUBMIT_PROPERTIES_FILE (which is merged into submitEnvVars above),
+      * Followed by the standard priorities specified by the documentation of SparkSubmitArguments.
       */
-    val conf = SparkSubmitArguments.mergeSparkProperties(Seq(submitEnvVars,
-        Map(SPARK_PROPERTIES_FILE->sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE").get)))
+    val conf = SparkSubmitArguments.mergeSparkProperties(Seq(submitEnvVars))
 
     assume(runner != null, "RUNNER must be set")
     assume(classpath != null, "CLASSPATH must be set")
