@@ -21,6 +21,8 @@ import io.netty.channel.embedded.EmbeddedChannel
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.api.java.StorageLevels
+
 
 /**
  * Test client/server encoder/decoder protocol.
@@ -99,11 +101,13 @@ class ProtocolSuite extends FunSuite {
     testClientToServer(BlockFetchRequest(Seq("b1", "b2", "b3")))
   }
 
-  ignore("client to server protocol - BlockUploadRequest(\"\", new TestManagedBuffer(0))") {
-    testClientToServer(BlockUploadRequest("", new TestManagedBuffer(0)))
+  test("client to server protocol - BlockUploadRequest(\"\", new TestManagedBuffer(0))") {
+    testClientToServer(
+      BlockUploadRequest("", new TestManagedBuffer(0), StorageLevels.MEMORY_AND_DISK))
   }
 
-  ignore("client to server protocol - BlockUploadRequest(\"b_upload\", new TestManagedBuffer(10))") {
-    testClientToServer(BlockUploadRequest("b_upload", new TestManagedBuffer(10)))
+  test("client to server protocol - BlockUploadRequest(\"b_upload\", new TestManagedBuffer(10))") {
+    testClientToServer(
+      BlockUploadRequest("b_upload", new TestManagedBuffer(10), StorageLevels.MEMORY_AND_DISK_2))
   }
 }

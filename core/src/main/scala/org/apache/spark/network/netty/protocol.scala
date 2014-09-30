@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.nio.ByteBuffer
 import java.util.{List => JList}
 
 import io.netty.buffer.ByteBuf
@@ -25,7 +26,8 @@ import io.netty.channel.ChannelHandler.Sharable
 import io.netty.handler.codec._
 
 import org.apache.spark.Logging
-import org.apache.spark.network.{NettyManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.{NioManagedBuffer, NettyManagedBuffer, ManagedBuffer}
+import org.apache.spark.storage.StorageLevel
 
 
 /** Messages from the client to the server. */
@@ -47,7 +49,11 @@ final case class BlockFetchRequest(blocks: Seq[String]) extends ClientRequest {
  * Request to upload a block to the server. Currently the server does not ack the upload request.
  */
 private[netty]
-final case class BlockUploadRequest(blockId: String, data: ManagedBuffer) extends ClientRequest {
+final case class BlockUploadRequest(
+    blockId: String,
+    data: ManagedBuffer,
+    level: StorageLevel)
+  extends ClientRequest {
   require(blockId.length <= Byte.MaxValue)
   override def id = 1
 }
@@ -71,6 +77,20 @@ private[netty]
 final case class BlockFetchFailure(blockId: String, error: String) extends ServerResponse {
   require(blockId.length <= Byte.MaxValue)
   override def id = 1
+}
+
+/** Response to [[BlockUploadRequest]] when a block is successfully uploaded. */
+private[netty]
+final case class BlockUploadSuccess(blockId: String) extends ServerResponse {
+  require(blockId.length <= Byte.MaxValue)
+  override def id = 2
+}
+
+/** Response to [[BlockUploadRequest]] when there is an error uploading the block. */
+private[netty]
+final case class BlockUploadFailure(blockId: String, error: String) extends ServerResponse {
+  require(blockId.length <= Byte.MaxValue)
+  override def id = 3
 }
 
 
@@ -102,12 +122,12 @@ final class ClientRequestEncoder extends MessageToMessageEncoder[ClientRequest] 
         assert(buf.writableBytes() == 0)
         out.add(buf)
 
-      case BlockUploadRequest(blockId, data) =>
+      case BlockUploadRequest(blockId, data, level) =>
         // 8 bytes: frame size
         // 1 byte: msg id (BlockFetchRequest vs BlockUploadRequest)
         // 1 byte: blockId.length
         // data itself (length can be derived from: frame size - 1 - blockId.length)
-        val headerLength = 8 + 1 + 1 + blockId.length
+        val headerLength = 8 + 1 + 1 + blockId.length + 5
         val frameLength = headerLength + data.size
         val header = ctx.alloc().buffer(headerLength)
 
@@ -118,6 +138,8 @@ final class ClientRequestEncoder extends MessageToMessageEncoder[ClientRequest] 
         header.writeLong(frameLength)
         header.writeByte(in.id)
         ProtocolUtils.writeBlockId(header, blockId)
+        header.writeInt(level.toInt)
+        header.writeByte(level.replication)
 
         assert(header.writableBytes() == 0)
         out.add(header)
@@ -148,8 +170,12 @@ final class ClientRequestDecoder extends MessageToMessageDecoder[ByteBuf] {
 
       case 1 =>  // BlockUploadRequest
         val blockId = ProtocolUtils.readBlockId(in)
-        in.retain()  // retain the bytebuf so we don't recycle it immediately.
-        BlockUploadRequest(blockId, new NettyManagedBuffer(in))
+        val level = new StorageLevel(in.readInt(), in.readByte())
+
+        val ret = ByteBuffer.allocate(in.readableBytes())
+        ret.put(in.nioBuffer())
+        ret.flip()
+        BlockUploadRequest(blockId, new NioManagedBuffer(ret), level)
     }
 
     assert(decoded.id == msgTypeId)
@@ -207,6 +233,27 @@ final class ServerResponseEncoder extends MessageToMessageEncoder[ServerResponse
 
         assert(buf.writableBytes() == 0)
         out.add(buf)
+
+      case BlockUploadSuccess(blockId) =>
+        val frameLength = 8 + 1 + 1 + blockId.length
+        val buf = ctx.alloc().buffer(frameLength)
+        buf.writeLong(frameLength)
+        buf.writeByte(in.id)
+        ProtocolUtils.writeBlockId(buf, blockId)
+
+        assert(buf.writableBytes() == 0)
+        out.add(buf)
+
+      case BlockUploadFailure(blockId, error) =>
+        val frameLength = 8 + 1 + 1 + blockId.length + + error.length
+        val buf = ctx.alloc().buffer(frameLength)
+        buf.writeLong(frameLength)
+        buf.writeByte(in.id)
+        ProtocolUtils.writeBlockId(buf, blockId)
+        buf.writeBytes(error.getBytes)
+
+        assert(buf.writableBytes() == 0)
+        out.add(buf)
     }
   }
 }
@@ -228,13 +275,22 @@ final class ServerResponseDecoder extends MessageToMessageDecoder[ByteBuf] {
       case 0 =>  // BlockFetchSuccess
         val blockId = ProtocolUtils.readBlockId(in)
         in.retain()
-        new BlockFetchSuccess(blockId, new NettyManagedBuffer(in))
+        BlockFetchSuccess(blockId, new NettyManagedBuffer(in))
 
       case 1 =>  // BlockFetchFailure
         val blockId = ProtocolUtils.readBlockId(in)
         val errorBytes = new Array[Byte](in.readableBytes())
         in.readBytes(errorBytes)
-        new BlockFetchFailure(blockId, new String(errorBytes))
+        BlockFetchFailure(blockId, new String(errorBytes))
+
+      case 2 =>  // BlockUploadSuccess
+        BlockUploadSuccess(ProtocolUtils.readBlockId(in))
+
+      case 3 =>  // BlockUploadFailure
+        val blockId = ProtocolUtils.readBlockId(in)
+        val errorBytes = new Array[Byte](in.readableBytes())
+        in.readBytes(errorBytes)
+        BlockUploadFailure(blockId, new String(errorBytes))
     }
 
     assert(decoded.id == msgId)

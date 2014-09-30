@@ -20,10 +20,13 @@ package org.apache.spark.network.netty
 import java.io.Closeable
 import java.util.concurrent.TimeoutException
 
+import scala.concurrent.{Future, promise}
+
 import io.netty.channel.{ChannelFuture, ChannelFutureListener}
 
 import org.apache.spark.Logging
-import org.apache.spark.network.BlockFetchingListener
+import org.apache.spark.network.{ManagedBuffer, BlockFetchingListener}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -58,19 +61,19 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Closea
   def fetchBlocks(blockIds: Seq[String], listener: BlockFetchingListener): Unit = {
     var startTime: Long = 0
     logTrace {
-      startTime = System.nanoTime()
+      startTime = System.currentTimeMillis()
       s"Sending request $blockIds to $serverAddr"
     }
 
     blockIds.foreach { blockId =>
-      handler.addRequest(blockId, listener)
+      handler.addFetchRequest(blockId, listener)
     }
 
     cf.channel().writeAndFlush(BlockFetchRequest(blockIds)).addListener(new ChannelFutureListener {
       override def operationComplete(future: ChannelFuture): Unit = {
         if (future.isSuccess) {
           logTrace {
-            val timeTaken = (System.nanoTime() - startTime).toDouble / 1000000
+            val timeTaken = System.currentTimeMillis() - startTime
             s"Sending request $blockIds to $serverAddr took $timeTaken ms"
           }
         } else {
@@ -79,12 +82,41 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Closea
             s"Failed to send request $blockIds to $serverAddr: ${future.cause.getMessage}"
           logError(errorMsg, future.cause)
           blockIds.foreach { blockId =>
-            handler.removeRequest(blockId)
+            handler.removeFetchRequest(blockId)
             listener.onBlockFetchFailure(blockId, new RuntimeException(errorMsg))
           }
         }
       }
     })
+  }
+
+  def uploadBlock(blockId: String, data: ManagedBuffer, storageLevel: StorageLevel): Future[Unit] = {
+    var startTime: Long = 0
+    logTrace {
+      startTime = System.currentTimeMillis()
+      s"Uploading block ($blockId) to $serverAddr"
+    }
+    val f = cf.channel().writeAndFlush(new BlockUploadRequest(blockId, data, storageLevel))
+
+    val p = promise[Unit]()
+    handler.addUploadRequest(blockId, p)
+    f.addListener(new ChannelFutureListener {
+      override def operationComplete(future: ChannelFuture): Unit = {
+        if (future.isSuccess) {
+          logTrace {
+            val timeTaken = System.currentTimeMillis() - startTime
+            s"Uploading block ($blockId) to $serverAddr took $timeTaken ms"
+          }
+        } else {
+          // Fail all blocks.
+          val errorMsg =
+            s"Failed to upload block $blockId to $serverAddr: ${future.cause.getMessage}"
+          logError(errorMsg, future.cause)
+        }
+      }
+    })
+
+    p.future
   }
 
   /** Close the connection. This does NOT block till the connection is closed. */

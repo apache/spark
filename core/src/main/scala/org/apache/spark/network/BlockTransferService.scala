@@ -54,9 +54,6 @@ abstract class BlockTransferService extends Closeable {
    * Fetch a sequence of blocks from a remote node asynchronously,
    * available only after [[init]] is invoked.
    *
-   * Note that [[BlockFetchingListener.onBlockFetchSuccess]] is called once per block,
-   * while [[BlockFetchingListener.onBlockFetchFailure]] is called once per failure (not per block).
-   *
    * Note that this API takes a sequence so the implementation can batch requests, and does not
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
    * the data of a block is fetched, rather than waiting for all blocks to be fetched.
