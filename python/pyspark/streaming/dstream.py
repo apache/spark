@@ -164,13 +164,13 @@ class DStream(object):
 
         self.foreachRDD(takeAndPrint)
 
-    def first(self):
+    def _first(self):
         """
         Return the first RDD in the stream.
         """
-        return self.take(1)[0]
+        return self._take(1)[0]
 
-    def take(self, n):
+    def _take(self, n):
         """
         Return the first `n` RDDs in the stream (will start and stop).
         """
@@ -188,7 +188,7 @@ class DStream(object):
         self._ssc.stop(False, True)
         return results
 
-    def collect(self):
+    def _collect(self):
         """
         Collect each RDDs into the returned list.
 
