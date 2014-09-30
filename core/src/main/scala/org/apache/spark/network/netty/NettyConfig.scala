@@ -53,7 +53,7 @@ class NettyConfig(conf: SparkConf) {
    *  buffer size should be ~ 1.25MB
    */
   private[netty] val receiveBuf: Option[Int] =
-    conf.getOption("spark.shuffle.io.sendBuffer").map(_.toInt)
+    conf.getOption("spark.shuffle.io.receiveBuffer").map(_.toInt)
 
   /** Send buffer size (SO_SNDBUF). */
   private[netty] val sendBuf: Option[Int] =
