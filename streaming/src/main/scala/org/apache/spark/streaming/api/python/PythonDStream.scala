@@ -239,7 +239,10 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
                                    @transient pinvReduceFunc: PythonRDDFunction,
                                    _windowDuration: Duration,
                                    _slideDuration: Duration
-                                   ) extends PythonStateDStream(parent, preduceFunc) {
+                                   ) extends PythonDStream(parent, preduceFunc) {
+
+  super.persist(StorageLevel.MEMORY_ONLY)
+  override val mustCheckpoint = true
 
   val invReduceFunc = new RDDFunction(pinvReduceFunc)
 
