@@ -94,6 +94,7 @@ abstract class BlockTransferService extends Closeable {
         lock.synchronized {
           val ret = ByteBuffer.allocate(data.size.toInt)
           ret.put(data.nioByteBuffer())
+          ret.flip()
           result = Left(new NioManagedBuffer(ret))
           lock.notify()
         }
