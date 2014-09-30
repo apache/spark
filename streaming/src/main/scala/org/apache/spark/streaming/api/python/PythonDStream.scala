@@ -34,7 +34,8 @@ import org.apache.spark.streaming.api.java._
 /**
  * Interface for Python callback function with three arguments
  */
-trait PythonRDDFunction {
+private[spark] trait PythonRDDFunction {
+  // callback in Python
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
 }
 
@@ -44,38 +45,30 @@ trait PythonRDDFunction {
 private[python] class RDDFunction(pfunc: PythonRDDFunction)
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
 
-  def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
-    if (rdd.isDefined) {
-      JavaRDD.fromRDD(rdd.get)
-    } else {
-      null
-    }
-  }
-
-  def some(jrdd: JavaRDD[Array[Byte]]): Option[RDD[Array[Byte]]] = {
-    if (jrdd != null) {
-      Some(jrdd.rdd)
-    } else {
-      None
-    }
-  }
-
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    some(pfunc.call(time.milliseconds, List(wrapRDD(rdd)).asJava))
+    PythonDStream.some(pfunc.call(time.milliseconds, List(PythonDStream.wrapRDD(rdd)).asJava))
   }
 
   def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    some(pfunc.call(time.milliseconds, List(wrapRDD(rdd), wrapRDD(rdd2)).asJava))
+    val rdds = List(PythonDStream.wrapRDD(rdd), PythonDStream.wrapRDD(rdd2)).asJava
+    PythonDStream.some(pfunc.call(time.milliseconds, rdds))
   }
 
-  // for JFunction2
+  // for function.Function2
   def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
     pfunc.call(time.milliseconds, rdds)
   }
 }
 
+
+/**
+ * Base class for PythonDStream with some common methods
+ */
 private[python]
-abstract class PythonDStream(parent: DStream[_]) extends DStream[Array[Byte]] (parent.ssc) {
+abstract class PythonDStream(parent: DStream[_], pfunc: PythonRDDFunction)
+  extends DStream[Array[Byte]] (parent.ssc) {
+
+  val func = new RDDFunction(pfunc)
 
   override def dependencies = List(parent)
 
@@ -84,12 +77,33 @@ abstract class PythonDStream(parent: DStream[_]) extends DStream[Array[Byte]] (p
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
 
+/**
+ * Helper functions
+ */
 private[spark] object PythonDStream {
+
+  // convert Option[RDD[_]] to JavaRDD, handle null gracefully
+  def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
+    if (rdd.isDefined) {
+      JavaRDD.fromRDD(rdd.get)
+    } else {
+      null
+    }
+  }
+
+  // convert JavaRDD to Option[RDD[Array[Byte]]] to , handle null gracefully
+  def some(jrdd: JavaRDD[Array[Byte]]): Option[RDD[Array[Byte]]] = {
+    if (jrdd != null) {
+      Some(jrdd.rdd)
+    } else {
+      None
+    }
+  }
 
   // helper function for DStream.foreachRDD(),
   // cannot be `foreachRDD`, it will confusing py4j
-  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pyfunc: PythonRDDFunction){
-    val func = new RDDFunction(pyfunc)
+  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonRDDFunction){
+    val func = new RDDFunction((pfunc))
     jdstream.dstream.foreachRDD((rdd, time) => func(Some(rdd), time))
   }
 
@@ -112,34 +126,36 @@ private[spark] object PythonDStream {
 /**
  * Transformed DStream in Python.
  *
- * If the result RDD is PythonRDD, then it will cache it as an template for future use,
- * this can reduce the Python callbacks.
+ * If `reuse` is true and the result of the `func` is an PythonRDD, then it will cache it
+ * as an template for future use, this can reduce the Python callbacks.
  */
 private[spark]
 class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
                                 var reuse: Boolean = false)
-  extends PythonDStream(parent) {
+  extends PythonDStream(parent, pfunc) {
 
-  val func = new RDDFunction(pfunc)
+  // rdd returned by func
   var lastResult: PythonRDD = _
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
-    val rdd1 = parent.getOrCompute(validTime)
-    if (rdd1.isEmpty) {
+    val rdd = parent.getOrCompute(validTime)
+    if (rdd.isEmpty) {
       return None
     }
     if (reuse && lastResult != null) {
-      Some(lastResult.copyTo(rdd1.get))
+      // use the previous result as the template to generate new RDD
+      Some(lastResult.copyTo(rdd.get))
     } else {
-      val r = func(rdd1, validTime)
+      val r = func(rdd, validTime)
       if (reuse && r.isDefined && lastResult == null) {
+        // try to use the result as a template
         r.get match {
-          case rdd: PythonRDD =>
-            if (rdd.parent(0) == rdd1) {
+          case pyrdd: PythonRDD =>
+            if (pyrdd.parent(0) == rdd) {
               // only one PythonRDD
-              lastResult = rdd
+              lastResult = pyrdd
             } else {
-              // may have multiple stages
+              // maybe have multiple stages, don't check it anymore
               reuse = false
             }
         }
@@ -174,10 +190,8 @@ class PythonTransformed2DStream(parent: DStream[_], parent2: DStream[_],
  * similar to StateDStream
  */
 private[spark]
-class PythonStateDStream(parent: DStream[Array[Byte]], preduceFunc: PythonRDDFunction)
-  extends PythonDStream(parent) {
-
-  val reduceFunc = new RDDFunction(preduceFunc)
+class PythonStateDStream(parent: DStream[Array[Byte]], reduceFunc: PythonRDDFunction)
+  extends PythonDStream(parent, reduceFunc) {
 
   super.persist(StorageLevel.MEMORY_ONLY)
   override val mustCheckpoint = true
@@ -186,7 +200,7 @@ class PythonStateDStream(parent: DStream[Array[Byte]], preduceFunc: PythonRDDFun
     val lastState = getOrCompute(validTime - slideDuration)
     val rdd = parent.getOrCompute(validTime)
     if (rdd.isDefined) {
-      reduceFunc(lastState, rdd, validTime)
+      func(lastState, rdd, validTime)
     } else {
       lastState
     }
@@ -244,7 +258,7 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
       // add the RDDs of the reduced values in "new time steps"
       val newRDDs = parent.slice(previous.endTime + parent.slideDuration, current.endTime)
       if (newRDDs.size > 0) {
-        reduceFunc(subtracted, Some(ssc.sc.union(newRDDs)), validTime)
+        func(subtracted, Some(ssc.sc.union(newRDDs)), validTime)
       } else {
         subtracted
       }
@@ -252,7 +266,7 @@ class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
       // Get the RDDs of the reduced values in current window
       val currentRDDs = parent.slice(current.beginTime + parent.slideDuration, current.endTime)
       if (currentRDDs.size > 0) {
-        reduceFunc(None, Some(ssc.sc.union(currentRDDs)), validTime)
+        func(None, Some(ssc.sc.union(currentRDDs)), validTime)
       } else {
         None
       }

@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from datetime import datetime
+
 from pyspark.rdd import RDD
 
 
@@ -40,7 +42,8 @@ class RDDFunction(object):
 
             rdds = [RDD(jrdd, self.ctx, ser) if jrdd else self.emptyRDD
                     for jrdd, ser in zip(jrdds, sers)]
-            r = self.func(milliseconds, *rdds)
+            t = datetime.fromtimestamp(milliseconds / 1000.0)
+            r = self.func(t, *rdds)
             if r:
                 return r._jrdd
         except Exception:

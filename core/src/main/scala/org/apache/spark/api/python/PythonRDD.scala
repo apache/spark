@@ -52,6 +52,7 @@ private[spark] class PythonRDD(
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
+  // create a new PythonRDD with same Python setting but different parent.
   def copyTo(rdd: RDD[_]): PythonRDD = {
     new PythonRDD(rdd, command, envVars, pythonIncludes, preservePartitoning,
       pythonExec, broadcastVars, accumulator)

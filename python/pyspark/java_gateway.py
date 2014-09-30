@@ -23,7 +23,6 @@ import shlex
 import platform
 from subprocess import Popen, PIPE
 from threading import Thread
-
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
 

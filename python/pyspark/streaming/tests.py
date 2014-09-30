@@ -29,16 +29,49 @@ from pyspark.streaming.context import StreamingContext
 class PySparkStreamingTestCase(unittest.TestCase):
 
     timeout = 10  # seconds
+    duration = 1
 
     def setUp(self):
         class_name = self.__class__.__name__
         self.sc = SparkContext(appName=class_name)
         self.sc.setCheckpointDir("/tmp")
         # TODO: decrease duration to speed up tests
-        self.ssc = StreamingContext(self.sc, duration=1)
+        self.ssc = StreamingContext(self.sc, self.duration)
 
     def tearDown(self):
         self.ssc.stop()
+
+    def _take(self, dstream, n):
+        """
+        Return the first `n` elements in the stream (will start and stop).
+        """
+        results = []
+
+        def take(_, rdd):
+            if rdd and len(results) < n:
+                results.extend(rdd.take(n - len(results)))
+
+        dstream.foreachRDD(take)
+
+        self.ssc.start()
+        while len(results) < n:
+            time.sleep(0.01)
+        self.ssc.stop(False, True)
+        return results
+
+    def _collect(self, dstream):
+        """
+        Collect each RDDs into the returned list.
+
+        :return: list, which will have the collected items.
+        """
+        result = []
+
+        def get_output(_, rdd):
+            r = rdd.collect()
+            result.append(r)
+        dstream.foreachRDD(get_output)
+        return result
 
     def _test_func(self, input, func, expected, sort=False, input2=None):
         """
@@ -59,7 +92,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         else:
             stream = func(input_stream)
 
-        result = stream._collect()
+        result = self._collect(stream)
         self.ssc.start()
 
         start_time = time.time()
@@ -88,16 +121,6 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
 
 class TestBasicOperations(PySparkStreamingTestCase):
-
-    def test_take(self):
-        input = [range(i) for i in range(3)]
-        dstream = self.ssc.queueStream(input)
-        self.assertEqual([0, 0, 1], dstream._take(3))
-
-    def test_first(self):
-        input = [range(10)]
-        dstream = self.ssc.queueStream(input)
-        self.assertEqual(0, dstream._first())
 
     def test_map(self):
         """Basic operation test for DStream.map."""
@@ -248,7 +271,7 @@ class TestBasicOperations(PySparkStreamingTestCase):
         rdds = [self.sc.parallelize(r, 2) for r in input]
 
         def func(dstream):
-            return dstream.repartitions(1).glom()
+            return dstream.repartition(1).glom()
         expected = [[[1, 2, 3, 4]], [[5, 6, 7, 8]]]
         self._test_func(rdds, func, expected)
 
@@ -395,15 +418,9 @@ class TestWindowFunctions(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
 
-class TestStreamingContext(unittest.TestCase):
-    def setUp(self):
-        self.sc = SparkContext(master="local[2]", appName=self.__class__.__name__)
-        self.batachDuration = 0.1
-        self.ssc = StreamingContext(self.sc, self.batachDuration)
+class TestStreamingContext(PySparkStreamingTestCase):
 
-    def tearDown(self):
-        self.ssc.stop()
-        self.sc.stop()
+    duration = 0.1
 
     def test_stop_only_streaming_context(self):
         self._addInputStream()
@@ -421,12 +438,12 @@ class TestStreamingContext(unittest.TestCase):
         # Make sure each length of input is over 3
         inputs = map(lambda x: range(1, x), range(5, 101))
         stream = self.ssc.queueStream(inputs)
-        stream._collect()
+        self._collect(stream)
 
     def test_queueStream(self):
         input = [range(i) for i in range(3)]
         dstream = self.ssc.queueStream(input)
-        result = dstream._collect()
+        result = self._collect(dstream)
         self.ssc.start()
         time.sleep(1)
         self.assertEqual(input, result[:3])
@@ -445,7 +462,7 @@ class TestStreamingContext(unittest.TestCase):
     #
     #     self.ssc = StreamingContext(self.sc, self.batachDuration)
     #     dstream2 = self.ssc.textFileStream(d)
-    #     result = dstream2._collect()
+    #     result = self._collect(dstream2)
     #     self.ssc.start()
     #     time.sleep(2)
     #     self.assertEqual(input, result[:3])
@@ -455,7 +472,7 @@ class TestStreamingContext(unittest.TestCase):
         dstream = self.ssc.queueStream(input)
         dstream2 = self.ssc.queueStream(input)
         dstream3 = self.ssc.union(dstream, dstream2)
-        result = dstream3._collect()
+        result = self._collect(dstream3)
         self.ssc.start()
         time.sleep(1)
         expected = [i * 2 for i in input]
@@ -472,7 +489,7 @@ class TestStreamingContext(unittest.TestCase):
 
         dstream = self.ssc.transform([dstream1, dstream2, dstream3], func)
 
-        self.assertEqual([2, 3, 1], dstream._take(3))
+        self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
 
 if __name__ == "__main__":
