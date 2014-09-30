@@ -23,8 +23,6 @@ import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
-import org.apache.log4j.PropertyConfigurator
-
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -37,17 +35,22 @@ import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
+
+private[spark] object CallSite {
+  val SHORT_FORM = "callSite.short"
+  val LONG_FORM = "callSite.long"
+}
 
 /**
  * Various utility methods used by Spark.
@@ -81,7 +84,7 @@ private[spark] object Utils extends Logging {
     ois.readObject.asInstanceOf[T]
   }
 
-  /** Deserialize a Long value (used for {@link org.apache.spark.api.python.PythonPartitioner}) */
+  /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
   def deserializeLongValue(bytes: Array[Byte]) : Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
     var result = bytes(7) & 0xFFL
@@ -148,7 +151,7 @@ private[spark] object Utils extends Logging {
   def classForName(className: String) = Class.forName(className, true, getContextOrSparkClassLoader)
 
   /**
-   * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput) = {
     if (bb.hasArray) {
@@ -328,7 +331,7 @@ private[spark] object Utils extends Logging {
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
-    val fileOverwrite = conf.getBoolean("spark.files.overwrite", false)
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
@@ -350,7 +353,7 @@ private[spark] object Utils extends Logging {
         uc.connect()
         val in = uc.getInputStream()
         val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, true)
+        Utils.copyStream(in, out, closeStreams = true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
           if (fileOverwrite) {
             targetFile.delete()
@@ -397,7 +400,7 @@ private[spark] object Utils extends Logging {
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, true)
+        Utils.copyStream(in, out, closeStreams = true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
           if (fileOverwrite) {
             targetFile.delete()
@@ -661,7 +664,7 @@ private[spark] object Utils extends Logging {
    */
   def deleteRecursively(file: File) {
     if (file != null) {
-      if ((file.isDirectory) && !isSymlink(file)) {
+      if (file.isDirectory() && !isSymlink(file)) {
         for (child <- listFilesSafely(file)) {
           deleteRecursively(child)
         }
@@ -696,11 +699,7 @@ private[spark] object Utils extends Logging {
       new File(file.getParentFile().getCanonicalFile(), file.getName())
     }
 
-    if (fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())) {
-      return false
-    } else {
-      return true
-    }
+    !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())
   }
 
   /**
@@ -799,7 +798,7 @@ private[spark] object Utils extends Logging {
         .start()
     new Thread("read stdout for " + command(0)) {
       override def run() {
-        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines()) {
           System.err.println(line)
         }
       }
@@ -813,8 +812,10 @@ private[spark] object Utils extends Logging {
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
-  def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
-                          extraEnvironment: Map[String, String] = Map.empty): String = {
+  def executeAndGetOutput(
+      command: Seq[String],
+      workingDir: File = new File("."),
+      extraEnvironment: Map[String, String] = Map.empty): String = {
     val builder = new ProcessBuilder(command: _*)
         .directory(workingDir)
     val environment = builder.environment()
@@ -824,7 +825,7 @@ private[spark] object Utils extends Logging {
     val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
-        for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
+        for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
           System.err.println(line)
         }
       }
@@ -832,7 +833,7 @@ private[spark] object Utils extends Logging {
     val output = new StringBuffer
     val stdoutThread = new Thread("read stdout for " + command(0)) {
       override def run() {
-        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines()) {
           output.append(line)
         }
       }
@@ -841,8 +842,8 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
-      logError(s"Process $command exited with code $exitCode: ${output}")
-      throw new SparkException("Process " + command + " exited with code " + exitCode)
+      logError(s"Process $command exited with code $exitCode: $output")
+      throw new SparkException(s"Process $command exited with code $exitCode")
     }
     output.toString
   }
@@ -855,29 +856,37 @@ private[spark] object Utils extends Logging {
     try {
       block
     } catch {
+      case e: ControlThrowable => throw e
       case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
     }
   }
 
-  /**
-   * A regular expression to match classes of the "core" Spark API that we want to skip when
-   * finding the call site of a method.
-   */
-  private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+  /** Default filtering function for finding call sites using `getCallSite`. */
+  private def coreExclusionFunction(className: String): Boolean = {
+    // A regular expression to match classes of the "core" Spark API that we want to skip when
+    // finding the call site of a method.
+    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SCALA_CLASS_REGEX = """^scala""".r
+    val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
+    val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
+    // If the class is a Spark internal class or a Scala class, then exclude.
+    isSparkCoreClass || isScalaClass
+  }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
+   *
+   * @param skipClass Function that is used to exclude non-user-code classes.
    */
-  def getCallSite: CallSite = {
-    val trace = Thread.currentThread.getStackTrace()
-      .filterNot { ste:StackTraceElement =>
-        // When running under some profilers, the current stack trace might contain some bogus
-        // frames. This is intended to ensure that we don't crash in these situations by
-        // ignoring any frames that we can't examine.
-        (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
-      }
+  def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
+    val trace = Thread.currentThread.getStackTrace().filterNot { ste: StackTraceElement =>
+      // When running under some profilers, the current stack trace might contain some bogus
+      // frames. This is intended to ensure that we don't crash in these situations by
+      // ignoring any frames that we can't examine.
+      ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace")
+    }
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -891,7 +900,7 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (insideSpark) {
-        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
+        if (skipClass(el.getClassName)) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
@@ -911,7 +920,7 @@ private[spark] object Utils extends Logging {
     }
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
-      shortForm = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      shortForm = s"$lastSparkMethod at $firstUserFile:$firstUserLine",
       longForm = callStack.take(callStackDepth).mkString("\n"))
   }
 
@@ -1014,7 +1023,7 @@ private[spark] object Utils extends Logging {
     false
   }
 
-  def isSpace(c: Char): Boolean = {
+  private def isSpace(c: Char): Boolean = {
     " \t\r\n".indexOf(c) != -1
   }
 
@@ -1166,7 +1175,7 @@ private[spark] object Utils extends Logging {
     }
     import scala.sys.process._
     (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_!
-      ProcessLogger(line => (logInfo(line)))
+    ProcessLogger(line => logInfo(line))
   }
 
 
@@ -1247,7 +1256,7 @@ private[spark] object Utils extends Logging {
     val startTime = System.currentTimeMillis
     while (!terminated) {
       try {
-        process.exitValue
+        process.exitValue()
         terminated = true
       } catch {
         case e: IllegalThreadStateException =>
@@ -1288,6 +1297,20 @@ private[spark] object Utils extends Logging {
       case t: Throwable =>
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
         throw t
+    }
+  }
+
+  /** Executes the given block in a Try, logging any uncaught exceptions. */
+  def tryLog[T](f: => T): Try[T] = {
+    try {
+      val res = f
+      scala.util.Success(res)
+    } catch {
+      case ct: ControlThrowable =>
+        throw ct
+      case t: Throwable =>
+        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        scala.util.Failure(t)
     }
   }
 

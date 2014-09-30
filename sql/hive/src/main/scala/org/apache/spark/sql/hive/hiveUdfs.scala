@@ -44,25 +44,14 @@ private[hive] abstract class HiveFunctionRegistry
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
     // not always serializable.
-    val functionInfo: FunctionInfo = Option(FunctionRegistry.getFunctionInfo(name)).getOrElse(
-      sys.error(s"Couldn't find function $name"))
+    val functionInfo: FunctionInfo =
+      Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
+        sys.error(s"Couldn't find function $name"))
 
-    val functionClassName = functionInfo.getFunctionClass.getName()
+    val functionClassName = functionInfo.getFunctionClass.getName
 
     if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      val function = functionInfo.getFunctionClass.newInstance().asInstanceOf[UDF]
-      val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
-
-      val expectedDataTypes = method.getParameterTypes.map(javaClassToDataType)
-
-      HiveSimpleUdf(
-        functionClassName,
-        children.zip(expectedDataTypes).map {
-          case (e, NullType) => e
-          case (e, t) if (e.dataType == t) => e
-          case (e, t) => Cast(e, t)
-        }
-      )
+      HiveSimpleUdf(functionClassName, children)
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(functionClassName, children)
     } else if (
@@ -116,15 +105,9 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
   @transient
   lazy val dataType = javaClassToDataType(method.getReturnType)
 
-  def catalystToHive(value: Any): Object = value match {
-    // TODO need more types here? or can we use wrap()
-    case bd: BigDecimal => new HiveDecimal(bd.underlying())
-    case d => d.asInstanceOf[Object]
-  }
-
   // TODO: Finish input output types.
   override def eval(input: Row): Any = {
-    val evaluatedChildren = children.map(c => catalystToHive(c.eval(input)))
+    val evaluatedChildren = children.map(c => wrap(c.eval(input)))
 
     unwrap(FunctionRegistry.invoke(method, function, conversionHelper
       .convertIfNecessary(evaluatedChildren: _*): _*))
@@ -168,7 +151,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
     override def get(): AnyRef = wrap(func())
   }
 
-  val dataType: DataType = inspectorToDataType(returnInspector)
+  lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.

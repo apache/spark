@@ -213,6 +213,24 @@ class SerializationTestCase(unittest.TestCase):
         out2 = ser.loads(ser.dumps(out1))
         self.assertEquals(out1, out2)
 
+    def test_func_globals(self):
+
+        class Unpicklable(object):
+            def __reduce__(self):
+                raise Exception("not picklable")
+
+        global exit
+        exit = Unpicklable()
+
+        ser = CloudPickleSerializer()
+        self.assertRaises(Exception, lambda: ser.dumps(exit))
+
+        def foo():
+            sys.exit(0)
+
+        self.assertTrue("exit" in foo.func_code.co_names)
+        ser.dumps(foo)
+
 
 class PySparkTestCase(unittest.TestCase):
 
@@ -322,6 +340,18 @@ class TestAddFile(PySparkTestCase):
         self.sc.addPyFile(path)
         from userlib import UserClass
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
+
+    def test_overwrite_system_module(self):
+        self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
+
+        import SimpleHTTPServer
+        self.assertEqual("My Server", SimpleHTTPServer.__name__)
+
+        def func(x):
+            import SimpleHTTPServer
+            return SimpleHTTPServer.__name__
+
+        self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
 class TestRDDFunctions(PySparkTestCase):
@@ -667,6 +697,27 @@ class TestSQL(PySparkTestCase):
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
         srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
         self.assertEqual(10, srdd3.count())
+
+    def test_serialize_nested_array_and_map(self):
+        d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        row = srdd.first()
+        self.assertEqual(1, len(row.l))
+        self.assertEqual(1, row.l[0].a)
+        self.assertEqual("2", row.d["key"].d)
+
+        l = srdd.map(lambda x: x.l).first()
+        self.assertEqual(1, len(l))
+        self.assertEqual('s', l[0].b)
+
+        d = srdd.map(lambda x: x.d).first()
+        self.assertEqual(1, len(d))
+        self.assertEqual(1.0, d["key"].c)
+
+        row = srdd.map(lambda x: x.d["key"]).first()
+        self.assertEqual(1.0, row.c)
+        self.assertEqual("2", row.d)
 
 
 class TestIO(PySparkTestCase):
@@ -1107,7 +1158,7 @@ class TestOutputFormat(PySparkTestCase):
     def test_unbatched_save_and_read(self):
         basepath = self.tempdir.name
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
+        self.sc.parallelize(ei, len(ei)).saveAsSequenceFile(
             basepath + "/unbatched/")
 
         unbatched_sequence = sorted(self.sc.sequenceFile(
@@ -1153,7 +1204,7 @@ class TestOutputFormat(PySparkTestCase):
         basepath = self.tempdir.name
         # non-batch-serialized RDD[[(K, V)]] should be rejected
         data = [[(1, "a")], [(2, "aa")], [(3, "aaa")]]
-        rdd = self.sc.parallelize(data, numSlices=len(data))
+        rdd = self.sc.parallelize(data, len(data))
         self.assertRaises(Exception, lambda: rdd.saveAsSequenceFile(
             basepath + "/malformed/sequence"))
 

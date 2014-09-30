@@ -883,7 +883,7 @@ for details.
 <tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
-    <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or 
+    <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
       average) over each key, using <code>reduceByKey</code> or <code>combineByKey</code> will yield much better 
       performance.
     <br />
@@ -906,7 +906,7 @@ for details.
 <tr>
   <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W)) pairs with all pairs of elements for each key.
-    Outer joins are also supported through <code>leftOuterJoin</code> and <code>rightOuterJoin</code>.
+    Outer joins are supported through <code>leftOuterJoin</code>, <code>rightOuterJoin</code>, and <code>fullOuterJoin</code>.
   </td>
 </tr>
 <tr>
