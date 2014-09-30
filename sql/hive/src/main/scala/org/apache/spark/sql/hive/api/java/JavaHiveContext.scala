@@ -34,7 +34,7 @@ class JavaHiveContext(sparkContext: JavaSparkContext) extends JavaSQLContext(spa
     if (sqlContext.dialect == "sql") {
       super.sql(sqlText)
     } else if (sqlContext.dialect == "hiveql") {
-      new JavaSchemaRDD(sqlContext, sqlContext.hiveParser(sqlText))
+      new JavaSchemaRDD(sqlContext, HiveQl.parseSql(sqlText))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${sqlContext.dialect}.  Try 'sql' or 'hiveql'")
     }
@@ -45,5 +45,5 @@ class JavaHiveContext(sparkContext: JavaSparkContext) extends JavaSQLContext(spa
     */
   @Deprecated
   def hql(hqlQuery: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, sqlContext.hiveParser(hqlQuery))
+    new JavaSchemaRDD(sqlContext, HiveQl.parseSql(hqlQuery))
 }

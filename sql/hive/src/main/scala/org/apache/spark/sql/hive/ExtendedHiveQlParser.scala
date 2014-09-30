@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.SqlLexical
 import scala.util.parsing.combinator.lexical.StdLexical
 
 /**
- * A simple Hive SQL pre parser. It parses the commands like cache,uncache etc and 
- * remaining actual query will be parsed by HiveQl.parseSql 
+ * A parser that recognizes all HiveQL constructs together with several Spark SQL specific 
+ * extensions like CACHE TABLE and UNCACHE TABLE.
  */
-class HiveSqlParser extends StandardTokenParsers with PackratParsers {  
+class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {  
   
    def apply(input: String): LogicalPlan = {
     // Special-case out set commands since the value fields can be
@@ -82,23 +82,23 @@ class HiveSqlParser extends StandardTokenParsers with PackratParsers {
   override val lexical = new SqlLexical(reservedWords)
   
   protected lazy val query: Parser[LogicalPlan] = (
-    cache | unCache | addJar | addFile | dfs | source | hiveQl
+    cache | uncache | addJar | addFile | dfs | source | hiveQl
   )  
   
   protected lazy val hiveQl: Parser[LogicalPlan] =
     remainingQuery ^^ { 
-      case r => HiveQl.parseSql(r.trim()) 
+      case r => HiveQl.createPlan(r.trim()) 
     }
   
   /** It returns all remaining query */
   protected lazy val remainingQuery: Parser[String] = new Parser[String] {
-    def apply(in:Input) = Success(in.source.subSequence(in.offset, in.source.length).toString,
+    def apply(in: Input) = Success(in.source.subSequence(in.offset, in.source.length).toString,
         in.drop(in.source.length()))
   }  
   
   /** It returns all query */
   protected lazy val allQuery: Parser[String] = new Parser[String] {
-    def apply(in:Input) = Success(in.source.toString,
+    def apply(in: Input) = Success(in.source.toString,
         in.drop(in.source.length()))
   }  
   
@@ -109,7 +109,7 @@ class HiveSqlParser extends StandardTokenParsers with PackratParsers {
         CacheTableAsSelectCommand(tableName, plan)
     }
     
-  protected lazy val unCache: Parser[LogicalPlan] =
+  protected lazy val uncache: Parser[LogicalPlan] =
     UNCACHE ~ TABLE ~> ident ^^ {
       case tableName => CacheCommand(tableName, false)
     }  

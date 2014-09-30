@@ -76,9 +76,6 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
     
-  @transient
-  protected[sql] val hiveParser = new HiveSqlParser  
-
   // Change the default SQL dialect to HiveQL
   override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
 
@@ -98,7 +95,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (dialect == "sql") {
       super.sql(sqlText)
     } else if (dialect == "hiveql") {
-      new SchemaRDD(this, hiveParser(sqlText))
+      new SchemaRDD(this, HiveQl.parseSql(sqlText))
     }  else {
       sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
     }
@@ -106,7 +103,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @deprecated("hiveql() is deprecated as the sql function now parses using HiveQL by default. " +
              s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
-  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, hiveParser(hqlQuery))
+  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
 
   @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
              s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")

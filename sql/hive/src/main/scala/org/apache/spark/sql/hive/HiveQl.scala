@@ -126,6 +126,9 @@ private[hive] object HiveQl {
     "TOK_CREATETABLE",
     "TOK_DESCTABLE"
   ) ++ nativeCommands
+  
+  // It parses hive sql query along with with several Spark SQL specific extensions
+  protected val hiveSqlParser = new ExtendedHiveQlParser
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
@@ -215,9 +218,20 @@ private[hive] object HiveQl {
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
+  def parseSql(sql: String): LogicalPlan = hiveSqlParser(sql)
+  
+  /** Creates LogicalPlan for a given HiveQL string. */
+  def createPlan(sql: String) = {
     try {
-      createPlan(sql)
+      val tree = getAst(sql)
+      if (nativeCommands contains tree.getText) {
+        NativeCommand(sql)
+      } else {
+        nodeToPlan(tree) match {
+          case NativePlaceholder => NativeCommand(sql)
+          case other => other
+        }
+      }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
       case e: NotImplementedError => sys.error(
@@ -225,20 +239,7 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
-    }
-  }
-  
-  /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
-    val tree = getAst(sql)
-    if (nativeCommands contains tree.getText) {
-      NativeCommand(sql)
-    } else {
-      nodeToPlan(tree) match {
-        case NativePlaceholder => NativeCommand(sql)
-        case other => other
-      }
-    }
+    }    
   }
 
   def parseDdl(ddl: String): Seq[Attribute] = {

@@ -140,7 +140,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val describedTable = "DESCRIBE (\\w+)".r
 
   protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
-    lazy val logical = hiveParser(hql)
+    lazy val logical = HiveQl.parseSql(hql)
     def hiveExec() = runSqlHive(hql)
     override def toString = hql + "\n" + super.toString
   }
