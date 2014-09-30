@@ -219,7 +219,7 @@ private[hive] object HiveQl {
 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = hiveSqlParser(sql)
-  
+
   /** Creates LogicalPlan for a given HiveQL string. */
   def createPlan(sql: String) = {
     try {
@@ -239,7 +239,7 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
-    }    
+    }
   }
 
   def parseDdl(ddl: String): Seq[Attribute] = {
