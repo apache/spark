@@ -234,11 +234,11 @@ class StreamingContext(object):
         jdstreams = ListConverter().convert([d._jdstream for d in dstreams],
                                             SparkContext._gateway._gateway_client)
         # change the final serializer to sc.serializer
-        jfunc = RDDFunction(self._sc,
-                            lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
-                            *[d._jrdd_deserializer for d in dstreams])
-
-        jdstream = self._jvm.PythonDStream.callTransform(self._jssc, jdstreams, jfunc)
+        func = RDDFunction(self._sc,
+                           lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
+                           *[d._jrdd_deserializer for d in dstreams])
+        jfunc = self._jvm.RDDFunction(func)
+        jdstream = self._jssc.transform(jdstreams, jfunc)
         return DStream(jdstream, self, self._sc.serializer)
 
     def union(self, *dstreams):

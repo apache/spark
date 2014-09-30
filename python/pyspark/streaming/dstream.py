@@ -150,9 +150,6 @@ class DStream(object):
         """
         return self.transform(lambda rdd: rdd.partitionBy(numPartitions, partitionFunc))
 
-    # def foreach(self, func):
-    #    return self.foreachRDD(lambda _, rdd: rdd.foreach(func))
-
     def foreachRDD(self, func):
         """
         Apply a function to each RDD in this DStream.

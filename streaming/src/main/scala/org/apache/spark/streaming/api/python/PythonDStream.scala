@@ -47,12 +47,12 @@ private[python] class RDDFunction(@transient var pfunc: PythonRDDFunction)
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
 
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    PythonDStream.some(pfunc.call(time.milliseconds, List(PythonDStream.wrapRDD(rdd)).asJava))
+    Option(pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava)).map(_.rdd)
   }
 
   def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    val rdds = List(PythonDStream.wrapRDD(rdd), PythonDStream.wrapRDD(rdd2)).asJava
-    PythonDStream.some(pfunc.call(time.milliseconds, rdds))
+    val rdds = List(rdd.map(JavaRDD.fromRDD(_)).orNull, rdd2.map(JavaRDD.fromRDD(_)).orNull).asJava
+    Option(pfunc.call(time.milliseconds, rdds)).map(_.rdd)
   }
 
   // for function.Function2
@@ -115,37 +115,11 @@ private[python] object PythonDStream {
     serializer = new RDDFunctionSerializer(ser)
   }
 
-  // convert Option[RDD[_]] to JavaRDD, handle null gracefully
-  def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
-    if (rdd.isDefined) {
-      JavaRDD.fromRDD(rdd.get)
-    } else {
-      null
-    }
-  }
-
-  // convert JavaRDD to Option[RDD[Array[Byte]]] to , handle null gracefully
-  def some(jrdd: JavaRDD[Array[Byte]]): Option[RDD[Array[Byte]]] = {
-    if (jrdd != null) {
-      Some(jrdd.rdd)
-    } else {
-      None
-    }
-  }
-
   // helper function for DStream.foreachRDD(),
   // cannot be `foreachRDD`, it will confusing py4j
-  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonRDDFunction){
+  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonRDDFunction) {
     val func = new RDDFunction((pfunc))
     jdstream.dstream.foreachRDD((rdd, time) => func(Some(rdd), time))
-  }
-
-  // helper function for ssc.transform()
-  def callTransform(ssc: JavaStreamingContext, jdsteams: JList[JavaDStream[_]],
-                    pyfunc: PythonRDDFunction)
-    :JavaDStream[Array[Byte]] = {
-    val func = new RDDFunction(pyfunc)
-    ssc.transform(jdsteams, func)
   }
 
   // convert list of RDD into queue of RDDs, for ssc.queueStream()
@@ -232,7 +206,7 @@ class PythonTransformed2DStream(parent: DStream[_], parent2: DStream[_],
     func(parent.getOrCompute(validTime), parent2.getOrCompute(validTime), validTime)
   }
 
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+  val asJavaDStream = JavaDStream.fromDStream(this)
 }
 
 /**
