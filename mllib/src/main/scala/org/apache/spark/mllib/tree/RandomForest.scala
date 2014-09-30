@@ -163,7 +163,7 @@ private class RandomForest (
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
-      val (nodesForGroup, treeToNodeToIndexInfo) =
+      val (nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures) =
         RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.size > 0,
@@ -172,7 +172,7 @@ private class RandomForest (
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
       DecisionTree.findBestSplits(baggedInput,
-        metadata, topNodes, nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
+        metadata, topNodes, nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures, splits, bins, nodeQueue, timer)
       timer.stop("findBestSplits")
     }
 
@@ -392,12 +392,14 @@ object RandomForest extends Serializable with Logging {
       nodeQueue: mutable.Queue[(Int, Node)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
-      rng: scala.util.Random): (Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
+      rng: scala.util.Random)
+    :(Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]], Map[Int, Option[Array[Int]]]) = {
     // Collect some nodes to split:
     //  nodesForGroup(treeIndex) = nodes to split
     val mutableNodesForGroup = new mutable.HashMap[Int, mutable.ArrayBuffer[Node]]()
     val mutableTreeToNodeToIndexInfo =
       new mutable.HashMap[Int, mutable.HashMap[Int, NodeIndexInfo]]()
+    val mutableNodeToFeatures = new mutable.HashMap[Int, Option[Array[Int]]]()
     var memUsage: Long = 0L
     var numNodesInGroup = 0
     while (nodeQueue.nonEmpty && memUsage < maxMemoryUsage) {
@@ -418,6 +420,7 @@ object RandomForest extends Serializable with Logging {
         mutableTreeToNodeToIndexInfo
           .getOrElseUpdate(treeIndex, new mutable.HashMap[Int, NodeIndexInfo]())(node.id)
           = new NodeIndexInfo(numNodesInGroup, featureSubset)
+        mutableNodeToFeatures(numNodesInGroup) = featureSubset
       }
       numNodesInGroup += 1
       memUsage += nodeMemUsage
@@ -425,7 +428,8 @@ object RandomForest extends Serializable with Logging {
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[Node]] = mutableNodesForGroup.mapValues(_.toArray).toMap
     val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.mapValues(_.toMap).toMap
-    (nodesForGroup, treeToNodeToIndexInfo)
+    val nodeToFeatures = mutableNodeToFeatures.toMap
+    (nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures)
   }
 
   /**

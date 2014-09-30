@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.SparkContext._
 
 
 /**
@@ -336,9 +337,8 @@ object DecisionTree extends Serializable with Logging {
    * @param instanceWeight  Weight (importance) of instance in dataset.
    */
   private def mixedBinSeqOp(
-      agg: DTStatsAggregator,
+      agg: NodeStatsAggregator,
       treePoint: TreePoint,
-      nodeIndex: Int,
       bins: Array[Array[Bin]],
       unorderedFeatures: Set[Int],
       instanceWeight: Double,
@@ -350,7 +350,6 @@ object DecisionTree extends Serializable with Logging {
       // Use all features
       agg.metadata.numFeatures
     }
-    val nodeOffset = agg.getNodeOffset(nodeIndex)
     // Iterate over features.
     var featureIndexIdx = 0
     while (featureIndexIdx < numFeaturesPerNode) {
@@ -363,16 +362,16 @@ object DecisionTree extends Serializable with Logging {
         // Unordered feature
         val featureValue = treePoint.binnedFeatures(featureIndex)
         val (leftNodeFeatureOffset, rightNodeFeatureOffset) =
-          agg.getLeftRightNodeFeatureOffsets(nodeIndex, featureIndexIdx)
+          agg.getLeftRightNodeFeatureOffsets(featureIndexIdx)
         // Update the left or right bin for each split.
         val numSplits = agg.metadata.numSplits(featureIndex)
         var splitIndex = 0
         while (splitIndex < numSplits) {
           if (bins(featureIndex)(splitIndex).highSplit.categories.contains(featureValue)) {
-            agg.nodeFeatureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
+            agg.update(leftNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           } else {
-            agg.nodeFeatureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label,
+            agg.update(rightNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           }
           splitIndex += 1
@@ -380,7 +379,7 @@ object DecisionTree extends Serializable with Logging {
       } else {
         // Ordered feature
         val binIndex = treePoint.binnedFeatures(featureIndex)
-        agg.nodeUpdate(nodeOffset, nodeIndex, featureIndexIdx, binIndex, treePoint.label,
+        agg.update(featureIndexIdx, binIndex, treePoint.label,
           instanceWeight)
       }
       featureIndexIdx += 1
@@ -399,20 +398,19 @@ object DecisionTree extends Serializable with Logging {
    * @param instanceWeight  Weight (importance) of instance in dataset.
    */
   private def orderedBinSeqOp(
-      agg: DTStatsAggregator,
+      agg: NodeStatsAggregator,
       treePoint: TreePoint,
-      nodeIndex: Int,
       instanceWeight: Double,
       featuresForNode: Option[Array[Int]]): Unit = {
     val label = treePoint.label
-    val nodeOffset = agg.getNodeOffset(nodeIndex)
+
     // Iterate over features.
     if (featuresForNode.nonEmpty) {
       // Use subsampled features
       var featureIndexIdx = 0
       while (featureIndexIdx < featuresForNode.get.size) {
         val binIndex = treePoint.binnedFeatures(featuresForNode.get.apply(featureIndexIdx))
-        agg.nodeUpdate(nodeOffset, nodeIndex, featureIndexIdx, binIndex, label, instanceWeight)
+        agg.update(featureIndexIdx, binIndex, label, instanceWeight)
         featureIndexIdx += 1
       }
     } else {
@@ -421,7 +419,7 @@ object DecisionTree extends Serializable with Logging {
       var featureIndex = 0
       while (featureIndex < numFeatures) {
         val binIndex = treePoint.binnedFeatures(featureIndex)
-        agg.nodeUpdate(nodeOffset, nodeIndex, featureIndex, binIndex, label, instanceWeight)
+        agg.update(featureIndex, binIndex, label, instanceWeight)
         featureIndex += 1
       }
     }
@@ -448,6 +446,7 @@ object DecisionTree extends Serializable with Logging {
       topNodes: Array[Node],
       nodesForGroup: Map[Int, Array[Node]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
+      nodeToFeatures: Map[Int, Option[Array[Int]]],
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
       nodeQueue: mutable.Queue[(Int, Node)],
@@ -496,8 +495,8 @@ object DecisionTree extends Serializable with Logging {
      * @return  agg
      */
     def binSeqOp(
-        agg: DTStatsAggregator,
-        baggedPoint: BaggedPoint[TreePoint]): DTStatsAggregator = {
+        agg: Array[NodeStatsAggregator],
+        baggedPoint: BaggedPoint[TreePoint]): Array[NodeStatsAggregator] = {
       treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
         val nodeIndex = predictNodeIndex(topNodes(treeIndex), baggedPoint.datum.binnedFeatures,
           bins, metadata.unorderedFeatures)
@@ -508,9 +507,9 @@ object DecisionTree extends Serializable with Logging {
           val featuresForNode = nodeInfo.featureSubset
           val instanceWeight = baggedPoint.subsampleWeights(treeIndex)
           if (metadata.unorderedFeatures.isEmpty) {
-            orderedBinSeqOp(agg, baggedPoint.datum, aggNodeIndex, instanceWeight, featuresForNode)
+            orderedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, instanceWeight, featuresForNode)
           } else {
-            mixedBinSeqOp(agg, baggedPoint.datum, aggNodeIndex, bins, metadata.unorderedFeatures,
+            mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, bins, metadata.unorderedFeatures,
               instanceWeight, featuresForNode)
           }
         }
@@ -520,14 +519,32 @@ object DecisionTree extends Serializable with Logging {
 
     // Calculate bin aggregates.
     timer.start("aggregation")
-    val binAggregates: DTStatsAggregator = {
-      val initAgg = if (metadata.subsamplingFeatures) {
-        new DTStatsAggregatorSubsampledFeatures(metadata, treeToNodeToIndexInfo)
-      } else {
-        new DTStatsAggregatorFixedFeatures(metadata, numNodes)
+
+
+
+    val nodeToBestSplits: Map[Int, (Split, InformationGainStats, Predict)] = input.mapPartitions(points => {
+      val numNodes = nodeToFeatures.keys.size
+      val nodeStatsAggregators = new Array[NodeStatsAggregator](numNodes)
+      var nodeIndex = 0
+      while (nodeIndex < numNodes) {
+        nodeStatsAggregators(nodeIndex) = new NodeStatsAggregator(metadata, nodeToFeatures(nodeIndex))
+        nodeIndex += 1
       }
-      input.treeAggregate(initAgg)(binSeqOp, DTStatsAggregator.binCombOp)
-    }
+
+      points.foreach(binSeqOp(nodeStatsAggregators, _))
+      nodeStatsAggregators.zipWithIndex.map(t => {
+        (t._2, t._1)
+      }).iterator
+    }).reduceByKey((arr1: NodeStatsAggregator, arr2: NodeStatsAggregator) => {
+      arr1.merge(arr2)
+    }).map((nodeIndex: Int, aggStats: NodeStatsAggregator) => {
+      val featuresForNode = nodeToFeatures(nodeIndex)
+      val (split: Split, stats: InformationGainStats, predict: Predict) =
+        binsToBestSplit(aggStats, nodeIndex, splits, featuresForNode, metadata)
+      (nodeIndex, (split, stats, predict))
+    }).collectAsMap()
+
+
     timer.stop("aggregation")
 
     // Calculate best splits for all nodes in the group
@@ -539,9 +556,8 @@ object DecisionTree extends Serializable with Logging {
         val nodeIndex = node.id
         val nodeInfo = treeToNodeToIndexInfo(treeIndex)(nodeIndex)
         val aggNodeIndex = nodeInfo.nodeIndexInGroup
-        val featuresForNode = nodeInfo.featureSubset
         val (split: Split, stats: InformationGainStats, predict: Predict) =
-          binsToBestSplit(binAggregates, aggNodeIndex, splits, featuresForNode)
+          nodeToBestSplits(aggNodeIndex)
         logDebug("best split = " + split)
 
         // Extract info for this node.  Create children if not leaf.
@@ -637,12 +653,11 @@ object DecisionTree extends Serializable with Logging {
    * @return tuple for best split: (Split, information gain, prediction at node)
    */
   private def binsToBestSplit(
-      binAggregates: DTStatsAggregator,
+      binAggregates: NodeStatsAggregator,
       nodeIndex: Int,
       splits: Array[Array[Split]],
-      featuresForNode: Option[Array[Int]]): (Split, InformationGainStats, Predict) = {
-
-    val metadata: DecisionTreeMetadata = binAggregates.metadata
+      featuresForNode: Option[Array[Int]],
+      metadata: DecisionTreeMetadata): (Split, InformationGainStats, Predict) = {
 
     // calculate predict only once
     var predict: Option[Predict] = None
@@ -659,7 +674,7 @@ object DecisionTree extends Serializable with Logging {
         // Cumulative sum (scanLeft) of bin statistics.
         // Afterwards, binAggregates for a bin is the sum of aggregates for
         // that bin + all preceding bins.
-        val nodeFeatureOffset = binAggregates.getNodeFeatureOffset(nodeIndex, featureIndexIdx)
+        val nodeFeatureOffset = binAggregates.getNodeFeatureOffset(featureIndexIdx)
         var splitIndex = 0
         while (splitIndex < numSplits) {
           binAggregates.mergeForNodeFeature(nodeFeatureOffset, splitIndex + 1, splitIndex)
@@ -679,7 +694,7 @@ object DecisionTree extends Serializable with Logging {
       } else if (metadata.isUnordered(featureIndex)) {
         // Unordered categorical feature
         val (leftChildOffset, rightChildOffset) =
-          binAggregates.getLeftRightNodeFeatureOffsets(nodeIndex, featureIndexIdx)
+          binAggregates.getLeftRightNodeFeatureOffsets(featureIndexIdx)
         val (bestFeatureSplitIndex, bestFeatureGainStats) =
           Range(0, numSplits).map { splitIndex =>
             val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
