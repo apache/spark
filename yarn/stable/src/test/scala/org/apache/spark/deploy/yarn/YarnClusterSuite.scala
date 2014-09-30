@@ -86,13 +86,13 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
     super.afterAll()
   }
 
-  test("run Spark in yarn-client mode") {
+  ignore("run Spark in yarn-client mode") {
     var result = File.createTempFile("result", null, tempDir)
     YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
     checkResult(result)
   }
 
-  test("run Spark in yarn-cluster mode") {
+  ignore("run Spark in yarn-cluster mode") {
     val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
     var result = File.createTempFile("result", null, tempDir)
 
