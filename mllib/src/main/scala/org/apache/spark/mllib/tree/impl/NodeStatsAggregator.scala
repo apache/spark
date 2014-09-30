@@ -33,19 +33,6 @@ private[tree] class NodeStatsAggregator(
     case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
   }
 
-
-  /**
-   * Offset for each feature for calculating indices into the [[allStats]] array.
-   */
-  private val featureOffsets: Array[Int] = {
-    numBins.scanLeft(0)((total, nBins) => total + statsSize * nBins)
-  }
-
-  /**
-   * Number of elements (Double values) used for the sufficient statistics of each bin.
-   */
-  val statsSize: Int = impurityAggregator.statsSize
-
   /**
    * Number of bins for each feature.  This is indexed by the feature index.
    */
@@ -58,6 +45,18 @@ private[tree] class NodeStatsAggregator(
   }
 
   val numFeatures: Int = numBins.size
+
+  /**
+   * Offset for each feature for calculating indices into the [[allStats]] array.
+   */
+  private val featureOffsets: Array[Int] = {
+    numBins.scanLeft(0)((total, nBins) => total + statsSize * nBins)
+  }
+
+  /**
+   * Number of elements (Double values) used for the sufficient statistics of each bin.
+   */
+  val statsSize: Int = impurityAggregator.statsSize
 
 
   /**
@@ -97,6 +96,24 @@ private[tree] class NodeStatsAggregator(
   def update(featureIndex: Int, binIndex: Int, label: Double, instanceWeight: Double): Unit = {
     val i = featureOffsets(featureIndex) + binIndex * statsSize
     impurityAggregator.update(allStats, i, label, instanceWeight)
+  }
+
+  /**
+   * Faster version of [[update]].
+   * Update the stats for a given (feature, bin), using the given label.
+   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   *                           from [[getNodeFeatureOffset]].
+   *                           For unordered features, this is a pre-computed
+   *                           (node, feature, left/right child) offset from
+   *                           [[getLeftRightNodeFeatureOffsets]].
+   */
+  def nodeFeatureUpdate(
+      nodeFeatureOffset: Int,
+      binIndex: Int,
+      label: Double,
+      instanceWeight: Double): Unit = {
+    impurityAggregator.update(allStats, nodeFeatureOffset + binIndex * statsSize,
+      label, instanceWeight)
   }
 
   /**

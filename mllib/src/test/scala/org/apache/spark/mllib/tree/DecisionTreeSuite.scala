@@ -435,8 +435,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
       (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
     val nodeToFeatures: Map[Int, Option[Array[Int]]] = Map(
-      (rootNode1.leftNode.get.id, None),
-      (rootNode1.rightNode.get.id, None)
+      (0, None),
+      (1, None)
     )
     val nodeQueue = new mutable.Queue[(Int, Node)]()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
@@ -450,7 +450,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val treeToNodeToIndexInfoA = Map((0, Map(
       (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
     val nodeToFeaturesA: Map[Int, Option[Array[Int]]] = Map(
-      (rootNode2.leftNode.get.id, None)
+      (0, None)
     )
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
@@ -459,7 +459,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val treeToNodeToIndexInfoB = Map((0, Map(
       (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
     val nodeToFeaturesB: Map[Int, Option[Array[Int]]] = Map(
-      (rootNode2.rightNode.get.id, None)
+      (0, None)
     )
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),

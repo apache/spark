@@ -368,10 +368,10 @@ object DecisionTree extends Serializable with Logging {
         var splitIndex = 0
         while (splitIndex < numSplits) {
           if (bins(featureIndex)(splitIndex).highSplit.categories.contains(featureValue)) {
-            agg.update(leftNodeFeatureOffset, splitIndex, treePoint.label,
+            agg.nodeFeatureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           } else {
-            agg.update(rightNodeFeatureOffset, splitIndex, treePoint.label,
+            agg.nodeFeatureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           }
           splitIndex += 1
