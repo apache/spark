@@ -20,10 +20,13 @@ package org.apache.spark.network.nio
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import org.apache.spark._
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
+import scala.util.control.NonFatal
 
 private[nio]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,
@@ -47,7 +50,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 
   @volatile private var closed = false
   var onCloseCallback: Connection => Unit = null
-  var onExceptionCallback: (Connection, Exception) => Unit = null
+  val onExceptionCallbacks = new ConcurrentLinkedQueue[(Connection, Throwable) => Unit]
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
   val remoteAddress = getRemoteAddress()
@@ -134,20 +137,24 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     onCloseCallback = callback
   }
 
-  def onException(callback: (Connection, Exception) => Unit) {
-    onExceptionCallback = callback
+  def onException(callback: (Connection, Throwable) => Unit) {
+    onExceptionCallbacks.add(callback)
   }
 
   def onKeyInterestChange(callback: (Connection, Int) => Unit) {
     onKeyInterestChangeCallback = callback
   }
 
-  def callOnExceptionCallback(e: Exception) {
-    if (onExceptionCallback != null) {
-      onExceptionCallback(this, e)
-    } else {
-      logError("Error in connection to " + getRemoteConnectionManagerId() +
-        " and OnExceptionCallback not registered", e)
+  def callOnExceptionCallback(e: Throwable) {
+    onExceptionCallbacks foreach {
+      callback =>
+        try {
+          callback(this, e)
+        } catch {
+          case NonFatal(e) => {
+            logWarning("Ignore error", e)
+          }
+        }
     }
   }
 
