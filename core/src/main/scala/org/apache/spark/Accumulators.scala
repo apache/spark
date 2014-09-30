@@ -45,15 +45,11 @@ import org.apache.spark.util.Utils
 class Accumulable[R, T] (
     @transient initialValue: R,
     param: AccumulableParam[R, T],
-    val name: Option[String],
-    val allowDuplicate: Boolean)
+    val name: Option[String])
   extends Serializable {
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
-    this(initialValue, param, name, true)
-
   def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None, true)
+    this(initialValue, param, None)
 
   val id: Long = Accumulators.newId
 
@@ -232,16 +228,11 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @tparam T result type
  */
 class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T],
-                     name: Option[String], allowDuplicate: Boolean)
-    extends Accumulable[T,T](initialValue, param, name, allowDuplicate) {
+                     name: Option[String])
+    extends Accumulable[T,T](initialValue, param, name) {
 
-  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) =
-    this(initialValue, param, None, true)
-
-  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
-
-  def this(initialValue: T, param: AccumulatorParam[T], allowDuplicate: Boolean) =
-    this(initialValue, param, None, allowDuplicate)
+  def this(initialValue: T, param: AccumulatorParam[T]) =
+    this(initialValue, param, None)
 }
 
 /**
@@ -278,8 +269,6 @@ private object Accumulators {
     }
   }
 
-  def isAllowDuplicate(id: Long) = originals(id).allowDuplicate
-
   // Clear the local (non-original) accumulators for the current thread
   def clear() {
     synchronized {
@@ -301,13 +290,6 @@ private object Accumulators {
       if (originals.contains(id)) {
         originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
       }
-    }
-  }
-
-  // Add values to the original accumulators with some given IDs
-  def add(value: (Long, Any)): Unit = synchronized {
-    if (originals.contains(value._1)) {
-      originals(value._1).asInstanceOf[Accumulable[Any, Any]] ++= value._2
     }
   }
 

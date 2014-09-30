@@ -738,7 +738,8 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(scheduler.sc.dagScheduler === null)
   }
 
-  test("accumulator allowing duplication can be calculated correctly") {
+  test("accumulator not allowing duplication is not calculated for resubmitted stage") {
+    //just for register
     val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
     val shuffleOneRdd = new MyRDD(sc, 2, Nil)
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
@@ -762,45 +763,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     completeWithAccumulator(accum.id, taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
     completeWithAccumulator(accum.id, taskSets(5), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assert(Accumulators.originals(accum.id).value === 7)
-    assertDataStructuresEmpty
-  }
-
-  test("accumulator not allowing duplication is not calculated for resubmitted stage") {
-    //just for register
-    val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam, false)
-    val shuffleOneRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne))
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
-    submit(finalRdd, Array(0))
-    // have the first stage complete normally
-    completeWithAccumulator(accum.id, taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 2)),
-      (Success, makeMapStatus("hostB", 2))))
-    // have the second stage complete normally
-    completeWithAccumulator(accum.id, taskSets(1), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostC", 1))))
-    // fail the third stage because hostA went down
-    completeWithAccumulator(accum.id, taskSets(2), Seq(
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0), null)))
-    scheduler.resubmitFailedStages()
-    completeWithAccumulator(accum.id, taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
-    completeWithAccumulator(accum.id, taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
-    completeWithAccumulator(accum.id, taskSets(5), Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
     assert(Accumulators.originals(accum.id).value === 5)
-    assertDataStructuresEmpty
-  }
-
-  test("accumulator is cleared for aborted stages") {
-    //just for register
-    new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
-    val rdd = new MyRDD(sc, 2, Nil)
-    submit(rdd, Array(0))
-    failed(taskSets(0), "tastset failed")
     assertDataStructuresEmpty
   }
 
@@ -830,7 +793,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
-    assert(scheduler.stageIdToAccumulators.isEmpty)
   }
 }
 

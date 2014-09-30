@@ -112,9 +112,8 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
-  // stageId => (SplitId -> (accumulatorId, accumulatorValue))
-  private[scheduler] val stageIdToAccumulators = new HashMap[Int,
-    HashMap[Int, ListBuffer[(Long, Any)]]]
+  // (stageId, partitionId)
+  private val updatedAccumulators = new HashSet[(Int, Int)]
 
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
@@ -434,17 +433,6 @@ class DAGScheduler(
     }
     // data structures based on StageId
     stageIdToStage -= stageId
-
-    // accumulate acc values, if the stage is aborted, its accumulators
-    // will not be calculated, since we have removed it in abortStage()
-    for (partitionIdToAccum <- stageIdToAccumulators.get(stageId);
-        accumulators <- partitionIdToAccum.values;
-        accum <- accumulators) {
-      Accumulators.add(accum)
-    }
-
-    stageIdToAccumulators -= stageId
-
     logDebug("After removal of stage %d, remaining stages = %d"
       .format(stageId, stageIdToStage.size))
   }
@@ -452,24 +440,15 @@ class DAGScheduler(
   /**
    * detect the duplicate accumulator value and save the accumulator values
    * @param accumValue the accumulator values received from the task
-   * @param stage the stage which the task belongs to
-   * @param task the completed task
+   * @param stageId the stage which the task belongs to
+   * @param partitionId the partitionId the task belongs to
    */
-  private def saveAccumulatorValue(accumValue: Map[Long, Any], stage: Stage, task: Task[_]) {
-    if (accumValue != null) {
-      for ((id, value) <- accumValue) {
-        if (Accumulators.isAllowDuplicate(id)) {
-          Accumulators.add((id, value))
-        } else {
-          if (!stageIdToAccumulators.contains(stage.id) ||
-            !stageIdToAccumulators(stage.id).contains(task.partitionId)) {
-            val accum = stageIdToAccumulators.getOrElseUpdate(stage.id,
-              new HashMap[Int, ListBuffer[(Long, Any)]]).
-              getOrElseUpdate(task.partitionId, new ListBuffer[(Long, Any)])
-            accum += id -> value
-          }
-        }
-      }
+  private def saveAccumulatorValue(accumValue: Map[Long, Any],
+                                   stageId: Int, partitionId: Int): Unit = {
+    // de-duplicate
+    if (accumValue != null && !updatedAccumulators.contains((stageId, partitionId))) {
+      Accumulators.add(accumValue)
+      updatedAccumulators.add((stageId, partitionId))
     }
   }
 
@@ -979,9 +958,11 @@ class DAGScheduler(
     }
     event.reason match {
       case Success =>
+        // only save AccumulatorValue when it's the first successfully finished
+        // task
         if (event.accumUpdates != null) {
           try {
-            saveAccumulatorValue(event.accumUpdates, stage, task)
+            saveAccumulatorValue(event.accumUpdates, stage.id, task.partitionId)
             event.accumUpdates.foreach { case (id, partialValue) =>
               val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
               // To avoid UI cruft, ignore cases where value wasn't updated
@@ -1120,7 +1101,6 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
-        stageIdToAccumulators -= failedStage.id
         // Mark the map whose fetch failed as broken in the map stage
         if (mapId != -1) {
           mapStage.removeOutputLoc(mapId, bmAddress)
@@ -1265,9 +1245,6 @@ class DAGScheduler(
         } else {
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
-          // remove StageIdToAccumulators(id) ensuring that the aborted stage
-          // accumulator is not calculated when the stage is finished successfully
-          stageIdToAccumulators -= stage.id
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
