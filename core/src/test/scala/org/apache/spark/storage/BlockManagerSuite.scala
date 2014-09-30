@@ -48,6 +48,7 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.apache.spark.network.{ManagedBuffer, BlockTransferService}
 
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
@@ -1370,41 +1371,85 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(a3Locs3x !== a2Locs3x, "Two blocks gave same locations with 3x replication")
   }
 
+  test("block replication - replication failures") {
+
+    /*
+      Create a system of three block managers / stores. One of them (say, failableStore)
+      cannot receive blocks. So attempts to use that as replication target fails.
+
+        store <-----------/fails/-----------> failableStore
+          A                                          A
+          |                                          |
+          |                                          |
+          -----/works/-----> store1 <----/fails/------
+
+        We are first going to add a normal store and a failable store, and test
+        whether 2x replication fails to create two copies of a block.
+        Then we are going to add the third normal store,
+        and test that now 2x replication works as the new store will be used for replication.
+     */
+
+
+    // Insert a block with 2x replication and return the number of copies of the block
+    def replicateAndGetNumCopies(blockId: String): Int = {
+      store.putSingle(blockId, new Array[Byte](1000), StorageLevel.MEMORY_AND_DISK_2)
+      val numLocations = master.getLocations(blockId).size
+      allStores.foreach { _.removeBlock(blockId) }
+      numLocations
+    }
+
+    // Add a normal block manager
+    store = makeBlockManager(10000, "store")
+
+    // Add a failable block manager with a mock transfer service that does not
+    // allow receiving of blocks. So attempts to use it as a replication target will fail.
+    val failableTransfer = mock(classOf[BlockTransferService]) // this wont actually work
+    when(failableTransfer.hostName).thenReturn("some-hostname")
+    when(failableTransfer.port).thenReturn(1000)
+    val failableStore = new BlockManager("failable-store", actorSystem, master, serializer, 10000, conf,
+      mapOutputTracker, shuffleManager, failableTransfer)
+    allStores += failableStore // so that this gets stopped after test
+    assert(master.getPeers(store.blockManagerId).toSet === Set(failableStore.blockManagerId))
+
+    // Test that 2x replication fails by creating only one copy of the block
+    assert(replicateAndGetNumCopies("a1") === 1)
+
+    // Add another normal block manager and test that 2x replication works
+    store = makeBlockManager(10000, "store2")
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      assert(replicateAndGetNumCopies("a2") === 2)
+    }
+  }
+
   test("block replication - addition and deletion of block managers") {
     val blockSize = 1000
     val storeSize = 10000
     val initialStores = (1 to 2).map { i => makeBlockManager(storeSize, s"store$i") }
 
-    /**
-     * Function to test whether insert a block with replication achieves the expected replication.
-     * Since this function can be call on the same block id repeatedly through an `eventually`,
-     * it needs to be ensured that the method leaves block manager + master in the same state as
-     * it was before attempting to insert the block.
-     */
-    def testPut(blockId: String, storageLevel: StorageLevel, expectedNumLocations: Int) {
-      try {
-        initialStores.head.putSingle(blockId, new Array[Byte](blockSize), storageLevel)
-        assert(master.getLocations(blockId).size === expectedNumLocations)
-      } finally {
-        allStores.foreach { _.removeBlock(blockId) }
-      }
+    // Insert a block with given replication factor and return the number of copies of the block\
+    def replicateAndGetNumCopies(blockId: String, replicationFactor: Int): Int = {
+      val storageLevel = StorageLevel(true, true, false, true, replicationFactor)
+      initialStores.head.putSingle(blockId, new Array[Byte](blockSize), storageLevel)
+      val numLocations = master.getLocations(blockId).size
+      allStores.foreach { _.removeBlock(blockId) }
+      numLocations
     }
 
     // 2x replication should work, 3x replication should only replicate 2x
-    testPut("a1", StorageLevel.MEMORY_AND_DISK_2, 2)
-    testPut("a2", StorageLevel(true, true, false, true, 3), 2)
+    assert(replicateAndGetNumCopies("a1", 2) === 2)
+    assert(replicateAndGetNumCopies("a2", 3) === 2)
 
     // Add another store, 3x replication should work now, 4x replication should only replicate 3x
     val newStore1 = makeBlockManager(storeSize, s"newstore1")
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      testPut("a3", StorageLevel(true, true, false, true, 3), 3)
+      assert(replicateAndGetNumCopies("a3", 3) === 3)
     }
-    testPut("a4",StorageLevel(true, true, false, true, 4), 3)
+    assert(replicateAndGetNumCopies("a4", 4) === 3)
 
     // Add another store, 4x replication should work now
     val newStore2 = makeBlockManager(storeSize, s"newstore2")
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      testPut("a5", StorageLevel(true, true, false, true, 4), 4)
+      assert(replicateAndGetNumCopies("a5", 4) === 4)
     }
 
     // Remove all but the 1st store, 2x replication should fail
@@ -1413,12 +1458,12 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
         master.removeExecutor(store.blockManagerId.executorId)
         store.stop()
     }
-    testPut("a6", StorageLevel.MEMORY_AND_DISK_2, 1)
+    assert(replicateAndGetNumCopies("a6", 2) === 1)
 
     // Add new stores, 3x replication should work
     val newStores = (3 to 5).map { i => makeBlockManager(storeSize, s"newstore$i") }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      testPut("a7", StorageLevel(true, true, false, true, 3), 3)
+      assert(replicateAndGetNumCopies("a7", 3) === 3)
     }
   }
 
