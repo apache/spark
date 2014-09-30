@@ -34,7 +34,7 @@ import org.apache.spark.streaming.api.java._
 /**
  * Interface for Python callback function with three arguments
  */
-private[spark] trait PythonRDDFunction {
+private[python] trait PythonRDDFunction {
   // callback in Python
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
 }
@@ -80,7 +80,7 @@ abstract class PythonDStream(parent: DStream[_], pfunc: PythonRDDFunction)
 /**
  * Helper functions
  */
-private[spark] object PythonDStream {
+private[python] object PythonDStream {
 
   // convert Option[RDD[_]] to JavaRDD, handle null gracefully
   def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
@@ -129,7 +129,7 @@ private[spark] object PythonDStream {
  * If `reuse` is true and the result of the `func` is an PythonRDD, then it will cache it
  * as an template for future use, this can reduce the Python callbacks.
  */
-private[spark]
+private[python]
 class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
                                 var reuse: Boolean = false)
   extends PythonDStream(parent, pfunc) {
@@ -168,7 +168,7 @@ class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
 /**
  * Transformed from two DStreams in Python.
  */
-private[spark]
+private[python]
 class PythonTransformed2DStream(parent: DStream[_], parent2: DStream[_],
                                 pfunc: PythonRDDFunction)
   extends DStream[Array[Byte]] (parent.ssc) {
@@ -189,7 +189,7 @@ class PythonTransformed2DStream(parent: DStream[_], parent2: DStream[_],
 /**
  * similar to StateDStream
  */
-private[spark]
+private[python]
 class PythonStateDStream(parent: DStream[Array[Byte]], reduceFunc: PythonRDDFunction)
   extends PythonDStream(parent, reduceFunc) {
 
@@ -210,7 +210,7 @@ class PythonStateDStream(parent: DStream[Array[Byte]], reduceFunc: PythonRDDFunc
 /**
  * similar to ReducedWindowedDStream
  */
-private[spark]
+private[python]
 class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
                                    preduceFunc: PythonRDDFunction,
                                    pinvReduceFunc: PythonRDDFunction,
