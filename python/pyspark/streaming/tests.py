@@ -341,6 +341,25 @@ class TestBasicOperations(PySparkStreamingTestCase):
         expected = [[('a', (1, None)), ('b', (2, 3)), ('c', (None, 4))]]
         self._test_func(input, func, expected, True, input2)
 
+    def update_state_by_key(self):
+
+        def updater(it):
+            for k, vs, s in it:
+                if not s:
+                    s = vs
+                else:
+                    s.extend(vs)
+                yield (k, s)
+
+        input = [[('k', i)] for i in range(5)]
+
+        def func(dstream):
+            return dstream.updateStateByKey(updater)
+
+        expected = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
+        expected = [[('k', v)] for v in expected]
+        self._test_func(input, func, expected)
+
 
 class TestWindowFunctions(PySparkStreamingTestCase):
 
@@ -397,25 +416,6 @@ class TestWindowFunctions(PySparkStreamingTestCase):
         d1 = self.ssc.queueStream(input1)
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 0.1, 0.1))
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 1, 0.1))
-
-    def update_state_by_key(self):
-
-        def updater(it):
-            for k, vs, s in it:
-                if not s:
-                    s = vs
-                else:
-                    s.extend(vs)
-                yield (k, s)
-
-        input = [[('k', i)] for i in range(5)]
-
-        def func(dstream):
-            return dstream.updateStateByKey(updater)
-
-        expected = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
-        expected = [[('k', v)] for v in expected]
-        self._test_func(input, func, expected)
 
 
 class TestStreamingContext(PySparkStreamingTestCase):
