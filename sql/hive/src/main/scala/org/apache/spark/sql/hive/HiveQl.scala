@@ -217,39 +217,7 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
-      if (sql.trim.toLowerCase.startsWith("set")) {
-        // Split in two parts since we treat the part before the first "="
-        // as key, and the part after as value, which may contain other "=" signs.
-        sql.trim.drop(3).split("=", 2).map(_.trim) match {
-          case Array("") => // "set"
-            SetCommand(None, None)
-          case Array(key) => // "set key"
-            SetCommand(Some(key), None)
-          case Array(key, value) => // "set key=value"
-            SetCommand(Some(key), Some(value))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        sql.trim.drop(12).trim.split(" ").toSeq match {
-          case Seq(tableName) => 
-            CacheCommand(tableName, true)
-          case Seq(tableName, _, select @ _*) => 
-            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
-        CacheCommand(sql.trim.drop(14).trim, false)
-      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8).trim)
-      } else if (sql.trim.toLowerCase.startsWith("add file")) {
-        AddFile(sql.trim.drop(9))
-      } else if (sql.trim.toLowerCase.startsWith("dfs")) {
-        NativeCommand(sql)
-      } else if (sql.trim.startsWith("source")) {
-        SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.trim.startsWith("!")) {
-        ShellCommand(sql.drop(1))
-      } else {
-        createPlan(sql)
-      }
+      createPlan(sql)
     } catch {
       case e: Exception => throw new ParseException(sql, e)
       case e: NotImplementedError => sys.error(
