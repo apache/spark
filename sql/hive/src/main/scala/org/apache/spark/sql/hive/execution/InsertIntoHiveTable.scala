@@ -69,36 +69,36 @@ case class InsertIntoHiveTable(
    * Wraps with Hive types based on object inspector.
    * TODO: Consolidate all hive OI/data interface code.
    */
-  protected def wrapperFor(oi: ObjectInspector): Any => Any = {
-    case soi: JavaHiveVarcharObjectInspector =>
-      (s: String) => new HiveVarchar(s, s.size)
+  protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
+    case _: JavaHiveVarcharObjectInspector =>
+      (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
-    case doi: JavaHiveDecimalObjectInspector =>
-      (d: BigDecimal) => new HiveDecimal(d.underlying())
+    case _: JavaHiveDecimalObjectInspector =>
+      (o: Any) => new HiveDecimal(o.asInstanceOf[BigDecimal].underlying())
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
-      (row: Row) => {
+      (o: Any) => {
         val struct = soi.create()
-        (row, soi.getAllStructFieldRefs, wrappers).zipped.foreach { (data, field, wrapper) =>
-          soi.setStructFieldData(struct, field, wrapper(data))
+        (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
+          (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
         }
         struct
       }
 
     case loi: ListObjectInspector =>
       val wrapper = wrapperFor(loi.getListElementObjectInspector)
-      (seq: Seq[_]) => seqAsJavaList(seq.map(wrapper))
+      (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
 
     case moi: MapObjectInspector =>
       val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
       val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
-      (m: Map[_, _]) => mapAsJavaMap(m.map { case (key, value) =>
+      (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
         keyWrapper(key) -> valueWrapper(value)
       })
 
-    case (obj, _) =>
-      obj
+    case _ =>
+      identity[Any]
   }
 
   def saveAsHiveFile(
@@ -147,8 +147,8 @@ case class InsertIntoHiveTable(
         .asInstanceOf[StructObjectInspector]
 
       val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
-      val outputData = new Array[Any](fieldOIs.length)
       val wrappers = fieldOIs.map(wrapperFor)
+      val outputData = new Array[Any](fieldOIs.length)
 
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
@@ -158,7 +158,7 @@ case class InsertIntoHiveTable(
       iterator.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
-          outputData(i) = wrappers(i)(row(i), fieldOIs(i))
+          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row(i))
           i += 1
         }
 
