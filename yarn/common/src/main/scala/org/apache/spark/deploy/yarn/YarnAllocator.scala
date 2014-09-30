@@ -116,7 +116,7 @@ private[yarn] abstract class YarnAllocator(
     // this is needed by alpha, do it here since we add numPending right after this
     val executorsPending = numPendingAllocate.get()
     if (missing > 0) {
-      val totalExecutorMemory = executorMemory + memoryOverhead;
+      val totalExecutorMemory = executorMemory + memoryOverhead
       numPendingAllocate.addAndGet(missing)
       logInfo(s"Will allocate $missing executor containers, each with $totalExecutorMemory MB " + 
         s"memory including $memoryOverhead MB overhead")
