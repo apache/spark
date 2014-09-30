@@ -69,7 +69,7 @@ private[tree] class NodeStatsAggregator(
   /**
    * Total number of elements stored in this aggregator
    */
-  val statsSize: Int = featureOffsets.last
+  val allStatsSize: Int = featureOffsets.last
 
   /**
    * Flat array of elements.
@@ -78,7 +78,7 @@ private[tree] class NodeStatsAggregator(
    * Note: For unordered features, the left child stats have binIndex in [0, numBins(featureIndex))
    *       and the right child stats in [numBins(featureIndex), 2 * numBins(featureIndex))
    */
-  val allStats: Array[Double] = new Array[Double](statsSize)
+  val allStats: Array[Double] = new Array[Double](allStatsSize)
 
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).

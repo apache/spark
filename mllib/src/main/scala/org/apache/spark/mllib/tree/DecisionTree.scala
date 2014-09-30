@@ -535,12 +535,12 @@ object DecisionTree extends Serializable with Logging {
       nodeStatsAggregators.zipWithIndex.map(t => {
         (t._2, t._1)
       }).iterator
-    }).reduceByKey((arr1: NodeStatsAggregator, arr2: NodeStatsAggregator) => {
+    }).reduceByKey((agg1: NodeStatsAggregator, agg2: NodeStatsAggregator) => {
       arr1.merge(arr2)
     }).map((nodeIndex: Int, aggStats: NodeStatsAggregator) => {
       val featuresForNode = nodeToFeatures(nodeIndex)
       val (split: Split, stats: InformationGainStats, predict: Predict) =
-        binsToBestSplit(aggStats, nodeIndex, splits, featuresForNode, metadata)
+        binsToBestSplit(aggStats, splits, featuresForNode, metadata)
       (nodeIndex, (split, stats, predict))
     }).collectAsMap()
 
@@ -654,7 +654,6 @@ object DecisionTree extends Serializable with Logging {
    */
   private def binsToBestSplit(
       binAggregates: NodeStatsAggregator,
-      nodeIndex: Int,
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
       metadata: DecisionTreeMetadata): (Split, InformationGainStats, Predict) = {
@@ -706,7 +705,7 @@ object DecisionTree extends Serializable with Logging {
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else {
         // Ordered categorical feature
-        val nodeFeatureOffset = binAggregates.getNodeFeatureOffset(nodeIndex, featureIndexIdx)
+        val nodeFeatureOffset = binAggregates.getNodeFeatureOffset(featureIndexIdx)
         val numBins = metadata.numBins(featureIndex)
 
         /* Each bin is one category (feature value).
