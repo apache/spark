@@ -88,6 +88,7 @@ private[spark] class LocalActor(
 private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
 
+  private val appId = new ApplicationId("local-" + System.currentTimeMillis)
   var localActor: ActorRef = null
 
   override def start() {
@@ -115,7 +116,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
     localActor ! StatusUpdate(taskId, state, serializedData)
   }
 
-  override def applicationId =
-    new ApplicationId("local-" + System.currentTimeMillis)
+  override def applicationId = appId
+
 
 }

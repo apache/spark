@@ -53,17 +53,4 @@ public class ApplicationId implements Serializable {
     return appId;
   }
 
-
-  private static ApplicationId defaultAppId =
-    new ApplicationId(String.valueOf(System.currentTimeMillis()));
-
-  /**
-   *  Default implementation of Application Id
-   *
-   *  @return Default implementation of Application id based on System.currentTimeMillis
-   */
-  public static ApplicationId getApplicationId() {
-    return defaultAppId;
-  }
-
 }
