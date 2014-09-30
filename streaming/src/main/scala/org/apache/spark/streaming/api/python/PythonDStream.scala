@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming.api.python
 
+import java.io.{ObjectInputStream, ObjectOutputStream}
+import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.api.java._
 import org.apache.spark.api.python._
@@ -35,14 +36,14 @@ import org.apache.spark.streaming.api.java._
  * Interface for Python callback function with three arguments
  */
 private[python] trait PythonRDDFunction {
-  // callback in Python
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
 }
 
 /**
  * Wrapper for PythonRDDFunction
+ * TODO: support checkpoint
  */
-private[python] class RDDFunction(pfunc: PythonRDDFunction)
+private[python] class RDDFunction(@transient var pfunc: PythonRDDFunction)
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
 
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
@@ -58,29 +59,61 @@ private[python] class RDDFunction(pfunc: PythonRDDFunction)
   def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
     pfunc.call(time.milliseconds, rdds)
   }
+
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    assert(PythonDStream.serializer != null, "Serializer has not been registered!")
+    val bytes = PythonDStream.serializer.serialize(pfunc)
+    out.writeInt(bytes.length)
+    out.write(bytes)
+  }
+
+  private def readObject(in: ObjectInputStream): Unit = {
+    assert(PythonDStream.serializer != null, "Serializer has not been registered!")
+    val length = in.readInt()
+    val bytes = new Array[Byte](length)
+    in.readFully(bytes)
+    pfunc = PythonDStream.serializer.deserialize(bytes)
+  }
 }
 
+/**
+ * Inferface for Python Serializer to serialize PythonRDDFunction
+ */
+private[python] trait PythonRDDFunctionSerializer {
+  def dumps(id: String): Array[Byte]  //
+  def loads(bytes: Array[Byte]): PythonRDDFunction
+}
 
 /**
- * Base class for PythonDStream with some common methods
+ * Wrapper for PythonRDDFunctionSerializer
  */
-private[python]
-abstract class PythonDStream(parent: DStream[_], pfunc: PythonRDDFunction)
-  extends DStream[Array[Byte]] (parent.ssc) {
+private[python] class RDDFunctionSerializer(pser: PythonRDDFunctionSerializer) {
+  def serialize(func: PythonRDDFunction): Array[Byte] = {
+    // get the id of PythonRDDFunction in py4j
+    val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
+    val f = h.getClass().getDeclaredField("id");
+    f.setAccessible(true);
+    val id = f.get(h).asInstanceOf[String];
+    pser.dumps(id)
+  }
 
-  val func = new RDDFunction(pfunc)
-
-  override def dependencies = List(parent)
-
-  override def slideDuration: Duration = parent.slideDuration
-
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+  def deserialize(bytes: Array[Byte]): PythonRDDFunction = {
+    pser.loads(bytes)
+  }
 }
 
 /**
  * Helper functions
  */
 private[python] object PythonDStream {
+
+  // A serializer in Python, used to serialize PythonRDDFunction
+  var serializer: RDDFunctionSerializer = _
+
+  // Register a serializer from Python, should be called during initialization
+  def registerSerializer(ser: PythonRDDFunctionSerializer) = {
+    serializer = new RDDFunctionSerializer(ser)
+  }
 
   // convert Option[RDD[_]] to JavaRDD, handle null gracefully
   def wrapRDD(rdd: Option[RDD[_]]): JavaRDD[_] = {
@@ -124,13 +157,29 @@ private[python] object PythonDStream {
 }
 
 /**
+ * Base class for PythonDStream with some common methods
+ */
+private[python]
+abstract class PythonDStream(parent: DStream[_], @transient pfunc: PythonRDDFunction)
+  extends DStream[Array[Byte]] (parent.ssc) {
+
+  val func = new RDDFunction(pfunc)
+
+  override def dependencies = List(parent)
+
+  override def slideDuration: Duration = parent.slideDuration
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+
+/**
  * Transformed DStream in Python.
  *
  * If `reuse` is true and the result of the `func` is an PythonRDD, then it will cache it
  * as an template for future use, this can reduce the Python callbacks.
  */
 private[python]
-class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
+class PythonTransformedDStream (parent: DStream[_], @transient pfunc: PythonRDDFunction,
                                 var reuse: Boolean = false)
   extends PythonDStream(parent, pfunc) {
 
@@ -170,7 +219,7 @@ class PythonTransformedDStream (parent: DStream[_], pfunc: PythonRDDFunction,
  */
 private[python]
 class PythonTransformed2DStream(parent: DStream[_], parent2: DStream[_],
-                                pfunc: PythonRDDFunction)
+                                @transient pfunc: PythonRDDFunction)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   val func = new RDDFunction(pfunc)
@@ -190,7 +239,7 @@ class PythonTransformed2DStream(parent: DStream[_], parent2: DStream[_],
  * similar to StateDStream
  */
 private[python]
-class PythonStateDStream(parent: DStream[Array[Byte]], reduceFunc: PythonRDDFunction)
+class PythonStateDStream(parent: DStream[Array[Byte]], @transient reduceFunc: PythonRDDFunction)
   extends PythonDStream(parent, reduceFunc) {
 
   super.persist(StorageLevel.MEMORY_ONLY)
@@ -212,8 +261,8 @@ class PythonStateDStream(parent: DStream[Array[Byte]], reduceFunc: PythonRDDFunc
  */
 private[python]
 class PythonReducedWindowedDStream(parent: DStream[Array[Byte]],
-                                   preduceFunc: PythonRDDFunction,
-                                   pinvReduceFunc: PythonRDDFunction,
+                                   @transient preduceFunc: PythonRDDFunction,
+                                   @transient pinvReduceFunc: PythonRDDFunction,
                                    _windowDuration: Duration,
                                    _slideDuration: Duration
                                    ) extends PythonStateDStream(parent, preduceFunc) {

@@ -16,6 +16,7 @@
 #
 
 from datetime import datetime
+import traceback
 
 from pyspark.rdd import RDD
 
@@ -47,7 +48,6 @@ class RDDFunction(object):
             if r:
                 return r._jrdd
         except Exception:
-            import traceback
             traceback.print_exc()
 
     def __repr__(self):
@@ -55,6 +55,32 @@ class RDDFunction(object):
 
     class Java:
         implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
+
+
+class RDDFunctionSerializer(object):
+    def __init__(self, ctx, serializer):
+        self.ctx = ctx
+        self.serializer = serializer
+
+    def dumps(self, id):
+        try:
+            func = self.ctx._gateway.gateway_property.pool[id]
+            return bytearray(self.serializer.dumps((func.func, func.deserializers)))
+        except Exception:
+            traceback.print_exc()
+
+    def loads(self, bytes):
+        try:
+            f, deserializers = self.serializer.loads(str(bytes))
+            return RDDFunction(self.ctx, f, *deserializers)
+        except Exception:
+            traceback.print_exc()
+
+    def __repr__(self):
+        return "RDDFunctionSerializer(%s)" % self.serializer
+
+    class Java:
+        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunctionSerializer']
 
 
 def rddToFileName(prefix, suffix, time):

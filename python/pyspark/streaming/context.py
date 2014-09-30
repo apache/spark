@@ -19,11 +19,11 @@ from py4j.java_collections import ListConverter
 from py4j.java_gateway import java_import
 
 from pyspark import RDD
-from pyspark.serializers import UTF8Deserializer
+from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
-from pyspark.streaming.util import RDDFunction
+from pyspark.streaming.util import RDDFunction, RDDFunctionSerializer
 
 __all__ = ["StreamingContext"]
 
@@ -100,6 +100,9 @@ class StreamingContext(object):
         java_import(self._jvm, "org.apache.spark.streaming.*")
         java_import(self._jvm, "org.apache.spark.streaming.api.java.*")
         java_import(self._jvm, "org.apache.spark.streaming.api.python.*")
+        # register serializer for RDDFunction
+        ser = RDDFunctionSerializer(self._sc, CloudPickleSerializer())
+        self._jvm.PythonDStream.registerSerializer(ser)
         return self._jvm.JavaStreamingContext(sc._jsc, self._jduration(duration))
 
     def _jduration(self, seconds):
