@@ -820,7 +820,7 @@ private[spark] class BlockManager(
     val peersFailedToReplicateTo = new ArrayBuffer[BlockManagerId]
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
-    val startTime = System.nanoTime
+    val startTime = System.currentTimeMillis
     val random = new Random(blockId.hashCode)
 
     var replicationFailed = false
@@ -871,7 +871,7 @@ private[spark] class BlockManager(
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
-              .format((System.currentTimeMillis - onePeerStartTime) / 1e3))
+              .format((System.currentTimeMillis - onePeerStartTime)))
             peersReplicatedTo += peer
             peersForReplication -= peer
             replicationFailed = false
@@ -892,7 +892,7 @@ private[spark] class BlockManager(
           done = true
       }
     }
-    val timeTakeMs = (System.currentTimeMillis - startTime) / 1e3
+    val timeTakeMs = (System.currentTimeMillis - startTime)
     logDebug(s"Replicating $blockId of ${data.limit()} bytes to " +
       s"${peersReplicatedTo.size} peer(s) took $timeTakeMs ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {

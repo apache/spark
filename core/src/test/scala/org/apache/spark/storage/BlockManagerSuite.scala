@@ -1372,7 +1372,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("block replication - replication failures") {
-
     /*
       Create a system of three block managers / stores. One of them (say, failableStore)
       cannot receive blocks. So attempts to use that as replication target fails.
@@ -1383,12 +1382,11 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
           |                                          |
           -----/works/-----> store1 <----/fails/------
 
-        We are first going to add a normal store and a failable store, and test
-        whether 2x replication fails to create two copies of a block.
-        Then we are going to add the third normal store,
+        We are first going to add a normal block manager (i.e. store) and the failable block
+        manager (i.e. failableStore), and test whether 2x replication fails to create two
+        copies of a block. Then we are going to add another normal block manager (i.e., store1),
         and test that now 2x replication works as the new store will be used for replication.
      */
-
 
     // Insert a block with 2x replication and return the number of copies of the block
     def replicateAndGetNumCopies(blockId: String): Int = {
@@ -1490,7 +1488,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       i => makeBlockManager(storeSize, s"store$i")
     }
 
-    storageLevels.foreach {storageLevel =>
+    storageLevels.foreach { storageLevel =>
       // Put the block into one of the stores
       val blockId = new TestBlockId(
         "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase)
