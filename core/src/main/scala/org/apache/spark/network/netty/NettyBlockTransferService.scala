@@ -63,9 +63,9 @@ final class NettyBlockTransferService(conf: SparkConf) extends BlockTransferServ
       hostname: String,
       port: Int,
       blockId: String,
-      blockData: ManagedBuffer, level: StorageLevel): Future[Unit] = {
-    // TODO(rxin): Implement uploadBlock.
-    ???
+      blockData: ManagedBuffer,
+      level: StorageLevel): Future[Unit] = {
+    clientFactory.createClient(hostName, port).uploadBlock(blockId, blockData, level)
   }
 
   override def hostName: String = {

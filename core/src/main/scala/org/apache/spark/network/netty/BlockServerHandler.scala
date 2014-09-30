@@ -21,6 +21,7 @@ import io.netty.channel._
 
 import org.apache.spark.Logging
 import org.apache.spark.network.{ManagedBuffer, BlockDataManager}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -39,13 +40,13 @@ private[netty] class BlockServerHandler(dataProvider: BlockDataManager)
   override def channelRead0(ctx: ChannelHandlerContext, request: ClientRequest): Unit = {
     request match {
       case BlockFetchRequest(blockIds) =>
-        blockIds.foreach(processBlockRequest(ctx, _))
-      case BlockUploadRequest(blockId, data) =>
-        // TODO(rxin): handle upload.
+        blockIds.foreach(processFetchRequest(ctx, _))
+      case BlockUploadRequest(blockId, data, level) =>
+        processUploadRequest(ctx, blockId, data, level)
     }
   }  // end of channelRead0
 
-  private def processBlockRequest(ctx: ChannelHandlerContext, blockId: String): Unit = {
+  private def processFetchRequest(ctx: ChannelHandlerContext, blockId: String): Unit = {
     // A helper function to send error message back to the client.
     def client = ctx.channel.remoteAddress.toString
 
@@ -90,4 +91,35 @@ private[netty] class BlockServerHandler(dataProvider: BlockDataManager)
       }
     )
   }  // end of processBlockRequest
+
+  private def processUploadRequest(
+      ctx: ChannelHandlerContext,
+      blockId: String,
+      data: ManagedBuffer,
+      level: StorageLevel): Unit = {
+    // A helper function to send error message back to the client.
+    def client = ctx.channel.remoteAddress.toString
+
+    try {
+      dataProvider.putBlockData(blockId, data, level)
+      ctx.writeAndFlush(BlockUploadSuccess(blockId)).addListener(new ChannelFutureListener {
+        override def operationComplete(future: ChannelFuture): Unit = {
+          if (!future.isSuccess) {
+            logError(s"Error sending an ACK back to client $client")
+          }
+        }
+      })
+    } catch {
+      case e: Throwable =>
+        logError(s"Error processing uploaded block $blockId", e)
+        ctx.writeAndFlush(BlockUploadFailure(blockId, e.getMessage)).addListener(
+          new ChannelFutureListener {
+            override def operationComplete(future: ChannelFuture): Unit = {
+              if (!future.isSuccess) {
+                logError(s"Error sending an ACK back to client $client")
+              }
+            }
+          })
+    }
+  }  // end of processUploadRequest
 }

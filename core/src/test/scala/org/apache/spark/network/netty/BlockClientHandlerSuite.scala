@@ -35,7 +35,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
   /** Helper method to get num. outstanding requests from a private field using reflection. */
   private def sizeOfOutstandingRequests(handler: BlockClientHandler): Int = {
     val f = handler.getClass.getDeclaredField(
-      "org$apache$spark$network$netty$BlockClientHandler$$outstandingRequests")
+      "org$apache$spark$network$netty$BlockClientHandler$$outstandingFetches")
     f.setAccessible(true)
     f.get(handler).asInstanceOf[java.util.Map[_, _]].size
   }
@@ -45,7 +45,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
     val blockData = "blahblahblahblahblah"
     val handler = new BlockClientHandler
     val listener = mock(classOf[BlockFetchingListener])
-    handler.addRequest(blockId, listener)
+    handler.addFetchRequest(blockId, listener)
     assert(sizeOfOutstandingRequests(handler) === 1)
 
     val channel = new EmbeddedChannel(handler)
@@ -63,7 +63,7 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
     val blockId = "test_block"
     val handler = new BlockClientHandler
     val listener = mock(classOf[BlockFetchingListener])
-    handler.addRequest(blockId, listener)
+    handler.addFetchRequest(blockId, listener)
     assert(sizeOfOutstandingRequests(handler) === 1)
 
     val channel = new EmbeddedChannel(handler)
@@ -77,9 +77,9 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
   test("clear all outstanding request upon uncaught exception") {
     val handler = new BlockClientHandler
     val listener = mock(classOf[BlockFetchingListener])
-    handler.addRequest("b1", listener)
-    handler.addRequest("b2", listener)
-    handler.addRequest("b3", listener)
+    handler.addFetchRequest("b1", listener)
+    handler.addFetchRequest("b2", listener)
+    handler.addFetchRequest("b3", listener)
     assert(sizeOfOutstandingRequests(handler) === 3)
 
     val channel = new EmbeddedChannel(handler)
@@ -96,9 +96,9 @@ class BlockClientHandlerSuite extends FunSuite with PrivateMethodTester {
   test("clear all outstanding request upon connection close") {
     val handler = new BlockClientHandler
     val listener = mock(classOf[BlockFetchingListener])
-    handler.addRequest("c1", listener)
-    handler.addRequest("c2", listener)
-    handler.addRequest("c3", listener)
+    handler.addFetchRequest("c1", listener)
+    handler.addFetchRequest("c2", listener)
+    handler.addFetchRequest("c3", listener)
     assert(sizeOfOutstandingRequests(handler) === 3)
 
     val channel = new EmbeddedChannel(handler)
