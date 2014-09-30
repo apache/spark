@@ -22,7 +22,7 @@ import operator
 import unittest
 import tempfile
 
-from pyspark.context import SparkContext, RDD
+from pyspark.context import SparkConf, SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
 
 
@@ -33,7 +33,8 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     def setUp(self):
         class_name = self.__class__.__name__
-        self.sc = SparkContext(appName=class_name)
+        conf = SparkConf().set("spark.default.parallelism", 1)
+        self.sc = SparkContext(appName=class_name, conf=conf)
         self.sc.setCheckpointDir("/tmp")
         # TODO: decrease duration to speed up tests
         self.ssc = StreamingContext(self.sc, self.duration)
