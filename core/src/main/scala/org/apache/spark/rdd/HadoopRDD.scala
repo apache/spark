@@ -224,26 +224,17 @@ class HadoopRDD[K, V](
       val value: V = reader.createValue()
 
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      // Find a function that will return the FileSystem bytes read by this thread.
       val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
         SparkHadoopUtil.get.getInputBytesReadCallback(
-          split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf).orElse {
-          // If we can't get the bytes read from the FS stats, fall back to the split size,
-          // which may be inaccurate.
-          try {
-            val splitSize = split.inputSplit.value.getLength
-            Some(() => splitSize)
-          } catch {
-            case e: java.io.IOException => {
-              logWarning("Unable to get input size to set InputMetrics for task", e)
-              None
-            }
-          }
-        }
+          split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf)
       } else {
         None
       }
-      bytesReadCallback.foreach(inputMetrics.registerUpdateBytesReadCallback(_))
-      context.taskMetrics.inputMetrics = Some(inputMetrics)
+      if (bytesReadCallback.isDefined) {
+        context.taskMetrics.inputMetrics = Some(inputMetrics)
+      }
+      var recordsSinceMetricsUpdate = 0
 
       override def getNext() = {
         try {
@@ -252,12 +243,33 @@ class HadoopRDD[K, V](
           case eof: EOFException =>
             finished = true
         }
+
+        // Update bytes read metric every 32 records
+        if (recordsSinceMetricsUpdate == 32 && bytesReadCallback.isDefined) {
+          recordsSinceMetricsUpdate = 0
+          inputMetrics.bytesRead = bytesReadCallback.get()
+        } else {
+          recordsSinceMetricsUpdate += 1
+        }
         (key, value)
       }
 
       override def close() {
         try {
           reader.close()
+          if (bytesReadCallback.isDefined) {
+            inputMetrics.bytesRead = bytesReadCallback.get()
+          } else if (split.inputSplit.value.isInstanceOf[FileSplit]) {
+            // If we can't get the bytes read from the FS stats, fall back to the split size,
+            // which may be inaccurate.
+            try {
+              inputMetrics.bytesRead = split.inputSplit.value.getLength
+              context.taskMetrics.inputMetrics = Some(inputMetrics)
+            } catch {
+              case e: java.io.IOException =>
+                logWarning("Unable to get input size to set InputMetrics for task", e)
+            }
+          }
         } catch {
           case e: Exception => {
             if (!Utils.inShutdown()) {

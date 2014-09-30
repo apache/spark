@@ -167,25 +167,7 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
    * Total bytes read.
    */
   var bytesRead: Long = 0L
-
-  @volatile @transient var updateBytesReadCallback: Option[() => Long] = None
-
-  /**
-   * Invoke the updateBytesRead callback and mutate bytesRead.
-   */
-  def updateBytesRead() {
-    updateBytesReadCallback.foreach(c => bytesRead = c())
-  }
-
-  /**
-   * Register a function that can be called to get up-to-date information on how many bytes the task
-   * has read from an input source.
-   */
-  def registerUpdateBytesReadCallback(f: () => Long) {
-    updateBytesReadCallback = Some(f)
-  }
 }
-
 
 /**
  * :: DeveloperApi ::
