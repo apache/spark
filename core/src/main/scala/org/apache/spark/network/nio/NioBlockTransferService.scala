@@ -205,6 +205,6 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     val buffer = blockDataManager.getBlockData(blockId)
     logDebug("GetBlock " + blockId + " used " + Utils.getUsedTimeMs(startTimeMs)
       + " and got buffer " + buffer)
-    buffer.nioByteBuffer()
+    if (buffer == null) null else buffer.nioByteBuffer()
   }
 }
