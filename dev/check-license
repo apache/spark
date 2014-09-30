@@ -20,11 +20,10 @@
 
 acquire_rat_jar () {
 
-  URL1="http://search.maven.org/remotecontent?filepath=org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
-  URL2="http://repo1.maven.org/maven2/org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
+  URL="http://repo1.maven.org/maven2/org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
 
   JAR="$rat_jar"
-  
+
   if [[ ! -f "$rat_jar" ]]; then
     # Download rat launch jar if it hasn't been downloaded yet
     if [ ! -f "$JAR" ]; then
@@ -32,15 +31,17 @@ acquire_rat_jar () {
     printf "Attempting to fetch rat\n"
     JAR_DL="${JAR}.part"
     if hash curl 2>/dev/null; then
-      (curl --silent "${URL1}" > "$JAR_DL" || curl --silent "${URL2}" > "$JAR_DL") && mv "$JAR_DL" "$JAR"
+      curl --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
     elif hash wget 2>/dev/null; then
-      (wget --quiet ${URL1} -O "$JAR_DL" || wget --quiet ${URL2} -O "$JAR_DL") && mv "$JAR_DL" "$JAR"
+      wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
     else
       printf "You do not have curl or wget installed, please install rat manually.\n"
       exit -1
     fi
     fi
-    if [ ! -f "$JAR" ]; then
+
+    unzip -tq $JAR &> /dev/null
+    if [ $? -ne 0 ]; then
       # We failed to download
       printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
       exit -1
@@ -55,7 +56,7 @@ cd "$FWDIR"
 
 if test -x "$JAVA_HOME/bin/java"; then
     declare java_cmd="$JAVA_HOME/bin/java"
-else 
+else
     declare java_cmd=java
 fi
 
