@@ -22,7 +22,7 @@ import operator
 import unittest
 import tempfile
 
-from pyspark.context import SparkContext
+from pyspark.context import SparkContext, RDD
 from pyspark.streaming.context import StreamingContext
 
 
@@ -46,8 +46,13 @@ class PySparkStreamingTestCase(unittest.TestCase):
         @param func: wrapped function. This function should return PythonDStream object.
         @param expected: expected output for this testcase.
         """
+        if not isinstance(input[0], RDD):
+            input = [self.sc.parallelize(d, 1) for d in input]
         input_stream = self.ssc.queueStream(input)
+        if input2 and not isinstance(input2[0], RDD):
+            input2 = [self.sc.parallelize(d, 1) for d in input2]
         input_stream2 = self.ssc.queueStream(input2) if input2 is not None else None
+
         # Apply test function to stream.
         if input2:
             stream = func(input_stream, input_stream2)
@@ -63,6 +68,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             current_time = time.time()
             # Check time out.
             if (current_time - start_time) > self.timeout:
+                print "timeout after", self.timeout
                 break
             # StreamingContext.awaitTermination is not used to wait because
             # if py4j server is called every 50 milliseconds, it gets an error.

@@ -552,14 +552,18 @@ class DStream(object):
 
         def reduceFunc(t, a, b):
             b = b.reduceByKey(func, numPartitions)
-            r = a.union(b).reduceByKey(func, numPartitions) if a else b
+            # use the average of number of partitions, or it will keep increasing
+            partitions = numPartitions or (a.getNumPartitions() + b.getNumPartitions())/2
+            r = a.union(b).reduceByKey(func, partitions) if a else b
             if filterFunc:
                 r = r.filter(filterFunc)
             return r
 
         def invReduceFunc(t, a, b):
             b = b.reduceByKey(func, numPartitions)
-            joined = a.leftOuterJoin(b, numPartitions)
+            # use the average of number of partitions, or it will keep increasing
+            partitions = numPartitions or (a.getNumPartitions() + b.getNumPartitions())/2
+            joined = a.leftOuterJoin(b, partitions)
             return joined.mapValues(lambda (v1, v2): invFunc(v1, v2) if v2 is not None else v1)
 
         jreduceFunc = RDDFunction(self.ctx, reduceFunc, reduced._jrdd_deserializer)
@@ -587,7 +591,9 @@ class DStream(object):
             if a is None:
                 g = b.groupByKey(numPartitions).map(lambda (k, vs): (k, list(vs), None))
             else:
-                g = a.cogroup(b, numPartitions)
+                # use the average of number of partitions, or it will keep increasing
+                partitions = numPartitions or (a.getNumPartitions() + b.getNumPartitions())/2
+                g = a.cogroup(b, partitions)
                 g = g.map(lambda (k, (va, vb)): (k, list(vb), list(va)[0] if len(va) else None))
             state = g.mapPartitions(lambda x: updateFunc(x))
             return state.filter(lambda (k, v): v is not None)
