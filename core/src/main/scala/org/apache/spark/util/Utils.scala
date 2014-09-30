@@ -44,6 +44,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.commons.io.FileUtils
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -731,17 +732,20 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Finds all the files in a directory whose last modified time is older than cutoff seconds.
-   * @param dir  must be the path to a directory, or IllegalArgumentException is thrown
-   * @param cutoff measured in seconds. Files older than this are returned.
+   * Determines if a directory contains any files newer than cutoff seconds.
+   * 
+   * @param dir must be the path to a directory, or IllegalArgumentException is thrown
+   * @param cutoff measured in seconds. Returns true if there are any files in dir newer than this.
    */
-  def findOldFiles(dir: File, cutoff: Long): Seq[File] = {
+  def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long) : Boolean = {
     val currentTimeMillis = System.currentTimeMillis
-    if (dir.isDirectory) {
-      val files = listFilesSafely(dir)
-      files.filter { file => file.lastModified < (currentTimeMillis - cutoff * 1000) }
+    if (!dir.isDirectory) {
+      throw new IllegalArgumentException (dir + " is not a directory!")
     } else {
-      throw new IllegalArgumentException(dir + " is not a directory!")
+      val files = FileUtils.listFiles(dir, null, true)
+      val cutoffTimeInMillis = (currentTimeMillis - (cutoff * 1000))
+      val newFiles = files.filter { file => file.lastModified > cutoffTimeInMillis }
+      (dir.lastModified > cutoffTimeInMillis) || (!newFiles.isEmpty)
     }
   }
 

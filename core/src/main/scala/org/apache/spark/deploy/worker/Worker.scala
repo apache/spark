@@ -23,6 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
+import scala.collection.JavaConversions._
 import scala.language.postfixOps
 
 import akka.actor._
@@ -35,6 +36,8 @@ import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
+import org.apache.commons.io.FileUtils
+import java.io.IOException
 
 /**
   * @param masterUrls Each url should look like spark://host:port.
@@ -207,9 +210,16 @@ private[spark] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
       val cleanupFuture = concurrent.future {
         logInfo("Cleaning up oldest application directories in " + workDir + " ...")
-        Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
-          .foreach(Utils.deleteRecursively)
+        val appDirs = workDir.listFiles()
+        if (appDirs == null) {
+          throw new IOException("ERROR: Failed to list files in " + appDirs)
+        }
+        appDirs.filter {
+          dir => dir.isDirectory &&
+          !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
+        }.foreach(Utils.deleteRecursively)
       }
+
       cleanupFuture onFailure {
         case e: Throwable =>
           logError("App dir cleanup failed: " + e.getMessage, e)
