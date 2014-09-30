@@ -57,6 +57,11 @@ object SparkGLRM {
   // Number of partitions for data
   var NUMCHUNKS = 4
 
+  // GLRM settings, change prox and loss here
+  val lossFunction = funnyLossL1Grad _
+  val moviesProx = proxL1 _
+  val usersProx = proxL2 _
+
   /*********************************
    * GLRM: Bank of loss functions
    *********************************/
@@ -67,6 +72,11 @@ object SparkGLRM {
   def lossL1Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
     // gradient of L1 loss
     math.signum(prediction - actual)
+  }
+
+  def funnyLossL1Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+    // weird loss function for demonstration
+    if (i + j % 2 == 0) lossL1Grad(i, j, prediction, actual) else lossL2Grad(i, j, prediction, actual)
   }
 
   /***********************************
@@ -164,24 +174,23 @@ object SparkGLRM {
 
     val errs = Array.ofDim[Double](ITERATIONS)
 
-    //val stepSize = 10.0 / (maxU + maxM)
-    val stepSize = 1.0
+    val stepSize = 0.1 / (maxU + maxM)
 
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
 
       // Update ms
       println("Computing gradient losses")
-      var lg = computeLossGrads(msb, usb, R, lossL2Grad)  // GLRM: Change loss here
+      var lg = computeLossGrads(msb, usb, R, lossFunction)
       println("Updating M factors")
-      ms = update(usb, msb, lg, stepSize, mCount, proxL2)  // GLRM: Change prox here
+      ms = update(usb, msb, lg, stepSize, mCount, moviesProx)
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
-      lg = computeLossGrads(usb, msb, RT, lossL2Grad) // GLRM: Change loss here
+      lg = computeLossGrads(usb, msb, RT, lossFunction)
       println("Updating U factors")
-      us = update(msb, usb, lg, stepSize, uCount, proxL2) // GLRM: Change prox here
+      us = update(msb, usb, lg, stepSize, uCount, usersProx)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
 
       // Comment this out in large runs to avoid an extra pass
@@ -190,18 +199,6 @@ object SparkGLRM {
       //  err * err
       //}.mean()
     }
-
-    // Uncomment for debug output
-    //println("US factor")
-    //println(us.mkString(", "))
-    //println()
-
-    //println("MS factor")
-    //println(ms.mkString(", "))
-    //println()
-
-    //println("RMSE")
-    //println(errs.mkString(", "))
 
     sc.stop()
   }
