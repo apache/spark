@@ -90,7 +90,8 @@ class BlockClient(cf: ChannelFuture, handler: BlockClientHandler) extends Closea
     })
   }
 
-  def uploadBlock(blockId: String, data: ManagedBuffer, storageLevel: StorageLevel): Future[Unit] = {
+  def uploadBlock(blockId: String, data: ManagedBuffer, storageLevel: StorageLevel): Future[Unit] =
+  {
     var startTime: Long = 0
     logTrace {
       startTime = System.currentTimeMillis()
