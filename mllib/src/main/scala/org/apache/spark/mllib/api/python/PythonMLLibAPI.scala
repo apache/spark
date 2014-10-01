@@ -240,7 +240,6 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for Python mllib KMeans.train()
    */
-  //train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int, mode: String):
   def trainKMeansModel(
       data: JavaRDD[Vector],
       k: Int,
