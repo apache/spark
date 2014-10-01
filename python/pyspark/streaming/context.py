@@ -238,29 +238,37 @@ class StreamingContext(object):
 
     def _check_serialzers(self, rdds):
         # make sure they have same serializer
-        if len(set(rdd._jrdd_deserializer for rdd in rdds)):
+        if len(set(rdd._jrdd_deserializer for rdd in rdds)) > 1:
             for i in range(len(rdds)):
                 # reset them to sc.serializer
                 rdds[i] = rdds[i].map(lambda x: x, preservesPartitioning=True)
 
-    def queueStream(self, queue, oneAtATime=True, default=None):
+    def queueStream(self, rdds, oneAtATime=True, default=None):
         """
         Create an input stream from an queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
         NOTE: changes to the queue after the stream is created will not be recognized.
-        @param queue      Queue of RDDs
-        @tparam T         Type of objects in the RDD
+
+        @param rdds       Queue of RDDs
+        @param oneAtATime pick one rdd each time or pick all of them once.
+        @param default    The default rdd if no more in rdds
         """
-        if queue and not isinstance(queue[0], RDD):
-            rdds = [self._sc.parallelize(input) for input in queue]
-        else:
-            rdds = queue
+        if default and not isinstance(default, RDD):
+            default = self._sc.parallelize(default)
+
+        if not rdds and default:
+            rdds = [rdds]
+
+        if rdds and not isinstance(rdds[0], RDD):
+            rdds = [self._sc.parallelize(input) for input in rdds]
         self._check_serialzers(rdds)
+
         jrdds = ListConverter().convert([r._jrdd for r in rdds],
                                         SparkContext._gateway._gateway_client)
         queue = self._jvm.PythonDStream.toRDDQueue(jrdds)
         if default:
+            default = default._reserialize(rdds[0]._jrdd_deserializer)
             jdstream = self._jssc.queueStream(queue, oneAtATime, default._jrdd)
         else:
             jdstream = self._jssc.queueStream(queue, oneAtATime)

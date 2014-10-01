@@ -508,16 +508,16 @@ class TestCheckpoint(PySparkStreamingTestCase):
             conf = SparkConf().set("spark.default.parallelism", 1)
             sc = SparkContext(conf=conf)
             ssc = StreamingContext(sc, .2)
-            rdd = sc.parallelize(range(10), 1)
+            rdd = sc.parallelize(range(1), 1)
             dstream = ssc.queueStream([rdd], default=rdd)
-            result[0] = self._collect(dstream.countByWindow(1, .2))
+            result[0] = self._collect(dstream.countByWindow(1, 0.2))
             return ssc
         tmpd = tempfile.mkdtemp("test_streaming_cps")
         ssc = StreamingContext.getOrCreate(tmpd, setup)
         ssc.start()
         ssc.awaitTermination(4)
         ssc.stop()
-        expected = [[i * 10 + 10] for i in range(5)] + [[50]] * 5
+        expected = [[i * 1 + 1] for i in range(5)] + [[5]] * 5
         self.assertEqual(expected, result[0][:10])
 
         ssc = StreamingContext.getOrCreate(tmpd, setup)

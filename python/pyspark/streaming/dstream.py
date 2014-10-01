@@ -292,7 +292,7 @@ class DStream(object):
             oldfunc = func
             func = lambda t, a, b: oldfunc(a, b)
         assert func.func_code.co_argcount == 3, "func should take two or three arguments"
-        jfunc = RDDFunction(self.ctx, func, self._jrdd_deserializer)
+        jfunc = RDDFunction(self.ctx, func, self._jrdd_deserializer, other._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonTransformed2DStream(self._jdstream.dstream(),
                                                           other._jdstream.dstream(), jfunc)
         jrdd_serializer = self._jrdd_deserializer if keepSerializer else self.ctx.serializer
