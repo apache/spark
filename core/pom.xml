@@ -125,14 +125,6 @@
       <artifactId>lz4</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>chill_${scala.binary.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>chill-java</artifactId>
-    </dependency>
-    <dependency>
       <groupId>commons-net</groupId>
       <artifactId>commons-net</artifactId>
     </dependency>
@@ -262,6 +254,10 @@
       <groupId>org.easymock</groupId>
       <artifactId>easymockclassextension</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.twitter</groupId>
+      <artifactId>chill-java</artifactId>
     </dependency>
     <dependency>
       <groupId>asm</groupId>
@@ -411,4 +407,64 @@
       </resource>
     </resources>
   </build>
+
+  <profiles>
+    <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>com.twitter</groupId>
+          <artifactId>chill_${scala.binary.version}</artifactId>
+          <version>${chill.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm-commons</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>com.twitter</groupId>
+          <artifactId>chill-java</artifactId>
+          <version>${chill.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm-commons</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+      </dependencies>
+
+    </profile>
+
+    <profile>
+      <id>scala-2.11</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+        <dependencies>
+          <dependency>
+            <groupId>tv.cntt</groupId>
+            <artifactId>chill-scala_${scala.binary.version}</artifactId>
+            <version>1.2</version>
+          </dependency>
+          <!-- All alternatives of chill are not available -->
+        </dependencies>
+
+    </profile>
+
+  </profiles>
+
 </project>

@@ -333,6 +333,36 @@ private[spark] object Utils extends Logging {
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     uri.getScheme match {
+      case null | "file" =>
+        // In the case of a local file, copy the local file to the target directory.
+        // Note the difference between uri vs url.
+        val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
+        var shouldCopy = true
+        if (targetFile.exists) {
+          if (!Files.equal(sourceFile, targetFile)) {
+            if (fileOverwrite) {
+              targetFile.delete()
+              logInfo(("File %s exists and does not match contents of %s, " +
+                "replacing it with %s").format(targetFile, url, url))
+            } else {
+              throw new SparkException(
+                "File " + targetFile + " exists and does not match contents of" + " " + url)
+            }
+          } else {
+            // Do nothing if the file contents are the same, i.e. this file has been copied
+            // previously.
+            logInfo(sourceFile.getAbsolutePath + " has been previously copied to "
+              + targetFile.getAbsolutePath)
+            shouldCopy = false
+          }
+        }
+
+        if (shouldCopy) {
+          // The file does not exist in the target directory. Copy it there.
+          logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+          Files.copy(sourceFile, targetFile)
+        }
+
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
 
@@ -366,35 +396,7 @@ private[spark] object Utils extends Logging {
           }
         }
         Files.move(tempFile, targetFile)
-      case "file" | null =>
-        // In the case of a local file, copy the local file to the target directory.
-        // Note the difference between uri vs url.
-        val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
-        var shouldCopy = true
-        if (targetFile.exists) {
-          if (!Files.equal(sourceFile, targetFile)) {
-            if (fileOverwrite) {
-              targetFile.delete()
-              logInfo(("File %s exists and does not match contents of %s, " +
-                "replacing it with %s").format(targetFile, url, url))
-            } else {
-              throw new SparkException(
-                "File " + targetFile + " exists and does not match contents of" + " " + url)
-            }
-          } else {
-            // Do nothing if the file contents are the same, i.e. this file has been copied
-            // previously.
-            logInfo(sourceFile.getAbsolutePath + " has been previously copied to "
-              + targetFile.getAbsolutePath)
-            shouldCopy = false
-          }
-        }
 
-        if (shouldCopy) {
-          // The file does not exist in the target directory. Copy it there.
-          logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
-          Files.copy(sourceFile, targetFile)
-        }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
@@ -1341,14 +1343,15 @@ private[spark] object Utils extends Logging {
       throw new IllegalArgumentException(s"Given path is malformed: $uri")
     }
     uri.getScheme match {
-      case windowsDrive(d) if windows =>
-        new URI("file:/" + uri.toString.stripPrefix("/"))
       case null =>
         // Preserve fragments for HDFS file name substitution (denoted by "#")
         // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
         val fragment = uri.getFragment
         val part = new File(uri.getPath).toURI
         new URI(part.getScheme, part.getPath, fragment)
+      // In scala 2.11 regex is unapplied before evaluating guard expression.
+      case windowsDrive(d) if windows =>
+        new URI("file:/" + uri.toString.stripPrefix("/"))
       case _ =>
         uri
     }
@@ -1372,8 +1375,8 @@ private[spark] object Utils extends Logging {
       paths.split(",").filter { p =>
         val formattedPath = if (windows) formatWindowsPath(p) else p
         new URI(formattedPath).getScheme match {
-          case windowsDrive(d) if windows => false
           case "local" | "file" | null => false
+          case windowsDrive(d) if windows => false
           case _ => true
         }
       }

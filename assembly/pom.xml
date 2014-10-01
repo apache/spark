@@ -66,11 +66,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -241,6 +236,32 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-repl_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>scala-2.11</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <!-- <dependencies> -->
+      <!--   <dependency> -->
+      <!--     <groupId>org.apache.spark</groupId> -->
+      <!--     <artifactId>spark-repl_${scala.binary.version}</artifactId> -->
+      <!--     <version>${project.version}</version> -->
+      <!--   </dependency> -->
+      <!-- </dependencies> -->
     </profile>
     <profile>
       <id>deb</id>

@@ -90,13 +90,21 @@ object SparkBuild extends PomBuild {
     profiles
   }
 
-  override val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+  override val profiles = {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
     case None => backwardCompatibility
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
         println("Note: We ignore environment variables, when use of profile is detected in " +
           "conjunction with environment variable.")
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
+    }
+    if(profiles.exists(_.contains("scala"))) {
+      profiles
+    } else {
+      println("Enabled default scala profile")
+      profiles ++ Seq("scala-2.10")
+    }
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -110,7 +118,7 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
-  lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ genjavadocSettings ++ Seq (
+  lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
@@ -346,7 +354,7 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
-
+    retrievePattern := "[conf]/[artifact](-[revision]).[ext]",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),

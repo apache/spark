@@ -17,19 +17,4 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | sbt/sbt -Pscala-2.10 -Phive scalastyle > scalastyle.txt
-
-# Check style with YARN alpha built too
-echo -e "q\n" | sbt/sbt -Pscala-2.10 -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.9 yarn-alpha/scalastyle \
-  >> scalastyle.txt
-# Check style with YARN built too
-echo -e "q\n" | sbt/sbt -Pscala-2.10 -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 yarn/scalastyle \
-  >> scalastyle.txt
-
-ERRORS=$(cat scalastyle.txt | grep -e "\<error\>")
-if test ! -z "$ERRORS"; then
-    echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
-    exit 1
-else
-    echo -e "Scalastyle checks passed."
-fi
+find -name 'pom.xml' -exec sed -i 's|\(artifactId.*\)_2.11|\1_2.10|g' {}  \;

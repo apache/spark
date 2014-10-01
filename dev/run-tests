@@ -132,7 +132,7 @@ echo "========================================================================="
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   echo -e "q\n" \
-    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean package assembly/assembly \
+    | sbt/sbt $BUILD_MVN_PROFILE_ARGS -Pscala-2.10 clean package assembly/assembly \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
