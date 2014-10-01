@@ -27,7 +27,7 @@ import org.apache.spark.mllib.tree.impurity._
  * and helps with indexing.
  * This class is abstract to support learning with and without feature subsampling.
  */
-private[tree] class NodeStatsAggregator(
+private[tree] class DTStatsAggregator(
     val metadata: DecisionTreeMetadata,
     featureSubset: Option[Array[Int]]) extends Serializable {
 
@@ -165,7 +165,7 @@ private[tree] class NodeStatsAggregator(
    * Merge this aggregator with another, and returns this aggregator.
    * This method modifies this aggregator in-place.
    */
-  def merge(other: NodeStatsAggregator): NodeStatsAggregator = {
+  def merge(other: DTStatsAggregator): DTStatsAggregator = {
     require(statsSize == other.statsSize,
       s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
         + s" This aggregator is of length $statsSize, but the other is ${other.statsSize}.")

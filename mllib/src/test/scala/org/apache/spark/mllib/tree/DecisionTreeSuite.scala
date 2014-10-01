@@ -434,13 +434,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (rootNode1.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)),
       (rootNode1.rightNode.get.id, new RandomForest.NodeIndexInfo(1, None)))))
-    val nodeToFeatures: Map[Int, Option[Array[Int]]] = Map(
-      (0, None),
-      (1, None)
-    )
     val nodeQueue = new mutable.Queue[(Int, Node)]()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode1),
-      nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures, splits, bins, nodeQueue)
+      nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue)
     val children1 = new Array[Node](2)
     children1(0) = rootNode1.leftNode.get
     children1(1) = rootNode1.rightNode.get
@@ -449,21 +445,15 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val nodesForGroupA = Map((0, Array(rootNode2.leftNode.get)))
     val treeToNodeToIndexInfoA = Map((0, Map(
       (rootNode2.leftNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
-    val nodeToFeaturesA: Map[Int, Option[Array[Int]]] = Map(
-      (0, None)
-    )
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupA, treeToNodeToIndexInfoA, nodeToFeaturesA, splits, bins, nodeQueue)
+      nodesForGroupA, treeToNodeToIndexInfoA, splits, bins, nodeQueue)
     val nodesForGroupB = Map((0, Array(rootNode2.rightNode.get)))
     val treeToNodeToIndexInfoB = Map((0, Map(
       (rootNode2.rightNode.get.id, new RandomForest.NodeIndexInfo(0, None)))))
-    val nodeToFeaturesB: Map[Int, Option[Array[Int]]] = Map(
-      (0, None)
-    )
     nodeQueue.clear()
     DecisionTree.findBestSplits(baggedInput, metadata, Array(rootNode2),
-      nodesForGroupB, treeToNodeToIndexInfoB, nodeToFeaturesB, splits, bins, nodeQueue)
+      nodesForGroupB, treeToNodeToIndexInfoB, splits, bins, nodeQueue)
     val children2 = new Array[Node](2)
     children2(0) = rootNode2.leftNode.get
     children2(1) = rootNode2.rightNode.get
