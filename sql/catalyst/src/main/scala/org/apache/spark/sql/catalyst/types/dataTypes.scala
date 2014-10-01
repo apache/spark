@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
+import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
 import scala.util.parsing.combinator.RegexParsers
@@ -250,6 +251,7 @@ object FractionalType {
 }
 abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
+  private[sql] val asIntegral: Integral[JvmType]
 }
 
 case object DecimalType extends FractionalType {
@@ -258,6 +260,7 @@ case object DecimalType extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[BigDecimal]]
   private[sql] val fractional = implicitly[Fractional[BigDecimal]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val asIntegral = BigDecimalAsIfIntegral
   def simpleString: String = "decimal"
 }
 
@@ -267,6 +270,7 @@ case object DoubleType extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val asIntegral = DoubleAsIfIntegral
   def simpleString: String = "double"
 }
 
@@ -276,6 +280,7 @@ case object FloatType extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val asIntegral = FloatAsIfIntegral
   def simpleString: String = "float"
 }
 

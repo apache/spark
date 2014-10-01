@@ -6,6 +6,7 @@
 *.iml
 *.iws
 .idea/
+.idea_modules/
 sbt/*.jar
 .settings
 .cache
@@ -22,6 +23,7 @@ conf/*.cmd
 conf/*.properties
 conf/*.conf
 conf/*.xml
+conf/slaves
 docs/_site
 docs/api
 target/
