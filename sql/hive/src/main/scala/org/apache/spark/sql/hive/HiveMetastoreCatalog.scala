@@ -96,10 +96,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     serDeInfo.setParameters(Map[String, String]())
     sd.setSerdeInfo(serDeInfo)
 
-    try client.createTable(table) catch {
-      case e: org.apache.hadoop.hive.ql.metadata.HiveException
-        if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
-           allowExisting => // Do nothing.
+    synchronized {
+      try client.createTable(table) catch {
+        case e: org.apache.hadoop.hive.ql.metadata.HiveException
+          if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
+             allowExisting => // Do nothing.
+      }
     }
   }
 
