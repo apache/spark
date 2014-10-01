@@ -231,11 +231,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient protected[hive] lazy val sessionState = {
     val ss = new SessionState(hiveconf)
     setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
+    SessionState.start(ss)
+    ss.err = new PrintStream(outputBuffer, true, "UTF-8")
+    ss.out = new PrintStream(outputBuffer, true, "UTF-8")
+
     ss
   }
-
-  sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
-  sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
@@ -273,7 +274,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     results
   }
 
-  SessionState.start(sessionState)
 
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
@@ -404,7 +404,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // be similar with Hive.
         describeHiveTableCommand.hiveString
       case command: PhysicalCommand =>
-        command.sideEffectResult.map(_.head.toString)
+        command.executeCollect().map(_.head.toString)
 
       case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq

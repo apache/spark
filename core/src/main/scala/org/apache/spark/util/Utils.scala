@@ -1474,10 +1474,8 @@ private[spark] object Utils extends Logging {
         }
         isBindCollision(e.getCause)
       case e: MultiException => e.getThrowables.exists(isBindCollision)
-      case e: Exception =>
-        isBindCollision(e.getCause)
-      case _ =>
-        return false
+      case e: Exception => isBindCollision(e.getCause)
+      case _ => false
     }
   }
 
