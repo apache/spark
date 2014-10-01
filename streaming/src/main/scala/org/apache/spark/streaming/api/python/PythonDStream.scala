@@ -174,7 +174,7 @@ class PythonTransformedDStream (parent: DStream[_], @transient pfunc: PythonTran
         // try to use the result as a template
         r.get match {
           case pyrdd: PythonRDD =>
-            if (pyrdd.parent(0) == rdd) {
+            if (pyrdd.firstParent == rdd) {
               // only one PythonRDD
               lastResult = pyrdd
             } else {
