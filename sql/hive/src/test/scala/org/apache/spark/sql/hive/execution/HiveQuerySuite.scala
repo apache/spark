@@ -164,7 +164,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("Cast Timestamp to Timestamp in UDF",
     """
-       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp)) 
+       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
        | FROM src LIMIT 1
     """.stripMargin)
 
