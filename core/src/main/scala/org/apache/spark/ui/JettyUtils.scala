@@ -194,9 +194,13 @@ private[spark] object JettyUtils extends Logging {
       httpConnector.setHost(hostName)
 
       if (conf.get("spark.ui.https.enabled", "false").toBoolean) {
-        val securePort = (currentPort + 8000) % 65536
+        val securePort = if (currentPort + 1 > 65536) {
+          currentPort - 1
+        } else {
+          currentPort + 1
+        }
         val schema = "https"
-        // Create a connector on port currentPort+1 to listen for HTTPS requests
+        // Create a connector on port securePort to listen for HTTPS requests
         val connector = buildSslSelectChannelConnector(securePort, conf)
         connector.setHost(hostName)
         server.setConnectors(Seq(httpConnector,connector).toArray)
@@ -251,15 +255,15 @@ private[spark] object JettyUtils extends Logging {
     }
   }
 
-  def createRedirectHttpsHandler(securePort: Int, schema: String): ContextHandler = {
+  private def createRedirectHttpsHandler(securePort: Int, schema: String): ContextHandler = {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
     redirectHandler.setHandler(new AbstractHandler {
       @Override def handle(
-                            target: String,
-                            baseRequest: Request,
-                            request: HttpServletRequest,
-                            response: HttpServletResponse): Unit = {
+                    target: String,
+                    baseRequest: Request,
+                    request: HttpServletRequest,
+                    response: HttpServletResponse): Unit = {
         if (baseRequest.isSecure) {
           return
         }
@@ -268,8 +272,7 @@ private[spark] object JettyUtils extends Logging {
             baseRequest.getRequestURI, baseRequest.getQueryString)
           response.setContentLength(0)
           response.sendRedirect(url)
-        }
-        else {
+        }else {
           response.sendError(HttpStatus.FORBIDDEN_403, "!Secure")
         }
         baseRequest.setHandled(true)
@@ -284,11 +287,10 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def buildSslSelectChannelConnector(port: Int, conf: SparkConf): Connector =  {
-
     val ctxFactory = new SslContextFactory()
     conf.getAll
       .filter { case (k, v) => k.startsWith("spark.ui.ssl.") }
-      .foreach { case (k, v) => setSslContextFactoryProps(k,v,ctxFactory) }
+      .foreach { case (k, v) => setSslContextFactoryProps(k, v, ctxFactory) }
 
     val connector = new SslSelectChannelConnector(ctxFactory)
     connector.setPort(port)
