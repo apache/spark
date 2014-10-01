@@ -965,7 +965,7 @@ class SQLContext(object):
                    BatchedSerializer(PickleSerializer(), 1024))
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
+        if len(pickled_command) > (1 << 20):  # 1M
             broadcast = self._sc.broadcast(pickled_command)
             pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
