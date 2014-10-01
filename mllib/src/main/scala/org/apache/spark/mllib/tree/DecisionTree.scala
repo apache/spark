@@ -23,7 +23,6 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.Logging
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
 import org.apache.spark.mllib.tree.configuration.Strategy
@@ -378,8 +377,7 @@ object DecisionTree extends Serializable with Logging {
       } else {
         // Ordered feature
         val binIndex = treePoint.binnedFeatures(featureIndex)
-        agg.update(featureIndexIdx, binIndex, treePoint.label,
-          instanceWeight)
+        agg.update(featureIndexIdx, binIndex, treePoint.label, instanceWeight)
       }
       featureIndexIdx += 1
     }
@@ -519,23 +517,21 @@ object DecisionTree extends Serializable with Logging {
     // Calculate best splits for all nodes in the group
     timer.start("chooseSplits")
 
-    // In each parition, iterate all instances and compute aggregate stats for each node,
+    // In each partition, iterate all instances and compute aggregate stats for each node,
     // yield an (nodeIndex, nodeAggregateStats) pair for each node.
     // After a `reduceByKey` operation,
     // stats of a node will be shuffled to a particular partition and be combined together,
     // then best splits for nodes are found there.
     // Finally, only best Splits for nodes are collected to driver to construct decision tree.
-    val nodeToBestSplits: Map[Int, (Split, InformationGainStats, Predict)] =
-      input.mapPartitions(points => {
+
+    val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
+    val nodeToBestSplits =
+      input.mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
         val numNodes = nodeToFeatures.keys.size
-        val nodeStatsAggregators = new Array[NodeStatsAggregator](numNodes)
-        var nodeIndex = 0
-        while (nodeIndex < numNodes) {
-          nodeStatsAggregators(nodeIndex) =
-            new NodeStatsAggregator(metadata, nodeToFeatures(nodeIndex))
-          nodeIndex += 1
+        val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
+          new NodeStatsAggregator(metadata, nodeToFeaturesBc.value.apply(nodeIndex))
         }
 
         // iterator all instances in current partition and update aggregate stats
@@ -543,20 +539,16 @@ object DecisionTree extends Serializable with Logging {
 
         // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.zipWithIndex.map(t => {
-          (t._2, t._1)
-        }).iterator
-      }).reduceByKey((a, b) => a.merge(b))
-        .map(t => {
-          val nodeIndex = t._1
-          val aggStats = t._2
-          val featuresForNode = nodeToFeatures(nodeIndex)
+        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+      }.reduceByKey((a, b) => a.merge(b))
+        .map { case (nodeIndex, aggStats) =>
+          val featuresForNode = nodeToFeaturesBc.value.apply(nodeIndex)
 
           // find best split for each node
           val (split: Split, stats: InformationGainStats, predict: Predict) =
             binsToBestSplit(aggStats, splits, featuresForNode, metadata)
           (nodeIndex, (split, stats, predict))
-        }).collectAsMap().toMap
+        }.collectAsMap()
 
     timer.stop("chooseSplits")
 
