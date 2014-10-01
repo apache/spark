@@ -145,7 +145,7 @@ private[hive] trait HiveInspectors {
     case l: Long => l: java.lang.Long
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
-    case b: BigDecimal => new HiveDecimal(b.underlying())
+    case b: BigDecimal => HiveDecimal.create(b.underlying())
     case b: Array[Byte] => b
     case t: java.sql.Timestamp => t
     case s: Seq[_] => seqAsJavaList(s.map(wrap))

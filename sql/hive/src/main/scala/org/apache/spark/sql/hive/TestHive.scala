@@ -142,7 +142,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val describedTable = "DESCRIBE (\\w+)".r
 
   protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
-    lazy val logical = HiveQl.parseSql(hql)
+    lazy val logical = HiveQl.parseSql(hql, hiveconf)
     def hiveExec() = runSqlHive(hql)
     override def toString = hql + "\n" + super.toString
   }
@@ -417,7 +417,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
       configure()
-
+      runSqlHive("create database if not exists default")
       runSqlHive("USE default")
 
       // Just loading src makes a lot of tests pass.  This is because some tests do something like
@@ -432,7 +432,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         // At this point there is really no reason to continue, but the test framework traps exits.
         // So instead we just pause forever so that at least the developer can see where things
         // started to go wrong.
-        Thread.sleep(100000)
     }
   }
 }

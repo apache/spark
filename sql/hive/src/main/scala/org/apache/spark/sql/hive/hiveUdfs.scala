@@ -32,6 +32,9 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
+import org.apache.hadoop.io.IntWritable
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -122,8 +125,16 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
   type UDFType = GenericUDF
 
   @transient
-  protected lazy val argumentInspectors = children.map(_.dataType).map(toInspector)
-
+  protected lazy val argumentInspectors = {
+    if( functionClassName == "org.apache.hadoop.hive.ql.udf.generic.GenericUDFRound" &&
+      children.size == 2) {
+      Seq(toInspector(children(0).dataType),
+        PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+          TypeInfoFactory.intTypeInfo, new IntWritable(children(1).eval(null).asInstanceOf[Int])))
+    } else {
+      children.map(_.dataType).map(toInspector)
+    }
+  }
   @transient
   protected lazy val returnInspector = function.initialize(argumentInspectors.toArray)
 

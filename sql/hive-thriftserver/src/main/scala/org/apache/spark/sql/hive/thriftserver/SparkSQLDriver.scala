@@ -74,11 +74,11 @@ private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveCo
 
   override def getSchema: Schema = tableSchema
 
-  override def getResults(res: JArrayList[String]): Boolean = {
+  override def getResults(res: java.util.List[_]): Boolean = {
     if (hiveResponse == null) {
       false
     } else {
-      res.addAll(hiveResponse)
+      res.asInstanceOf[java.util.ArrayList[String]].addAll(hiveResponse)
       hiveResponse = null
       true
     }

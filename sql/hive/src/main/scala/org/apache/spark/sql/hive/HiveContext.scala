@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.io.TimestampWritable
 
 import org.apache.spark.SparkContext
@@ -46,6 +45,7 @@ import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.hadoop.hive.common.StatsSetupConst
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -95,7 +95,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (dialect == "sql") {
       super.sql(sqlText)
     } else if (dialect == "hiveql") {
-      new SchemaRDD(this, HiveQl.parseSql(sqlText))
+      new SchemaRDD(this, HiveQl.parseSql(sqlText, hiveconf))
     }  else {
       sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
     }
@@ -103,7 +103,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   @deprecated("hiveql() is deprecated as the sql function now parses using HiveQL by default. " +
              s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
-  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
+  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery, hiveconf))
 
   @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
              s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
@@ -284,7 +284,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hiveconf)
+      val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hiveconf)
 
       SessionState.start(sessionState)
 
@@ -292,17 +292,22 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         case driver: Driver =>
           driver.init()
 
-          val results = new JArrayList[String]
+          val results = new JArrayList[Object]
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
-            driver.destroy()
+            driver.close()
             throw new QueryExecutionException(response.getErrorMessage)
           }
           driver.setMaxRows(maxRows)
           driver.getResults(results)
-          driver.destroy()
-          results
+          driver.close()
+          results.map { r =>
+            r match {
+              case s: String => s
+              case a: Array[Object] => a(0).asInstanceOf[String]
+            }
+          }
         case _ =>
           sessionState.out.println(tokens(0) + " " + cmd_1)
           Seq(proc.run(cmd_1).getResponseCode.toString)

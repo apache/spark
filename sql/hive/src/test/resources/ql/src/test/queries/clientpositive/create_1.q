@@ -1,4 +1,3 @@
-set fs.default.name=invalidscheme:///;
 
 CREATE TABLE table1 (a STRING, b STRING) STORED AS TEXTFILE;
 DESCRIBE table1;

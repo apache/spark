@@ -77,8 +77,10 @@ case class HiveTableScan(
       attributes.map(a =>
         relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
 
-    ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
-    ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
+    if(neededColumnIDs.size != 0) {
+      ColumnProjectionUtils.appendReadColumns(
+        hiveConf, neededColumnIDs, attributes.map(_.name).toSeq)
+    }
 
     // Specifies types and object inspectors of columns to be scanned.
     val structOI = ObjectInspectorUtils

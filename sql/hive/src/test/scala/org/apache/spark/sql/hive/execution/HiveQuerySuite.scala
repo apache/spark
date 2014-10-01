@@ -504,14 +504,14 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a partition is a native command
     assertResult(
       Array(
-        Array("key", "int", "None"),
-        Array("value", "string", "None"),
-        Array("dt", "string", "None"),
+        Array("key", "int", ""),
+        Array("value", "string", ""),
+        Array("dt", "string", ""),
         Array("", "", ""),
         Array("# Partition Information", "", ""),
         Array("# col_name", "data_type", "comment"),
         Array("", "", ""),
-        Array("dt", "string", "None"))
+        Array("dt", "string", ""))
     ) {
       sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)

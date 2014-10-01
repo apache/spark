@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.test.TestHive
 class CachedTableSuite extends HiveComparisonTest {
   import TestHive._
 
-  TestHive.loadTestTable("src")
+  TestHive.reset
 
   test("cache table") {
     TestHive.cacheTable("src")

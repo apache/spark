@@ -34,7 +34,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = HiveQl.parseSql(analyzeCommand)
+      val parsed = HiveQl.parseSql(analyzeCommand, TestHive.hiveconf)
       val operators = parsed.collect {
         case a: AnalyzeTable => a
         case o => o
@@ -80,7 +80,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
-    assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
