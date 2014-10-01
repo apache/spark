@@ -63,4 +63,10 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
+
+  test("SPARK-3708 Backticks aren't handled correctly is aliases") {
+    checkAnswer(
+      sql("SELECT k FROM (SELECT `key` AS `k` FROM src) a"),
+      sql("SELECT `key` FROM src").collect().toSeq)
+  }  
 }
