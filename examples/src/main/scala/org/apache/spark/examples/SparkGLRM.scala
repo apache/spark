@@ -58,7 +58,7 @@ object SparkGLRM {
   var NUMCHUNKS = 4
 
   // GLRM settings, change prox and loss here
-  val lossFunction = funnyLossL1Grad _
+  val lossFunction = funnyLossGrad _
   val moviesProx = proxL1 _
   val usersProx = proxL2 _
 
@@ -74,7 +74,7 @@ object SparkGLRM {
     math.signum(prediction - actual)
   }
 
-  def funnyLossL1Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+  def funnyLossGrad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
     // weird loss function for demonstration
     if (i + j % 2 == 0) lossL1Grad(i, j, prediction, actual) else lossL2Grad(i, j, prediction, actual)
   }
