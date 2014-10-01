@@ -76,7 +76,7 @@ object GradientBoosting extends Logging {
     logDebug(data.first.toString)
 
     // psuedo-residual for second iteration
-    data = data.map(point => LabeledPoint(loss.calculateResidual(firstModel, point,
+    data = data.map(point => LabeledPoint(loss.lossGradient(firstModel, point,
       learningRate), point.features))
 
 
@@ -89,7 +89,7 @@ object GradientBoosting extends Logging {
       trees(m) = model
       logDebug("error of tree = " + meanSquaredError(model, data))
       //update data with pseudo-residuals
-      data = data.map(point => LabeledPoint(loss.calculateResidual(model, point, learningRate),
+      data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
         point.features))
       // Checkpoint
       val checkpointingPeriod = boostingStrategy.checkpointPeriod
@@ -106,7 +106,6 @@ object GradientBoosting extends Logging {
 
   }
 
-  // TODO: Port this method to a generic metrics package
   /**
    * Calculates the mean squared error for regression.
    */

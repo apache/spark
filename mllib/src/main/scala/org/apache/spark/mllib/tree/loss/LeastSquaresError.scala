@@ -24,7 +24,7 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel
 object LeastSquaresError extends Loss {
 
   @DeveloperApi
-  override def calculateResidual(
+  override def lossGradient(
     model: DecisionTreeModel,
     point: LabeledPoint,
     learningRate: Double): Double = {

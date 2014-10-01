@@ -24,7 +24,7 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel
 trait Loss extends Serializable {
 
   @DeveloperApi
-  def calculateResidual(
+  def lossGradient(
       model: DecisionTreeModel,
       point: LabeledPoint,
       learningRate: Double): Double
