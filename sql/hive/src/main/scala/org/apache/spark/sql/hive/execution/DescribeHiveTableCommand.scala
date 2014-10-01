@@ -48,7 +48,7 @@ case class DescribeHiveTableCommand(
         .mkString("\t")
   }
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override protected lazy val sideEffectResult: Seq[Row] = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil
 
