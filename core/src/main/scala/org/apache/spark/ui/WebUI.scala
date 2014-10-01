@@ -92,12 +92,6 @@ private[spark] abstract class WebUI(
     }
   }
 
-  def appUiAddressPrefix = if (conf.get("spark.ui.https.enabled", "false").toBoolean) {
-    "https"
-  } else {
-    "http"
-  }
-
   /** Initialize all components of the server. */
   def initialize()
 
@@ -106,7 +100,7 @@ private[spark] abstract class WebUI(
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
       serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
-      logInfo(s"Started %s at $appUiAddressPrefix://%s:%d".format(
+      logInfo(s"Started %s at http://%s:%d".format(
         className, publicHostName, boundPort))
     } catch {
       case e: Exception =>

@@ -138,12 +138,7 @@ private[spark] class Worker(
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
-    val workerWebUiUrlPrefix = if ( conf.get("spark.ui.https.enabled", "false").toBoolean) {
-      "https://"
-    } else{
-      "http://"
-    }
-    workerWebUiUrl = workerWebUiUrlPrefix + publicAddress + ":" + webUi.boundPort
+    workerWebUiUrl = "http://" + publicAddress + ":" + webUi.boundPort
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)

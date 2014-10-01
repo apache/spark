@@ -24,7 +24,6 @@ import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.servlet.ServletContextHandler
-import org.eclipse.jetty.server.Server
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -126,28 +125,27 @@ class UISuite extends FunSuite {
   }
 
   test("jetty with https selects different port under contention") {
-    val startPort = 4040
-    val server = new Server(startPort)
-
-    Try { server.start() } match {
-      case Success(s) =>
-      case Failure(e) =>
-      // Either case server port is busy hence setup for test complete
-    }
+    val server = new ServerSocket(0)
+    val startPort = server.getLocalPort
 
     val sparkConf = new SparkConf()
       .set("spark.ui.https.enabled", "true")
-      .set("spark.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+      .set("spark.ui.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+      .set("spark.ui.ssl.server.keystore.password", "123456")
+      .set("spark.ui.ssl.server.keystore.keypassword", "123456")
     val serverInfo1 = JettyUtils.startJettyServer(
-      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf)
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf, "server1")
     val serverInfo2 = JettyUtils.startJettyServer(
-      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf)
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf, "server2")
     // Allow some wiggle room in case ports on the machine are under contention
     val boundPort1 = serverInfo1.boundPort
     val boundPort2 = serverInfo2.boundPort
     assert(boundPort1 != startPort)
     assert(boundPort2 != startPort)
     assert(boundPort1 != boundPort2)
+    serverInfo1.server.stop()
+    serverInfo2.server.stop()
+    server.close()
   }
 
   test("jetty binds to port 0 correctly") {
@@ -165,8 +163,10 @@ class UISuite extends FunSuite {
 
   test("jetty with https binds to port 0 correctly") {
     val sparkConf = new SparkConf()
-      .set("spark.ui.https.enabled", "true")
-      .set("spark.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+      .set("spark.ui.https.enabled", "false")
+      .set("spark.ui.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+      .set("spark.ui.ssl.server.keystore.password", "123456")
+      .set("spark.ui.ssl.server.keystore.keypassword", "123456")
     val serverInfo = JettyUtils.startJettyServer(
       "0.0.0.0", 0, Seq[ServletContextHandler](), sparkConf)
     val server = serverInfo.server
@@ -177,6 +177,7 @@ class UISuite extends FunSuite {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
       case Failure(e) =>
     }
+    serverInfo.server.stop()
   }
 
   test("verify appUIAddress contains the scheme") {

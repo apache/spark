@@ -99,7 +99,7 @@ private[spark] class SparkUI(
    */
   private[spark] def appUIHostPort = publicHostName + ":" + boundPort
 
-  private[spark] def appUIAddress = s"$appUiAddressPrefix://$appUIHostPort"
+  private[spark] def appUIAddress = s"http://$appUIHostPort"
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

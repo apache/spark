@@ -24,6 +24,7 @@ import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.util.MultiException
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -1415,9 +1416,10 @@ private[spark] object Utils extends Logging {
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
+      println(s"start $serviceName at tryport: $tryPort")
       try {
         val (service, port) = startService(tryPort)
-        logInfo(s"Successfully started service$serviceString on port $port.")
+        println(s"Successfully started service$serviceString on port $port.")
         return (service, port)
       } catch {
         case e: Exception if isBindCollision(e) =>
@@ -1429,7 +1431,7 @@ private[spark] object Utils extends Logging {
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+          println(s"Service$serviceString could not bind on port $tryPort. " +
             s"Attempting port ${tryPort + 1}.")
       }
     }
@@ -1447,8 +1449,11 @@ private[spark] object Utils extends Logging {
           return true
         }
         isBindCollision(e.getCause)
-      case e: Exception => isBindCollision(e.getCause)
-      case _ => false
+      case e: MultiException => e.getThrowables.exists(isBindCollision)
+      case e: Exception =>
+        isBindCollision(e.getCause)
+      case _ =>
+        return false
     }
   }
 

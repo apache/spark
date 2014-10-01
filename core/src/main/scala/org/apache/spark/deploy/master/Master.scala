@@ -123,12 +123,7 @@ private[spark] class Master(
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
-    val masterWebUiUrlPrefix = if( conf.get("spark.ui.https.enabled", "false").toBoolean) {
-      "https://"
-    } else{
-      "http://"
-    }
-    masterWebUiUrl = masterWebUiUrlPrefix + masterPublicAddress + ":" + webUi.boundPort
+    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
     masterMetricsSystem.registerSource(masterSource)
