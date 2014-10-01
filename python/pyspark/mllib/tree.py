@@ -77,7 +77,12 @@ class DecisionTreeModel(object):
         return self._java_model.depth()
 
     def __repr__(self):
+        """ Print summary of model. """
         return self._java_model.toString()
+
+    def toDebugString(self):
+        """ Print full model. """
+        return self._java_model.toDebugString()
 
 
 class DecisionTree(object):
@@ -135,7 +140,6 @@ class DecisionTree(object):
         >>> from numpy import array
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import DecisionTree
-        >>> from pyspark.mllib.linalg import SparseVector
         >>>
         >>> data = [
         ...     LabeledPoint(0.0, [0.0]),
@@ -145,7 +149,9 @@ class DecisionTree(object):
         ... ]
         >>> model = DecisionTree.trainClassifier(sc.parallelize(data), 2, {})
         >>> print model,  # it already has newline
-        DecisionTreeModel classifier
+        DecisionTreeModel classifier of depth 1 with 3 nodes
+        >>> print model.toDebugString(),  # it already has newline
+        DecisionTreeModel classifier of depth 1 with 3 nodes
           If (feature 0 <= 0.5)
            Predict: 0.0
           Else (feature 0 > 0.5)
