@@ -36,15 +36,25 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
+
+    // Create stream with empty filter restrictions
     JavaDStream<Status> test1 = TwitterUtils.createStream(ssc);
-    JavaDStream<Status> test2 = TwitterUtils.createStream(ssc, filters);
-    JavaDStream<Status> test3 = TwitterUtils.createStream(
+    JavaDStream<Status> test2 = TwitterUtils.createStream(ssc, auth);
+
+    // Create stream filtered by keywords
+    JavaDStream<Status> test3 = TwitterUtils.createStream(ssc, filters);
+    JavaDStream<Status> test4 = TwitterUtils.createStream(
       ssc, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test4 = TwitterUtils.createStream(ssc, auth);
     JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth, filters);
     JavaDStream<Status> test6 = TwitterUtils.createStream(ssc,
       auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+
+    // Create stream from FilterQuery
     JavaDStream<Status> test7 = TwitterUtils.createStream(ssc, query);
-    JavaDStream<Status> test8 = TwitterUtils.createStream(ssc, auth, query);
+    JavaDStream<Status> test8 = TwitterUtils.createStream(
+      ssc, query, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test9 = TwitterUtils.createStream(ssc, auth, query);
+    JavaDStream<Status> test10 = TwitterUtils.createStream(ssc,
+      auth, query, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }
