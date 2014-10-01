@@ -980,7 +980,8 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       val valExpr = nodeToExpr(value)
       val listMap = list.map(nodeToExpr)
-      if (listMap.exists(e => !e.isInstanceOf[Literal]) == false){
+      if (listMap.exists(e => ((!e.isInstanceOf[Literal]) && 
+          (!e.isInstanceOf[UnaryMinus]))) == false){
         val hSet = listMap.map(e => e.eval(null))
         InSet(valExpr, HashSet() ++ hSet, valExpr +: listMap)
       }
