@@ -183,8 +183,8 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     val dynamicPartPath = dynamicPartColNames
       .zip(row.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
-        val string = String.valueOf(rawVal)
-        s"/$col=${if (rawVal == null || string.isEmpty) defaultPartName else string}"
+        val string = if (rawVal == null) null else String.valueOf(rawVal)
+        s"/$col=${if (string == null || string.isEmpty) defaultPartName else string}"
       }
       .mkString
 
