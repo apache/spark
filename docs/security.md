@@ -50,9 +50,7 @@ Spark use SSL(Secure Sockets Layer) to establish an encrypted link between UI se
   <tr>
     <td>spark.ui.ssl.client.https.needAuth</td>
     <td>(none)</td>
-    <td>
-      Set true if SSL needs client authentication.
-    </td>
+    <td>Set true if SSL needs client authentication.</td>
   </tr>
   <tr>
     <td>spark.ui.ssl.server.truststore.location</td>
