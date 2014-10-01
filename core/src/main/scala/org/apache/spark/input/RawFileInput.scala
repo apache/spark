@@ -46,7 +46,7 @@ abstract class StreamFileInputFormat[T]
       if (file.isDir) 0L else file.getLen
     }.sum
 
-    val maxSplitSize = Math.ceil(totalLen*1.0/files.length).toLong
+    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -61,8 +61,10 @@ abstract class StreamFileInputFormat[T]
  */
 class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, index: Integer)
   extends Serializable {
-
+  // transient forces file to be reopened after being moved (serialization)
+  @transient
   private var fileIn: FSDataInputStream = null.asInstanceOf[FSDataInputStream]
+  @transient
   private var isOpen = false
   /**
    * Calculate the path name independently of opening the file
@@ -76,11 +78,23 @@ class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, i
    * create a new DataInputStream from the split and context
    */
   def open(): FSDataInputStream = {
-    val pathp = split.getPath(index)
-    val fs = pathp.getFileSystem(context.getConfiguration)
-    fileIn = fs.open(pathp)
-    isOpen=true
+    if (!isOpen) {
+      val pathp = split.getPath(index)
+      val fs = pathp.getFileSystem(context.getConfiguration)
+      fileIn = fs.open(pathp)
+      isOpen=true
+    }
     fileIn
+  }
+
+  /**
+   * Read the file as a byte array
+   */
+  def toArray(): Array[Byte] = {
+    open()
+    val innerBuffer = ByteStreams.toByteArray(fileIn)
+    close()
+    innerBuffer
   }
 
   /**
@@ -131,7 +145,7 @@ abstract class StreamBasedRecordReader[T](
 
   override def nextKeyValue = {
     if (!processed) {
-      val fileIn = new PortableDataStream(split,context,index)
+      val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
       fileIn.close() // if it has not been open yet, close does nothing
       key = fileIn.getPath
@@ -157,7 +171,7 @@ private[spark] class StreamRecordReader(
                                          split: CombineFileSplit,
                                          context: TaskAttemptContext,
                                          index: Integer)
-  extends StreamBasedRecordReader[PortableDataStream](split,context,index) {
+  extends StreamBasedRecordReader[PortableDataStream](split, context, index) {
 
   def parseStream(inStream: PortableDataStream): PortableDataStream = inStream
 }
@@ -170,7 +184,7 @@ private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDat
   override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)=
   {
     new CombineFileRecordReader[String,PortableDataStream](
-      split.asInstanceOf[CombineFileSplit],taContext,classOf[StreamRecordReader]
+      split.asInstanceOf[CombineFileSplit], taContext, classOf[StreamRecordReader]
     )
   }
 }
@@ -194,28 +208,3 @@ abstract class BinaryRecordReader[T](
   }
   def parseByteArray(inArray: Array[Byte]): T
 }
-
-
-
-private[spark] class ByteRecordReader(
-                                       split: CombineFileSplit,
-                                       context: TaskAttemptContext,
-                                       index: Integer)
-  extends BinaryRecordReader[Array[Byte]](split,context,index) {
-
-  override def parseByteArray(inArray: Array[Byte]) = inArray
-}
-
-/**
- * A class for reading the file using the BinaryRecordReader (as Byte array)
- */
-private[spark] class ByteInputFormat extends StreamFileInputFormat[Array[Byte]] {
-  override def createRecordReader(split: InputSplit, taContext: TaskAttemptContext)=
-  {
-    new CombineFileRecordReader[String,Array[Byte]](
-      split.asInstanceOf[CombineFileSplit],taContext,classOf[ByteRecordReader]
-    )
-  }
-}
-
-

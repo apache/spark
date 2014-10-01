@@ -36,7 +36,7 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
+import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, RDD}
@@ -256,8 +256,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def dataStreamFiles(path: String, minPartitions: Int = defaultMinPartitions):
-  JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.dataStreamFiles(path,minPartitions))
+  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
 
   /**
    * Read a directory of files as DataInputStream from HDFS,
@@ -288,8 +288,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
-    JavaPairRDD[String, Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
+  def binaryArrays(path: String, minPartitions: Int = defaultMinPartitions):
+    JavaPairRDD[String, Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions).mapValues(_.toArray()))
 
   /**
    * Load data from a flat binary file, assuming each record is a set of numbers
@@ -299,8 +299,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @param path Directory to the input data files
    * @return An RDD of data with values, JavaRDD[(Array[Byte])]
    */
-  def binaryRecords(path: String): JavaRDD[Array[Byte]] = {
-    new JavaRDD(sc.binaryRecords(path))
+  def binaryRecords(path: String,recordLength: Int): JavaRDD[Array[Byte]] = {
+    new JavaRDD(sc.binaryRecords(path,recordLength))
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.

@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.{File, FileWriter}
 
+import org.apache.spark.input.PortableDataStream
+
 import scala.io.Source
 
 import com.google.common.io.Files
@@ -240,35 +242,69 @@ class FileSuite extends FunSuite with LocalSparkContext {
     file.close()
 
     val inRdd = sc.binaryFiles(outFileName)
-    val (infile: String, indata: Array[Byte]) = inRdd.first
+    val (infile: String, indata: PortableDataStream) = inRdd.first
 
     // Try reading the output back as an object file
     assert(infile === outFileName)
-    assert(indata === testOutput)
+    assert(indata.toArray === testOutput)
   }
 
-  test("fixed record length binary file as byte array") {
-    // a fixed length of 6 bytes
-
+  test("portabledatastream caching tests") {
     sc = new SparkContext("local", "test")
     val outFile = new File(tempDir, "record-bytestream-00000.bin")
     val outFileName = outFile.getAbsolutePath()
 
     // create file
     val testOutput = Array[Byte](1,2,3,4,5,6)
-    val testOutputCopies = 10
     val bbuf = java.nio.ByteBuffer.wrap(testOutput)
     // write data to file
     val file = new java.io.FileOutputStream(outFile)
     val channel = file.getChannel
-    for(i <- 1 to testOutputCopies) channel.write(bbuf)
+    channel.write(bbuf)
     channel.close()
     file.close()
-    sc.hadoopConfiguration.setInt("recordLength",testOutput.length)
 
-    val inRdd = sc.binaryRecords(outFileName)
+    val inRdd = sc.binaryFiles(outFileName).cache()
+    inRdd.foreach{
+      curData: (String, PortableDataStream) =>
+       curData._2.toArray() // force the file to read
+    }
+    val mappedRdd = inRdd.map{
+      curData: (String, PortableDataStream) =>
+        (curData._2.getPath(),curData._2)
+    }
+    val (infile: String, indata: PortableDataStream) = mappedRdd.first
+
+    // Try reading the output back as an object file
+
+    assert(indata.toArray === testOutput)
+  }
+
+  test("fixed record length binary file as byte array") {
+    // a fixed length of 6 bytes
+
+    sc = new SparkContext("local", "test")
+
+    val outFile = new File(tempDir, "record-bytestream-00000.bin")
+    val outFileName = outFile.getAbsolutePath()
+
+    // create file
+    val testOutput = Array[Byte](1,2,3,4,5,6)
+    val testOutputCopies = 10
+
+    // write data to file
+    val file = new java.io.FileOutputStream(outFile)
+    val channel = file.getChannel
+    for(i <- 1 to testOutputCopies) {
+      val bbuf = java.nio.ByteBuffer.wrap(testOutput)
+      channel.write(bbuf)
+    }
+    channel.close()
+    file.close()
+
+    val inRdd = sc.binaryRecords(outFileName, testOutput.length)
     // make sure there are enough elements
-    assert(inRdd.count== testOutputCopies)
+    assert(inRdd.count == testOutputCopies)
 
     // now just compare the first one
     val indata: Array[Byte] = inRdd.first
