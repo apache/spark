@@ -21,7 +21,7 @@ import traceback
 from pyspark import SparkContext, RDD
 
 
-class RDDFunction(object):
+class TransformFunction(object):
     """
     This class is for py4j callback.
     """
@@ -58,13 +58,13 @@ class RDDFunction(object):
             traceback.print_exc()
 
     def __repr__(self):
-        return "RDDFunction(%s)" % self.func
+        return "TransformFunction(%s)" % self.func
 
     class Java:
-        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
+        implements = ['org.apache.spark.streaming.api.python.PythonTransformFunction']
 
 
-class RDDFunctionSerializer(object):
+class TransformFunctionSerializer(object):
     def __init__(self, ctx, serializer, gateway=None):
         self.ctx = ctx
         self.serializer = serializer
@@ -80,15 +80,15 @@ class RDDFunctionSerializer(object):
     def loads(self, bytes):
         try:
             f, deserializers = self.serializer.loads(str(bytes))
-            return RDDFunction(self.ctx, f, *deserializers)
+            return TransformFunction(self.ctx, f, *deserializers)
         except Exception:
             traceback.print_exc()
 
     def __repr__(self):
-        return "RDDFunctionSerializer(%s)" % self.serializer
+        return "TransformFunctionSerializer(%s)" % self.serializer
 
     class Java:
-        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunctionSerializer']
+        implements = ['org.apache.spark.streaming.api.python.PythonTransformFunctionSerializer']
 
 
 def rddToFileName(prefix, suffix, time):

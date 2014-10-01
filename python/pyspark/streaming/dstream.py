@@ -22,7 +22,7 @@ from datetime import datetime
 
 from pyspark import RDD
 from pyspark.storagelevel import StorageLevel
-from pyspark.streaming.util import rddToFileName, RDDFunction
+from pyspark.streaming.util import rddToFileName, TransformFunction
 from pyspark.rdd import portable_hash
 from pyspark.resultiterable import ResultIterable
 
@@ -154,7 +154,7 @@ class DStream(object):
         """
         Apply a function to each RDD in this DStream.
         """
-        jfunc = RDDFunction(self.ctx, func, self._jrdd_deserializer)
+        jfunc = TransformFunction(self.ctx, func, self._jrdd_deserializer)
         api = self._ssc._jvm.PythonDStream
         api.callForeachRDD(self._jdstream, jfunc)
 
@@ -292,7 +292,7 @@ class DStream(object):
             oldfunc = func
             func = lambda t, a, b: oldfunc(a, b)
         assert func.func_code.co_argcount == 3, "func should take two or three arguments"
-        jfunc = RDDFunction(self.ctx, func, self._jrdd_deserializer, other._jrdd_deserializer)
+        jfunc = TransformFunction(self.ctx, func, self._jrdd_deserializer, other._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonTransformed2DStream(self._jdstream.dstream(),
                                                           other._jdstream.dstream(), jfunc)
         jrdd_serializer = self._jrdd_deserializer if keepSerializer else self.ctx.serializer
@@ -535,9 +535,9 @@ class DStream(object):
             joined = a.leftOuterJoin(b, numPartitions)
             return joined.mapValues(lambda (v1, v2): invFunc(v1, v2) if v2 is not None else v1)
 
-        jreduceFunc = RDDFunction(self.ctx, reduceFunc, reduced._jrdd_deserializer)
+        jreduceFunc = TransformFunction(self.ctx, reduceFunc, reduced._jrdd_deserializer)
         if invReduceFunc:
-            jinvReduceFunc = RDDFunction(self.ctx, invReduceFunc, reduced._jrdd_deserializer)
+            jinvReduceFunc = TransformFunction(self.ctx, invReduceFunc, reduced._jrdd_deserializer)
         else:
             jinvReduceFunc = None
         if slideDuration is None:
@@ -568,8 +568,8 @@ class DStream(object):
             state = g.mapPartitions(lambda x: updateFunc(x))
             return state.filter(lambda (k, v): v is not None)
 
-        jreduceFunc = RDDFunction(self.ctx, reduceFunc,
-                                  self.ctx.serializer, self._jrdd_deserializer)
+        jreduceFunc = TransformFunction(self.ctx, reduceFunc,
+                                        self.ctx.serializer, self._jrdd_deserializer)
         dstream = self.ctx._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc)
         return DStream(dstream.asJavaDStream(), self._ssc, self.ctx.serializer)
 
@@ -609,7 +609,7 @@ class TransformedDStream(DStream):
             return self._jdstream_val
 
         func = self.func
-        jfunc = RDDFunction(self.ctx, func, self.prev._jrdd_deserializer)
+        jfunc = TransformFunction(self.ctx, func, self.prev._jrdd_deserializer)
         jdstream = self.ctx._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(),
                                                           jfunc, self.reuse).asJavaDStream()
         self._jdstream_val = jdstream

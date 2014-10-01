@@ -25,7 +25,7 @@ from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
-from pyspark.streaming.util import RDDFunction, RDDFunctionSerializer
+from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
 
 __all__ = ["StreamingContext"]
 
@@ -114,10 +114,10 @@ class StreamingContext(object):
         java_import(gw.jvm, "org.apache.spark.streaming.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
-        # register serializer for RDDFunction
+        # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
-        cls._transformerSerializer = RDDFunctionSerializer(SparkContext._active_spark_context,
-                                                           CloudPickleSerializer(), gw)
+        cls._transformerSerializer = TransformFunctionSerializer(
+            SparkContext._active_spark_context, CloudPickleSerializer(), gw)
         gw.jvm.PythonDStream.registerSerializer(cls._transformerSerializer)
 
     @classmethod
@@ -284,10 +284,10 @@ class StreamingContext(object):
         jdstreams = ListConverter().convert([d._jdstream for d in dstreams],
                                             SparkContext._gateway._gateway_client)
         # change the final serializer to sc.serializer
-        func = RDDFunction(self._sc,
-                           lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
-                           *[d._jrdd_deserializer for d in dstreams])
-        jfunc = self._jvm.RDDFunction(func)
+        func = TransformFunction(self._sc,
+                                 lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
+                                 *[d._jrdd_deserializer for d in dstreams])
+        jfunc = self._jvm.TransformFunction(func)
         jdstream = self._jssc.transform(jdstreams, jfunc)
         return DStream(jdstream, self, self._sc.serializer)
 
