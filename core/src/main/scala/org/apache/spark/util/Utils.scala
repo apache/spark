@@ -1416,10 +1416,10 @@ private[spark] object Utils extends Logging {
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
-      println(s"start $serviceName at tryport: $tryPort")
+      logInfo(s"start $serviceName at tryport: $tryPort")
       try {
         val (service, port) = startService(tryPort)
-        println(s"Successfully started service$serviceString on port $port.")
+        logInfo(s"Successfully started service$serviceString on port $port.")
         return (service, port)
       } catch {
         case e: Exception if isBindCollision(e) =>
@@ -1431,7 +1431,7 @@ private[spark] object Utils extends Logging {
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          println(s"Service$serviceString could not bind on port $tryPort. " +
+          logInfo(s"Service$serviceString could not bind on port $tryPort. " +
             s"Attempting port ${tryPort + 1}.")
       }
     }
