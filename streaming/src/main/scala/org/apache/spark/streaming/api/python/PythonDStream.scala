@@ -77,7 +77,7 @@ private[python] class RDDFunction(@transient var pfunc: PythonRDDFunction)
 }
 
 /**
- * Inferface for Python Serializer to serialize PythonRDDFunction
+ * Interface for Python Serializer to serialize PythonRDDFunction
  */
 private[python] trait PythonRDDFunctionSerializer {
   def dumps(id: String): Array[Byte]  //
@@ -91,9 +91,9 @@ private[python] class RDDFunctionSerializer(pser: PythonRDDFunctionSerializer) {
   def serialize(func: PythonRDDFunction): Array[Byte] = {
     // get the id of PythonRDDFunction in py4j
     val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
-    val f = h.getClass().getDeclaredField("id");
-    f.setAccessible(true);
-    val id = f.get(h).asInstanceOf[String];
+    val f = h.getClass().getDeclaredField("id")
+    f.setAccessible(true)
+    val id = f.get(h).asInstanceOf[String]
     pser.dumps(id)
   }
 

@@ -18,24 +18,31 @@
 from datetime import datetime
 import traceback
 
-from pyspark.rdd import RDD
+from pyspark import SparkContext, RDD
 
 
 class RDDFunction(object):
     """
     This class is for py4j callback.
     """
+    _emptyRDD = None
+
     def __init__(self, ctx, func, *deserializers):
         self.ctx = ctx
         self.func = func
         self.deserializers = deserializers
-        emptyRDD = getattr(self.ctx, "_emptyRDD", None)
-        if emptyRDD is None:
-            self.ctx._emptyRDD = emptyRDD = self.ctx.parallelize([]).cache()
-        self.emptyRDD = emptyRDD
+
+    @property
+    def emptyRDD(self):
+        if self._emptyRDD is None and self.ctx:
+            self._emptyRDD = self.ctx.parallelize([]).cache()
+        return self._emptyRDD
 
     def call(self, milliseconds, jrdds):
         try:
+            if self.ctx is None:
+                self.ctx = SparkContext._active_spark_context
+
             # extend deserializers with the first one
             sers = self.deserializers
             if len(sers) < len(jrdds):
@@ -51,20 +58,21 @@ class RDDFunction(object):
             traceback.print_exc()
 
     def __repr__(self):
-        return "RDDFunction(%s)" % (str(self.func))
+        return "RDDFunction(%s)" % self.func
 
     class Java:
         implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
 
 
 class RDDFunctionSerializer(object):
-    def __init__(self, ctx, serializer):
+    def __init__(self, ctx, serializer, gateway=None):
         self.ctx = ctx
         self.serializer = serializer
+        self.gateway = gateway or self.ctx._gateway
 
     def dumps(self, id):
         try:
-            func = self.ctx._gateway.gateway_property.pool[id]
+            func = self.gateway.gateway_property.pool[id]
             return bytearray(self.serializer.dumps((func.func, func.deserializers)))
         except Exception:
             traceback.print_exc()

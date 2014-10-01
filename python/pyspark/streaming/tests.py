@@ -493,5 +493,38 @@ class TestStreamingContext(PySparkStreamingTestCase):
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
 
+class TestCheckpoint(PySparkStreamingTestCase):
+
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        pass
+
+    def test_get_or_create(self):
+        result = [0]
+
+        def setup():
+            conf = SparkConf().set("spark.default.parallelism", 1)
+            sc = SparkContext(conf=conf)
+            ssc = StreamingContext(sc, .2)
+            rdd = sc.parallelize(range(10), 1)
+            dstream = ssc.queueStream([rdd], default=rdd)
+            result[0] = self._collect(dstream.countByWindow(1, .2))
+            return ssc
+        tmpd = tempfile.mkdtemp("test_streaming_cps")
+        ssc = StreamingContext.getOrCreate(tmpd, setup)
+        ssc.start()
+        ssc.awaitTermination(4)
+        ssc.stop()
+        expected = [[i * 10 + 10] for i in range(5)] + [[50]] * 5
+        self.assertEqual(expected, result[0][:10])
+
+        ssc = StreamingContext.getOrCreate(tmpd, setup)
+        ssc.start()
+        ssc.awaitTermination(2)
+        ssc.stop()
+
+
 if __name__ == "__main__":
     unittest.main()

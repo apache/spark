@@ -82,6 +82,14 @@ abstract class RDD[T: ClassTag](
   def this(@transient oneParent: RDD[_]) =
     this(oneParent.context , List(new OneToOneDependency(oneParent)))
 
+  // setContext after loading from checkpointing
+  private[spark] def setContext(s: SparkContext) = {
+    if (sc != null && sc != s) {
+      throw new SparkException("Context is already set in " + this + ", cannot set it again")
+    }
+    sc = s
+  }
+
   private[spark] def conf = sc.conf
   // =======================================================================
   // Methods that should be implemented by subclasses of RDD

@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.UnionRDD
 import scala.collection.mutable.Queue
@@ -31,6 +32,12 @@ class QueueInputDStream[T: ClassTag](
     oneAtATime: Boolean,
     defaultRDD: RDD[T]
   ) extends InputDStream[T](ssc) {
+
+  private[streaming] override def setContext(s: StreamingContext) {
+    super.setContext(s)
+    queue.map(_.setContext(s.sparkContext))
+    defaultRDD.setContext(s.sparkContext)
+  }
 
   override def start() { }
 

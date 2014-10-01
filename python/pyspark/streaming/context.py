@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import sys
 
 from py4j.java_collections import ListConverter
 from py4j.java_gateway import java_import
 
-from pyspark import RDD
+from pyspark import RDD, SparkConf
 from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
@@ -75,34 +77,22 @@ class StreamingContext(object):
     respectively. `context.awaitTransformation()` allows the current thread
     to wait for the termination of the context by `stop()` or by an exception.
     """
+    _transformerSerializer = None
 
-    def __init__(self, sparkContext, duration):
+    def __init__(self, sparkContext, duration=None, jssc=None):
         """
         Create a new StreamingContext.
 
         @param sparkContext: L{SparkContext} object.
         @param duration: number of seconds.
         """
+
         self._sc = sparkContext
         self._jvm = self._sc._jvm
-        self._start_callback_server()
-        self._jssc = self._initialize_context(self._sc, duration)
-
-    def _start_callback_server(self):
-        gw = self._sc._gateway
-        # getattr will fallback to JVM
-        if "_callback_server" not in gw.__dict__:
-            _daemonize_callback_server()
-            gw._start_callback_server(gw._python_proxy_port)
-            gw._python_proxy_port = gw._callback_server.port  # update port with real port
+        self._jssc = jssc or self._initialize_context(self._sc, duration)
 
     def _initialize_context(self, sc, duration):
-        java_import(self._jvm, "org.apache.spark.streaming.*")
-        java_import(self._jvm, "org.apache.spark.streaming.api.java.*")
-        java_import(self._jvm, "org.apache.spark.streaming.api.python.*")
-        # register serializer for RDDFunction
-        ser = RDDFunctionSerializer(self._sc, CloudPickleSerializer())
-        self._jvm.PythonDStream.registerSerializer(ser)
+        self._ensure_initialized()
         return self._jvm.JavaStreamingContext(sc._jsc, self._jduration(duration))
 
     def _jduration(self, seconds):
@@ -110,6 +100,58 @@ class StreamingContext(object):
         Create Duration object given number of seconds
         """
         return self._jvm.Duration(int(seconds * 1000))
+
+    @classmethod
+    def _ensure_initialized(cls):
+        SparkContext._ensure_initialized()
+        gw = SparkContext._gateway
+        # start callback server
+        # getattr will fallback to JVM
+        if "_callback_server" not in gw.__dict__:
+            _daemonize_callback_server()
+            gw._start_callback_server(gw._python_proxy_port)
+
+        java_import(gw.jvm, "org.apache.spark.streaming.*")
+        java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
+        java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
+        # register serializer for RDDFunction
+        # it happens before creating SparkContext when loading from checkpointing
+        cls._transformerSerializer = RDDFunctionSerializer(SparkContext._active_spark_context,
+                                                           CloudPickleSerializer(), gw)
+        gw.jvm.PythonDStream.registerSerializer(cls._transformerSerializer)
+
+    @classmethod
+    def getOrCreate(cls, path, setupFunc):
+        """
+        Get the StreamingContext from checkpoint file at `path`, or setup
+        it by `setupFunc`.
+
+        :param path: directory of checkpoint
+        :param setupFunc: a function used to create StreamingContext and
+                          setup DStreams.
+        :return: a StreamingContext
+        """
+        if not os.path.exists(path) or not os.path.isdir(path) or not os.listdir(path):
+            ssc = setupFunc()
+            ssc.checkpoint(path)
+            return ssc
+
+        cls._ensure_initialized()
+        gw = SparkContext._gateway
+
+        try:
+            jssc = gw.jvm.JavaStreamingContext(path)
+        except Exception:
+            print >>sys.stderr, "failed to load StreamingContext from checkpoint"
+            raise
+
+        jsc = jssc.sparkContext()
+        conf = SparkConf(_jconf=jsc.getConf())
+        sc = SparkContext(conf=conf, gateway=gw, jsc=jsc)
+        # update ctx in serializer
+        SparkContext._active_spark_context = sc
+        cls._transformerSerializer.ctx = sc
+        return StreamingContext(sc, None, jssc)
 
     @property
     def sparkContext(self):
