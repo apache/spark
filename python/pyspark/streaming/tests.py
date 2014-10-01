@@ -70,7 +70,8 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
         def get_output(_, rdd):
             r = rdd.collect()
-            result.append(r)
+            if r:
+                result.append(r)
         dstream.foreachRDD(get_output)
         return result
 
@@ -449,24 +450,18 @@ class TestStreamingContext(PySparkStreamingTestCase):
         time.sleep(1)
         self.assertEqual(input, result[:3])
 
-    # TODO: fix this test
-    # def test_textFileStream(self):
-    #     input = [range(i) for i in range(3)]
-    #     dstream = self.ssc.queueStream(input)
-    #     d = os.path.join(tempfile.gettempdir(), str(id(self)))
-    #     if not os.path.exists(d):
-    #         os.makedirs(d)
-    #     dstream.saveAsTextFiles(os.path.join(d, 'test'))
-    #     self.ssc.start()
-    #     time.sleep(1)
-    #     self.ssc.stop(False, True)
-    #
-    #     self.ssc = StreamingContext(self.sc, self.batachDuration)
-    #     dstream2 = self.ssc.textFileStream(d)
-    #     result = self._collect(dstream2)
-    #     self.ssc.start()
-    #     time.sleep(2)
-    #     self.assertEqual(input, result[:3])
+    def test_textFileStream(self):
+        d = tempfile.mkdtemp()
+        self.ssc = StreamingContext(self.sc, self.duration)
+        dstream2 = self.ssc.textFileStream(d).map(int)
+        result = self._collect(dstream2)
+        self.ssc.start()
+        time.sleep(1)
+        for name in ('a', 'b'):
+            with open(os.path.join(d, name), "w") as f:
+                f.writelines(["%d\n" % i for i in range(10)])
+        time.sleep(2)
+        self.assertEqual([range(10) * 2], result[:3])
 
     def test_union(self):
         input = [range(i) for i in range(3)]
@@ -503,27 +498,34 @@ class TestCheckpoint(PySparkStreamingTestCase):
 
     def test_get_or_create(self):
         result = [0]
+        inputd = tempfile.mkdtemp()
 
         def setup():
             conf = SparkConf().set("spark.default.parallelism", 1)
             sc = SparkContext(conf=conf)
             ssc = StreamingContext(sc, .2)
-            rdd = sc.parallelize(range(1), 1)
-            dstream = ssc.queueStream([rdd], default=rdd)
-            result[0] = self._collect(dstream.countByWindow(1, 0.2))
+            dstream = ssc.textFileStream(inputd)
+            result[0] = self._collect(dstream.count())
             return ssc
+
         tmpd = tempfile.mkdtemp("test_streaming_cps")
         ssc = StreamingContext.getOrCreate(tmpd, setup)
         ssc.start()
+        time.sleep(1)
+        with open(os.path.join(inputd, "1"), 'w') as f:
+            f.writelines(["%d\n" % i for i in range(10)])
         ssc.awaitTermination(4)
-        ssc.stop()
+        ssc.stop(True, True)
         expected = [[i * 1 + 1] for i in range(5)] + [[5]] * 5
-        self.assertEqual(expected, result[0][:10])
+        self.assertEqual([[10]], result[0][:1])
 
         ssc = StreamingContext.getOrCreate(tmpd, setup)
         ssc.start()
+        time.sleep(1)
+        with open(os.path.join(inputd, "1"), 'w') as f:
+            f.writelines(["%d\n" % i for i in range(10)])
         ssc.awaitTermination(2)
-        ssc.stop()
+        ssc.stop(True, True)
 
 
 if __name__ == "__main__":
