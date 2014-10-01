@@ -320,6 +320,10 @@ object SparkSubmit {
     } catch {
       case e: ClassNotFoundException =>
         e.printStackTrace(printStream)
+        if (childMainClass.contains("thriftserver")) {
+          println(s"Failed to load main class $childMainClass.")
+          println("You need to build Spark with -Phive.")
+        }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
