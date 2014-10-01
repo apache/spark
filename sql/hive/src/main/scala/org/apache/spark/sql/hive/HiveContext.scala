@@ -46,7 +46,6 @@ import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 import org.apache.spark.sql.hive.HiveShim
-import org.apache.spark.sql.hive.HiveShim._
 
 /**
  * DEPRECATED: Use HiveContext instead.

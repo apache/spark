@@ -73,15 +73,10 @@ private[hive] object HiveShim {
     context.getExternalTmpFileURI(uri)
   }
 
-  implicit class wrapperToPartition(p: Partition) {
-    def getDataLocationPath: Path = p.getPartitionPath
-  }
+  def getDataLocationPath(p: Partition) = p.getPartitionPath
 
-  implicit class wrapperToHive(client: Hive) {
-    def getAllPartitionsOf(tbl: Table) = {
-      client.getAllPartitionsForPruner(tbl)
-    }
-  }
+  def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsForPruner(tbl)
+
 }
 
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)

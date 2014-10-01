@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.HiveShim
-import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
@@ -60,7 +59,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val table = client.getTable(databaseName, tblName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
-        client.getAllPartitionsOf(table).toSeq
+        HiveShim.getAllPartitionsOf(client, table).toSeq
       } else {
         Nil
       }
@@ -245,6 +244,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BooleanType => "boolean"
     case DecimalType => "decimal"
     case TimestampType => "timestamp"
+    case NullType => "void"
   }
 }
 

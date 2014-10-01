@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
-import org.apache.hadoop.hive.ql.metadata.Partition
+import org.apache.hadoop.hive.ql.metadata.{Table, Hive, Partition}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
 import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer}
@@ -105,24 +105,29 @@ private[hive] object HiveShim {
     context.getExternalTmpPath(path.toUri)
   }
 
+  def getDataLocationPath(p: Partition) = p.getDataLocation
+
+  def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsOf(tbl)
+
   /*
    * Bug introdiced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
    * Fix it through wrapper.
    * */
   implicit def wrapperToFileSinkDesc(w: ShimFileSinkDesc): FileSinkDesc = {
-    var f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
-    f.setCompressed(w.compressed)
-    f.setCompressCodec(w.compressCodec)
-    f.setCompressType(w.compressType)
-    f.setTableInfo(w.tableInfo)
-    f
-  }
-
-  implicit class wrapperToPartition(p: Partition) {
-    def getDataLocationPath: Path = p.getDataLocation
+        var f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
+        f.setCompressed(w.compressed)
+        f.setCompressCodec(w.compressCodec)
+        f.setCompressType(w.compressType)
+        f.setTableInfo(w.tableInfo)
+        f.setDestTableId(w.destTableId)
+        f
   }
 }
 
+/*
+ * Bug introdiced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
+ * Fix it through wrapper.
+ */
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)
   extends Serializable with Logging {
   var compressCodec: String = _
