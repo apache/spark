@@ -32,4 +32,13 @@
   <packaging>jar</packaging>
   <name>Spark Project YARN Stable API</name>
 
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-tests</artifactId>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
 </project>

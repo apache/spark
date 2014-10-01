@@ -63,15 +63,18 @@ import org.apache.spark.metrics.source.Source
  *
  * [options] is the specific property of this source or sink.
  */
-private[spark] class MetricsSystem private (val instance: String,
-    conf: SparkConf, securityMgr: SecurityManager) extends Logging {
+private[spark] class MetricsSystem private (
+    val instance: String,
+    conf: SparkConf,
+    securityMgr: SecurityManager)
+  extends Logging {
 
-  val confFile = conf.get("spark.metrics.conf", null)
-  val metricsConfig = new MetricsConfig(Option(confFile))
+  private[this] val confFile = conf.get("spark.metrics.conf", null)
+  private[this] val metricsConfig = new MetricsConfig(Option(confFile))
 
-  val sinks = new mutable.ArrayBuffer[Sink]
-  val sources = new mutable.ArrayBuffer[Source]
-  val registry = new MetricRegistry()
+  private val sinks = new mutable.ArrayBuffer[Sink]
+  private val sources = new mutable.ArrayBuffer[Source]
+  private val registry = new MetricRegistry()
 
   // Treat MetricsServlet as a special sink as it should be exposed to add handlers to web ui
   private var metricsServlet: Option[MetricsServlet] = None
@@ -91,7 +94,7 @@ private[spark] class MetricsSystem private (val instance: String,
     sinks.foreach(_.stop)
   }
 
-  def report(): Unit = {
+  def report() {
     sinks.foreach(_.report())
   }
 
@@ -155,8 +158,8 @@ private[spark] object MetricsSystem {
   val SINK_REGEX = "^sink\\.(.+)\\.(.+)".r
   val SOURCE_REGEX = "^source\\.(.+)\\.(.+)".r
 
-  val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
-  val MINIMAL_POLL_PERIOD = 1
+  private[this] val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
+  private[this] val MINIMAL_POLL_PERIOD = 1
 
   def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
     val period = MINIMAL_POLL_UNIT.convert(pollPeriod, pollUnit)
@@ -166,7 +169,8 @@ private[spark] object MetricsSystem {
     }
   }
 
-  def createMetricsSystem(instance: String, conf: SparkConf,
-      securityMgr: SecurityManager): MetricsSystem =
+  def createMetricsSystem(
+      instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
     new MetricsSystem(instance, conf, securityMgr)
+  }
 }

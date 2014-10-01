@@ -401,17 +401,17 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
           status = FinalApplicationStatus.SUCCEEDED
         } catch {
-          case e: InvocationTargetException => {
+          case e: InvocationTargetException =>
             e.getCause match {
-              case _: InterruptedException => {
+              case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              }
+
+              case e => throw e
             }
-          }
         } finally {
           logDebug("Finishing main")
+          finalStatus = status
         }
-        finalStatus = status
       }
     }
     userClassThread.setName("Driver")

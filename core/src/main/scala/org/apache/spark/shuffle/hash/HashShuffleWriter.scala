@@ -103,13 +103,11 @@ private[spark] class HashShuffleWriter[K, V](
 
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
-    val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
+    val sizes: Array[Long] = shuffle.writers.map { writer: BlockObjectWriter =>
       writer.commitAndClose()
-      val size = writer.fileSegment().length
-      MapOutputTracker.compressSize(size)
+      writer.fileSegment().length
     }
-
-    new MapStatus(blockManager.blockManagerId, compressedSizes)
+    MapStatus(blockManager.blockManagerId, sizes)
   }
 
   private def revertWrites(): Unit = {
