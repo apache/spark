@@ -244,7 +244,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     val inRdd = sc.binaryFiles(outFileName)
     val (infile: String, indata: PortableDataStream) = inRdd.first
 
-    // Try reading the output back as an object file
+    // Make sure the name and array match
     assert(infile.contains(outFileName)) // a prefix may get added
     assert(indata.toArray === testOutput)
   }
