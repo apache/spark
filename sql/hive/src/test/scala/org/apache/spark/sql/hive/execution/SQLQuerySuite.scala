@@ -39,7 +39,7 @@ class SQLQuerySuite extends QueryTest {
   test("ordering not in agg") {
     checkAnswer(
       sql("SELECT key FROM src GROUP BY key, value ORDER BY value"),
-      sql("""
+      sql( """
         SELECT key
         FROM (
           SELECT key, value
@@ -58,7 +58,7 @@ class SQLQuerySuite extends QueryTest {
   test("test CTAS") {
     checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
     checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
+      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
 
