@@ -52,16 +52,6 @@ import org.apache.spark.util.IntParam
  * checkpoint data exists in ~/checkpoint/, then it will create StreamingContext from
  * the checkpoint data.
  *
- * To run this example in a local standalone cluster with automatic driver recovery,
- *
- *      `$ bin/spark-class org.apache.spark.deploy.Client -s launch <cluster-url> \
- *              <path-to-examples-jar> \
- *              org.apache.spark.examples.streaming.RecoverableNetworkWordCount <cluster-url> \
- *              localhost 9999 ~/checkpoint ~/out`
- *
- * <path-to-examples-jar> would typically be
- * <spark-dir>/examples/target/scala-XX/spark-examples....jar
- *
  * Refer to the online documentation for more details.
  */
 object RecoverableNetworkWordCount {
