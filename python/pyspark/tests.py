@@ -467,8 +467,12 @@ class TestRDDFunctions(PySparkTestCase):
     def test_large_closure(self):
         N = 1000000
         data = [float(i) for i in xrange(N)]
-        m = self.sc.parallelize(range(1), 1).map(lambda x: len(data)).sum()
-        self.assertEquals(N, m)
+        rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
+        self.assertEquals(N, rdd.first())
+        self.assertTrue(rdd._broadcast is not None)
+        rdd = self.sc.parallelize(range(1), 1).map(lambda x: 1)
+        self.assertEqual(1, rdd.first())
+        self.assertTrue(rdd._broadcast is None)
 
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
