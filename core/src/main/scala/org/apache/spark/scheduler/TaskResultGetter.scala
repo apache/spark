@@ -72,6 +72,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
+          // Matching NonFatal so we don't catch the ControlThrowable from the "return" above.
           case NonFatal(ex) =>
             logError("Exception while getting task result", ex)
             taskSetManager.abort("Exception while getting task result: %s".format(ex))
