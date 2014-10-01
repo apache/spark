@@ -191,6 +191,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
 
     checkAnswer(
+      sql("SELECT b FROM binaryData ORDER BY a ASC"),
+      (1 to 5).map(Row(_)).toSeq)
+
+    checkAnswer(
+      sql("SELECT b FROM binaryData ORDER BY a DESC"),
+      (1 to 5).map(Row(_)).toSeq.reverse)
+
+    checkAnswer(
       sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
       arrayData.collect().sortBy(_.data(0)).toSeq)
 
