@@ -51,7 +51,7 @@ object RDDRelation {
     val rddFromSql = sql("SELECT key, value FROM records WHERE key < 10")
 
     println("Result of RDD.map:")
-    rddFromSql.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect.foreach(println)
+    rddFromSql.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect().foreach(println)
 
     // Queries can also be written using a LINQ-like Scala DSL.
     rdd.where('key === 1).orderBy('value.asc).select('key).collect().foreach(println)
@@ -68,5 +68,7 @@ object RDDRelation {
     // These files can also be registered as tables.
     parquetFile.registerTempTable("parquetFile")
     sql("SELECT * FROM parquetFile").collect().foreach(println)
+
+    sc.stop()
   }
 }

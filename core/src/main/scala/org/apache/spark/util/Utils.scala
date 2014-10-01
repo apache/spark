@@ -23,6 +23,8 @@ import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
+import org.eclipse.jetty.util.MultiException
+
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -1437,7 +1439,7 @@ private[spark] object Utils extends Logging {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
-      val tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
+      val tryPort = if (startPort == 0) startPort else (startPort + offset) % (65536 - 1024) + 1024
       try {
         val (service, port) = startService(tryPort)
         logInfo(s"Successfully started service$serviceString on port $port.")
@@ -1470,6 +1472,7 @@ private[spark] object Utils extends Logging {
           return true
         }
         isBindCollision(e.getCause)
+      case e: MultiException => e.getThrowables.exists(isBindCollision)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
     }

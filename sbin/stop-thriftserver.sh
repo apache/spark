@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,15 +17,9 @@
 # limitations under the License.
 #
 
-# Set everything to be logged to the file streaming/target/unit-tests.log
-log4j.rootCategory=INFO, file
-# log4j.appender.file=org.apache.log4j.FileAppender
-log4j.appender.file=org.apache.log4j.FileAppender
-log4j.appender.file.append=false
-log4j.appender.file.file=target/unit-tests.log
-log4j.appender.file.layout=org.apache.log4j.PatternLayout
-log4j.appender.file.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n
+# Stops the thrift server on the machine this script is executed on.
 
-# Ignore messages below warning level from Jetty, because it's a bit verbose
-log4j.logger.org.eclipse.jetty=WARN
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
+"$sbin"/spark-daemon.sh stop org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 1
