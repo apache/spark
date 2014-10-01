@@ -61,7 +61,8 @@ public class JavaSparkSQL {
     // Load a text file and convert each line to a Java Bean.
     JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
       new Function<String, Person>() {
-        public Person call(String line) throws Exception {
+        @Override
+        public Person call(String line) {
           String[] parts = line.split(",");
 
           Person person = new Person();
@@ -82,6 +83,7 @@ public class JavaSparkSQL {
     // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
     List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+      @Override
       public String call(Row row) {
         return "Name: " + row.getString(0);
       }
@@ -104,6 +106,7 @@ public class JavaSparkSQL {
     JavaSchemaRDD teenagers2 =
       sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
     teenagerNames = teenagers2.map(new Function<Row, String>() {
+      @Override
       public String call(Row row) {
           return "Name: " + row.getString(0);
       }
@@ -136,6 +139,7 @@ public class JavaSparkSQL {
     // The results of SQL queries are JavaSchemaRDDs and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
     teenagerNames = teenagers3.map(new Function<Row, String>() {
+      @Override
       public String call(Row row) { return "Name: " + row.getString(0); }
     }).collect();
     for (String name: teenagerNames) {
@@ -162,6 +166,7 @@ public class JavaSparkSQL {
 
     JavaSchemaRDD peopleWithCity = sqlCtx.sql("SELECT name, address.city FROM people2");
     List<String> nameAndCity = peopleWithCity.map(new Function<Row, String>() {
+      @Override
       public String call(Row row) {
         return "Name: " + row.getString(0) + ", City: " + row.getString(1);
       }
@@ -169,5 +174,7 @@ public class JavaSparkSQL {
     for (String name: nameAndCity) {
       System.out.println(name);
     }
+
+    ctx.stop();
   }
 }

@@ -39,7 +39,7 @@ object HiveFromSpark {
 
     // Queries are expressed in HiveQL
     println("Result of 'SELECT *': ")
-    sql("SELECT * FROM src").collect.foreach(println)
+    sql("SELECT * FROM src").collect().foreach(println)
 
     // Aggregation queries are also supported.
     val count = sql("SELECT COUNT(*) FROM src").collect().head.getLong(0)
@@ -61,5 +61,7 @@ object HiveFromSpark {
     // Queries can then join RDD data with data stored in Hive.
     println("Result of SELECT *:")
     sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
+
+    sc.stop()
   }
 }

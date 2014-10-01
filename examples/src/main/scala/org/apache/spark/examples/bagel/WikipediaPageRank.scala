@@ -21,7 +21,6 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 
 import org.apache.spark.bagel._
-import org.apache.spark.bagel.Bagel._
 
 import scala.xml.{XML,NodeSeq}
 
@@ -78,9 +77,9 @@ object WikipediaPageRank {
       (id, new PRVertex(1.0 / numVertices, outEdges))
     })
     if (usePartitioner) {
-      vertices = vertices.partitionBy(new HashPartitioner(sc.defaultParallelism)).cache
+      vertices = vertices.partitionBy(new HashPartitioner(sc.defaultParallelism)).cache()
     } else {
-      vertices = vertices.cache
+      vertices = vertices.cache()
     }
     println("Done parsing input file.")
 
@@ -100,7 +99,9 @@ object WikipediaPageRank {
       (result
        .filter { case (id, vertex) => vertex.value >= threshold }
        .map { case (id, vertex) => "%s\t%s\n".format(id, vertex.value) }
-       .collect.mkString)
+       .collect().mkString)
     println(top)
+
+    sc.stop()
   }
 }
