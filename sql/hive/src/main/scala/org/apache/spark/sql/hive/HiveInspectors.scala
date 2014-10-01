@@ -213,6 +213,8 @@ private[hive] trait HiveInspectors {
     case _: JavaHiveDecimalObjectInspector => DecimalType
     case _: WritableTimestampObjectInspector => TimestampType
     case _: JavaTimestampObjectInspector => TimestampType
+    case _: WritableVoidObjectInspector => NullType
+    case _: JavaVoidObjectInspector => NullType
   }
 
   implicit class typeInfoConversions(dt: DataType) {
