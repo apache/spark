@@ -1455,7 +1455,7 @@ private[spark] object Utils extends Logging {
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logInfo(s"Service$serviceString could not bind on port $tryPort. " +
+          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
             s"Attempting port ${tryPort + 1}.")
       }
     }

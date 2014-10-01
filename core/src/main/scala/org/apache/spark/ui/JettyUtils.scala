@@ -176,11 +176,11 @@ private[spark] object JettyUtils extends Logging {
    * found. Return the jetty Server object, the chosen port, and a mutable collection of handlers.
    */
   def startJettyServer(
-                        hostName: String,
-                        port: Int,
-                        handlers: Seq[ServletContextHandler],
-                        conf: SparkConf,
-                        serverName: String = ""): ServerInfo = {
+      hostName: String,
+      port: Int,
+      handlers: Seq[ServletContextHandler],
+      conf: SparkConf,
+      serverName: String = ""): ServerInfo = {
 
     val collection = new ContextHandlerCollection
     addFilters(handlers, conf)

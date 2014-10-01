@@ -11,11 +11,65 @@ Spark currently supports authentication via a shared secret. Authentication can 
 
 ## Web UI
 
-The Spark UI can also be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting. A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable` and `spark.ui.view.acls` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
+The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting and by using [Jetty https/SSL](http://www.eclipse.org/jetty/documentation/current/configuring-ssl.html) via the `spark.ui.https.enabled` setting.
+
+### Authentication
+
+A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable` and `spark.ui.view.acls` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
 
 Spark also supports modify ACLs to control who has access to modify a running Spark application.  This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable` and `spark.modify.acls`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
 
 Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the config `spark.admin.acls`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
+
+### Encryption
+
+Spark use SSL(Secure Sockets Layer) to establish an encrypted link between UI server and browser client. The config `spark.ui.https.enabled` open switch for encryption, other configs of SSL encryption is as follows
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td>spark.ui.ssl.server.keystore.keypassword</td>
+    <td>(none)</td>
+    <td>The password for the specific key within the key store.</td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.server.keystore.location</td>
+    <td>(none)</td>
+    <td>The file or URL of the SSL Key store.</td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.server.keystore.password</td>
+    <td>(none)</td>
+    <td>The password for the key store.</td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.server.keystore.type</td>
+    <td>JKS</td>
+    <td>The type of the key store (default "JKS").</td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.client.https.needAuth</td>
+    <td>(none)</td>
+    <td>
+      Set true if SSL needs client authentication.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.server.truststore.location</td>
+    <td>(none)</td>
+    <td>The file name or URL of the trust store location.</td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.server.truststore.password</td>
+    <td>(none)</td>
+    <td>The password for the trust store</td>
+  </tr>
+  <tr>
+    <td>spark.ui.ssl.server.truststore.type</td>
+    <td>JKS</td>
+    <td>The type of the trust store (default "JKS")</td>
+  </tr>
+</table>
 
 ## Event Logging
 
