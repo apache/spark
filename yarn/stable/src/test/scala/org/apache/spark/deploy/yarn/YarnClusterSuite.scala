@@ -21,7 +21,6 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
-import scala.concurrent.duration.Duration
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -84,7 +83,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     // This hack loops for a bit waiting for the port to change, and fails the test if it hasn't
     // done so in a timely manner (defined to be 10 seconds).
     val config = yarnCluster.getConfig()
-    val deadline = System.currentTimeMillis() + Duration(10, TimeUnit.SECONDS).toMillis
+    val deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10)
     while (config.get(YarnConfiguration.RM_ADDRESS).split(":")(1) == "0") {
       if (System.currentTimeMillis() > deadline) {
         throw new IllegalStateException("Timed out waiting for RM to come up.")
