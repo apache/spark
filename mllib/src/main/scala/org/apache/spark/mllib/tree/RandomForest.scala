@@ -380,7 +380,7 @@ object RandomForest extends Serializable with Logging {
    *
    * @param nodeQueue  Queue of nodes to split.
    * @param maxMemoryUsage  Bound on size of aggregate statistics.
-   * @return  (nodesForGroup, treeToNodeToIndexInfo, nodeToFeatures).
+   * @return  (nodesForGroup, treeToNodeToIndexInfo).
    *          nodesForGroup holds the nodes to split: treeIndex --> nodes in tree.
    *
    *          treeToNodeToIndexInfo holds indices selected features for each node:
@@ -393,8 +393,7 @@ object RandomForest extends Serializable with Logging {
       nodeQueue: mutable.Queue[(Int, Node)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
-      rng: scala.util.Random)
-    :(Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
+      rng: scala.util.Random): (Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
     // Collect some nodes to split:
     //  nodesForGroup(treeIndex) = nodes to split
     val mutableNodesForGroup = new mutable.HashMap[Int, mutable.ArrayBuffer[Node]]()
