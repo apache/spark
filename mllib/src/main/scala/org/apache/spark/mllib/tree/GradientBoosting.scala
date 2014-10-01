@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
@@ -25,29 +26,86 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.{GradientBoostingModel, DecisionTreeModel}
 import org.apache.spark.mllib.tree.configuration.Algo._
 
+/**
+ * :: Experimental ::
+ * A class that implements gradient boosting for regression problems.
+ * @param strategy Parameters for the underlying decision tree estimators
+ * @param boostingStrategy Parameters for the gradient boosting algorithm
+ */
+@Experimental
 class GradientBoosting (
     private val strategy: Strategy,
     private val boostingStrategy: BoostingStrategy) extends Serializable with Logging {
 
+  /**
+   * Method to train a gradient boosting model
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @return GradientBoostingModel that can be used for prediction
+   */
   def train(input: RDD[LabeledPoint]): GradientBoostingModel = {
-    strategy.algo match {
-      // case Classification => GradientBoost.classification(input, strategy)
+    val algo = strategy.algo
+    algo match {
       case Regression => GradientBoosting.regression(input, strategy, boostingStrategy)
+      case _ =>
+        throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
   }
 
 }
 
+
 object GradientBoosting extends Logging {
 
+  /**
+   * Method to train a gradient boosting model.
+   * The method currently only supports regression.
+   *
+   * Note: Using [[org.apache.spark.mllib.tree.GradientBoosting#trainRegressor]]
+   *       is recommended to clearly specify regression.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param strategy The configuration parameters for the underlying tree-based estimators
+   *                 which specify the type of algorithm (classification, regression, etc.),
+   *                 feature type (continuous, categorical), depth of the tree,
+   *                 quantile calculation strategy, etc.
+   * @return GradientBoostingModel that can be used for prediction
+   */
   def train(
       input: RDD[LabeledPoint],
       strategy: Strategy,
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {
-    //val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new GradientBoosting(strategy, boostingStrategy).train(input)
   }
 
+
+  /**
+   * Method to train a gradient boosting regression model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param strategy The configuration parameters for the underlying tree-based estimators
+   *                 which specify the type of algorithm (classification, regression, etc.),
+   *                 feature type (continuous, categorical), depth of the tree,
+   *                 quantile calculation strategy, etc.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainRegressor(
+             input: RDD[LabeledPoint],
+             strategy: Strategy,
+             boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+    new GradientBoosting(strategy, boostingStrategy).train(input)
+  }
+
+  /**
+   * Internal method for performing regression using trees as base learners.
+   * @param input training dataset
+   * @param strategy tree parameters
+   * @param boostingStrategy boosting parameters
+   * @return
+   */
   private def regression(
       input: RDD[LabeledPoint],
       strategy: Strategy,
@@ -97,7 +155,6 @@ object GradientBoosting extends Logging {
       if (m % checkpointingPeriod == 0) {
         //data.checkpoint()
       }
-      logDebug(data.first.toString)
       m += 1
     }
 

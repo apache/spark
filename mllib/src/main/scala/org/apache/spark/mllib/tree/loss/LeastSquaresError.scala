@@ -21,8 +21,18 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 
+/**
+ * Class for least squares error loss calculation.
+ */
 object LeastSquaresError extends Loss {
 
+  /**
+   * Method to calculate the loss gradients for the gradient boosting calculation
+   * @param model Model of the weak learner
+   * @param point Instance of the training dataset
+   * @param learningRate Learning rate parameter for regularization
+   * @return Loss gradient
+   */
   @DeveloperApi
   override def lossGradient(
     model: DecisionTreeModel,
