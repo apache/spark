@@ -289,7 +289,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def binaryArrays(path: String, minPartitions: Int = defaultMinPartitions):
-    JavaPairRDD[String, Array[Byte]] = new JavaPairRDD(sc.binaryFiles(path,minPartitions).mapValues(_.toArray()))
+    JavaPairRDD[String, Array[Byte]] =
+    new JavaPairRDD(sc.binaryFiles(path,minPartitions).mapValues(_.toArray()))
 
   /**
    * Load data from a flat binary file, assuming each record is a set of numbers

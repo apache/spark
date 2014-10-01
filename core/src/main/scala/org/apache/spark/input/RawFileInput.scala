@@ -20,6 +20,7 @@ package org.apache.spark.input
 import scala.collection.JavaConversions._
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.mapreduce.InputSplit
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
@@ -27,7 +28,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader
-import java.io.DataInputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutputStream, DataInputStream}
 
 
 /**
@@ -58,17 +59,50 @@ abstract class StreamFileInputFormat[T]
 /**
  * A class that allows DataStreams to be serialized and moved around by not creating them
  * until they need to be read
+ * @note TaskAttemptContext is not serializable resulting in the confBytes construct
+ * @note CombineFileSplit is not serializable resulting in the splitBytes construct
  */
-class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, index: Integer)
+class PortableDataStream(@transient isplit: CombineFileSplit, @transient context: TaskAttemptContext, index: Integer)
   extends Serializable {
-  // transient forces file to be reopened after being moved (serialization)
+  // transient forces file to be reopened after being serialization
+  // it is also used for non-serializable classes
+
   @transient
   private var fileIn: FSDataInputStream = null.asInstanceOf[FSDataInputStream]
   @transient
   private var isOpen = false
+
+  private val confBytes = {
+    val baos = new ByteArrayOutputStream()
+    context.getConfiguration.write(new DataOutputStream(baos))
+    baos.toByteArray
+  }
+
+  private val splitBytes = {
+    val baos = new ByteArrayOutputStream()
+    isplit.write(new DataOutputStream(baos))
+    baos.toByteArray
+  }
+
+  @transient
+  private lazy val split = {
+    val bais = new ByteArrayInputStream(splitBytes)
+    val nsplit = new CombineFileSplit()
+    nsplit.readFields(new DataInputStream(bais))
+    nsplit
+  }
+
+  @transient
+  private lazy val conf = {
+    val bais = new ByteArrayInputStream(confBytes)
+    val nconf = new Configuration()
+    nconf.readFields(new DataInputStream(bais))
+    nconf
+  }
   /**
    * Calculate the path name independently of opening the file
    */
+  @transient
   private lazy val path = {
     val pathp = split.getPath(index)
     pathp.toString
@@ -80,7 +114,7 @@ class PortableDataStream(split: CombineFileSplit, context: TaskAttemptContext, i
   def open(): FSDataInputStream = {
     if (!isOpen) {
       val pathp = split.getPath(index)
-      val fs = pathp.getFileSystem(context.getConfiguration)
+      val fs = pathp.getFileSystem(conf)
       fileIn = fs.open(pathp)
       isOpen=true
     }

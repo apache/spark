@@ -280,6 +280,43 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(indata.toArray === testOutput)
   }
 
+  test("portabledatastream flatmap tests") {
+    sc = new SparkContext("local", "test")
+    val outFile = new File(tempDir, "record-bytestream-00000.bin")
+    val outFileName = outFile.getAbsolutePath()
+
+    // create file
+    val testOutput = Array[Byte](1,2,3,4,5,6)
+    val numOfCopies = 3
+    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
+    // write data to file
+    val file = new java.io.FileOutputStream(outFile)
+    val channel = file.getChannel
+    channel.write(bbuf)
+    channel.close()
+    file.close()
+
+    val inRdd = sc.binaryFiles(outFileName)
+    val mappedRdd = inRdd.map{
+      curData: (String, PortableDataStream) =>
+        (curData._2.getPath(),curData._2)
+    }
+    val copyRdd = mappedRdd.flatMap{
+      curData: (String, PortableDataStream) =>
+        for(i <- 1 to numOfCopies) yield (i,curData._2)
+    }
+
+    val copyArr: Array[(Int, PortableDataStream)] = copyRdd.collect()
+
+    // Try reading the output back as an object file
+    assert(copyArr.length == numOfCopies)
+    copyArr.foreach{
+      cEntry: (Int, PortableDataStream) =>
+        assert(cEntry._2.toArray === testOutput)
+    }
+
+  }
+
   test("fixed record length binary file as byte array") {
     // a fixed length of 6 bytes
 

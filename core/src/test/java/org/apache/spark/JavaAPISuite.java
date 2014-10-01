@@ -881,7 +881,6 @@ public class JavaAPISuite implements Serializable {
         readRDD.foreach(new VoidFunction<Tuple2<String,PortableDataStream>>() {
             @Override
             public void call(Tuple2<String, PortableDataStream> stringPortableDataStreamTuple2) throws Exception {
-                stringPortableDataStreamTuple2._2().getPath();
                 stringPortableDataStreamTuple2._2().toArray(); // force the file to read
             }
         });
