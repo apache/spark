@@ -240,20 +240,14 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for Python mllib KMeans.train()
    */
+  //train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int, mode: String):
   def trainKMeansModel(
       data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
       runs: Int,
       initializationMode: String): KMeansModel = {
-    val kMeansAlg = new KMeans()
-      .setK(k)
-      .setMaxIterations(maxIterations)
-      .setRuns(runs)
-      .setInitializationMode(initializationMode)
-      // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
-      .disableUncachedWarning()
-    return kMeansAlg.run(data.rdd)
+    return KMeans.train(data,k, maxIterations,runs,initializationMode)
   }
 
   /**

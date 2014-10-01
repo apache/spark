@@ -38,37 +38,6 @@ import scala.reflect.ClassTag
  * The resulting clustering may contain fewer than K clusters.
  */
 
-private [mllib] class CentroidMapper[P <: FP : ClassTag, C <: FP : ClassTag](
-  pointOps: PointOps[P, C],
-  bcActiveCenters: Broadcast[Array[Array[C]]],
-  runDistortion: Array[Accumulator[Double]]) extends Serializable {
-
-  def doIt(points: Iterator[P] ): Iterator[((Int, Int), Centroid)] = {
-    val bcCenters = bcActiveCenters.value
-    val centers = bcCenters.map {
-      _.map { _ => new Centroid}
-    }
-    for (
-      point <- points;
-      (clusters: Array[C], run) <- bcCenters.zipWithIndex
-    ) {
-      val (cluster, cost) = pointOps.findClosest(clusters, point)
-      runDistortion(run) += cost
-      centers(run)(cluster).add(point)
-    }
-
-    val contribution =
-      for (
-        (clusters, run) <- bcCenters.zipWithIndex;
-        (contrib, cluster) <- clusters.zipWithIndex
-      ) yield {
-        ((run, cluster), centers(run)(cluster))
-      }
-
-    contribution.iterator
-  }
-}
-
 private[mllib] class MultiKMeans[P <: FP : ClassTag, C <: FP : ClassTag](
   pointOps: PointOps[P, C], maxIterations: Int) extends MultiKMeansClusterer[P, C] {
 
@@ -134,10 +103,31 @@ private[mllib] class MultiKMeans[P <: FP : ClassTag, C <: FP : ClassTag](
   def getCentroids(data: RDD[P], activeCenters: Array[Array[C]]) = {
     val runDistortion = activeCenters.map(_ => data.sparkContext.accumulator(Zero))
     val bcActiveCenters = data.sparkContext.broadcast(activeCenters)
-    val x = new CentroidMapper(pointOps, bcActiveCenters, runDistortion)
-    logDebug("centroid mapper constructed")
-    val result = data.mapPartitions { x.doIt }.reduceByKey { (x, y) => x.add(y)}.collect()
-    logDebug("centroids produced")
+    val ops = pointOps
+    val result = data.mapPartitions {  points =>
+      val bcCenters = bcActiveCenters.value
+      val centers = bcCenters.map {
+        _.map { _ => new Centroid}
+      }
+      for (
+        point <- points;
+        (clusters: Array[C], run) <- bcCenters.zipWithIndex
+      ) {
+        val (cluster, cost) = ops.findClosest(clusters, point)
+        runDistortion(run) += cost
+        centers(run)(cluster).add(point)
+      }
+
+      val contribution =
+        for (
+          (clusters, run) <- bcCenters.zipWithIndex;
+          (contrib, cluster) <- clusters.zipWithIndex
+        ) yield {
+          ((run, cluster), centers(run)(cluster))
+        }
+
+      contribution.iterator
+    }.reduceByKey { (x, y) => x.add(y)}.collect()
     bcActiveCenters.unpersist()
     (result, runDistortion.map(x => x.localValue))
   }
