@@ -20,6 +20,7 @@ package org.apache.spark.streaming.twitter;
 import java.util.Arrays;
 
 import org.junit.Test;
+import twitter4j.FilterQuery;
 import twitter4j.Status;
 import twitter4j.auth.Authorization;
 import twitter4j.auth.NullAuthorization;
@@ -31,6 +32,7 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
+    FilterQuery query = new FilterQuery().track(filters);
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
@@ -42,5 +44,7 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
     JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth, filters);
     JavaDStream<Status> test6 = TwitterUtils.createStream(ssc,
       auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test7 = TwitterUtils.createStream(ssc, query);
+    JavaDStream<Status> test8 = TwitterUtils.createStream(ssc, auth, query);
   }
 }
