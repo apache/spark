@@ -85,7 +85,7 @@ sealed trait Matrix extends Serializable {
 }
 
 /**
- * Column-majored dense matrix.
+ * Column-major dense matrix.
  * The entry values are stored in a single array of doubles with columns listed in sequence.
  * For example, the following matrix
  * {{{
@@ -128,7 +128,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
 }
 
 /**
- * Column-majored sparse matrix.
+ * Column-major sparse matrix.
  * The entry values are stored in Compressed Sparse Column (CSC) format.
  * For example, the following matrix
  * {{{
@@ -207,7 +207,7 @@ class SparseMatrix(
 object Matrices {
 
   /**
-   * Creates a column-majored dense matrix.
+   * Creates a column-major dense matrix.
    *
    * @param numRows number of rows
    * @param numCols number of columns
@@ -218,7 +218,7 @@ object Matrices {
   }
 
   /**
-   * Creates a column-majored sparse matrix in Compressed Sparse Column (CSC) format.
+   * Creates a column-major sparse matrix in Compressed Sparse Column (CSC) format.
    *
    * @param numRows number of rows
    * @param numCols number of columns
