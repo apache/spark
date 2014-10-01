@@ -40,8 +40,10 @@ import org.apache.spark.sql.SQLConf
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
+// SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
-  extends TestHiveContext(new SparkContext("local[2]", "TestSQLContext", new SparkConf()))
+  extends TestHiveContext(
+    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
