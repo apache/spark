@@ -130,11 +130,19 @@ class IndexedRDDPartitionSuite extends FunSuite {
 
   test("createUsingIndex") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
-    val elems = List((0L, 2), (2L, 2), (3L, 2))
-    val vp2 = vp.createUsingIndex(elems.iterator)
-    assert(vp2.iterator.toSet === Set((0L, 2), (2L, 2)))
-    assert(vp.index === vp2.index)
-  }
+
+    // No new elements
+    val elems1 = List((0L, 2), (2L, 2))
+    val vp1 = vp.createUsingIndex(elems1.iterator)
+    assert(vp1.iterator.toSet === elems1.toSet)
+    assert(vp.index === vp1.index)
+
+    // New elements
+    val elems2 = List((0L, 2), (2L, 2), (3L, 2))
+    val vp2 = vp.createUsingIndex(elems2.iterator)
+    assert(vp2.iterator.toSet === elems2.toSet)
+    assert(vp.index != vp2.index)
+}
 
   test("innerJoinKeepLeft") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
@@ -146,10 +154,19 @@ class IndexedRDDPartitionSuite extends FunSuite {
 
   test("aggregateUsingIndex") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
-    val messages = List((0L, "a"), (2L, "b"), (0L, "c"), (3L, "d"))
-    val vp2 = vp.aggregateUsingIndex[String](messages.iterator, _ + _)
-    assert(vp2.iterator.toSet === Set((0L, "ac"), (2L, "b")))
-  }
+
+    // No new elements
+    val messages1 = List((0L, "a"), (2L, "b"), (0L, "c"))
+    val vp1 = vp.aggregateUsingIndex[String](messages1.iterator, _ + _)
+    assert(vp1.iterator.toSet === Set((0L, "ac"), (2L, "b")))
+    assert(vp.index === vp1.index)
+
+    // No new elements
+    val messages2 = List((0L, "a"), (2L, "b"), (0L, "c"), (3L, "d"))
+    val vp2 = vp.aggregateUsingIndex[String](messages2.iterator, _ + _)
+    assert(vp2.iterator.toSet === Set((0L, "ac"), (2L, "b"), (3L, "d")))
+    assert(vp.index != vp2.index)
+}
 
   test("reindex") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))

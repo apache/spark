@@ -153,6 +153,10 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
     assert(ps.aggregateUsingIndex[Int](messages, _ + _).collect.toSet ===
       (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
+
+    val messagesWithNew = List((0L, 1), (-1L, 1))
+    assert(ps.aggregateUsingIndex[Int](sc.parallelize(messagesWithNew), _ + _).collect.toSet ===
+      messagesWithNew.toSet)
   }
 }
 
