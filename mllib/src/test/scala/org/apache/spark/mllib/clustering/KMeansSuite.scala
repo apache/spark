@@ -56,11 +56,11 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, mode = RANDOM)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
     model = KMeans.train(
-      data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
+      data, k = 1, maxIterations = 1, runs = 1, mode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
   }
 
@@ -75,7 +75,7 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
 
     // Make sure code runs.
     var model = KMeans.train(data, k=2, maxIterations=1)
-    assert(model.clusterCenters.size === 2)
+    assert(model.clusterCenters.size === 1)
   }
 
   test("more clusters than points") {
@@ -87,7 +87,7 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
 
     // Make sure code runs.
     var model = KMeans.train(data, k=3, maxIterations=1)
-    assert(model.clusterCenters.size === 3)
+    assert(model.clusterCenters.size === 2)
   }
 
   test("single cluster with big dataset") {
@@ -119,11 +119,10 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, mode = RANDOM)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
-      initializationMode = K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, mode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
   }
 
@@ -164,11 +163,10 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, mode = RANDOM)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
-      initializationMode = K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, mode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
     data.unpersist()
