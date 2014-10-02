@@ -216,7 +216,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     conf.set("spark.kryo.registrator", "this.class.does.not.exist")
 
     val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance())
-    assert(thrown.getMessage.contains("Failed to invoke registrator this.class.does.not.exist"))
+    assert(thrown.getMessage.contains("Failed to load user registrator this.class.does.not.exist"))
   }
 
   test("default class loader can be set by a different thread") {

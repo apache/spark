@@ -129,8 +129,7 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     If you use Kryo serialization, give a comma-separated list of custom class names to register
-    with Kryo. If a custom registrator is given through <code>spark.kryo.registrator</code> it
-    overrides any classes specified through this property.
+    with Kryo.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
