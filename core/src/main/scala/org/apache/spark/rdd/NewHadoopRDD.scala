@@ -173,9 +173,21 @@ class NewHadoopRDD[K, V](
     new NewHadoopMapPartitionsWithSplitRDD(this, f, preservesPartitioning)
   }
 
-  override def getPreferredLocations(split: Partition): Seq[String] = {
-    val theSplit = split.asInstanceOf[NewHadoopPartition]
-    theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
+  override def getPreferredLocations(hsplit: Partition): Seq[String] = {
+    val split = hsplit.asInstanceOf[NewHadoopPartition].serializableHadoopSplit.value
+    val locs = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
+      case Some(c) => 
+        try {
+          val infos = c.newGetLocationInfo.invoke(split).asInstanceOf[Array[AnyRef]]
+          Some(HadoopRDD.convertSplitLocationInfo(infos))
+        } catch {
+          case e : Exception =>
+            logDebug("Failed to use InputSplit#getLocationInfo.", e)
+            None
+        }
+      case None => None
+    }
+    locs.getOrElse(split.getLocations.filter(_ != "localhost"))
   }
 
   def getConf: Configuration = confBroadcast.value.value
