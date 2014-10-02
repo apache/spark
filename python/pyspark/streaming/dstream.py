@@ -286,13 +286,11 @@ class DStream(object):
         `func` can have one argument of `rdd`, or have two arguments of
         (`time`, `rdd`)
         """
-        resue = False
         if func.func_code.co_argcount == 1:
-            reuse = True
             oldfunc = func
             func = lambda t, rdd: oldfunc(rdd)
         assert func.func_code.co_argcount == 2, "func should take one or two arguments"
-        return TransformedDStream(self, func, reuse)
+        return TransformedDStream(self, func)
 
     def transformWith(self, func, other, keepSerializer=False):
         """
@@ -597,26 +595,23 @@ class TransformedDStream(DStream):
     Multiple continuous transformations of DStream can be combined into
     one transformation.
     """
-    def __init__(self, prev, func, reuse=False):
+    def __init__(self, prev, func):
         ssc = prev._ssc
         self._ssc = ssc
         self.ctx = ssc._sc
         self._jrdd_deserializer = self.ctx.serializer
         self.is_cached = False
         self.is_checkpointed = False
+        self._jdstream_val = None
 
         if (isinstance(prev, TransformedDStream) and
                 not prev.is_cached and not prev.is_checkpointed):
             prev_func = prev.func
-            old_func = func
-            func = lambda t, rdd: old_func(t, prev_func(t, rdd))
-            reuse = reuse and prev.reuse
-            prev = prev.prev
-
-        self.prev = prev
-        self.func = func
-        self.reuse = reuse
-        self._jdstream_val = None
+            self.func = lambda t, rdd: func(t, prev_func(t, rdd))
+            self.prev = prev.prev
+        else:
+            self.prev = prev
+            self.func = func
 
     @property
     def _jdstream(self):
@@ -624,7 +619,6 @@ class TransformedDStream(DStream):
             return self._jdstream_val
 
         jfunc = TransformFunction(self.ctx, self.func, self.prev._jrdd_deserializer)
-        jdstream = self.ctx._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(),
-                                                          jfunc, self.reuse).asJavaDStream()
-        self._jdstream_val = jdstream
-        return jdstream
+        dstream = self.ctx._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
+        self._jdstream_val = dstream.asJavaDStream()
+        return self._jdstream_val

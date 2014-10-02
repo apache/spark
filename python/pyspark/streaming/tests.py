@@ -504,7 +504,7 @@ class TestCheckpoint(PySparkStreamingTestCase):
             return ssc
 
         cpd = tempfile.mkdtemp("test_streaming_cps")
-        ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.ssc = ssc = StreamingContext.getOrCreate(cpd, setup)
         ssc.start()
 
         def check_output(n):
@@ -539,7 +539,7 @@ class TestCheckpoint(PySparkStreamingTestCase):
         ssc.stop(True, True)
 
         time.sleep(1)
-        ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.ssc = ssc = StreamingContext.getOrCreate(cpd, setup)
         ssc.start()
         check_output(3)
 

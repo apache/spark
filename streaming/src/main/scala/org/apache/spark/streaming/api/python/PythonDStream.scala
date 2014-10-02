@@ -157,43 +157,18 @@ private[python] abstract class PythonDStream(
 
 /**
  * Transformed DStream in Python.
- *
- * If `reuse` is true and the result of the `func` is an PythonRDD, then it will cache it
- * as an template for future use, this can reduce the Python callbacks.
  */
 private[python] class PythonTransformedDStream (
     parent: DStream[_],
-    @transient pfunc: PythonTransformFunction,
-    var reuse: Boolean = false)
+    @transient pfunc: PythonTransformFunction)
   extends PythonDStream(parent, pfunc) {
-
-  // rdd returned by func
-  var lastResult: PythonRDD = _
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     val rdd = parent.getOrCompute(validTime)
-    if (rdd.isEmpty) {
-      return None
-    }
-    if (reuse && lastResult != null) {
-      // use the previous result as the template to generate new RDD
-      Some(lastResult.copyTo(rdd.get))
+    if (rdd.isDefined) {
+      func(rdd, validTime)
     } else {
-      val r = func(rdd, validTime)
-      if (reuse && r.isDefined && lastResult == null) {
-        // try to use the result as a template
-        r.get match {
-          case pyrdd: PythonRDD =>
-            if (pyrdd.firstParent == rdd) {
-              // only one PythonRDD
-              lastResult = pyrdd
-            } else {
-              // maybe have multiple stages, don't check it anymore
-              reuse = false
-            }
-        }
-      }
-      r
+      None
     }
   }
 }
@@ -209,9 +184,9 @@ private[python] class PythonTransformed2DStream(
 
   val func = new TransformFunction(pfunc)
 
-  override def slideDuration: Duration = parent.slideDuration
-
   override def dependencies = List(parent, parent2)
+
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
     val empty: RDD[_] = ssc.sparkContext.emptyRDD
@@ -220,7 +195,7 @@ private[python] class PythonTransformed2DStream(
     func(Some(rdd1), Some(rdd2), validTime)
   }
 
-  val asJavaDStream = JavaDStream.fromDStream(this)
+  val asJavaDStream  = JavaDStream.fromDStream(this)
 }
 
 /**
