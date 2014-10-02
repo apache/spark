@@ -620,8 +620,8 @@ val people = sqlContext.jsonFile(path)
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 // root
-//  |-- age: IntegerType
-//  |-- name: StringType
+//  |-- age: integer (nullable = true)
+//  |-- name: string (nullable = true)
 
 // Register this SchemaRDD as a table.
 people.registerTempTable("people")
@@ -658,8 +658,8 @@ JavaSchemaRDD people = sqlContext.jsonFile(path);
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
 // root
-//  |-- age: IntegerType
-//  |-- name: StringType
+//  |-- age: integer (nullable = true)
+//  |-- name: string (nullable = true)
 
 // Register this JavaSchemaRDD as a table.
 people.registerTempTable("people");
@@ -697,8 +697,8 @@ people = sqlContext.jsonFile(path)
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 # root
-#  |-- age: IntegerType
-#  |-- name: StringType
+#  |-- age: integer (nullable = true)
+#  |-- name: string (nullable = true)
 
 # Register this SchemaRDD as a table.
 people.registerTempTable("people")
@@ -1394,7 +1394,7 @@ please use factory methods provided in
 </tr>
 <tr>
   <td> <b>StructType</b> </td>
-  <td> org.apache.spark.sql.api.java </td>
+  <td> org.apache.spark.sql.api.java.Row </td>
   <td>
   DataType.createStructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a List or an array of StructFields.
