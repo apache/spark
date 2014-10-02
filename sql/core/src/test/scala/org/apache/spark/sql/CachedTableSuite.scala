@@ -44,8 +44,7 @@ class CachedTableSuite extends QueryTest {
     }
   }
 
-  // TODO: Reenable.
-  ignore("too big for memory") {
+  test("too big for memory") {
     val data = "*" * 10000
     sparkContext.parallelize(1 to 1000000, 1).map(_ => BigData(data)).registerTempTable("bigData")
     cacheTable("bigData")
