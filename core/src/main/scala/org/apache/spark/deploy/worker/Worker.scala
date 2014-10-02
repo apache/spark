@@ -209,14 +209,14 @@ private[spark] class Worker(
         if (appDirs == null) {
           throw new IOException("ERROR: Failed to list files in " + appDirs)
         }
-        appDirs.filter { dir => {
+        appDirs.filter { dir =>
           // the directory is used by an application - check that the application is not running
           // when cleaning up
           val appIdFromDir = dir.getName
           val isAppStillRunning = executors.values.map(_.appId).contains(appIdFromDir)
           dir.isDirectory && !isAppStillRunning &&
           !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
-        } }.foreach(Utils.deleteRecursively)
+        }.foreach(Utils.deleteRecursively)
       }
 
       cleanupFuture onFailure {
