@@ -837,11 +837,11 @@ private[spark] class BlockManager(
    * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
    * store reaches its limit and needs to free up space.
    *
-   * Return the block status if the given block has been updated, else None.
+   * Return the block status and dropped memory size if the given block has been updated, else None.
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: Either[Array[Any], ByteBuffer]): Option[(BlockStatus, Long)] = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
@@ -873,10 +873,8 @@ private[spark] class BlockManager(
         }
 
         // Actually drop from memory store
-        val droppedMemorySize =
-          if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
-        val blockIsRemoved = memoryStore.remove(blockId)
-        if (blockIsRemoved) {
+        val droppedMemorySize = memoryStore.removeWithoutUpdateMemorySize(blockId)
+        if (droppedMemorySize > 0) {
           blockIsUpdated = true
         } else {
           logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
@@ -891,7 +889,7 @@ private[spark] class BlockManager(
           blockInfo.remove(blockId)
         }
         if (blockIsUpdated) {
-          return Some(status)
+          return Some(status -> droppedMemorySize)
         }
       }
     }
