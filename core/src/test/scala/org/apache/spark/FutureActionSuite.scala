@@ -15,24 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow, Row}
-import org.apache.spark.sql.execution.{Command, LeafNode}
-import org.apache.spark.sql.hive.HiveContext
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case class NativeCommand(
-    sql: String, output: Seq[Attribute])(
-    @transient context: HiveContext)
-  extends LeafNode with Command {
+import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 
-  override protected lazy val sideEffectResult: Seq[Row] = context.runSqlHive(sql).map(Row(_))
+import org.apache.spark.SparkContext._
 
-  override def otherCopyArgs = context :: Nil
+class FutureActionSuite extends FunSuite with BeforeAndAfter with Matchers with LocalSparkContext {
+
+  before {
+    sc = new SparkContext("local", "FutureActionSuite")
+  }
+
+  test("simple async action") {
+    val rdd = sc.parallelize(1 to 10, 2)
+    val job = rdd.countAsync()
+    val res = Await.result(job, Duration.Inf)
+    res should be (10)
+    job.jobIds.size should be (1)
+  }
+
+  test("complex async action") {
+    val rdd = sc.parallelize(1 to 15, 3)
+    val job = rdd.takeAsync(10)
+    val res = Await.result(job, Duration.Inf)
+    res should be (1 to 10)
+    job.jobIds.size should be (2)
+  }
+
 }
