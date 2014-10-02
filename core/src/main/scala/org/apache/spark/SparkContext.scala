@@ -1156,6 +1156,38 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Start an asynchronous computation that may launch Spark jobs.
+   * Returns a `FutureAction` object that contains the result of the computation and allows the
+   * computation to be cancelled.
+   *
+   * @tparam T            the type of the result
+   * @param jobGroupId    the job group for Spark jobs launched by this computation
+   * @param description   a description of the job group
+   * @param body          the asynchronous computation
+   * @return              the `FutureAction` holding the result of the computation
+   */
+  def runAsync[T](jobGroupId: String,
+                  description: String)
+                 (body: => T): FutureAction[T] = {
+    new RunAsyncResult[T](jobGroupId, description, this, body)
+  }
+
+  /**
+   * Start an asynchronous computation that may launch Spark jobs.
+   * Returns a `FutureAction` object that contains the result of the computation and allows the
+   * computation to be cancelled.
+   *
+   * All Spark jobs launched by this computation will be created in the same (anonymous) job group.
+   *
+   * @tparam T            the type of the result
+   * @param body          the asynchronous computation
+   * @return              the `FutureAction` holding the result of the computation
+   */
+  def runAsync[T](body: => T): FutureAction[T] = {
+    runAsync(s"RunAsync${UUID.randomUUID().toString}", "Anonymous runAsync job")(body)
+  }
+
+  /**
    * :: DeveloperApi ::
    * Run a job that can return approximate results.
    */

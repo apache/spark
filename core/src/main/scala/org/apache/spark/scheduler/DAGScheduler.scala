@@ -477,6 +477,10 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties = null): JobWaiter[U] =
   {
+    if (Thread.currentThread().isInterrupted) {
+      throw new SparkException(
+        "Shouldn't submit jobs from interrupted threads (was the job cancelled?)")
+    }
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
@@ -493,8 +497,11 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+    // Make a defensive copy of the mutable properties object (this fixes a race condition that
+    // could occur during cancellation).
+    val propertiesCopy = Option(properties).map(_.clone().asInstanceOf[Properties]).orNull
     eventProcessActor ! JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
+      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, propertiesCopy)
     waiter
   }
 
@@ -677,7 +684,7 @@ class DAGScheduler(
     // Cancel all jobs belonging to this job group.
     // First finds all active jobs with this group id, and then kill stages for them.
     val activeInGroup = activeJobs.filter(activeJob =>
-      groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
+      groupId == Option(activeJob.properties).map(_.get(SparkContext.SPARK_JOB_GROUP_ID)).orNull)
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
     submitWaitingStages()
