@@ -218,7 +218,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
           val message = if (securityMgr.isAuthenticationEnabled() && !isSaslComplete()) {
             // only allow sending of security messages until sasl is complete
             var pos = 0
-            var securityMsg = null
+            var securityMsg: Message = null
             while (pos < messages.size() && securityMsg == null) {
               if (messages.get(pos).isSecurityNeg) {
                 securityMsg = messages.remove(pos)
