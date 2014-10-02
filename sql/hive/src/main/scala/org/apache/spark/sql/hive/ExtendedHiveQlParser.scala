@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.SqlLexical
  * A parser that recognizes all HiveQL constructs together with several Spark SQL specific 
  * extensions like CACHE TABLE and UNCACHE TABLE.
  */
-class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {  
+private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {  
   
   def apply(input: String): LogicalPlan = {
     // Special-case out set commands since the value fields can be
@@ -132,5 +132,4 @@ class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {
     SOURCE ~> remainingQuery ^^ {
       case rq => SourceCommand(rq.trim())
     }
-
 }
