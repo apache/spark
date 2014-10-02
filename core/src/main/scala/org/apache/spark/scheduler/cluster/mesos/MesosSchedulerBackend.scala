@@ -29,7 +29,7 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{ApplicationId, Logging, SparkContext, SparkException, TaskState}
+import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -354,7 +354,7 @@ private[spark] class MesosSchedulerBackend(
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
 
   override def applicationId() =
-    Option(appId).map(mAppId => new ApplicationId(mAppId.getValue)).getOrElse {
+    Option(appId).map(_.getValue).getOrElse {
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }

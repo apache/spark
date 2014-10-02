@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.{ApplicationId, Logging, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
@@ -35,7 +35,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var client: AppClient = null
   var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
-  @volatile var appId: ApplicationId = _
+  @volatile var appId: String = _
 
   val registrationLock = new Object()
   var registrationDone = false
@@ -87,7 +87,7 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def connected(appId: ApplicationId) {
+  override def connected(appId: String) {
     logInfo("Connected to Spark cluster with app ID " + appId)
     this.appId = appId
     notifyContext()

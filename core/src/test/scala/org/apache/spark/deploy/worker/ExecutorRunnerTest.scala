@@ -22,7 +22,7 @@ import java.io.File
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
-import org.apache.spark.{ApplicationId, SparkConf}
+import org.apache.spark.SparkConf
 
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId") {
@@ -30,11 +30,10 @@ class ExecutorRunnerTest extends FunSuite {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val appDesc = new ApplicationDescription("app name", Some(8), 500,
       Command("foo", Seq(), Map(), Seq(), Seq(), Seq()), "appUiUrl")
-    val appIdStr = "12345-worker321-9876"
-    val appId = new ApplicationId(appIdStr)
+    val appId = "12345-worker321-9876"
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome),
       f("ooga"), "blah", new SparkConf, ExecutorState.RUNNING)
 
-    assert(er.getCommandSeq.last === appIdStr)
+    assert(er.getCommandSeq.last === appId)
   }
 }

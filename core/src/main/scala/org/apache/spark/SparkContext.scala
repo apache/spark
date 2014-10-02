@@ -307,7 +307,7 @@ class SparkContext(config: SparkConf) extends Logging {
   taskScheduler.start()
 
   private val appId = taskScheduler.applicationId()
-  conf.set("spark.app.id", appId.toString)
+  conf.set("spark.app.id", appId)
 
   val metricsSystem = env.metricsSystem
   metricsSystem.registerSources()
@@ -1298,8 +1298,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
-    listenerBus.post(SparkListenerApplicationStart(appName,
-      Some(taskScheduler.applicationId().toString), startTime, sparkUser))
+    listenerBus.post(SparkListenerApplicationStart(appName, Some(taskScheduler.applicationId()),
+      startTime, sparkUser))
   }
 
   /** Post the application end event */

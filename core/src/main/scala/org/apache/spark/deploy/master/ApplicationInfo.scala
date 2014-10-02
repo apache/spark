@@ -24,12 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 
-import org.apache.spark.ApplicationId
 import org.apache.spark.deploy.ApplicationDescription
 
 private[spark] class ApplicationInfo(
     val startTime: Long,
-    val id: ApplicationId,
+    val id: String,
     val desc: ApplicationDescription,
     val submitDate: Date,
     val driver: ActorRef,

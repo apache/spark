@@ -23,7 +23,7 @@ import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.{ApplicationId, SparkConf, Logging}
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.util.logging.FileAppender
@@ -33,7 +33,7 @@ import org.apache.spark.util.logging.FileAppender
  * This is currently only used in standalone mode.
  */
 private[spark] class ExecutorRunner(
-    val appId: ApplicationId,
+    val appId: String,
     val execId: Int,
     val appDesc: ApplicationDescription,
     val cores: Int,
@@ -48,7 +48,7 @@ private[spark] class ExecutorRunner(
     var state: ExecutorState.Value)
   extends Logging {
 
-  val fullId = s"${appId}/${execId}"
+  val fullId = appId + "/" + execId
   var workerThread: Thread = null
   var process: Process = null
   var stdoutAppender: FileAppender = null
@@ -117,7 +117,7 @@ private[spark] class ExecutorRunner(
   def getCommandSeq = {
     val command = Command(
       appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId.toString),
+      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
       appDesc.command.environment,
       appDesc.command.classPathEntries,
       appDesc.command.libraryPathEntries,
@@ -131,7 +131,7 @@ private[spark] class ExecutorRunner(
   def fetchAndRunExecutor() {
     try {
       // Create the executor's working directory
-      val executorDir = new File(workDir, s"${appId}/${execId}")
+      val executorDir = new File(workDir, appId + "/" + execId)
       if (!executorDir.mkdirs()) {
         throw new IOException("Failed to create directory " + executorDir)
       }

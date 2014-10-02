@@ -41,7 +41,7 @@ private[spark] object JsonProtocol {
 
   def writeApplicationInfo(obj: ApplicationInfo) = {
     ("starttime" -> obj.startTime) ~
-    ("id" -> obj.id.toString) ~
+    ("id" -> obj.id) ~
     ("name" -> obj.desc.name) ~
     ("cores" -> obj.desc.maxCores) ~
     ("user" ->  obj.desc.user) ~
@@ -62,7 +62,7 @@ private[spark] object JsonProtocol {
   def writeExecutorRunner(obj: ExecutorRunner) = {
     ("id" -> obj.execId) ~
     ("memory" -> obj.memory) ~
-    ("appid" -> obj.appId.toString) ~
+    ("appid" -> obj.appId) ~
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
   }
 

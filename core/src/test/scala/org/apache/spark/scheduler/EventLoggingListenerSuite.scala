@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{ApplicationId, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.SPARK_VERSION
@@ -415,5 +415,5 @@ object EventLoggingListenerSuite {
     conf
   }
 
-  def getUniqueApplicationId = new ApplicationId("test-" + System.currentTimeMillis())
+  def getUniqueApplicationId = "test-" + System.currentTimeMillis
 }

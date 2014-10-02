@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.ApplicationId
-
 /**
  * Callbacks invoked by deploy client when various events happen. There are currently four events:
  * connecting to the cluster, disconnecting, being given an executor, and having an executor
@@ -27,7 +25,7 @@ import org.apache.spark.ApplicationId
  * Users of this API should *not* block inside the callback methods.
  */
 private[spark] trait AppClientListener {
-  def connected(appId: ApplicationId): Unit
+  def connected(appId: String): Unit
 
   /** Disconnection may be a temporary state, as we fail over to a new Master. */
   def disconnected(): Unit

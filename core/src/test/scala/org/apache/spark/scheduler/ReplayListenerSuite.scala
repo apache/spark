@@ -24,7 +24,7 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.{ApplicationId, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -156,7 +156,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener(new ApplicationId("test"), "testdir", conf) {
+    extends EventLoggingListener("test", "testdir", conf) {
     logger.close()
   }
 

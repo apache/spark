@@ -28,7 +28,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.{ApplicationId, SparkConf}
+import org.apache.spark.SparkConf
 
 class JsonProtocolSuite extends FunSuite {
 
@@ -94,7 +94,7 @@ class JsonProtocolSuite extends FunSuite {
 
   def createAppInfo() : ApplicationInfo = {
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      new ApplicationId("id"), createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
+      "id", createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }
@@ -117,7 +117,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   def createExecutorRunner(): ExecutorRunner = {
-    new ExecutorRunner(new ApplicationId("appId"), 123, createAppDesc(), 4, 1234, null, "workerId", "host",
+    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
       new File("sparkHome"), new File("workDir"), "akka://worker",
       new SparkConf, ExecutorState.RUNNING)
   }

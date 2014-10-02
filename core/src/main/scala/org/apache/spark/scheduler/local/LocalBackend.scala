@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import akka.actor.{Actor, ActorRef, Props}
 
-import org.apache.spark.{ApplicationId, Logging, SparkEnv, TaskState}
+import org.apache.spark.{Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
@@ -88,7 +88,7 @@ private[spark] class LocalActor(
 private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
 
-  private val appId = new ApplicationId("local-" + System.currentTimeMillis)
+  private val appId = "local-" + System.currentTimeMillis
   var localActor: ActorRef = null
 
   override def start() {
@@ -117,6 +117,5 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   }
 
   override def applicationId = appId
-
 
 }

@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{ApplicationId, Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.SPARK_VERSION
@@ -43,7 +43,7 @@ import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
 private[spark] class EventLoggingListener(
-    appId: ApplicationId,
+    appId: String,
     logBaseDir: String,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
@@ -51,7 +51,7 @@ private[spark] class EventLoggingListener(
 
   import EventLoggingListener._
 
-  def this(appId: ApplicationId, logBaseDir: String, sparkConf: SparkConf) =
+  def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
     this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
@@ -186,7 +186,7 @@ private[spark] object EventLoggingListener extends Logging {
     } else ""
   }
 
-  def getLogDirName(logBaseDir: String, appId: ApplicationId) = {
+  def getLogDirName(logBaseDir: String, appId: String) = {
     val name = appId.toString.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
     Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
   }

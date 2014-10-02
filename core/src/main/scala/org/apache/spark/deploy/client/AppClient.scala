@@ -26,7 +26,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{ApplicationId, Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -52,7 +52,7 @@ private[spark] class AppClient(
 
   var masterAddress: Address = null
   var actor: ActorRef = null
-  var appId: ApplicationId = null
+  var appId: String = null
   var registered = false
   var activeMasterUrl: String = null
 

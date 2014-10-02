@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.hadoop.yarn.api.records.{ApplicationId => YApplicationId, YarnApplicationState}
-import org.apache.spark.{ApplicationId, SparkException, Logging, SparkContext}
+import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
@@ -35,7 +35,7 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   private var client: Client = null
-  private var appId: YApplicationId = null
+  private var appId: ApplicationId = null
   private var stopping: Boolean = false
   private var totalExpectedExecutors = 0
 
@@ -156,7 +156,7 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   override def applicationId() =
-    Option(appId).map(yAppId => new ApplicationId(yAppId.toString)).getOrElse {
+    Option(appId).map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }

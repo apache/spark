@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.ApplicationId
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
@@ -32,7 +31,7 @@ import org.apache.spark.storage.BlockManagerId
  */
 private[spark] trait TaskScheduler {
 
-  private val appId = new ApplicationId(System.currentTimeMillis.toString)
+  private val appId = "spark-application-" + System.currentTimeMillis
 
   def rootPool: Pool
 

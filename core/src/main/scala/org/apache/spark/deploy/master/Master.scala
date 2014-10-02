@@ -32,7 +32,7 @@ import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
-import org.apache.spark.{ApplicationId, Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
@@ -68,13 +68,13 @@ private[spark] class Master(
   val addressToWorker = new HashMap[Address, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
-  val idToApp = new HashMap[ApplicationId, ApplicationInfo]
+  val idToApp = new HashMap[String, ApplicationInfo]
   val actorToApp = new HashMap[ActorRef, ApplicationInfo]
   val addressToApp = new HashMap[Address, ApplicationInfo]
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
-  val appIdToUI = new HashMap[ApplicationId, SparkUI]
+  val appIdToUI = new HashMap[String, SparkUI]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -738,7 +738,7 @@ private[spark] class Master(
   def newApplicationId(submitDate: Date) = {
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
-    new ApplicationId(appId)
+    appId
   }
 
   /** Check for, and remove, any timed-out workers */

@@ -28,7 +28,7 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{ApplicationId, Logging, SparkContext, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
@@ -314,7 +314,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   override def applicationId =
-    Option(appId).map(mAppId => new ApplicationId(mAppId.getValue)).getOrElse {
+    Option(appId).map(_.getValue).getOrElse {
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }

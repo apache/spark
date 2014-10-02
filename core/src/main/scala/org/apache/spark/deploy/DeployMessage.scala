@@ -19,7 +19,6 @@ package org.apache.spark.deploy
 
 import scala.collection.immutable.List
 
-import org.apache.spark.ApplicationId
 import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -48,7 +47,7 @@ private[deploy] object DeployMessages {
   }
 
   case class ExecutorStateChanged(
-      appId: ApplicationId,
+      appId: String,
       execId: Int,
       state: ExecutorState,
       message: Option[String],
@@ -72,15 +71,11 @@ private[deploy] object DeployMessages {
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage
 
-  case class KillExecutor(
-      masterUrl: String,
-      appId: ApplicationId,
-      execId: Int)
-  extends DeployMessage
+  case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 
   case class LaunchExecutor(
       masterUrl: String,
-      appId: ApplicationId,
+      appId: String,
       execId: Int,
       appDesc: ApplicationDescription,
       cores: Int,
@@ -100,11 +95,11 @@ private[deploy] object DeployMessages {
   case class RegisterApplication(appDescription: ApplicationDescription)
     extends DeployMessage
 
-  case class MasterChangeAcknowledged(appId: ApplicationId)
+  case class MasterChangeAcknowledged(appId: String)
 
   // Master to AppClient
 
-  case class RegisteredApplication(appId: ApplicationId, masterUrl: String) extends DeployMessage
+  case class RegisteredApplication(appId: String, masterUrl: String) extends DeployMessage
 
   // TODO(matei): replace hostPort with host
   case class ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) {

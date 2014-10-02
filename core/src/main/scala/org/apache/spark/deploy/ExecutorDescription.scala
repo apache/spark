@@ -17,15 +17,13 @@
 
 package org.apache.spark.deploy
 
-import org.apache.spark.ApplicationId
-
 /**
  * Used to send state on-the-wire about Executors from Worker to Master.
  * This state is sufficient for the Master to reconstruct its internal data structures during
  * failover.
  */
 private[spark] class ExecutorDescription(
-    val appId: ApplicationId,
+    val appId: String,
     val execId: Int,
     val cores: Int,
     val state: ExecutorState.Value)
