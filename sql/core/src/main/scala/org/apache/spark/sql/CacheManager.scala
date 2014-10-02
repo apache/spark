@@ -70,7 +70,7 @@ private[sql] trait CacheManager {
   }
 
   private[sql] def clearCache(): Unit = writeLock {
-    cachedData.foreach(_.cachedRepresentation.unpersist())
+    cachedData.foreach(_.cachedRepresentation.cachedColumnBuffers.unpersist())
     cachedData.clear()
   }
 

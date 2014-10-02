@@ -364,7 +364,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
     lazy val optimizedPlan = optimizer(analyzed)
-    lazy val withCachedData = useCacheData(optimizedPlan)
+    lazy val withCachedData = useCachedData(optimizedPlan)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = {
