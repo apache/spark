@@ -96,17 +96,38 @@ private[spark] class MetricsSystem private (
     sinks.foreach(_.report())
   }
 
-  def buildRegistryName(source: Source) = {
-    for {
-      appName <- conf.getOption("spark.app.name")
-      appId <- conf.getOption("spark.app.id")
-      executorId <- conf.getOption("spark.executor.id")
-    } yield {
-      MetricRegistry.name(appId, appName, executorId, source.sourceName)
+  /**
+   * Build a unique name for each combination of application, executor/driver and metric source.
+   * The name is built like <Application ID>.<Executor ID( or "driver" for Driver)>.<Metric name>
+   *
+   * @param source Metric source to be named by this method.
+   * @return An unique metric name for each combination of application, executor/driver and metric source.
+   */
+  def buildRegistryName(source: Source): String =
+    instance match {
+      /**
+       *  Only Driver and Executor are set spark.app.id and spark.executor.id.
+       *  For instance, Master and Worker are not related to a specific application.
+       */
+      case "driver" | "executor" =>
+        val appIdOpt = conf.getOption("spark.app.id")
+        val executorIdOpt = conf.getOption("spark.executor.id")
+        (for {
+          appId <- appIdOpt
+          executorId <- executorIdOpt
+        } yield {
+          MetricRegistry.name(appId, executorId, source.sourceName)
+        }).getOrElse {
+          if (appIdOpt == None) {
+            logWarning("spark.app.id is not set.")
+          }
+          if (executorIdOpt == None) {
+            logWarning("spark.executor.id is not set")
+          }
+          MetricRegistry.name(source.sourceName)
+        }
+      case _ => MetricRegistry.name(source.sourceName)
     }
-  }.getOrElse {
-    MetricRegistry.name(source.sourceName)
-  }
 
   def registerSource(source: Source) {
     sources += source
