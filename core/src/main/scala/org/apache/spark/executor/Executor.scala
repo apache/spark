@@ -21,6 +21,7 @@ import java.io.File
 import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.concurrent._
+import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -159,7 +160,8 @@ private[spark] class Executor(
       try {
         SparkEnv.set(env)
         Accumulators.clear()
-        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        val (userName, taskFiles, taskJars, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
 
@@ -179,7 +181,19 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        var value: Any = None
+        if (SparkHadoopUtil.get.isSecurityEnabled()) {
+          // Get the user whom the task belongs to
+          val ugi = SparkHadoopUtil.get.getTaskUser(userName)
+          // Run the task as the user whom the task belongs to
+          ugi.doAs(new PrivilegedExceptionAction[Unit] {
+            def run(): Unit = {
+              value = task.run(taskId.toInt)
+            }
+          })
+        } else {
+          value = task.run(taskId.toInt)
+        }
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
