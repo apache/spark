@@ -47,8 +47,6 @@ class SparkHadoopUtil extends Logging {
     val user = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
     if (user != SparkContext.SPARK_UNKNOWN_USER) {
       logDebug("running as user: " + user)
-      System.setProperty("HADOOP_USER_NAME", user)
-      logDebug("running hadoop client as user: " + System.getProperty("HADOOP_USER_NAME"))
       val ugi = UserGroupInformation.createRemoteUser(user)
       transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
       ugi.doAs(new PrivilegedExceptionAction[Unit] {
