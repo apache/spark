@@ -24,7 +24,6 @@ import java.util.LinkedList
 
 import org.apache.spark._
 
-import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 private[nio]
@@ -217,23 +216,18 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
           /* val message = messages(nextMessageToBeUsed) */
 
           val message = if (securityMgr.isAuthenticationEnabled() && !isSaslComplete()) {
-            // only send security messages until sasl is complete
-            @tailrec
-            def getFirstSecurityMessage(pos: Int): Option[Message] = {
-              if (pos >= messages.size()) {
-                None
-              } else {
-                if (messages.get(pos).isSecurityNeg) {
-                  Some(messages.remove(pos))
-                } else {
-                  getFirstSecurityMessage(pos + 1)
-                }
+            // only allow sending of security messages until sasl is complete
+            var pos = 0
+            var securityMsg = null
+            while (pos < messages.size() && securityMsg == null) {
+              if (messages.get(pos).isSecurityNeg) {
+                securityMsg = messages.remove(pos)
               }
+              pos = pos + 1
             }
-            getFirstSecurityMessage(0) match {
-              case Some(msg) => msg
-              case None => return None
-            }
+            // didn't find any security messages and auth isn't completed so return
+            if (securityMsg == null) return None
+            securityMsg
           } else {
             messages.removeFirst()
           }
