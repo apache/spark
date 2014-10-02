@@ -91,6 +91,9 @@ class SparkEnv (
     // actorSystem.awaitTermination()
 
     // Note that blockTransferService is stopped by BlockManager since it is started by it.
+
+    // clear all the references in ThreadLocal object
+    SparkEnv.reset()
   }
 
   private[spark]
@@ -119,7 +122,7 @@ class SparkEnv (
 }
 
 object SparkEnv extends Logging {
-  private val env = new ThreadLocal[SparkEnv]
+  @volatile private var env = new ThreadLocal[SparkEnv]
   @volatile private var lastSetSparkEnv : SparkEnv = _
 
   private[spark] val driverActorSystemName = "sparkDriver"
@@ -128,6 +131,12 @@ object SparkEnv extends Logging {
   def set(e: SparkEnv) {
     lastSetSparkEnv = e
     env.set(e)
+  }
+
+  // clear all the threadlocal references
+  private[spark] def reset(): Unit = {
+    env = new ThreadLocal[SparkEnv]
+    lastSetSparkEnv = null
   }
 
   /**
