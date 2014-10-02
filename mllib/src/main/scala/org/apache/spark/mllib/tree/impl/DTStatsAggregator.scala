@@ -79,19 +79,20 @@ private[tree] class DTStatsAggregator(
    * Flat array of elements.
    * Index for start of stats for a (feature, bin) is:
    *   index = featureOffsets(featureIndex) + binIndex * statsSize
-   * Note: For unordered features, the left child stats have binIndex in [0, numBins(featureIndex))
-   *       and the right child stats in [numBins(featureIndex), 2 * numBins(featureIndex))
+   * Note: For unordered features,
+   *       the left child stats have binIndex in [0, numBins(featureIndex) / 2))
+   *       and the right child stats in [numBins(featureIndex) / 2), numBins(featureIndex))
    */
   private val allStats: Array[Double] = new Array[Double](allStatsSize)
 
 
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
-   * @param nodeFeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
-   *                           from [[getNodeFeatureOffset]].
+   * @param FeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   *                           from [[getFeatureOffset]].
    *                           For unordered features, this is a pre-computed
    *                           (node, feature, left/right child) offset from
-   *                           [[getLeftRightNodeFeatureOffsets]].
+   *                           [[getLeftRightFeatureOffsets]].
    */
   def getImpurityCalculator(featureOffset: Int, binIndex: Int): ImpurityCalculator = {
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
@@ -108,39 +109,39 @@ private[tree] class DTStatsAggregator(
   /**
    * Faster version of [[update]].
    * Update the stats for a given (feature, bin), using the given label.
-   * @param nodeFeatureOffset  For ordered features, this is a pre-computed feature offset
-   *                           from [[getNodeFeatureOffset]].
+   * @param featureOffset  For ordered features, this is a pre-computed feature offset
+   *                           from [[getFeatureOffset]].
    *                           For unordered features, this is a pre-computed
    *                           (feature, left/right child) offset from
-   *                           [[getLeftRightNodeFeatureOffsets]].
+   *                           [[getLeftRightFeatureOffsets]].
    */
-  def nodeFeatureUpdate(
-      nodeFeatureOffset: Int,
+  def featureUpdate(
+      featureOffset: Int,
       binIndex: Int,
       label: Double,
       instanceWeight: Double): Unit = {
-    impurityAggregator.update(allStats, nodeFeatureOffset + binIndex * statsSize,
+    impurityAggregator.update(allStats, featureOffset + binIndex * statsSize,
       label, instanceWeight)
   }
 
   /**
-   * Pre-compute feature offset for use with [[nodeFeatureUpdate]].
+   * Pre-compute feature offset for use with [[featureUpdate]].
    * For ordered features only.
    */
   def getFeatureOffset(featureIndex: Int): Int = {
     require(!isUnordered(featureIndex),
-      s"DTStatsAggregator.getNodeFeatureOffset is for ordered features only, but was called" +
+      s"DTStatsAggregator.getFeatureOffset is for ordered features only, but was called" +
         s" for unordered feature $featureIndex.")
     featureOffsets(featureIndex)
   }
 
   /**
-   * Pre-compute feature offset for use with [[nodeFeatureUpdate]].
+   * Pre-compute feature offset for use with [[featureUpdate]].
    * For unordered features only.
    */
   def getLeftRightFeatureOffsets(featureIndex: Int): (Int, Int) = {
     require(isUnordered(featureIndex),
-      s"DTStatsAggregator.getLeftRightNodeFeatureOffsets is for unordered features only," +
+      s"DTStatsAggregator.getLeftRightFeatureOffsets is for unordered features only," +
         s" but was called for ordered feature $featureIndex.")
     val baseOffset = featureOffsets(featureIndex)
     (baseOffset, baseOffset + (numBins(featureIndex) >> 1) * statsSize)
@@ -148,11 +149,11 @@ private[tree] class DTStatsAggregator(
 
   /**
    * For a given feature, merge the stats for two bins.
-   * @param nodeFeatureOffset  For ordered features, this is a pre-computed feature offset
-   *                           from [[getNodeFeatureOffset]].
+   * @param featureOffset  For ordered features, this is a pre-computed feature offset
+   *                           from [[getFeatureOffset]].
    *                           For unordered features, this is a pre-computed
    *                           (feature, left/right child) offset from
-   *                           [[getLeftRightNodeFeatureOffsets]].
+   *                           [[getLeftRightFeatureOffsets]].
    * @param binIndex  The other bin is merged into this bin.
    * @param otherBinIndex  This bin is not modified.
    */

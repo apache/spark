@@ -366,10 +366,10 @@ object DecisionTree extends Serializable with Logging {
         var splitIndex = 0
         while (splitIndex < numSplits) {
           if (bins(featureIndex)(splitIndex).highSplit.categories.contains(featureValue)) {
-            agg.nodeFeatureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
+            agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           } else {
-            agg.nodeFeatureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label,
+            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label,
               instanceWeight)
           }
           splitIndex += 1
@@ -519,14 +519,16 @@ object DecisionTree extends Serializable with Logging {
      * @return
      */
     def getNodeToFeatures(treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]])
-      :Map[Int, Option[Array[Int]]] = {
+      : Option[Map[Int, Option[Array[Int]]]] = if (metadata.subsamplingFeatures) {
+      None
+    } else {
       val mutableNodeToFeatures = new mutable.HashMap[Int, Option[Array[Int]]]()
       treeToNodeToIndexInfo.values.foreach { nodeIdToNodeInfo =>
         nodeIdToNodeInfo.values.foreach { nodeIndexInfo =>
           mutableNodeToFeatures(nodeIndexInfo.nodeIndexInGroup) = nodeIndexInfo.featureSubset
         }
       }
-      mutableNodeToFeatures.toMap
+      Some(mutableNodeToFeatures.toMap)
     }
 
     // Calculate best splits for all nodes in the group
@@ -544,9 +546,9 @@ object DecisionTree extends Serializable with Logging {
       input.mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
-        val numNodes = nodeToFeatures.keys.size
         val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
-          new DTStatsAggregator(metadata, nodeToFeaturesBc.value.apply(nodeIndex))
+          val featuresForNode = nodeToFeaturesBc.value.flatMap(_.apply(nodeIndex))
+          new DTStatsAggregator(metadata, featuresForNode)
         }
 
         // iterator all instances in current partition and update aggregate stats
@@ -557,7 +559,7 @@ object DecisionTree extends Serializable with Logging {
         nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
       }.reduceByKey((a, b) => a.merge(b))
         .map { case (nodeIndex, aggStats) =>
-          val featuresForNode = nodeToFeaturesBc.value.apply(nodeIndex)
+          val featuresForNode = nodeToFeaturesBc.value.flatMap(_.apply(nodeIndex))
 
           // find best split for each node
           val (split: Split, stats: InformationGainStats, predict: Predict) =
