@@ -15,50 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty.server
+package org.apache.spark.network.netty
 
+import java.io.Closeable
 import java.net.InetSocketAddress
 
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.PooledByteBufAllocator
-import io.netty.channel.{ChannelFuture, ChannelInitializer, ChannelOption}
-import io.netty.channel.epoll.{EpollEventLoopGroup, EpollServerSocketChannel}
+import io.netty.channel.epoll.{Epoll, EpollEventLoopGroup, EpollServerSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
-import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
-import io.netty.channel.socket.oio.OioServerSocketChannel
-import io.netty.handler.codec.LineBasedFrameDecoder
-import io.netty.handler.codec.string.StringDecoder
-import io.netty.util.CharsetUtil
+import io.netty.channel.{ChannelInitializer, ChannelFuture, ChannelOption}
 
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.network.netty.NettyConfig
-import org.apache.spark.storage.BlockDataProvider
+import org.apache.spark.Logging
+import org.apache.spark.network.BlockDataManager
 import org.apache.spark.util.Utils
 
 
 /**
- * Server for serving Spark data blocks.
- * This should be used together with [[org.apache.spark.network.netty.client.BlockFetchingClient]].
- *
- * Protocol for requesting blocks (client to server):
- *   One block id per line, e.g. to request 3 blocks: "block1\nblock2\nblock3\n"
- *
- * Protocol for sending blocks (server to client):
- *   frame-length (4 bytes), block-id-length (4 bytes), block-id, block-data.
- *
- *   frame-length should not include the length of itself.
- *   If block-id-length is negative, then this is an error message rather than block-data. The real
- *   length is the absolute value of the frame-length.
- *
+ * Server for the [[NettyBlockTransferService]].
  */
-private[spark]
-class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Logging {
-
-  def this(sparkConf: SparkConf, dataProvider: BlockDataProvider) = {
-    this(new NettyConfig(sparkConf), dataProvider)
-  }
+private[netty]
+class BlockServer(conf: NettyConfig, dataProvider: BlockDataManager)
+  extends Closeable with Logging {
 
   def port: Int = _port
 
@@ -74,42 +54,24 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Lo
   /** Initialize the server. */
   private def init(): Unit = {
     bootstrap = new ServerBootstrap
-    val bossThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-boss")
-    val workerThreadFactory = Utils.namedThreadFactory("spark-shuffle-server-worker")
+    val threadFactory = Utils.namedThreadFactory("spark-netty-server")
 
     // Use only one thread to accept connections, and 2 * num_cores for worker.
     def initNio(): Unit = {
-      val bossGroup = new NioEventLoopGroup(1, bossThreadFactory)
-      val workerGroup = new NioEventLoopGroup(0, workerThreadFactory)
-      workerGroup.setIoRatio(conf.ioRatio)
+      val bossGroup = new NioEventLoopGroup(conf.serverThreads, threadFactory)
+      val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[NioServerSocketChannel])
     }
-    def initOio(): Unit = {
-      val bossGroup = new OioEventLoopGroup(1, bossThreadFactory)
-      val workerGroup = new OioEventLoopGroup(0, workerThreadFactory)
-      bootstrap.group(bossGroup, workerGroup).channel(classOf[OioServerSocketChannel])
-    }
     def initEpoll(): Unit = {
-      val bossGroup = new EpollEventLoopGroup(1, bossThreadFactory)
-      val workerGroup = new EpollEventLoopGroup(0, workerThreadFactory)
-      workerGroup.setIoRatio(conf.ioRatio)
+      val bossGroup = new EpollEventLoopGroup(conf.serverThreads, threadFactory)
+      val workerGroup = bossGroup
       bootstrap.group(bossGroup, workerGroup).channel(classOf[EpollServerSocketChannel])
     }
 
     conf.ioMode match {
       case "nio" => initNio()
-      case "oio" => initOio()
       case "epoll" => initEpoll()
-      case "auto" =>
-        // For auto mode, first try epoll (only available on Linux), then nio.
-        try {
-          initEpoll()
-        } catch {
-          // TODO: Should we log the throwable? But that always happen on non-Linux systems.
-          // Perhaps the right thing to do is to check whether the system is Linux, and then only
-          // call initEpoll on Linux.
-          case e: Throwable => initNio()
-        }
+      case "auto" => if (Epoll.isAvailable) initEpoll() else initNio()
     }
 
     // Use pooled buffers to reduce temporary buffer allocation
@@ -121,18 +83,18 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Lo
       bootstrap.option[java.lang.Integer](ChannelOption.SO_BACKLOG, backLog)
     }
     conf.receiveBuf.foreach { receiveBuf =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_RCVBUF, receiveBuf)
+      bootstrap.childOption[java.lang.Integer](ChannelOption.SO_RCVBUF, receiveBuf)
     }
     conf.sendBuf.foreach { sendBuf =>
-      bootstrap.option[java.lang.Integer](ChannelOption.SO_SNDBUF, sendBuf)
+      bootstrap.childOption[java.lang.Integer](ChannelOption.SO_SNDBUF, sendBuf)
     }
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline
-          .addLast("frameDecoder", new LineBasedFrameDecoder(1024))  // max block id length 1024
-          .addLast("stringDecoder", new StringDecoder(CharsetUtil.UTF_8))
-          .addLast("blockHeaderEncoder", new BlockHeaderEncoder)
+          .addLast("frameDecoder", ProtocolUtils.createFrameDecoder())
+          .addLast("clientRequestDecoder", new ClientRequestDecoder)
+          .addLast("serverResponseEncoder", new ServerResponseEncoder)
           .addLast("handler", new BlockServerHandler(dataProvider))
       }
     })
@@ -142,11 +104,14 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Lo
 
     val addr = channelFuture.channel.localAddress.asInstanceOf[InetSocketAddress]
     _port = addr.getPort
-    _hostName = addr.getHostName
+    // _hostName = addr.getHostName
+    _hostName = Utils.localHostName()
+
+    logInfo(s"Server started ${_hostName}:${_port}")
   }
 
   /** Shutdown the server. */
-  def stop(): Unit = {
+  def close(): Unit = {
     if (channelFuture != null) {
       channelFuture.channel().close().awaitUninterruptibly()
       channelFuture = null

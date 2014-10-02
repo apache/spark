@@ -206,21 +206,20 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Interface to get local block data.
-   *
-   * @return Some(buffer) if the block exists locally, and None if it doesn't.
+   * Interface to get local block data. Throws an exception if the block cannot be found or
+   * cannot be read successfully.
    */
-  override def getBlockData(blockId: String): Option[ManagedBuffer] = {
+  override def getBlockData(blockId: String): ManagedBuffer = {
     val bid = BlockId(blockId)
     if (bid.isShuffle) {
-      Some(shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId]))
+      shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId])
     } else {
       val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
-        Some(new NioByteBufferManagedBuffer(buffer))
+        new NioManagedBuffer(buffer)
       } else {
-        None
+        throw new BlockNotFoundException(blockId)
       }
     }
   }
@@ -332,17 +331,6 @@ private[spark] class BlockManager(
     val locations = master.getLocations(blockIds).toArray
     logDebug("Got multiple block location in %s".format(Utils.getUsedTimeMs(startTimeMs)))
     locations
-  }
-
-  /**
-   * A short-circuited method to get blocks directly from disk. This is used for getting
-   * shuffle blocks. It is safe to do so without a lock on block info since disk store
-   * never deletes (recent) items.
-   */
-  def getLocalShuffleFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    val buf = shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
-    val is = wrapForCompression(blockId, buf.inputStream())
-    Some(serializer.newInstance().deserializeStream(is).asIterator)
   }
 
   /**
@@ -804,7 +792,7 @@ private[spark] class BlockManager(
 
       try {
         blockTransferService.uploadBlockSync(
-          peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
+          peer.host, peer.port, blockId.toString, new NioManagedBuffer(data), tLevel)
       } catch {
         case e: Exception =>
           logError(s"Failed to replicate block to $peer", e)
@@ -1039,7 +1027,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    blockTransferService.stop()
+    blockTransferService.close()
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

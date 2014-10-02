@@ -38,6 +38,17 @@ object MimaExcludes {
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("graphx")
           ) ++
+          // This is @DeveloperAPI, but Mima still gives false-positives:
+          MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
+          Seq(
+            // This is @Experimental, but Mima still gives false-positives:
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.PathResolver"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.client.BlockClientListener")
+          ) ++
           MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
           MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
           Seq(

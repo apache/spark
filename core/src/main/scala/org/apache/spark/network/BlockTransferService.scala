@@ -17,13 +17,17 @@
 
 package org.apache.spark.network
 
+import java.io.Closeable
+import java.nio.ByteBuffer
+
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.storage.StorageLevel
 
 
-abstract class BlockTransferService {
+private[spark]
+abstract class BlockTransferService extends Closeable {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
@@ -34,7 +38,7 @@ abstract class BlockTransferService {
   /**
    * Tear down the transfer service.
    */
-  def stop(): Unit
+  def close(): Unit
 
   /**
    * Port number the service is listening on, available only after [[init]] is invoked.
@@ -49,9 +53,6 @@ abstract class BlockTransferService {
   /**
    * Fetch a sequence of blocks from a remote node asynchronously,
    * available only after [[init]] is invoked.
-   *
-   * Note that [[BlockFetchingListener.onBlockFetchSuccess]] is called once per block,
-   * while [[BlockFetchingListener.onBlockFetchFailure]] is called once per failure (not per block).
    *
    * Note that this API takes a sequence so the implementation can batch requests, and does not
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
@@ -83,7 +84,7 @@ abstract class BlockTransferService {
     val lock = new Object
     @volatile var result: Either[ManagedBuffer, Throwable] = null
     fetchBlocks(hostName, port, Seq(blockId), new BlockFetchingListener {
-      override def onBlockFetchFailure(exception: Throwable): Unit = {
+      override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
         lock.synchronized {
           result = Right(exception)
           lock.notify()
@@ -91,7 +92,10 @@ abstract class BlockTransferService {
       }
       override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
         lock.synchronized {
-          result = Left(data)
+          val ret = ByteBuffer.allocate(data.size.toInt)
+          ret.put(data.nioByteBuffer())
+          ret.flip()
+          result = Left(new NioManagedBuffer(ret))
           lock.notify()
         }
       }

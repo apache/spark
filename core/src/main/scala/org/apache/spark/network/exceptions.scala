@@ -15,11 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.netty
+package org.apache.spark.network
 
-import org.apache.spark.storage.{BlockId, FileSegment}
+class BlockFetchFailureException(blockId: String, errorMsg: String, cause: Throwable)
+  extends Exception(errorMsg, cause) {
 
-trait PathResolver {
-  /** Get the file segment in which the given block resides. */
-  def getBlockLocation(blockId: BlockId): FileSegment
+  def this(blockId: String, errorMsg: String) = this(blockId, errorMsg, null)
+}
+
+
+class BlockUploadFailureException(blockId: String, cause: Throwable)
+  extends Exception(s"Failed to fetch block $blockId", cause) {
+
+  def this(blockId: String) = this(blockId, null)
 }

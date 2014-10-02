@@ -24,26 +24,28 @@ import java.util.concurrent.{TimeUnit, Semaphore}
 
 import scala.collection.JavaConversions._
 
-import io.netty.buffer.{ByteBufUtil, Unpooled}
+import io.netty.buffer.Unpooled
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.Span
+import org.scalatest.time.Seconds
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.netty.client.{BlockClientListener, ReferenceCountedBuffer, BlockFetchingClientFactory}
-import org.apache.spark.network.netty.server.BlockServer
-import org.apache.spark.storage.{FileSegment, BlockDataProvider}
+import org.apache.spark.network._
+import org.apache.spark.storage.{BlockNotFoundException, StorageLevel}
 
 
 /**
- * Test suite that makes sure the server and the client implementations share the same protocol.
- */
+* Test cases that create real clients and servers and connect.
+*/
 class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
 
   val bufSize = 100000
   var buf: ByteBuffer = _
   var testFile: File = _
   var server: BlockServer = _
-  var clientFactory: BlockFetchingClientFactory = _
+  var clientFactory: BlockClientFactory = _
 
   val bufferBlockId = "buffer_block"
   val fileBlockId = "file_block"
@@ -63,24 +65,29 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     fp.write(fileContent)
     fp.close()
 
-    server = new BlockServer(new SparkConf, new BlockDataProvider {
-      override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
+    server = new BlockServer(new NettyConfig(new SparkConf), new BlockDataManager {
+      override def getBlockData(blockId: String): ManagedBuffer = {
         if (blockId == bufferBlockId) {
-          Right(buf)
+          new NioManagedBuffer(buf)
         } else if (blockId == fileBlockId) {
-          Left(new FileSegment(testFile, 10, testFile.length - 25))
+          new FileSegmentManagedBuffer(testFile, 10, testFile.length - 25)
         } else {
-          throw new Exception("Unknown block id " + blockId)
+          throw new BlockNotFoundException(blockId)
         }
       }
+
+      /**
+       * Put the block locally, using the given storage level.
+       */
+      def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit = ???
     })
 
-    clientFactory = new BlockFetchingClientFactory(new SparkConf)
+    clientFactory = new BlockClientFactory(new SparkConf)
   }
 
   override def afterAll() = {
-    server.stop()
-    clientFactory.stop()
+    server.close()
+    clientFactory.close()
   }
 
   /** A ByteBuf for buffer_block */
@@ -89,31 +96,30 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   /** A ByteBuf for file_block */
   lazy val fileBlockReference = Unpooled.wrappedBuffer(fileContent, 10, fileContent.length - 25)
 
-  def fetchBlocks(blockIds: Seq[String]): (Set[String], Set[ReferenceCountedBuffer], Set[String]) =
-  {
+  def fetchBlocks(blockIds: Seq[String]): (Set[String], Set[ManagedBuffer], Set[String]) = {
     val client = clientFactory.createClient(server.hostName, server.port)
     val sem = new Semaphore(0)
     val receivedBlockIds = Collections.synchronizedSet(new HashSet[String])
     val errorBlockIds = Collections.synchronizedSet(new HashSet[String])
-    val receivedBuffers = Collections.synchronizedSet(new HashSet[ReferenceCountedBuffer])
+    val receivedBuffers = Collections.synchronizedSet(new HashSet[ManagedBuffer])
 
     client.fetchBlocks(
       blockIds,
-      new BlockClientListener {
-        override def onFetchFailure(blockId: String, errorMsg: String): Unit = {
+      new BlockFetchingListener {
+        override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
           errorBlockIds.add(blockId)
           sem.release()
         }
 
-        override def onFetchSuccess(blockId: String, data: ReferenceCountedBuffer): Unit = {
-          receivedBlockIds.add(blockId)
+        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
           data.retain()
+          receivedBlockIds.add(blockId)
           receivedBuffers.add(data)
           sem.release()
         }
       }
     )
-    if (!sem.tryAcquire(blockIds.size, 30, TimeUnit.SECONDS)) {
+    if (!sem.tryAcquire(blockIds.size, 5, TimeUnit.SECONDS)) {
       fail("Timeout getting response from the server")
     }
     client.close()
@@ -123,7 +129,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   test("fetch a ByteBuffer block") {
     val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId))
     assert(blockIds === Set(bufferBlockId))
-    assert(buffers.map(_.underlying) === Set(byteBufferBlockReference))
+    assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference))
     assert(failBlockIds.isEmpty)
     buffers.foreach(_.release())
   }
@@ -131,7 +137,7 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   test("fetch a FileSegment block via zero-copy send") {
     val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(fileBlockId))
     assert(blockIds === Set(fileBlockId))
-    assert(buffers.map(_.underlying) === Set(fileBlockReference))
+    assert(buffers.map(_.convertToNetty()) === Set(fileBlockReference))
     assert(failBlockIds.isEmpty)
     buffers.foreach(_.release())
   }
@@ -141,12 +147,13 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
     assert(blockIds.isEmpty)
     assert(buffers.isEmpty)
     assert(failBlockIds === Set("random-block"))
+    buffers.foreach(_.release())
   }
 
   test("fetch both ByteBuffer block and FileSegment block") {
     val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId, fileBlockId))
     assert(blockIds === Set(bufferBlockId, fileBlockId))
-    assert(buffers.map(_.underlying) === Set(byteBufferBlockReference, fileBlockReference))
+    assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference, fileBlockReference))
     assert(failBlockIds.isEmpty)
     buffers.foreach(_.release())
   }
@@ -154,8 +161,14 @@ class ServerClientIntegrationSuite extends FunSuite with BeforeAndAfterAll {
   test("fetch both ByteBuffer block and a non-existent block") {
     val (blockIds, buffers, failBlockIds) = fetchBlocks(Seq(bufferBlockId, "random-block"))
     assert(blockIds === Set(bufferBlockId))
-    assert(buffers.map(_.underlying) === Set(byteBufferBlockReference))
+    assert(buffers.map(_.convertToNetty()) === Set(byteBufferBlockReference))
     assert(failBlockIds === Set("random-block"))
     buffers.foreach(_.release())
+  }
+
+  test("shutting down server should also close client") {
+    val client = clientFactory.createClient(server.hostName, server.port)
+    server.close()
+    eventually(timeout(Span(5, Seconds))) { assert(!client.isActive) }
   }
 }

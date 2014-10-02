@@ -42,7 +42,7 @@ class StorageLevel private(
   extends Externalizable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
-  private def this(flags: Int, replication: Int) {
+  private[spark] def this(flags: Int, replication: Int) {
     this((flags & 8) != 0, (flags & 4) != 0, (flags & 2) != 0, (flags & 1) != 0, replication)
   }
 
@@ -98,6 +98,7 @@ class StorageLevel private(
   }
 
   override def writeExternal(out: ObjectOutput) {
+    /* If the wire protocol changes, please also update [[ClientRequestEncoder]] */
     out.writeByte(toInt)
     out.writeByte(_replication)
   }
