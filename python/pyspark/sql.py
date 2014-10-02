@@ -39,11 +39,11 @@ from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
 
-#__all__ = [
-#    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
-#    "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
-#    "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-#    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
+__all__ = [
+    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
+    "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
+    "ShortType", "ArrayType", "MapType", "StructField", "StructType",
+    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
 
 
 def _get_simple_string(clz):
@@ -353,10 +353,6 @@ _all_primitive_types = dict((_get_simple_string(v), v)
                             if type(v) is PrimitiveTypeSingleton and
                             v.__base__ == PrimitiveType)
 
-all_primitive_types = _all_primitive_types
-
-def parse_datatype_json_string(json_string):
-    return _parse_datatype_json_string(json_string)
 
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
