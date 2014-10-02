@@ -331,12 +331,16 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    val taskId: TaskID = context.getTaskAttemptID.getTaskID
+    val taskId: TaskID = getTaskAttemptID(context).getTaskID
     val partition: Int = taskId.getId
     val filename = s"part-r-${partition + offset}.parquet"
     val committer: FileOutputCommitter =
       getOutputCommitter(context).asInstanceOf[FileOutputCommitter]
     new Path(committer.getWorkPath, filename)
+  }
+
+  private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
+    context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
   }
 }
 
