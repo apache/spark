@@ -855,7 +855,7 @@ private[hive] object HiveQl {
 
     case Token("TOK_SELEXPR",
            e :: Token(alias, Nil) :: Nil) =>
-      Some(Alias(nodeToExpr(e), alias)())
+      Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None
