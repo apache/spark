@@ -24,6 +24,8 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
+import py4j.GatewayServer
+
 import org.apache.spark.api.java._
 import org.apache.spark.api.python._
 import org.apache.spark.rdd.RDD
@@ -88,10 +90,14 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
  */
 private[python] object PythonTransformFunctionSerializer {
 
-  // A serializer in Python, used to serialize PythonTransformFunction
+  /**
+   * A serializer in Python, used to serialize PythonTransformFunction
+    */
   private var serializer: PythonTransformFunctionSerializer = _
 
-  // Register a serializer from Python, should be called during initialization
+  /*
+   * Register a serializer from Python, should be called during initialization
+   */
   def register(ser: PythonTransformFunctionSerializer): Unit = {
     serializer = ser
   }
@@ -117,20 +123,36 @@ private[python] object PythonTransformFunctionSerializer {
  */
 private[python] object PythonDStream {
 
-  // can not access PythonTransformFunctionSerializer.register() via Py4j
-  // Py4JError: PythonTransformFunctionSerializerregister does not exist in the JVM
+  /**
+   * can not access PythonTransformFunctionSerializer.register() via Py4j
+   * Py4JError: PythonTransformFunctionSerializerregister does not exist in the JVM
+   */
   def registerSerializer(ser: PythonTransformFunctionSerializer): Unit = {
     PythonTransformFunctionSerializer.register(ser)
   }
 
-  // helper function for DStream.foreachRDD(),
-  // cannot be `foreachRDD`, it will confusing py4j
+  /**
+   * Update the port of callback client to `port`
+   */
+  def updatePythonGatewayPort(gws: GatewayServer, port: Int): Unit = {
+    val cl = gws.getCallbackClient
+    val f = cl.getClass.getDeclaredField("port")
+    f.setAccessible(true)
+    f.setInt(cl, port)
+  }
+
+  /**
+   * helper function for DStream.foreachRDD(),
+   * cannot be `foreachRDD`, it will confusing py4j
+   */
   def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonTransformFunction) {
     val func = new TransformFunction((pfunc))
     jdstream.dstream.foreachRDD((rdd, time) => func(Some(rdd), time))
   }
 
-  // convert list of RDD into queue of RDDs, for ssc.queueStream()
+  /**
+   * convert list of RDD into queue of RDDs, for ssc.queueStream()
+   */
   def toRDDQueue(rdds: JArrayList[JavaRDD[Array[Byte]]]): java.util.Queue[JavaRDD[Array[Byte]]] = {
     val queue = new java.util.LinkedList[JavaRDD[Array[Byte]]]
     rdds.forall(queue.add(_))

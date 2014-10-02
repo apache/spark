@@ -18,7 +18,7 @@ import os
 import sys
 
 from py4j.java_collections import ListConverter
-from py4j.java_gateway import java_import
+from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
@@ -38,6 +38,8 @@ def _daemonize_callback_server():
     from exiting if it's not shutdown. The following code replace `start()`
     of CallbackServer with a new version, which set daemon=True for this
     thread.
+
+    Also, it will update the port number (0) with real port
     """
     # TODO: create a patch for Py4J
     import socket
@@ -54,8 +56,11 @@ def _daemonize_callback_server():
                                       1)
         try:
             self.server_socket.bind((self.address, self.port))
-        except Exception:
-            msg = 'An error occurred while trying to start the callback server'
+            if not self.port:
+                # update port with real port
+                self.port = self.server_socket.getsockname()[1]
+        except Exception as e:
+            msg = 'An error occurred while trying to start the callback server: %s' % e
             logger.exception(msg)
             raise Py4JNetworkError(msg)
 
@@ -105,15 +110,24 @@ class StreamingContext(object):
     def _ensure_initialized(cls):
         SparkContext._ensure_initialized()
         gw = SparkContext._gateway
-        # start callback server
-        # getattr will fallback to JVM
-        if "_callback_server" not in gw.__dict__:
-            _daemonize_callback_server()
-            gw._start_callback_server(gw._python_proxy_port)
 
         java_import(gw.jvm, "org.apache.spark.streaming.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
+
+        # start callback server
+        # getattr will fallback to JVM, so we cannot test by hasattr()
+        if "_callback_server" not in gw.__dict__:
+            _daemonize_callback_server()
+            # use random port
+            gw._start_callback_server(0)
+            # gateway with real port
+            gw._python_proxy_port = gw._callback_server.port
+            # get the GatewayServer object in JVM by ID
+            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
+            # update the port of CallbackClient with real port
+            gw.jvm.PythonDStream.updatePythonGatewayPort(jgws, gw._python_proxy_port)
+
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
         cls._transformerSerializer = TransformFunctionSerializer(
