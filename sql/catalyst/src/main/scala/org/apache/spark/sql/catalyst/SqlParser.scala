@@ -143,26 +143,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case (e, i) => Alias(e, s"c$i")()
     }
   }
-  
-  /** Creates the aliases to the grouping expressions */
-  protected def assignAliasesForGroups(
-      grpExprs: Seq[Expression], 
-      projExprs: Seq[Expression]): Seq[NamedExpression] = {
-    grpExprs.zipWithIndex.map {
-      case (ne: NamedExpression, _) => ne
-      case (e, i) => 
-        var aliasForGrp:NamedExpression = null
-        projExprs.foreach {
-          case Alias(pe,pi) if pe.fastEquals(e) =>  aliasForGrp = Alias(e, pi)()
-          case _ =>
-        }
-        if (aliasForGrp == null) {
-          Alias(e, s"c$i")()
-        } else {
-          aliasForGrp
-        }
-    }
-  }  
 
   protected lazy val query: Parser[LogicalPlan] = (
     select * (
@@ -186,7 +166,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         val withFilter = f.map(f => Filter(f, base)).getOrElse(base)
         val withProjection =
           g.map {g =>
-            Aggregate(assignAliasesForGroups(g,p), assignAliases(p), withFilter)
+            Aggregate(g, assignAliases(p), withFilter)
           }.getOrElse(Project(assignAliases(p), withFilter))
         val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
         val withHaving = h.map(h => Filter(h, withDistinct)).getOrElse(withDistinct)
