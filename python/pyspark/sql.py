@@ -39,11 +39,15 @@ from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
 
-__all__ = [
-    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
-    "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
-    "ShortType", "ArrayType", "MapType", "StructField", "StructType",
-    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
+#__all__ = [
+#    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
+#    "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
+#    "ShortType", "ArrayType", "MapType", "StructField", "StructType",
+#    "SQLContext", "HiveContext", "SchemaRDD", "Row"]
+
+
+def _get_simple_string(clz):
+    return clz.__name__[:-4].lower()
 
 
 class DataType(object):
@@ -63,11 +67,16 @@ class DataType(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def simpleString(self):
+        return _get_simple_string(self.__class__)
+
     def jsonValue(self):
-        return self.simpleString
+        return self.simpleString()
 
     def jsonString(self):
-        return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
+        return json.dumps(self.jsonValue(),
+                          separators=(',', ':'),
+                          sort_keys=True)
 
 
 class PrimitiveTypeSingleton(type):
@@ -100,8 +109,6 @@ class StringType(PrimitiveType):
     The data type representing string values.
     """
 
-    simpleString = 'string'
-
 
 class BinaryType(PrimitiveType):
 
@@ -109,8 +116,6 @@ class BinaryType(PrimitiveType):
 
     The data type representing bytearray values.
     """
-
-    simpleString = 'binary'
 
 
 class BooleanType(PrimitiveType):
@@ -120,8 +125,6 @@ class BooleanType(PrimitiveType):
     The data type representing bool values.
     """
 
-    simpleString = 'boolean'
-
 
 class TimestampType(PrimitiveType):
 
@@ -129,8 +132,6 @@ class TimestampType(PrimitiveType):
 
     The data type representing datetime.datetime values.
     """
-
-    simpleString = 'timestamp'
 
 
 class DecimalType(PrimitiveType):
@@ -140,8 +141,6 @@ class DecimalType(PrimitiveType):
     The data type representing decimal.Decimal values.
     """
 
-    simpleString = 'decimal'
-
 
 class DoubleType(PrimitiveType):
 
@@ -149,8 +148,6 @@ class DoubleType(PrimitiveType):
 
     The data type representing float values.
     """
-
-    simpleString = 'double'
 
 
 class FloatType(PrimitiveType):
@@ -160,8 +157,6 @@ class FloatType(PrimitiveType):
     The data type representing single precision floating-point values.
     """
 
-    simpleString = 'float'
-
 
 class ByteType(PrimitiveType):
 
@@ -170,8 +165,6 @@ class ByteType(PrimitiveType):
     The data type representing int values with 1 singed byte.
     """
 
-    simpleString = 'byte'
-
 
 class IntegerType(PrimitiveType):
 
@@ -179,8 +172,6 @@ class IntegerType(PrimitiveType):
 
     The data type representing int values.
     """
-
-    simpleString = 'integer'
 
 
 class LongType(PrimitiveType):
@@ -192,8 +183,6 @@ class LongType(PrimitiveType):
     please use DecimalType.
     """
 
-    simpleString = 'long'
-
 
 class ShortType(PrimitiveType):
 
@@ -201,8 +190,6 @@ class ShortType(PrimitiveType):
 
     The data type representing int values with 2 signed bytes.
     """
-
-    simpleString = 'short'
 
 
 class ArrayType(DataType):
@@ -234,15 +221,9 @@ class ArrayType(DataType):
         return "ArrayType(%s,%s)" % (self.elementType,
                                      str(self.containsNull).lower())
 
-    simpleString = 'array'
-
     def jsonValue(self):
-        return {
-            self.simpleString: {
-                'type': self.elementType.jsonValue(),
-                'containsNull': self.containsNull
-            }
-        }
+        return {self.simpleString(): {'type': self.elementType.jsonValue(),
+                                      'containsNull': self.containsNull}}
 
 
 class MapType(DataType):
@@ -284,16 +265,11 @@ class MapType(DataType):
         return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
                                       str(self.valueContainsNull).lower())
 
-    simpleString = 'map'
-
     def jsonValue(self):
-        return {
-            self.simpleString: {
-                'key': self.keyType.jsonValue(),
-                'value': self.valueType.jsonValue(),
-                'valueContainsNull': self.valueContainsNull
-            }
-        }
+        return {self.simpleString():
+                {'key': self.keyType.jsonValue(),
+                 'value': self.valueType.jsonValue(),
+                 'valueContainsNull': self.valueContainsNull}}
 
 
 class StructField(DataType):
@@ -334,13 +310,9 @@ class StructField(DataType):
                                           str(self.nullable).lower())
 
     def jsonValue(self):
-        return {
-            'field': {
-                'name': self.name,
-                'type': self.dataType.jsonValue(),
-                'nullable': self.nullable
-            }
-        }
+        return {'field': {'name': self.name,
+                          'type': self.dataType.jsonValue(),
+                          'nullable': self.nullable}}
 
 
 class StructType(DataType):
@@ -371,19 +343,20 @@ class StructType(DataType):
         return ("StructType(List(%s))" %
                 ",".join(str(field) for field in self.fields))
 
-    simpleString = 'struct'
-
     def jsonValue(self):
-        return {
-            self.simpleString: {
-                'fields': map(lambda f: f.jsonValue(), self.fields)
-            }
-        }
+        return {self.simpleString():
+                {'fields': map(lambda f: f.jsonValue(), self.fields)}}
 
 
-_all_primitive_types = dict((v.simpleString, v) for v in globals().itervalues()
-                            if type(v) is PrimitiveTypeSingleton and v.__base__ == PrimitiveType)
+_all_primitive_types = dict((_get_simple_string(v), v)
+                            for v in globals().itervalues()
+                            if type(v) is PrimitiveTypeSingleton and
+                            v.__base__ == PrimitiveType)
 
+all_primitive_types = _all_primitive_types
+
+def parse_datatype_json_string(json_string):
+    return _parse_datatype_json_string(json_string)
 
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
@@ -433,7 +406,7 @@ def _parse_datatype_json_string(json_string):
 
 
 def _parse_datatype_json_value(json_value):
-    if json_value in _all_primitive_types.keys():
+    if type(json_value) is unicode and json_value in _all_primitive_types.keys():
         return _all_primitive_types[json_value]()
     elif 'array' in json_value:
         array_type = json_value['array']
@@ -456,6 +429,8 @@ def _parse_datatype_json_value(json_value):
         struct_type = json_value['struct']
         fields = map(_parse_datatype_json_value, struct_type['fields'])
         return StructType(fields)
+    else:
+        raise ValueError('Unrecognized type: %s' % json_value)
 
 
 # Mapping Python types to Spark SQL DateType

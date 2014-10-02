@@ -78,10 +78,7 @@ object DataType {
   @deprecated("Use DataType.fromJson instead")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
-  /**
-   * Utility functions for working with DataTypes.
-   */
-  private[sql] object CaseClassStringParser extends RegexParsers {
+  private object CaseClassStringParser extends RegexParsers {
     protected lazy val primitiveType: Parser[DataType] =
       ( "StringType" ^^^ StringType
       | "FloatType" ^^^ FloatType
