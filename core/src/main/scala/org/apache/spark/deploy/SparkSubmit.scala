@@ -25,6 +25,7 @@ import scala.collection._
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.ConfigConstants._
 
 /**
  * Main gateway of launching a Spark application.
@@ -170,57 +171,38 @@ object SparkSubmit {
         args.pyFiles.getOrElse("")).mkString(",")
     }
 
+    // As arguments get processed they are removed from this map.
+    val unprocessedArgs = new mutable.HashSet ++= args.conf.keySet
+
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
 
-    // A list of rules to map each argument to system properties or command-line options in
-    // each deploy mode; we iterate through these below
+    /* By default, config properties will be passed to child processes as system properties
+     * unless they are mentioned in a list of rules below which map arguments to either
+     * 1. a command line option (clOption=...)
+     * 2. a differently named system property (sysProp=...)
+     */
     val options = List[OptionAssigner](
-
-      // All cluster managers
-      OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
-      OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.app.name"),
-      OptionAssigner(args.jars.orNull, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
-        sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverExtraClassPath.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraClassPath"),
-      OptionAssigner(args.driverExtraJavaOptions.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraJavaOptions"),
-      OptionAssigner(args.driverExtraLibraryPath.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        sysProp = "spark.driver.extraLibraryPath"),
-
       // Standalone cluster only
-      OptionAssigner(args.jars.orNull, STANDALONE, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
-      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
+      OptionAssigner(SPARK_DRIVER_MEMORY, STANDALONE, CLUSTER, clOption = "--memory"),
+      OptionAssigner(SPARK_DRIVER_CORES, STANDALONE, CLUSTER, clOption = "--cores"),
 
-      // Yarn client only
-      OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
-      OptionAssigner(args.executorCores, YARN, CLIENT, sysProp = "spark.executor.cores"),
-      OptionAssigner(args.files.orNull, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives.orNull, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
+      //  yarn client
+      OptionAssigner(SPARK_FILES, YARN, CLIENT, sysProp = SPARK_YARN_DIST_FILES,
+        keepProperty=true),
 
       // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
-      OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
-      OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
-      OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
-      OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
-      OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
-      OptionAssigner(args.files.orNull, YARN, CLUSTER, clOption = "--files"),
-      OptionAssigner(args.archives.orNull, YARN, CLUSTER, clOption = "--archives"),
-      OptionAssigner(args.jars.orNull, YARN, CLUSTER, clOption = "--addJars"),
-
-      // Other options
-      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.memory"),
-      OptionAssigner(args.totalExecutorCores.orNull, STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.cores.max"),
-      OptionAssigner(args.files.orNull, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
-        sysProp = "spark.files")
+      OptionAssigner(SPARK_APP_NAME, YARN, CLUSTER, clOption = "--name", keepProperty = true),
+      OptionAssigner(SPARK_DRIVER_MEMORY, YARN, CLUSTER, clOption = "--driver-memory"),
+      OptionAssigner(SPARK_YARN_QUEUE, YARN, CLUSTER, clOption = "--queue"),
+      OptionAssigner(SPARK_EXECUTOR_INSTANCES, YARN, CLUSTER, clOption = "--num-executors"),
+      OptionAssigner(SPARK_EXECUTOR_MEMORY, YARN, CLUSTER, clOption = "--executor-memory",
+        keepProperty=true),
+      OptionAssigner(SPARK_EXECUTOR_CORES, YARN, CLUSTER, clOption = "--executor-cores"),
+      OptionAssigner(SPARK_FILES, YARN, CLUSTER, clOption = "--files", keepProperty=true),
+      OptionAssigner(SPARK_YARN_DIST_ARCHIVES, YARN, CLUSTER, clOption = "--archives",
+        keepProperty=true),
+      OptionAssigner(SPARK_JARS, YARN, CLUSTER, clOption = "--addJars")
     )
 
     // In client mode, launch the application main class directly
@@ -230,19 +212,21 @@ object SparkSubmit {
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
-
       if (args.jars.isDefined) { childClasspath ++= args.jars.get.split(",") }
       if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
 
-
     // Map all arguments to command-line options or system properties for our chosen mode
     for (opt <- options) {
-      if (opt.value != null &&
-        (deployMode & opt.deployMode) != 0 &&
-        (clusterManager & opt.clusterManager) != 0) {
-        if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
-        if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
+      if (unprocessedArgs.contains(opt.configKey) &&
+          (deployMode & opt.deployMode) != 0 &&
+          (clusterManager & opt.clusterManager) != 0) {
+        val optValue = args.conf(opt.configKey)
+        if (opt.clOption != null) { childArgs += (opt.clOption, optValue) }
+        if (opt.sysProp != null) { sysProps.put(opt.sysProp, optValue) }
+        if (!opt.keepProperty) {
+          unprocessedArgs -= opt.configKey
+        }
       }
     }
 
@@ -251,11 +235,12 @@ object SparkSubmit {
     // For python files, the primary resource is already distributed as a regular file
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
-      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
+      var jars = args.conf.get(SPARK_JARS).map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
-      sysProps.put("spark.jars", jars.mkString(","))
+      sysProps.put(SPARK_JARS, jars.mkString(","))
+      unprocessedArgs -= SPARK_JARS
     }
 
     // In standalone-cluster mode, use Client as a wrapper around the user class
@@ -266,6 +251,10 @@ object SparkSubmit {
       }
       childArgs += "launch"
       childArgs += (args.master, args.primaryResource, args.mainClass.orNull)
+
+      unprocessedArgs --= Seq(SPARK_APP_PRIMARY_RESOURCE, SPARK_APP_CLASS,
+        SPARK_DRIVER_SUPERVISE)
+
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -276,15 +265,18 @@ object SparkSubmit {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
         childArgs += ("--jar", args.primaryResource)
+        unprocessedArgs -= SPARK_APP_PRIMARY_RESOURCE
       }
       childArgs += ("--class", args.mainClass.getOrElse(""))
+      unprocessedArgs -= SPARK_APP_CLASS
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }
     }
 
-    for ((k, v) <- args.conf) {
-      sysProps.getOrElseUpdate(k, v)
+    // Those config items that haven't already been processed will get passed as system properties.
+    for (k <- unprocessedArgs) {
+      sysProps.getOrElseUpdate(k, args.conf(k))
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)
@@ -403,8 +395,9 @@ object SparkSubmit {
  * Provides an indirection layer for passing arguments as system properties or flags to
  * the user's driver program or to downstream launcher tools.
  */
-private[spark] case class OptionAssigner(value: String,
+private[spark] case class OptionAssigner(configKey: String,
                                          clusterManager: Int,
                                          deployMode: Int,
                                          clOption: String = null,
+                                         keepProperty: Boolean = false,
                                          sysProp: String = null)

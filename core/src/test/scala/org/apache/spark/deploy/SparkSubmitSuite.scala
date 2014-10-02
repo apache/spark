@@ -19,6 +19,8 @@ package org.apache.spark.deploy
 
 import java.io.{File, OutputStream, PrintStream}
 
+import org.apache.spark.deploy.ConfigConstants._
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, TestUtils}
@@ -81,7 +83,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "No main class")
+    testPrematureExit(Array("foo1.jar"), "No main class")
   }
 
   test("handles arguments with --key=val") {
@@ -305,6 +307,11 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       unusedJar.toString)
     runSparkSubmit(args)
   }
+/*
+  name = conf.get(SPARK_APP_NAME)
+    .orElse( conf.get(SPARK_APP_CLASS))
+    .orElse( conf.get(SPARK_APP_PRIMARY_RESOURCE).map(x => Utils.stripDirectory(x)) )
+    .orNull*/
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   def runSparkSubmit(args: Seq[String]): String = {

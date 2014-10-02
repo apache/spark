@@ -102,7 +102,7 @@ private[spark] object ConfigConstants {
   /**
    * Comma-separated list of files to be placed in the working directory of each executor
    */
-  val SPAKR_FILES: String = "spark.files"
+  val SPARK_FILES: String = "spark.files"
 
   /**
    * Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
@@ -114,6 +114,11 @@ private[spark] object ConfigConstants {
    * working directory of each executor
    */
   val SPARK_YARN_DIST_ARCHIVES: String = "spark.yarn.dist.archives"
+
+  /**
+   * Yarn only: Comma separated list of files to be distributed to yarn cluster nodes
+   */
+  val SPARK_YARN_DIST_FILES: String = "spark.yarn.dist.files"
 
   /**
    * Comma-separated list of local jars to include on the driver and executor classpaths.

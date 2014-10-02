@@ -89,8 +89,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def numExecutors = conf(SPARK_EXECUTOR_INSTANCES)
   def numExecutors_= (value: String):Unit = conf.put(SPARK_EXECUTOR_INSTANCES, value)
 
-  def files = conf.get(SPAKR_FILES)
-  def files_= (value: String):Unit = conf.put(SPAKR_FILES, value)
+  def files = conf.get(SPARK_FILES)
+  def files_= (value: String):Unit = conf.put(SPARK_FILES, value)
 
   def archives = conf.get(SPARK_YARN_DIST_ARCHIVES)
   def archives_= (value: String):Unit = conf.put(SPARK_YARN_DIST_ARCHIVES, value)
@@ -156,7 +156,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   private def deriveConfigurations() = {
     // These config items point to file paths, but may need to be converted to absolute file uris.
-    val configFileUris = List(SPAKR_FILES, SPARK_SUBMIT_PYFILES, SPARK_YARN_DIST_ARCHIVES,
+    val configFileUris = List(SPARK_FILES, SPARK_SUBMIT_PYFILES, SPARK_YARN_DIST_ARCHIVES,
       SPARK_JARS, SPARK_APP_PRIMARY_RESOURCE)
 
     // Process configFileUris with resolvedURIs function if they are present.
@@ -321,7 +321,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--files") :: value :: tail =>
-        cmdLineConfig.put(SPAKR_FILES, value)
+        cmdLineConfig.put(SPARK_FILES, value)
         parse(tail)
 
       case ("--py-files") :: value :: tail =>
@@ -428,10 +428,10 @@ private[spark] object SparkSubmitArguments {
     SPARK_MASTER -> "local[*]",
     SPARK_VERBOSE -> "false",
     SPARK_DEPLOY_MODE -> "client",
-    SPARK_EXECUTOR_MEMORY -> "1G",
+    SPARK_EXECUTOR_MEMORY -> "1g",
     SPARK_EXECUTOR_CORES -> "1" ,
     SPARK_EXECUTOR_INSTANCES -> "2",
-    SPARK_DRIVER_MEMORY -> "512M",
+    SPARK_DRIVER_MEMORY -> "512m",
     SPARK_DRIVER_CORES -> "1",
     SPARK_DRIVER_SUPERVISE -> "false",
     SPARK_YARN_QUEUE -> "default",
@@ -450,7 +450,8 @@ private[spark] object SparkSubmitArguments {
    * System environment variables.
    * Function is over-writable to allow for easier debugging
    */
-  private[spark] var genEnvVars: () => Map[String, String] = () => sys.env
+  private[spark] var genEnvVars: () => Map[String, String] = () =>
+    sys.env.filterKeys(x=>x.toLowerCase.startsWith("spark"))
 
   /**
    * Gets configuration from reading SPARK_CONF_DIR/spark-defaults.conf if it exists
@@ -472,9 +473,8 @@ private[spark] object SparkSubmitArguments {
     } catch {
       // If an IOException occurs, report which file we were trying to open.
       case e: IOException => throw new IOException("IOException reading spark-defaults.conf file at " +
-        confPath.getOrElse("unknown address"), e)
+        confPath.getOrElse("an unknown filepath"), e)
     }
-
   }
 
   /**
@@ -502,13 +502,12 @@ private[spark] object SparkSubmitArguments {
       "SPARK_DRIVER_MEMORY" -> SPARK_DRIVER_MEMORY,
       "SPARK_EXECUTOR_MEMORY" -> SPARK_EXECUTOR_MEMORY)
 
-    var envVarConfig = genEnvVars() ++ legacyEnvVars
+    val envVarConfig = genEnvVars() ++ legacyEnvVars
       .filter { case (k, _) => sys.env.contains(k) }
       .map { case (k, v) => (v, sys.env(k)) }
 
     Utils.mergePropertyMaps( additionalConfigs ++ Seq(
       envVarConfig,
-      sys.props,
       sparkDefaultConfig,
       hardCodedDefaultConfig
     ))

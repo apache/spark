@@ -1485,7 +1485,7 @@ private[spark] object Utils extends Logging {
    * @param propList Seq of property maps[PropName->PropValue] to merge
    */
   private[spark] def mergePropertyMaps(propList: Seq[Map[String, String]]): Map[String, String] = {
-    propList.reduce(_ ++ _)
+    propList.reverse.reduce(_ ++ _)
   }
 }
 

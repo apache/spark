@@ -45,13 +45,14 @@ class MergablePropertiesTest extends FunSuite with Matchers {
     val result = Utils.mergePropertyMaps(Seq(Map(test1, test3a), Map(test2, test3b)))
     result should contain (test1)
     result should contain (test2)
-    result should contain (test3b)
+    result should contain (test3a)
   }
 
   test("merge three maps with one level of overlap") {
     val result = Utils.mergePropertyMaps(Seq(Map(test1, test3a), Map(test2, test3b), Map(test4)))
     result should contain (test1)
     result should contain (test2)
+    result should contain (test3a)
     result should contain (test4)
   }
 
@@ -59,7 +60,7 @@ class MergablePropertiesTest extends FunSuite with Matchers {
     val result = Utils.mergePropertyMaps(Seq(Map(test1, test3a), Map(test2, test3b), Map(test4, test3c)))
     result should contain (test1)
     result should contain (test2)
-    result should contain (test3c)
+    result should contain (test3a)
     result should contain (test4)
   }
 
