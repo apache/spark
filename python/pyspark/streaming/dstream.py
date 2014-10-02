@@ -284,7 +284,7 @@ class DStream(object):
         on each RDD of 'this' DStream.
 
         `func` can have one argument of `rdd`, or have two arguments of
-         (`time`, `rdd`)
+        (`time`, `rdd`)
         """
         resue = False
         if func.func_code.co_argcount == 1:
@@ -328,7 +328,8 @@ class DStream(object):
     def union(self, other):
         """
         Return a new DStream by unifying data of another DStream with this DStream.
-        @param other Another DStream having the same interval (i.e., slideDuration)
+
+        @param other: Another DStream having the same interval (i.e., slideDuration)
                      as this DStream.
         """
         if self._slideDuration != other._slideDuration:
@@ -348,11 +349,11 @@ class DStream(object):
 
     def join(self, other, numPartitions=None):
         """
-         Return a new DStream by applying 'join' between RDDs of `this` DStream and
+        Return a new DStream by applying 'join' between RDDs of `this` DStream and
         `other` DStream.
 
         Hash partitioning is used to generate the RDDs with `numPartitions`
-         partitions.
+        partitions.
         """
         if numPartitions is None:
             numPartitions = self.ctx.defaultParallelism
@@ -360,11 +361,11 @@ class DStream(object):
 
     def leftOuterJoin(self, other, numPartitions=None):
         """
-         Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
+        Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
         `other` DStream.
 
         Hash partitioning is used to generate the RDDs with `numPartitions`
-         partitions.
+        partitions.
         """
         if numPartitions is None:
             numPartitions = self.ctx.defaultParallelism
@@ -372,11 +373,11 @@ class DStream(object):
 
     def rightOuterJoin(self, other, numPartitions=None):
         """
-         Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
+        Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
         `other` DStream.
 
         Hash partitioning is used to generate the RDDs with `numPartitions`
-         partitions.
+        partitions.
         """
         if numPartitions is None:
             numPartitions = self.ctx.defaultParallelism
@@ -384,11 +385,11 @@ class DStream(object):
 
     def fullOuterJoin(self, other, numPartitions=None):
         """
-         Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+        Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
         `other` DStream.
 
         Hash partitioning is used to generate the RDDs with `numPartitions`
-         partitions.
+        partitions.
         """
         if numPartitions is None:
             numPartitions = self.ctx.defaultParallelism
@@ -424,9 +425,9 @@ class DStream(object):
         Return a new DStream in which each RDD contains all the elements in seen in a
         sliding window of time over this DStream.
 
-        @param windowDuration width of the window; must be a multiple of this DStream's
+        @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval
-        @param slideDuration  sliding interval of the window (i.e., the interval after which
+        @param slideDuration:  sliding interval of the window (i.e., the interval after which
                               the new DStream will generate RDDs); must be a multiple of this
                               DStream's batching interval
         """
@@ -448,13 +449,13 @@ class DStream(object):
          2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
          This is more efficient than `invReduceFunc` is None.
 
-        @param reduceFunc associative reduce function
-        @param invReduceFunc inverse reduce function of `reduceFunc`
-        @param windowDuration width of the window; must be a multiple of this DStream's
-                              batching interval
-        @param slideDuration  sliding interval of the window (i.e., the interval after which
-                              the new DStream will generate RDDs); must be a multiple of this
-                              DStream's batching interval
+        @param reduceFunc:     associative reduce function
+        @param invReduceFunc:  inverse reduce function of `reduceFunc`
+        @param windowDuration: width of the window; must be a multiple of this DStream's
+                               batching interval
+        @param slideDuration:  sliding interval of the window (i.e., the interval after which
+                               the new DStream will generate RDDs); must be a multiple of this
+                               DStream's batching interval
         """
         keyed = self.map(lambda x: (1, x))
         reduced = keyed.reduceByKeyAndWindow(reduceFunc, invReduceFunc,
@@ -478,12 +479,12 @@ class DStream(object):
         Return a new DStream in which each RDD contains the count of distinct elements in
         RDDs in a sliding window over this DStream.
 
-        @param windowDuration width of the window; must be a multiple of this DStream's
+        @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval
-        @param slideDuration  sliding interval of the window (i.e., the interval after which
+        @param slideDuration:  sliding interval of the window (i.e., the interval after which
                               the new DStream will generate RDDs); must be a multiple of this
                               DStream's batching interval
-        @param numPartitions  number of partitions of each RDD in the new DStream.
+        @param numPartitions:  number of partitions of each RDD in the new DStream.
         """
         keyed = self.map(lambda x: (x, 1))
         counted = keyed.reduceByKeyAndWindow(operator.add, operator.sub,
@@ -495,12 +496,12 @@ class DStream(object):
         Return a new DStream by applying `groupByKey` over a sliding window.
         Similar to `DStream.groupByKey()`, but applies it over a sliding window.
 
-        @param windowDuration width of the window; must be a multiple of this DStream's
+        @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval
-        @param slideDuration  sliding interval of the window (i.e., the interval after which
+        @param slideDuration:  sliding interval of the window (i.e., the interval after which
                               the new DStream will generate RDDs); must be a multiple of this
                               DStream's batching interval
-        @param numPartitions  Number of partitions of each RDD in the new DStream.
+        @param numPartitions:  Number of partitions of each RDD in the new DStream.
         """
         ls = self.mapValues(lambda x: [x])
         grouped = ls.reduceByKeyAndWindow(lambda a, b: a.extend(b) or a, lambda a, b: a[len(b):],
@@ -519,15 +520,15 @@ class DStream(object):
         `invFunc` can be None, then it will reduce all the RDDs in window, could be slower
         than having `invFunc`.
 
-        @param reduceFunc     associative reduce function
-        @param invReduceFunc  inverse function of `reduceFunc`
-        @param windowDuration width of the window; must be a multiple of this DStream's
+        @param reduceFunc:     associative reduce function
+        @param invReduceFunc:  inverse function of `reduceFunc`
+        @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval
-        @param slideDuration  sliding interval of the window (i.e., the interval after which
+        @param slideDuration:  sliding interval of the window (i.e., the interval after which
                               the new DStream will generate RDDs); must be a multiple of this
                               DStream's batching interval
-        @param numPartitions  number of partitions of each RDD in the new DStream.
-        @param filterFunc     function to filter expired key-value pairs;
+        @param numPartitions:  number of partitions of each RDD in the new DStream.
+        @param filterFunc:     function to filter expired key-value pairs;
                               only pairs that satisfy the function are retained
                               set this to null if you do not want to filter
         """
@@ -567,7 +568,7 @@ class DStream(object):
         Return a new "state" DStream where the state for each key is updated by applying
         the given function on the previous state of the key and the new values of the key.
 
-        @param updateFunc State update function ([(k, vs, s)] -> [(k, s)]).
+        @param updateFunc: State update function ([(k, vs, s)] -> [(k, s)]).
                           If `s` is None, then `k` will be eliminated.
         """
         if numPartitions is None:

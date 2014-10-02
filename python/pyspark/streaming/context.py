@@ -71,7 +71,7 @@ class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
     represents the connection to a Spark cluster, and can be used to create
-    L{DStream}s various input sources. It can be from an existing L{SparkContext}.
+    L{DStream} various input sources. It can be from an existing L{SparkContext}.
     After creating and transforming DStreams, the streaming computation can
     be started and stopped using `context.start()` and `context.stop()`,
     respectively. `context.awaitTransformation()` allows the current thread
@@ -180,8 +180,8 @@ class StreamingContext(object):
         Stop the execution of the streams, with option of ensuring all
         received data has been processed.
 
-        @param stopSparkContext Stop the associated SparkContext or not
-        @param stopGracefully Stop gracefully by waiting for the processing
+        @param stopSparkContext: Stop the associated SparkContext or not
+        @param stopGracefully: Stop gracefully by waiting for the processing
                               of all received data to be completed
         """
         self._jssc.stop(stopSparkContext, stopGraceFully)
@@ -197,7 +197,7 @@ class StreamingContext(object):
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
-        @param duration Minimum duration (in seconds) that each DStream
+        @param duration: Minimum duration (in seconds) that each DStream
                         should remember its RDDs
         """
         self._jssc.remember(self._jduration(duration))
@@ -207,7 +207,7 @@ class StreamingContext(object):
         Sets the context to periodically checkpoint the DStream operations for master
         fault-tolerance. The graph will be checkpointed every batch interval.
 
-        @param directory HDFS-compatible directory where the checkpoint data
+        @param directory: HDFS-compatible directory where the checkpoint data
                          will be reliably stored
         """
         self._jssc.checkpoint(directory)
@@ -215,12 +215,12 @@ class StreamingContext(object):
     def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
         """
         Create an input from TCP source hostname:port. Data is received using
-        a TCP socket and receive byte is interpreted as UTF8 encoded '\n' delimited
+        a TCP socket and receive byte is interpreted as UTF8 encoded ``\\n`` delimited
         lines.
 
-        @param hostname      Hostname to connect to for receiving data
-        @param port          Port to connect to for receiving data
-        @param storageLevel  Storage level to use for storing the received objects
+        @param hostname:      Hostname to connect to for receiving data
+        @param port:          Port to connect to for receiving data
+        @param storageLevel:  Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)
         return DStream(self._jssc.socketTextStream(hostname, port, jlevel), self,
@@ -249,9 +249,9 @@ class StreamingContext(object):
 
         NOTE: changes to the queue after the stream is created will not be recognized.
 
-        @param rdds       Queue of RDDs
-        @param oneAtATime pick one rdd each time or pick all of them once.
-        @param default    The default rdd if no more in rdds
+        @param rdds:       Queue of RDDs
+        @param oneAtATime: pick one rdd each time or pick all of them once.
+        @param default:    The default rdd if no more in rdds
         """
         if default and not isinstance(default, RDD):
             default = self._sc.parallelize(default)
