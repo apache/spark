@@ -41,6 +41,8 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
           MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
           Seq(
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.TaskLocation"),
             // Added normL1 and normL2 to trait MultivariateStatisticalSummary
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),
