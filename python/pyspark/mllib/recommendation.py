@@ -82,6 +82,11 @@ class MatrixFactorizationModel(object):
         return RDD(sc._jvm.PythonRDD.javaToPython(jresult), sc,
                    AutoBatchedSerializer(PickleSerializer()))
 
+    def userFeatures(self):
+        sc = self._context
+        juf = self._java_model.userFeaturesString().toJavaRDD()
+        return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc,
+                   AutoBatchedSerializer(PickleSerializer()))
 
 class ALS(object):
 
