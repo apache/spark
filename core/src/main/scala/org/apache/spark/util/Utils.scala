@@ -1440,6 +1440,7 @@ private[spark] object Utils extends Logging {
       val tryPort = if (startPort == 0) {
         startPort
       } else {
+        // If the new port wraps around, do not try a privilege port
         ((startPort + offset - 1024) % (65536 - 1024)) + 1024
       }
       try {
