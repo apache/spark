@@ -352,7 +352,12 @@ class SparkContext(config: SparkConf) extends Logging {
     localProperties.set(props)
   }
 
-  def getApplicationId = appId
+  /**
+   * Get an unique identifier which identifies each application.
+   *
+   * @return Application ID which is an unique identifier assigned to each application.
+   */
+  def getApplicationId(): String = appId
 
   @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
   def initLocalProperties() {
