@@ -143,18 +143,6 @@
   </properties>
 
   <repositories>
-      <repository>
-          <id>spark-hive</id>
-          <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
-          <name>Spark hive Repository</name>
-          <url>https://oss.sonatype.org/content/repositories/orgspark-project-1079/</url>
-          <releases>
-              <enabled>true</enabled>
-          </releases>
-          <snapshots>
-              <enabled>false</enabled>
-          </snapshots>
-      </repository>
     <repository>
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->

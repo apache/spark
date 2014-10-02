@@ -185,12 +185,12 @@
       </activation>
       <dependencies>
         <dependency>
-          <groupId>org.spark-project.hive</groupId>
+          <groupId>org.apache.hive</groupId>
           <artifactId>hive-metastore</artifactId>
           <version>${hive.version}</version>
         </dependency>
         <dependency>
-          <groupId>org.spark-project.hive</groupId>
+          <groupId>org.apache.hive</groupId>
           <artifactId>hive-exec</artifactId>
           <version>${hive.version}</version>
           <exclusions>
@@ -201,7 +201,7 @@
           </exclusions>
         </dependency>
         <dependency>
-          <groupId>org.spark-project.hive</groupId>
+          <groupId>org.apache.hive</groupId>
           <artifactId>hive-serde</artifactId>
           <version>${hive.version}</version>
           <exclusions>
