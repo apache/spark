@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import scala.collection.{Map, Set}
+import scala.collection.JavaConversions._
 
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -69,7 +70,8 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     appAttemptId
   }
 
-  override def getProxyHostAndPort(conf: YarnConfiguration) = WebAppUtils.getProxyHostAndPort(conf)
+  override def getProxyHostsAndPorts(conf: YarnConfiguration) = 
+      WebAppUtils.getProxyHostsAndPortsForAmFilter(conf)
 
   override def getMaxRegAttempts(conf: YarnConfiguration) =
     conf.getInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)

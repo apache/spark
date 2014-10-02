@@ -77,7 +77,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
   }
 
   override def getProxyHostAndPort(conf: YarnConfiguration) =
-    YarnConfiguration.getProxyHostAndPort(conf)
+    List(YarnConfiguration.getProxyHostAndPort(conf))
 
   override def getMaxRegAttempts(conf: YarnConfiguration) =
     conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES, YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)

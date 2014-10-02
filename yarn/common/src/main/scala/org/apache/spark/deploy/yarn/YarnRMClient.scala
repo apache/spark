@@ -60,7 +60,7 @@ trait YarnRMClient {
   def getAttemptId(): ApplicationAttemptId
 
   /** Returns the RM's proxy host and port. */
-  def getProxyHostAndPort(conf: YarnConfiguration): String
+  def getProxyHostsAndPorts(conf: YarnConfiguration): scala.collection.mutable.Buffer[String]
 
   /** Returns the maximum number of attempts to register the AM. */
   def getMaxRegAttempts(conf: YarnConfiguration): Int
