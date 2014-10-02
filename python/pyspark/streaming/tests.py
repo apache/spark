@@ -485,9 +485,6 @@ class TestCheckpoint(PySparkStreamingTestCase):
     def setUp(self):
         pass
 
-    def tearDown(self):
-        pass
-
     def test_get_or_create(self):
         inputd = tempfile.mkdtemp()
         outputd = tempfile.mkdtemp() + "/"
@@ -545,7 +542,6 @@ class TestCheckpoint(PySparkStreamingTestCase):
         ssc = StreamingContext.getOrCreate(cpd, setup)
         ssc.start()
         check_output(3)
-        ssc.stop(True, True)
 
 
 if __name__ == "__main__":
