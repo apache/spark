@@ -123,4 +123,14 @@ private[sql] trait CacheManager {
           .getOrElse(currentFragment)
     }
   }
+
+  /** Invalidates the cache of any data that contains `plan`. */
+  private[sql] def invalidateCache(plan: LogicalPlan): Unit = writeLock {
+    cachedData.foreach {
+      case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
+        data.cachedRepresentation.recache()
+      case _ =>
+    }
+  }
+
 }

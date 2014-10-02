@@ -56,6 +56,23 @@ class CachedTableSuite extends QueryTest {
     assertCached(sql("SELECT * FROM src"), 0)
   }
 
+  test("cache invalidation") {
+    sql("CREATE TABLE cachedTable(key INT, value STRING)")
+
+    sql("INSERT INTO TABLE cachedTable SELECT * FROM src")
+    checkAnswer(sql("SELECT * FROM cachedTable"), table("src").collect().toSeq)
+
+    cacheTable("cachedTable")
+    checkAnswer(sql("SELECT * FROM cachedTable"), table("src").collect().toSeq)
+
+    sql("INSERT INTO TABLE cachedTable SELECT * FROM src")
+    checkAnswer(
+      sql("SELECT * FROM cachedTable"),
+      table("src").collect().toSeq ++ table("src").collect().toSeq)
+
+    sql("DROP TABLE cachedTable")
+  }
+
   test("Drop cached table") {
     sql("CREATE TABLE test(a INT)")
     cacheTable("test")

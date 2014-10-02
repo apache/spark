@@ -133,12 +133,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
-
-
-      // case p @ logical.InsertIntoTable(
-      //             InMemoryRelation(_, _, _,
-      //               HiveTableScan(_, table, _)), _, child, _) =>
-      //  castChildOutput(p, table, child)
     }
 
     def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan) = {

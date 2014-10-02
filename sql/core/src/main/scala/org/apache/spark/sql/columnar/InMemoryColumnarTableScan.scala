@@ -57,6 +57,16 @@ private[sql] case class InMemoryRelation(
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
+    buildBuffers()
+  }
+
+  def recache() = {
+    _cachedColumnBuffers.unpersist()
+    _cachedColumnBuffers = null
+    buildBuffers()
+  }
+
+  private def buildBuffers(): Unit = {
     val output = child.output
     val cached = child.execute().mapPartitions { rowIterator =>
       new Iterator[CachedBatch] {
