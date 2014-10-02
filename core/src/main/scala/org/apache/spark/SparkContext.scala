@@ -1030,28 +1030,40 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Support function for API backtraces.
+   * Set the thread-local property for overriding the call sites
+   * of actions and RDDs.
    */
-  def setCallSite(site: String) {
-    setLocalProperty("externalCallSite", site)
+  def setCallSite(shortCallSite: String) {
+    setLocalProperty(CallSite.SHORT_FORM, shortCallSite)
   }
 
   /**
-   * Support function for API backtraces.
+   * Set the thread-local property for overriding the call sites
+   * of actions and RDDs.
+   */
+  private[spark] def setCallSite(callSite: CallSite) {
+    setLocalProperty(CallSite.SHORT_FORM, callSite.shortForm)
+    setLocalProperty(CallSite.LONG_FORM, callSite.longForm)
+  }
+
+  /**
+   * Clear the thread-local property for overriding the call sites
+   * of actions and RDDs.
    */
   def clearCallSite() {
-    setLocalProperty("externalCallSite", null)
+    setLocalProperty(CallSite.SHORT_FORM, null)
+    setLocalProperty(CallSite.LONG_FORM, null)
   }
 
   /**
    * Capture the current user callsite and return a formatted version for printing. If the user
-   * has overridden the call site, this will return the user's version.
+   * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
   private[spark] def getCallSite(): CallSite = {
-    Option(getLocalProperty("externalCallSite")) match {
-      case Some(callSite) => CallSite(callSite, longForm = "")
-      case None => Utils.getCallSite
-    }
+    Option(getLocalProperty(CallSite.SHORT_FORM)).map { case shortCallSite =>
+      val longCallSite = Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse("")
+      CallSite(shortCallSite, longCallSite)
+    }.getOrElse(Utils.getCallSite())
   }
 
   /**

@@ -20,15 +20,12 @@ package org.apache.spark.scheduler
 import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
-import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.executor.TaskMetrics
 
 /**
  * :: DeveloperApi ::
@@ -62,16 +59,8 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue() = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent]
 
   createLogDir()
-
-  // The following 5 functions are used only in testing.
-  private[scheduler] def getLogDir = logDir
-  private[scheduler] def getJobIdToPrintWriter = jobIdToPrintWriter
-  private[scheduler] def getStageIdToJobId = stageIdToJobId
-  private[scheduler] def getJobIdToStageIds = jobIdToStageIds
-  private[scheduler] def getEventQueue = eventQueue
 
   /** Create a folder for log files, the folder's name is the creation time of jobLogger */
   protected def createLogDir() {
@@ -79,7 +68,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     if (dir.exists()) {
       return
     }
-    if (dir.mkdirs() == false) {
+    if (!dir.mkdirs()) {
       // JobLogger should throw a exception rather than continue to construct this object.
       throw new IOException("create log directory error:" + logDir + "/" + logDirName + "/")
     }
@@ -261,7 +250,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   protected def recordJobProperties(jobId: Int, properties: Properties) {
     if (properties != null) {
       val description = properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION, "")
-      jobLogInfo(jobId, description, false)
+      jobLogInfo(jobId, description, withTime = false)
     }
   }
 

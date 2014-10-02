@@ -136,5 +136,7 @@ object CassandraCQLTest {
         classOf[CqlOutputFormat],
         job.getConfiguration()
       )
+
+    sc.stop()
   }
 }

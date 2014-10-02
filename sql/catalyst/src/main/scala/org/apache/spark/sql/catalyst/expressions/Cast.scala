@@ -86,15 +86,15 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
         try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0) * 1000))
+      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0)))
     case LongType =>
-      buildCast[Long](_, l => new Timestamp(l * 1000))
+      buildCast[Long](_, l => new Timestamp(l))
     case IntegerType =>
-      buildCast[Int](_, i => new Timestamp(i * 1000))
+      buildCast[Int](_, i => new Timestamp(i))
     case ShortType =>
-      buildCast[Short](_, s => new Timestamp(s * 1000))
+      buildCast[Short](_, s => new Timestamp(s))
     case ByteType =>
-      buildCast[Byte](_, b => new Timestamp(b * 1000))
+      buildCast[Byte](_, b => new Timestamp(b))
     // TimestampWritable.decimalToTimestamp
     case DecimalType =>
       buildCast[BigDecimal](_, d => decimalToTimestamp(d))
@@ -107,11 +107,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   private[this]  def decimalToTimestamp(d: BigDecimal) = {
-    val seconds = d.longValue()
+    val seconds = Math.floor(d.toDouble).toLong
     val bd = (d - seconds) * 1000000000
     val nanos = bd.intValue()
 
-    // Convert to millis
     val millis = seconds * 1000
     val t = new Timestamp(millis)
 
@@ -121,11 +120,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   // Timestamp to long, converting milliseconds to seconds
-  private[this] def timestampToLong(ts: Timestamp) = ts.getTime / 1000
+  private[this] def timestampToLong(ts: Timestamp) = Math.floor(ts.getTime / 1000.0).toLong
 
   private[this] def timestampToDouble(ts: Timestamp) = {
     // First part is the seconds since the beginning of time, followed by nanosecs.
-    ts.getTime / 1000 + ts.getNanos.toDouble / 1000000000
+    Math.floor(ts.getTime / 1000.0).toLong + ts.getNanos.toDouble / 1000000000
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention
