@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 
+import scala.collection.immutable.HashSet
+
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
     Batch("Combine Limits", FixedPoint(100),
@@ -38,7 +40,8 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      OptimizedIn) ::
     Batch("Filter Pushdown", FixedPoint(100),
       CombineFilters,
       PushPredicateThroughProject,
@@ -221,6 +224,25 @@ object ConstantFolding extends Rule[LogicalPlan] {
           case Literal(candidate, _) if candidate == v => true
           case _ => false
         } => Literal(true, BooleanType)
+    }
+  }
+}
+
+/**
+ * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
+ * which is much faster
+ */
+object OptimizedIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if list.exists {
+          case Literal(_ , _) => true
+          case UnaryMinus(_) => true
+          case _ => false
+        } => {
+          val hSet = list.map(e => e.eval(null))
+          InSet(v, HashSet() ++ hSet, v +: list)
+        }
     }
   }
 }

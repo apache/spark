@@ -96,7 +96,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 }
 
 /**
- * Evaluates to `true` if `list` contains `value`.
+ * Optimized version of In clause, when all filter values of In clause are
+ * static.
  */
 case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
     extends Predicate {
