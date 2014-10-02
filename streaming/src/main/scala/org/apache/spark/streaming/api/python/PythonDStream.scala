@@ -22,6 +22,7 @@ import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
 import org.apache.spark.api.java._
 import org.apache.spark.api.python._
@@ -40,8 +41,15 @@ private[python] trait PythonTransformFunction {
 }
 
 /**
+ * Interface for Python Serializer to serialize PythonTransformFunction
+ */
+private[python] trait PythonTransformFunctionSerializer {
+  def dumps(id: String): Array[Byte]
+  def loads(bytes: Array[Byte]): PythonTransformFunction
+}
+
+/**
  * Wrapper for PythonTransformFunction
- * TODO: support checkpoint
  */
 private[python] class TransformFunction(@transient var pfunc: PythonTransformFunction)
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
@@ -62,44 +70,45 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = {
-    assert(PythonDStream.serializer != null, "Serializer has not been registered!")
-    val bytes = PythonDStream.serializer.serialize(pfunc)
+    val bytes = PythonTransformFunctionSerializer.serialize(pfunc)
     out.writeInt(bytes.length)
     out.write(bytes)
   }
 
   private def readObject(in: ObjectInputStream): Unit = {
-    assert(PythonDStream.serializer != null, "Serializer has not been registered!")
     val length = in.readInt()
     val bytes = new Array[Byte](length)
     in.readFully(bytes)
-    pfunc = PythonDStream.serializer.deserialize(bytes)
+    pfunc = PythonTransformFunctionSerializer.deserialize(bytes)
   }
 }
 
 /**
- * Interface for Python Serializer to serialize PythonTransformFunction
+ * Helpers for PythonTransformFunctionSerializer
  */
-private[python] trait PythonTransformFunctionSerializer {
-  def dumps(id: String): Array[Byte]  //
-  def loads(bytes: Array[Byte]): PythonTransformFunction
-}
+private[python] object PythonTransformFunctionSerializer {
 
-/**
- * Wrapper for PythonTransformFunctionSerializer
- */
-private[python] class TransformFunctionSerializer(pser: PythonTransformFunctionSerializer) {
+  // A serializer in Python, used to serialize PythonTransformFunction
+  private var serializer: PythonTransformFunctionSerializer = _
+
+  // Register a serializer from Python, should be called during initialization
+  def register(ser: PythonTransformFunctionSerializer): Unit = {
+    serializer = ser
+  }
+
   def serialize(func: PythonTransformFunction): Array[Byte] = {
+    assert(serializer != null, "Serializer has not been registered!")
     // get the id of PythonTransformFunction in py4j
     val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
     val f = h.getClass().getDeclaredField("id")
     f.setAccessible(true)
     val id = f.get(h).asInstanceOf[String]
-    pser.dumps(id)
+    serializer.dumps(id)
   }
 
   def deserialize(bytes: Array[Byte]): PythonTransformFunction = {
-    pser.loads(bytes)
+    assert(serializer != null, "Serializer has not been registered!")
+    serializer.loads(bytes)
   }
 }
 
@@ -108,12 +117,10 @@ private[python] class TransformFunctionSerializer(pser: PythonTransformFunctionS
  */
 private[python] object PythonDStream {
 
-  // A serializer in Python, used to serialize PythonTransformFunction
-  var serializer: TransformFunctionSerializer = _
-
-  // Register a serializer from Python, should be called during initialization
-  def registerSerializer(ser: PythonTransformFunctionSerializer) = {
-    serializer = new TransformFunctionSerializer(ser)
+  // can not access PythonTransformFunctionSerializer.register() via Py4j
+  // Py4JError: PythonTransformFunctionSerializerregister does not exist in the JVM
+  def registerSerializer(ser: PythonTransformFunctionSerializer): Unit = {
+    PythonTransformFunctionSerializer.register(ser)
   }
 
   // helper function for DStream.foreachRDD(),
@@ -207,7 +214,10 @@ private[python] class PythonTransformed2DStream(
   override def dependencies = List(parent, parent2)
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
-    func(parent.getOrCompute(validTime), parent2.getOrCompute(validTime), validTime)
+    val empty: RDD[_] = ssc.sparkContext.emptyRDD
+    val rdd1 = parent.getOrCompute(validTime).getOrElse(empty)
+    val rdd2 = parent2.getOrCompute(validTime).getOrElse(empty)
+    func(Some(rdd1), Some(rdd2), validTime)
   }
 
   val asJavaDStream = JavaDStream.fromDStream(this)

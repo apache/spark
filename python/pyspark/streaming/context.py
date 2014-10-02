@@ -118,7 +118,6 @@ class StreamingContext(object):
         # it happens before creating SparkContext when loading from checkpointing
         cls._transformerSerializer = TransformFunctionSerializer(
             SparkContext._active_spark_context, CloudPickleSerializer(), gw)
-        gw.jvm.PythonDStream.registerSerializer(cls._transformerSerializer)
 
     @classmethod
     def getOrCreate(cls, path, setupFunc):

@@ -20,6 +20,8 @@ import operator
 import time
 from datetime import datetime
 
+from py4j.protocol import Py4JJavaError
+
 from pyspark import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.util import rddToFileName, TransformFunction
@@ -249,9 +251,15 @@ class DStream(object):
         Save each RDD in this DStream as at text file, using string
         representation of elements.
         """
-        def saveAsTextFile(time, rdd):
-            path = rddToFileName(prefix, suffix, time)
-            rdd.saveAsTextFile(path)
+        def saveAsTextFile(t, rdd):
+            path = rddToFileName(prefix, suffix, t)
+            try:
+                rdd.saveAsTextFile(path)
+            except Py4JJavaError as e:
+                # after recovered from checkpointing, the foreachRDD may
+                # be called twice
+                if 'FileAlreadyExistsException' not in str(e):
+                    raise
         return self.foreachRDD(saveAsTextFile)
 
     def _saveAsPickleFiles(self, prefix, suffix=None):
@@ -259,9 +267,15 @@ class DStream(object):
         Save each RDD in this DStream as at binary file, the elements are
         serialized by pickle.
         """
-        def saveAsPickleFile(time, rdd):
-            path = rddToFileName(prefix, suffix, time)
-            rdd.saveAsPickleFile(path)
+        def saveAsPickleFile(t, rdd):
+            path = rddToFileName(prefix, suffix, t)
+            try:
+                rdd.saveAsPickleFile(path)
+            except Py4JJavaError as e:
+                # after recovered from checkpointing, the foreachRDD may
+                # be called twice
+                if 'FileAlreadyExistsException' not in str(e):
+                    raise
         return self.foreachRDD(saveAsPickleFile)
 
     def transform(self, func):
@@ -608,8 +622,7 @@ class TransformedDStream(DStream):
         if self._jdstream_val is not None:
             return self._jdstream_val
 
-        func = self.func
-        jfunc = TransformFunction(self.ctx, func, self.prev._jrdd_deserializer)
+        jfunc = TransformFunction(self.ctx, self.func, self.prev._jrdd_deserializer)
         jdstream = self.ctx._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(),
                                                           jfunc, self.reuse).asJavaDStream()
         self._jdstream_val = jdstream

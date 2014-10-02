@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import time
 from datetime import datetime
 import traceback
 
@@ -32,23 +33,20 @@ class TransformFunction(object):
         self.func = func
         self.deserializers = deserializers
 
-    @property
-    def emptyRDD(self):
-        if self._emptyRDD is None and self.ctx:
-            self._emptyRDD = self.ctx.parallelize([]).cache()
-        return self._emptyRDD
-
     def call(self, milliseconds, jrdds):
         try:
             if self.ctx is None:
                 self.ctx = SparkContext._active_spark_context
+            if not self.ctx or not self.ctx._jsc:
+                # stopped
+                return
 
             # extend deserializers with the first one
             sers = self.deserializers
             if len(sers) < len(jrdds):
                 sers += (sers[0],) * (len(jrdds) - len(sers))
 
-            rdds = [RDD(jrdd, self.ctx, ser) if jrdd else self.emptyRDD
+            rdds = [RDD(jrdd, self.ctx, ser) if jrdd else None
                     for jrdd, ser in zip(jrdds, sers)]
             t = datetime.fromtimestamp(milliseconds / 1000.0)
             r = self.func(t, *rdds)
@@ -69,6 +67,7 @@ class TransformFunctionSerializer(object):
         self.ctx = ctx
         self.serializer = serializer
         self.gateway = gateway or self.ctx._gateway
+        self.gateway.jvm.PythonDStream.registerSerializer(self)
 
     def dumps(self, id):
         try:
@@ -91,7 +90,7 @@ class TransformFunctionSerializer(object):
         implements = ['org.apache.spark.streaming.api.python.PythonTransformFunctionSerializer']
 
 
-def rddToFileName(prefix, suffix, time):
+def rddToFileName(prefix, suffix, timestamp):
     """
     Return string prefix-time(.suffix)
 
@@ -99,12 +98,14 @@ def rddToFileName(prefix, suffix, time):
     'spark-12345678910'
     >>> rddToFileName("spark", "tmp", 12345678910)
     'spark-12345678910.tmp'
-
     """
+    if isinstance(timestamp, datetime):
+        seconds = time.mktime(timestamp.timetuple())
+        timestamp = long(seconds * 1000) + timestamp.microsecond / 1000
     if suffix is None:
-        return prefix + "-" + str(time)
+        return prefix + "-" + str(timestamp)
     else:
-        return prefix + "-" + str(time) + "." + suffix
+        return prefix + "-" + str(timestamp) + "." + suffix
 
 
 if __name__ == "__main__":
