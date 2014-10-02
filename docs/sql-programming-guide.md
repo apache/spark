@@ -732,7 +732,7 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 <div data-lang="scala"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
+adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a HiveContext.  When not configured by the
 hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
 directory.
@@ -753,7 +753,7 @@ sqlContext.sql("FROM src SELECT key, value").collect().foreach(println)
 <div data-lang="java"  markdown="1">
 
 When working with Hive one must construct a `JavaHiveContext`, which inherits from `JavaSQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
 the `sql` method a `JavaHiveContext` also provides an `hql` methods, which allows queries to be
 expressed in HiveQL.
 
@@ -774,7 +774,7 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 <div data-lang="python"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
 the `sql` method a `HiveContext` also provides an `hql` methods, which allows queries to be
 expressed in HiveQL.
 
@@ -872,12 +872,12 @@ that these options will be deprecated in future release as more optimizations ar
 Spark SQL also supports interfaces for running SQL queries directly without the need to write any
 code.
 
-## Running the Thrift JDBC server
+## Running the Thrift JDBC/ODBC server
 
-The Thrift JDBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
+The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
 in Hive 0.12. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.12.
 
-To start the JDBC server, run the following in the Spark directory:
+To start the JDBC/ODBC server, run the following in the Spark directory:
 
     ./sbin/start-thriftserver.sh
 
@@ -906,11 +906,11 @@ or system properties:
 ```
 {% endhighlight %}
 
-Now you can use beeline to test the Thrift JDBC server:
+Now you can use beeline to test the Thrift JDBC/ODBC server:
 
     ./bin/beeline
 
-Connect to the JDBC server in beeline with:
+Connect to the JDBC/ODBC server in beeline with:
 
     beeline> !connect jdbc:hive2://localhost:10000
 

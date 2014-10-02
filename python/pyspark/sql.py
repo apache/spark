@@ -838,43 +838,29 @@ def _create_cls(dataType):
     >>> obj = _create_cls(schema)(row)
     >>> pickle.loads(pickle.dumps(obj))
     Row(a=[1], b={'key': Row(c=1, d=2.0)})
+    >>> pickle.loads(pickle.dumps(obj.a))
+    [1]
+    >>> pickle.loads(pickle.dumps(obj.b))
+    {'key': Row(c=1, d=2.0)}
     """
 
     if isinstance(dataType, ArrayType):
         cls = _create_cls(dataType.elementType)
 
-        class List(list):
-
-            def __getitem__(self, i):
-                # create object with datetype
-                return _create_object(cls, list.__getitem__(self, i))
-
-            def __repr__(self):
-                # call collect __repr__ for nested objects
-                return "[%s]" % (", ".join(repr(self[i])
-                                           for i in range(len(self))))
-
-            def __reduce__(self):
-                return list.__reduce__(self)
+        def List(l):
+            if l is None:
+                return
+            return [_create_object(cls, v) for v in l]
 
         return List
 
     elif isinstance(dataType, MapType):
-        vcls = _create_cls(dataType.valueType)
+        cls = _create_cls(dataType.valueType)
 
-        class Dict(dict):
-
-            def __getitem__(self, k):
-                # create object with datetype
-                return _create_object(vcls, dict.__getitem__(self, k))
-
-            def __repr__(self):
-                # call collect __repr__ for nested objects
-                return "{%s}" % (", ".join("%r: %r" % (k, self[k])
-                                           for k in self))
-
-            def __reduce__(self):
-                return dict.__reduce__(self)
+        def Dict(d):
+            if d is None:
+                return
+            return dict((k, _create_object(cls, v)) for k, v in d.items())
 
         return Dict
 
@@ -974,12 +960,12 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func,
+        command = (func, None,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
+        if len(pickled_command) > (1 << 20):  # 1M
             broadcast = self._sc.broadcast(pickled_command)
             pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(

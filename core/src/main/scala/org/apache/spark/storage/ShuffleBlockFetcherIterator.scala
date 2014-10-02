@@ -121,7 +121,7 @@ final class ShuffleBlockFetcherIterator(
         }
 
         override def onBlockFetchFailure(e: Throwable): Unit = {
-          logError("Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
           // Note that there is a chance that some blocks have been fetched successfully, but we
           // still add them to the failed queue. This is fine because when the caller see a
           // FetchFailedException, it is going to fail the entire task anyway.

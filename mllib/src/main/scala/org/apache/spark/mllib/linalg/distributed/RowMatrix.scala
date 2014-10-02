@@ -19,17 +19,21 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
-import breeze.linalg.{svd => brzSvd, axpy => brzAxpy}
+import scala.collection.mutable.ListBuffer
+
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV, axpy => brzAxpy,
+  svd => brzSvd}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
+import org.apache.spark.Logging
+import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -409,6 +413,165 @@ class RowMatrix(
     }
 
     new RowMatrix(AB, nRows, B.numCols)
+  }
+
+  /**
+   * Compute all cosine similarities between columns of this matrix using the brute-force
+   * approach of computing normalized dot products.
+   *
+   * @return An n x n sparse upper-triangular matrix of cosine similarities between
+   *         columns of this matrix.
+   */
+  def columnSimilarities(): CoordinateMatrix = {
+    columnSimilarities(0.0)
+  }
+
+  /**
+   * Compute similarities between columns of this matrix using a sampling approach.
+   *
+   * The threshold parameter is a trade-off knob between estimate quality and computational cost.
+   *
+   * Setting a threshold of 0 guarantees deterministic correct results, but comes at exactly
+   * the same cost as the brute-force approach. Setting the threshold to positive values
+   * incurs strictly less computational cost than the brute-force approach, however the
+   * similarities computed will be estimates.
+   *
+   * The sampling guarantees relative-error correctness for those pairs of columns that have
+   * similarity greater than the given similarity threshold.
+   *
+   * To describe the guarantee, we set some notation:
+   * Let A be the smallest in magnitude non-zero element of this matrix.
+   * Let B be the largest  in magnitude non-zero element of this matrix.
+   * Let L be the maximum number of non-zeros per row.
+   *
+   * For example, for {0,1} matrices: A=B=1.
+   * Another example, for the Netflix matrix: A=1, B=5
+   *
+   * For those column pairs that are above the threshold,
+   * the computed similarity is correct to within 20% relative error with probability
+   * at least 1 - (0.981)^10/B^
+   *
+   * The shuffle size is bounded by the *smaller* of the following two expressions:
+   *
+   * O(n log(n) L / (threshold * A))
+   * O(m L^2^)
+   *
+   * The latter is the cost of the brute-force approach, so for non-zero thresholds,
+   * the cost is always cheaper than the brute-force approach.
+   *
+   * @param threshold Set to 0 for deterministic guaranteed correctness.
+   *                  Similarities above this threshold are estimated
+   *                  with the cost vs estimate quality trade-off described above.
+   * @return An n x n sparse upper-triangular matrix of cosine similarities
+   *         between columns of this matrix.
+   */
+  def columnSimilarities(threshold: Double): CoordinateMatrix = {
+    require(threshold >= 0, s"Threshold cannot be negative: $threshold")
+
+    if (threshold > 1) {
+      logWarning(s"Threshold is greater than 1: $threshold " +
+      "Computation will be more efficient with promoted sparsity, " +
+      " however there is no correctness guarantee.")
+    }
+
+    val gamma = if (threshold < 1e-6) {
+      Double.PositiveInfinity
+    } else {
+      10 * math.log(numCols()) / threshold
+    }
+
+    columnSimilaritiesDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
+  }
+
+  /**
+   * Find all similar columns using the DIMSUM sampling algorithm, described in two papers
+   *
+   * http://arxiv.org/abs/1206.2082
+   * http://arxiv.org/abs/1304.1467
+   *
+   * @param colMags A vector of column magnitudes
+   * @param gamma The oversampling parameter. For provable results, set to 10 * log(n) / s,
+   *              where s is the smallest similarity score to be estimated,
+   *              and n is the number of columns
+   * @return An n x n sparse upper-triangular matrix of cosine similarities
+   *         between columns of this matrix.
+   */
+  private[mllib] def columnSimilaritiesDIMSUM(
+      colMags: Array[Double],
+      gamma: Double): CoordinateMatrix = {
+    require(gamma > 1.0, s"Oversampling should be greater than 1: $gamma")
+    require(colMags.size == this.numCols(), "Number of magnitudes didn't match column dimension")
+    val sg = math.sqrt(gamma) // sqrt(gamma) used many times
+
+    // Don't divide by zero for those columns with zero magnitude
+    val colMagsCorrected = colMags.map(x => if (x == 0) 1.0 else x)
+
+    val sc = rows.context
+    val pBV = sc.broadcast(colMagsCorrected.map(c => sg / c))
+    val qBV = sc.broadcast(colMagsCorrected.map(c => math.min(sg, c)))
+
+    val sims = rows.mapPartitionsWithIndex { (indx, iter) =>
+      val p = pBV.value
+      val q = qBV.value
+
+      val rand = new XORShiftRandom(indx)
+      val scaled = new Array[Double](p.size)
+      iter.flatMap { row =>
+        val buf = new ListBuffer[((Int, Int), Double)]()
+        row match {
+          case sv: SparseVector =>
+            val nnz = sv.indices.size
+            var k = 0
+            while (k < nnz) {
+              scaled(k) = sv.values(k) / q(sv.indices(k))
+              k += 1
+            }
+            k = 0
+            while (k < nnz) {
+              val i = sv.indices(k)
+              val iVal = scaled(k)
+              if (iVal != 0 && rand.nextDouble() < p(i)) {
+                var l = k + 1
+                while (l < nnz) {
+                  val j = sv.indices(l)
+                  val jVal = scaled(l)
+                  if (jVal != 0 && rand.nextDouble() < p(j)) {
+                    buf += (((i, j), iVal * jVal))
+                  }
+                  l += 1
+                }
+              }
+              k += 1
+            }
+          case dv: DenseVector =>
+            val n = dv.values.size
+            var i = 0
+            while (i < n) {
+              scaled(i) = dv.values(i) / q(i)
+              i += 1
+            }
+            i = 0
+            while (i < n) {
+              val iVal = scaled(i)
+              if (iVal != 0 && rand.nextDouble() < p(i)) {
+                var j = i + 1
+                while (j < n) {
+                  val jVal = scaled(j)
+                  if (jVal != 0 && rand.nextDouble() < p(j)) {
+                    buf += (((i, j), iVal * jVal))
+                  }
+                  j += 1
+                }
+              }
+              i += 1
+            }
+        }
+        buf
+      }
+    }.reduceByKey(_ + _).map { case ((i, j), sim) =>
+      MatrixEntry(i.toLong, j.toLong, sim)
+    }
+    new CoordinateMatrix(sims, numCols(), numCols())
   }
 
   private[mllib] override def toBreeze(): BDM[Double] = {

@@ -135,8 +135,12 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("div",
     "SELECT 1 DIV 2, 1 div 2, 1 dIv 2, 100 DIV 51, 100 DIV 49 FROM src LIMIT 1")
 
-  createQueryTest("division",
-    "SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1")
+  // Jdk version leads to different query output for double, so not use createQueryTest here
+  test("division") {
+    val res = sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
+    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res).foreach( x =>
+      assert(x._1 == x._2.asInstanceOf[Double]))
+  }
 
   createQueryTest("modulus",
     "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), (101 / 2) % 10 FROM src LIMIT 1")
@@ -160,7 +164,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("Cast Timestamp to Timestamp in UDF",
     """
-       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp)) 
+       | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
        | FROM src LIMIT 1
     """.stripMargin)
 
@@ -306,8 +310,11 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("case statements WITHOUT key #4",
     "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
 
-  createQueryTest("timestamp cast #1",
-    "SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+  // Jdk version leads to different query output for double, so not use createQueryTest here
+  test("timestamp cast #1") {
+    val res = sql("SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
+    assert(0.001 == res.getDouble(0))
+  }
 
   createQueryTest("timestamp cast #2",
     "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
@@ -329,6 +336,9 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("timestamp cast #8",
     "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+
+  createQueryTest("select null from table",
+    "SELECT null FROM src LIMIT 1")
 
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
