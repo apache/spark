@@ -224,8 +224,6 @@ the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support
 $ PYSPARK_PYTHON=ipython PYSPARK_PYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
 {% endhighlight %}
 
-(`IPYTHON` and `IPYTHON_OPTS` are deprecated, but currently reserved for backward compatibility.)
-
 </div>
 
 </div>
