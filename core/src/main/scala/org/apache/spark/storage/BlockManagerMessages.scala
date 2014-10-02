@@ -88,7 +88,7 @@ private[spark] object BlockManagerMessages {
 
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 
-  case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
+  case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 
