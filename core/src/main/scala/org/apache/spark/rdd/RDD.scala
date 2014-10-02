@@ -208,6 +208,21 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Get the number of partitions in this RDD
+   *
+   * {{{
+   * scala> val rdd = sc.parallelize(1 to 4, 2)
+   * rdd: org.apache.spark.rdd.RDD[Int] = ParallelCollectionRDD[1] at parallelize at <console>:12
+   *
+   * scala> rdd.getNumPartitions
+   * res1: Int = 2
+   * }}}
+   *
+   * @return The number of partitions in this RDD
+   */
+  def getNumPartitions: Int = partitions.size
+
+  /**
    * Get the preferred locations of a partition (as hostnames), taking into account whether the
    * RDD is checkpointed.
    */
