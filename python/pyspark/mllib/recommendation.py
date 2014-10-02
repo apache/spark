@@ -88,6 +88,7 @@ class MatrixFactorizationModel(object):
         return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc,
                    AutoBatchedSerializer(PickleSerializer()))
 
+
 class ALS(object):
 
     @classmethod

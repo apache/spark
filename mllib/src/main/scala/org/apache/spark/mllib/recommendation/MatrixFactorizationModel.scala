@@ -107,7 +107,15 @@ class MatrixFactorizationModel private[mllib] (
     scored.top(num)(Ordering.by(_._2))
   }
 
+  /**
+    * Convert userFeatures RDD so that it can accessed by the python bindings
+    * The output RDD is a string concatenation of the user id and the latent
+    * factors.
+    *
+    * @param 
+    * @return RDD of strings
+    */
   def userFeaturesString(): RDD[String]  = {
-    userFeatures.map(element => element._1+","+element._2.mkString(","))
+    userFeatures.map(element => element._1 + "," + element._2.mkString(","))
   }
 }
