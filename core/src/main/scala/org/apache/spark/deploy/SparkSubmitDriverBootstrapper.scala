@@ -74,8 +74,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     // Property file loading comes after all SPARK* env variables are processed and should not
     // overwrite existing SPARK env variables
     sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE")
-    .flatMap ( SparkSubmitArguments.getFileIfExists )
-    .map ( SparkSubmitArguments.loadPropFile )
+    .flatMap ( Utils.getFileIfExists )
+    .map ( Utils.loadPropFile )
     .getOrElse(Map.empty)
     .foreach { case(k,v) =>
       submitEnvVars.getOrElseUpdate(k,v)

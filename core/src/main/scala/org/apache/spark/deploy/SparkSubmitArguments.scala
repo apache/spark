@@ -309,7 +309,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
          *  after we have finished the rest of the command line processing as property files
          *  cannot override explicit command line options .
          */
-        cmdLinePropertyFileValues ++= SparkSubmitArguments.getPropertyValuesFromFile(value)
+        cmdLinePropertyFileValues ++= Utils.getPropertyValuesFromFile(value)
         parse(tail)
 
       case ("--supervise") :: tail =>
@@ -467,8 +467,8 @@ private[spark] object SparkSubmitArguments {
     val confDir: Option[String] = altConfDir.orElse(baseConfDir)
     val confPath =  confDir.map(path => path + File.separator + FILENAME_SPARK_DEFAULTS_CONF)
     try {
-      confPath.flatMap { getFileIfExists }
-        .map{ loadPropFile }
+      confPath.flatMap { Utils.getFileIfExists }
+        .map{ Utils.loadPropFile }
         .getOrElse(Map.empty)
     } catch {
       // If an IOException occurs, report which file we were trying to open.
@@ -513,56 +513,4 @@ private[spark] object SparkSubmitArguments {
     ))
   }
 
-  /**
-   * Returns an Optional File if it exists
-   * @param filePath Path to create a file object on
-   * @return Some(File) if file exists in file system None otherwise
-   */
-  def getFileIfExists(filePath: String): Option[File] = {
-    val File = new File(filePath)
-    if (File.exists) {
-      Some(File)
-    } else {
-      None
-    }
-  }
-
-  /**
-   * Parses a property file using the java properties file parser
-   * @param filePath Path to property file
-   * @return Map of config values parsed from file
-   * @throws FileNotFoundException if file does not exist
-   * @throws IOException if file exists but is not accessible
-   */
-  def getPropertyValuesFromFile(filePath: String): Map[String, String] = {
-    val propFile = new File(filePath)
-    loadPropFile(propFile)
-  }
-
-  /**
-   * returns a loaded property file
-   * @param propFile File object pointing to properties file
-   * @return java properties object
-   * @throws FileNotFoundException if file does not exist
-   * @throws IOException if file exists but is not accessible
-   */
-  def loadPropFile(propFile: File): Map[String, String] = {
-    var isr: InputStreamReader = new InputStreamReader(new FileInputStream(propFile), CharEncoding.UTF_8)
-    try {
-      getPropertyValuesFromStream(isr)
-    } finally {
-      isr.close()
-    }
-  }
-
-  /**
-   * Loads property object from stream. the passed InputStreamReader is not closed
-   * @param r Reader to load property file from
-   * @return Map[PropName->PropValue]
-   */
-  def getPropertyValuesFromStream(r: Reader) = {
-    val prop = new Properties()
-    prop.load(r)
-    prop.asInstanceOf[java.util.Map[String, String]]
-  }
 }
