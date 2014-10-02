@@ -286,7 +286,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = false
-  override def dataType = DoubleType
+  override def dataType = if (child.dataType == DecimalType) DecimalType else DoubleType
   override def toString = s"AVG($child)"
 
   override def asPartial: SplitEvaluation = {

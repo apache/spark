@@ -96,7 +96,8 @@ case class GeneratedAggregate(
         val updateCount = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
         val updateSum = Coalesce(Add(expr, currentSum) :: currentSum :: Nil)
 
-        val result = Divide(Cast(currentSum, DoubleType), Cast(currentCount, DoubleType))
+        val resultType = if (expr.dataType == DecimalType) DecimalType else DoubleType
+        val result = Divide(Cast(currentSum, resultType), Cast(currentCount, resultType))
 
         AggregateEvaluation(
           currentCount :: currentSum :: Nil,
@@ -142,7 +143,7 @@ case class GeneratedAggregate(
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap: Map[TreeNodeRef, Expression] = 
+    val resultMap: Map[TreeNodeRef, Expression] =
       aggregatesToCompute.zip(computeFunctions).map {
         case (agg, func) => new TreeNodeRef(agg) -> func.result
       }.toMap
