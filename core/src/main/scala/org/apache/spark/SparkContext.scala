@@ -745,15 +745,19 @@ class SparkContext(config: SparkConf) extends Logging {
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
-    new Accumulator(initialValue, param)
+    new Accumulator(initialValue, param, this)
 
   /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
-   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with the specified name.
+   * Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
+   *
+   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
-    new Accumulator(initialValue, param, Some(name))
+    new Accumulator(initialValue, param, Some(name), this)
   }
 
   /**
@@ -763,17 +767,22 @@ class SparkContext(config: SparkConf) extends Logging {
    * @tparam R type that can be added to the accumulator
    */
   def accumulable[T, R](initialValue: T)(implicit param: AccumulableParam[T, R]) =
-    new Accumulable(initialValue, param)
+    new Accumulable(initialValue, param, this)
 
   /**
-   * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
-   * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
+   * Create an [[org.apache.spark.Accumulable]] shared variable, with the specified name.
+   * Tasks can add values to the accumuable using the `+=` operator. Only the driver can
    * access the accumuable's `value`.
+   *
+   * The accumulable's name is used in the Spark UI, as well as permitting accumulables to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulables are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
+   *
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
   def accumulable[T, R](initialValue: T, name: String)(implicit param: AccumulableParam[T, R]) =
-    new Accumulable(initialValue, param, Some(name))
+    new Accumulable(initialValue, param, Some(name), this)
 
   /**
    * Create an accumulator from a "mutable collection" type.
@@ -784,7 +793,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R,T]
-    new Accumulable(initialValue, param)
+    new Accumulable(initialValue, param, this)
   }
 
   /**

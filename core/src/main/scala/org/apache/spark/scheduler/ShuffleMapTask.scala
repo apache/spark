@@ -37,17 +37,19 @@ import org.apache.spark.shuffle.ShuffleWriter
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
+ * @param accumulablesBinary serialized version of the set of named accumulables for this job
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
-    @transient private var locs: Seq[TaskLocation])
-  extends Task[MapStatus](stageId, partition.index) with Logging {
+    @transient private var locs: Seq[TaskLocation],
+    accumulablesBinary: Broadcast[Array[Byte]])
+  extends Task[MapStatus](stageId, partition.index, accumulablesBinary) with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, null, new Partition { override def index = 0 }, null)
+    this(0, null, new Partition { override def index = 0 }, null, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {

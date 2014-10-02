@@ -436,7 +436,9 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    *
-   * This version supports naming the accumulator for display in Spark's web UI.
+   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def intAccumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
     sc.accumulator(initialValue, name)(IntAccumulatorParam)
@@ -453,7 +455,9 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    *
-   * This version supports naming the accumulator for display in Spark's web UI.
+   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def doubleAccumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
     sc.accumulator(initialValue, name)(DoubleAccumulatorParam)
@@ -469,7 +473,9 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    *
-   * This version supports naming the accumulator for display in Spark's web UI.
+   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def accumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
     intAccumulator(initialValue, name)
@@ -486,7 +492,9 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    *
-   * This version supports naming the accumulator for display in Spark's web UI.
+   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def accumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
     doubleAccumulator(initialValue, name)
@@ -502,7 +510,9 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `add` method. Only the master can access the accumulator's `value`.
    *
-   * This version supports naming the accumulator for display in Spark's web UI.
+   * The accumulator's name is used in the Spark UI, as well as permitting accumulators to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulators are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def accumulator[T](initialValue: T, name: String, accumulatorParam: AccumulatorParam[T])
       : Accumulator[T] =
@@ -519,7 +529,9 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
    * can "add" values with `add`. Only the master can access the accumuable's `value`.
    *
-   * This version supports naming the accumulator for display in Spark's web UI.
+   * The accumulable's name is used in the Spark UI, as well as permitting accumulables to be
+   * looked-up by name from the [[AccumulableRegistry]]. Note that named accumulables are broadcast
+   * to all executors, so this imposes a (small) cost in terms of serialization and network traffic.
    */
   def accumulable[T, R](initialValue: T, name: String, param: AccumulableParam[T, R])
       : Accumulable[T, R] =

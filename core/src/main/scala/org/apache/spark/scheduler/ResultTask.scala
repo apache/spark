@@ -36,6 +36,7 @@ import org.apache.spark.rdd.RDD
  *                   (RDD[T], (TaskContext, Iterator[T]) => U).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
+ * @param accumulablesBinary serialized version of the set of named accumulables for this job
  * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
  *                 input RDD's partitions).
  */
@@ -44,8 +45,9 @@ private[spark] class ResultTask[T, U](
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient locs: Seq[TaskLocation],
-    val outputId: Int)
-  extends Task[U](stageId, partition.index) with Serializable {
+    val outputId: Int,
+    accumulablesBinary: Broadcast[Array[Byte]])
+  extends Task[U](stageId, partition.index, accumulablesBinary) with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq

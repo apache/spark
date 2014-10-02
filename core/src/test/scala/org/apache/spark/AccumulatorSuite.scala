@@ -137,4 +137,81 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
     }
   }
 
+  test ("basic accumulation works with named accumulables"){
+    // Just a basic test to ensure that we haven't broken accumulation by the addition
+    // of the AccumulableRegistry, and associated functionality
+    sc = new SparkContext("local", "test")
+    val acc : Accumulator[Int] = sc.accumulator(0, "myaccum")
+    val d = sc.parallelize(1 to 20)
+    d.foreach{x => acc += x}
+    acc.value should be (210)
+  }
+
+  test ("named accumulables available in the registry") {
+    for (nThreads <- List(1, 10)) { // test single & multi-threaded
+      sc = new SparkContext("local[" + nThreads + "]", "test")
+      val acc : Accumulator[Int] = sc.accumulator(0, "myaccum")
+      val acc2 : Accumulator[Int] = sc.accumulator(0, "myaccum2")
+      val d = sc.parallelize(1 to 20, nThreads)
+      d.foreach{x => {
+        AccumulableRegistry.get("myaccum").get.asInstanceOf[Accumulator[Int]] += x
+        AccumulableRegistry.get("myaccum2").get.asInstanceOf[Accumulator[Int]] += (x*2)
+      }}
+      acc.value should be (210)
+      acc2.value should be (420)
+      resetSparkContext()
+    }
+  }
+
+  test ("accumulables can be passed explicitly as well as obtained from the registry") {
+    for (nThreads <- List(1, 10)) { // test single & multi-threaded
+      sc = new SparkContext("local[" + nThreads + "]", "test")
+      val acc : Accumulator[Int] = sc.accumulator(0, "myaccum")
+      val d = sc.parallelize(1 to 20, nThreads)
+      d.foreach{x => {
+        AccumulableRegistry.get("myaccum").get.asInstanceOf[Accumulator[Int]] += x
+        acc += (x*2)
+      }}
+      acc.value should be (630)
+      resetSparkContext()
+    }
+  }
+
+  // Ensures that only named accumulables that were created using the SparkContext that is
+  // running the job are used. Accumulables "left over" from other SparkContexts should not
+  // be broadcast.
+  test ("named accumulables for the correct SparkContext are used") {
+    for (i <- 0 to 1) {
+      sc = new SparkContext("local", "test")
+      val acc : Accumulator[Int] = sc.accumulator(0, "myaccum" + i)
+      val d = sc.parallelize(1 to 20)
+      d.foreach{x => {
+        AccumulableRegistry.get("myaccum" + i).get.asInstanceOf[Accumulator[Int]] += x
+        if (AccumulableRegistry.get("myaccum" + (i - 1)).isDefined) {
+          throw new IllegalStateException("Did not expect to find the accumulator [" +
+              ("myaccum" + (i - 1)) + "]")
+        }
+      }}
+      acc.value should be (210)
+      resetSparkContext()
+    }
+  }
+
+  test ("most recent named accumulable is returned from the registry") {
+    sc = new SparkContext("local", "test")
+    val acc : Accumulator[Int] = sc.accumulator(0, "myaccum")
+    val acc1 : Accumulator[Int] = sc.accumulator(0, "myaccum")
+    val acc2 : Accumulator[Int] = sc.accumulator(0, "myaccum")
+    val d = sc.parallelize(1 to 20)
+    d.foreach{x => {
+      AccumulableRegistry.get("myaccum").get.asInstanceOf[Accumulator[Int]] += x
+    }}
+    // If there are multiple named accumulables with the same name, the most recently-created
+    // one should be used when retrieving from the AccumulableRegistry
+    acc.value should be (0)
+    acc1.value should be (0)
+    acc2.value should be (210)
+    resetSparkContext()
+  }
+
 }

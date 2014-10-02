@@ -37,17 +37,19 @@ import org.apache.spark.serializer.JavaSerializer
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
+ * @param sc the [[SparkContext]] that created this accumulable
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] (
     @transient initialValue: R,
     param: AccumulableParam[R, T],
-    val name: Option[String])
+    val name: Option[String],
+    @transient val sc: SparkContext)
   extends Serializable {
 
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
+  def this(@transient initialValue: R, param: AccumulableParam[R, T], sc: SparkContext) =
+    this(initialValue, param, None, sc)
 
   val id: Long = Accumulators.newId
 
@@ -223,11 +225,13 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
+ * @param sc the [[SparkContext]] that created this accumulable
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
-    extends Accumulable[T,T](initialValue, param, name) {
-  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String],
+    @transient sc: SparkContext) extends Accumulable[T,T](initialValue, param, name, sc) {
+  def this(initialValue: T, param: AccumulatorParam[T], sc: SparkContext) = this(initialValue,
+      param, None, sc)
 }
 
 /**
@@ -243,15 +247,44 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   }
 }
 
+/**
+ * Provides the ability to look-up [[Accumulable]]s by name when performing operations on RDDs.
+ *
+ * For the correct Accumulable to be returned, the RDD used must have been created
+ * by the same [[SparkContext]] as the Accumulable. It is not possible to create Accumulables
+ * using one [[SparkContext]] and look them up when performing operations on an RDD created by
+ * a different [[SparkContext]].
+ *
+ * Note that named Accumulables cannot be looked-up in the driver program; they can only be
+ * obtained while an operation is being performed on an RDD (a task is executing).
+ *
+ * If multiple Accumulables have been created with the same name using the same [[SparkContext]]
+ * then the one that was created most recently is returned.
+ */
+object AccumulableRegistry {
+  /**
+   * Returns the [[Accumulable]] with the specified name, if it exists.
+   * @param name The name of the [[Accumulable]]
+   * @return The accumulable with the specified name, or [[None]] if one does not exist,
+   *         or if there is not a currently-executing task
+   */
+  def get(name: String): Option[Accumulable[_, _]] = {
+    Accumulators.getLocalAccumulable(name)
+  }
+}
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
-  val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
+  val localAccums = Map[Thread, LocalAccumulables]()
   var lastId: Long = 0
 
   def newId: Long = synchronized {
+    // Note that we currently rely on the current ID generation scheme (accumulables that are
+    // created later have higher IDs) to ensure that we always get the most recently-created
+    // accumulable when we look them up by name.
     lastId += 1
     lastId
   }
@@ -260,8 +293,8 @@ private object Accumulators {
     if (original) {
       originals(a.id) = a
     } else {
-      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-      accums(a.id) = a
+      val accums = localAccums.getOrElseUpdate(Thread.currentThread, new LocalAccumulables())
+      accums.add(a)
     }
   }
 
@@ -275,10 +308,16 @@ private object Accumulators {
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
+    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, new LocalAccumulables()).byId) {
       ret(id) = accum.localValue
     }
     return ret
+  }
+
+  // Get the local accumulable with the specified name
+  def getLocalAccumulable(name: String): Option[Accumulable[_, _]] = {
+    val accums = localAccums.getOrElseUpdate(Thread.currentThread, new LocalAccumulables())
+    accums.byName.get(name)
   }
 
   // Add values to the original accumulators with some given IDs
@@ -292,4 +331,27 @@ private object Accumulators {
 
   def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
   def stringifyValue(value: Any) = "%s".format(value)
+}
+
+private class LocalAccumulables(val byId: Map[Long, Accumulable[_, _]] = Map(),
+                                val byName: Map[String, Accumulable[_, _]] = Map()) {
+  def add(accumulable: Accumulable[_, _]) {
+    // It is possible to have two accumulables with the same ID. This is caused when
+    // a named accumulable is broadcast, but is also explicitly passed-in to a task.
+    // In this case we want the explicitly passed-in version to replace the broadcast version,
+    // since this is the version that the function references. Since explicitly passed accumulables
+    // are deserialized after broadcast ones, we always replace accumulables with the same ID here.
+    byId(accumulable.id) = accumulable
+    accumulable.name.foreach(name => {
+      val existing = byName.get(name)
+      // If there are two accumulables with the same name, we want to use the one that was
+      // defined later, which we assume is the one with the higher ID. Note that this relies
+      // on the implementation of the ID generation for accumulables. We also need to make sure to
+      // replace existing any accumulables with the same ID.
+      if (!existing.isDefined || existing.get.id <= accumulable.id) {
+        byName(name) = accumulable
+      }
+    })
+  }
+
 }
