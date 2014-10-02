@@ -106,4 +106,8 @@ class MatrixFactorizationModel private[mllib] (
     }
     scored.top(num)(Ordering.by(_._2))
   }
+
+  def userFeaturesString(userFeatures: RDD[(Int, Array[Double])]): RDD[String]  = {
+    userFeatures.map(element => element._1+","+element._2.mkString(","))
+  }
 }
