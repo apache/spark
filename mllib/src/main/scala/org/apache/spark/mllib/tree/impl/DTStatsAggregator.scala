@@ -166,12 +166,12 @@ private[tree] class DTStatsAggregator(
    * This method modifies this aggregator in-place.
    */
   def merge(other: DTStatsAggregator): DTStatsAggregator = {
-    require(statsSize == other.statsSize,
+    require(allStatsSize == other.allStatsSize,
       s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
-        + s" This aggregator is of length $statsSize, but the other is ${other.statsSize}.")
+        + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
     var i = 0
     // TODO: Test BLAS.axpy
-    while (i < statsSize) {
+    while (i < allStatsSize) {
       allStats(i) += other.allStats(i)
       i += 1
     }
