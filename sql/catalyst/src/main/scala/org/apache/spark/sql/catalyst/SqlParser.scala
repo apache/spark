@@ -166,7 +166,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         val withFilter = f.map(f => Filter(f, base)).getOrElse(base)
         val withProjection =
           g.map {g =>
-            Aggregate(assignAliases(g), assignAliases(p), withFilter)
+            Aggregate(g, assignAliases(p), withFilter)
           }.getOrElse(Project(assignAliases(p), withFilter))
         val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
         val withHaving = h.map(h => Filter(h, withDistinct)).getOrElse(withDistinct)
