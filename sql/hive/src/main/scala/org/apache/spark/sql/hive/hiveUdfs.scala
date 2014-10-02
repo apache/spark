@@ -222,7 +222,8 @@ private[hive] case class HiveUdaf(
 
   override def toString = s"$nodeName#$functionClassName(${children.mkString(",")})"
 
-  def newInstance() = new HiveUdafFunction(functionClassName, children, this, new GenericUDAFBridge(createFunction()))
+  def newInstance() =
+    new HiveUdafFunction(functionClassName, children, this, new GenericUDAFBridge(createFunction()))
 }
 
 /**
