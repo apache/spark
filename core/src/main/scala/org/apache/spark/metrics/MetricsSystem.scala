@@ -101,7 +101,8 @@ private[spark] class MetricsSystem private (
    * The name is built like <Application ID>.<Executor ID( or "driver" for Driver)>.<Metric name>
    *
    * @param source Metric source to be named by this method.
-   * @return An unique metric name for each combination of application, executor/driver and metric source.
+   * @return An unique metric name for each combination of
+   *         application, executor/driver and metric source.
    */
   def buildRegistryName(source: Source): String =
     instance match {
