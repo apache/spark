@@ -305,10 +305,6 @@ class SparkContext(config: SparkConf) extends Logging {
       new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
   }
 
-  // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
-  // constructor
-  taskScheduler.start()
-
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
       Some(new ContextCleaner(this))

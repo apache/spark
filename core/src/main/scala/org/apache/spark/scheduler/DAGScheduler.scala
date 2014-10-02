@@ -757,6 +757,9 @@ class DAGScheduler(
         finalStage.resultOfJob = Some(job)
         listenerBus.post(SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray,
           properties))
+        if (taskScheduler.started.compareAndSet(false, true)) {
+          taskScheduler.start()
+        }
         submitStage(finalStage)
       }
     }
@@ -1324,7 +1327,9 @@ class DAGScheduler(
   def stop() {
     logInfo("Stopping DAGScheduler")
     dagSchedulerActorSupervisor ! PoisonPill
-    taskScheduler.stop()
+    if (taskScheduler.started.compareAndSet(true, false)) {
+      taskScheduler.stop()
+    }
   }
 }
 
