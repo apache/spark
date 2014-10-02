@@ -710,15 +710,15 @@ private[spark] object Utils extends Logging {
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
    * @param cutoff measured in seconds. Returns true if there are any files in dir newer than this.
    */
-  def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long) : Boolean = {
+  def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
     val currentTimeMillis = System.currentTimeMillis
     if (!dir.isDirectory) {
       throw new IllegalArgumentException (dir + " is not a directory!")
     } else {
       val files = FileUtils.listFilesAndDirs(dir, TrueFileFilter.TRUE, TrueFileFilter.TRUE)
       val cutoffTimeInMillis = (currentTimeMillis - (cutoff * 1000))
-      val newFiles = files.filter { file => file.lastModified > cutoffTimeInMillis }
-      (dir.lastModified > cutoffTimeInMillis) || (!newFiles.isEmpty)
+      val newFiles = files.filter { _.lastModified > cutoffTimeInMillis }
+      newFiles.nonEmpty
     }
   }
 

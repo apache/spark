@@ -194,6 +194,8 @@ private[spark] class Worker(
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
       if (CLEANUP_ENABLED) {
+        logInfo("Worker cleanup is enabled, so old application directories will be deleted"
+          + " in: " + workDir)
         context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
           CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
       }
@@ -204,7 +206,6 @@ private[spark] class Worker(
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
       val cleanupFuture = concurrent.future {
-        logInfo("Cleaning up oldest application directories in " + workDir + " ...")
         val appDirs = workDir.listFiles()
         if (appDirs == null) {
           throw new IOException("ERROR: Failed to list files in " + appDirs)
@@ -216,7 +217,10 @@ private[spark] class Worker(
           val isAppStillRunning = executors.values.map(_.appId).contains(appIdFromDir)
           dir.isDirectory && !isAppStillRunning &&
           !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
-        }.foreach(Utils.deleteRecursively)
+        }.foreach { dir => 
+          logInfo("Removing directory: %s".format(dir.getPath))
+          Utils.deleteRecursively(dir)
+        }
       }
 
       cleanupFuture onFailure {
@@ -263,7 +267,8 @@ private[spark] class Worker(
           master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
         } catch {
           case e: Exception => {
-            logError("Failed to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+            logError("Failed to launch executor %s/%d for %s. Caused by exception: %s"
+              .format(appId, execId, appDesc.name, e.toString))
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
