@@ -48,7 +48,7 @@ private[spark] class YarnClusterSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
-  override def applicationId() =
+  override def applicationId(): String =
     /**
      *  In YARN Cluster mode, spark.yarn.app.id is expect to be set
      *  before user application is launched.

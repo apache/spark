@@ -41,6 +41,6 @@ private[spark] trait SchedulerBackend {
    *
    * @return The application ID, if the backend does not provide an ID.
    */
-  def applicationId() = appId
+  def applicationId(): String = appId
 
 }

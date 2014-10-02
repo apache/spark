@@ -735,7 +735,7 @@ private[spark] class Master(
   }
 
   /** Generate a new app ID given a app's submission date */
-  def newApplicationId(submitDate: Date) = {
+  def newApplicationId(submitDate: Date): String = {
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
     appId

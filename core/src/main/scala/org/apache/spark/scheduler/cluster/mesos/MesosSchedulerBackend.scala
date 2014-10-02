@@ -62,7 +62,7 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
-  @volatile var appId: FrameworkID = _
+  @volatile var appId: String = _
 
   override def start() {
     synchronized {
@@ -170,8 +170,8 @@ private[spark] class MesosSchedulerBackend(
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     val oldClassLoader = setClassLoader()
     try {
-      appId = frameworkId
-      logInfo("Registered as framework ID " + frameworkId.getValue)
+      appId = frameworkId.getValue
+      logInfo("Registered as framework ID " + appId)
       registeredLock.synchronized {
         isRegistered = true
         registeredLock.notifyAll()
@@ -353,8 +353,8 @@ private[spark] class MesosSchedulerBackend(
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
 
-  override def applicationId() =
-    Option(appId).map(_.getValue).getOrElse {
+  override def applicationId(): String =
+    Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }

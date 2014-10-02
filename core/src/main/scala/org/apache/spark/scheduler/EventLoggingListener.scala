@@ -59,11 +59,6 @@ private[spark] class EventLoggingListener(
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   val logDir = EventLoggingListener.getLogDirName(logBaseDir, appId)
-  private val name = {
-    val splitPath = logDir.split("/")
-    splitPath(splitPath.length-1)
-  }
-
   protected val logger = new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize,
     shouldCompress, shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
@@ -74,7 +69,7 @@ private[spark] class EventLoggingListener(
    * Return only the unique application directory without the base directory.
    */
   def getApplicationLogDir(): String = {
-    name
+    logDir.split("/").last
   }
 
   /**

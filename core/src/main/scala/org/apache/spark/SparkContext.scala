@@ -188,7 +188,7 @@ class SparkContext(config: SparkConf) extends Logging {
   val appName = conf.get("spark.app.name")
 
   val isEventLogEnabled = conf.getBoolean("spark.eventLog.enabled", false)
-  val eventLogDir = {
+  val eventLogDir: Option[String] = {
     if (isEventLogEnabled) {
       Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
     } else {
@@ -291,7 +291,7 @@ class SparkContext(config: SparkConf) extends Logging {
   executorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master, eventLogDir)
+  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
     Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
   @volatile private[spark] var dagScheduler: DAGScheduler = _
@@ -1493,10 +1493,7 @@ object SparkContext extends Logging {
   }
 
   /** Creates a task scheduler based on a given master URL. Extracted for testing. */
-  private def createTaskScheduler(
-    sc: SparkContext,
-    master: String,
-    eventLogDir: Option[String]): TaskScheduler = {
+  private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
     // Regular expression used for local[N] and local[*] master formats
     val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -1542,7 +1539,7 @@ object SparkContext extends Logging {
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, eventLogDir)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, sc.eventLogDir)
         scheduler.initialize(backend)
         scheduler
 
@@ -1559,7 +1556,7 @@ object SparkContext extends Logging {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, eventLogDir)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, sc.eventLogDir)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()

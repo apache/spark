@@ -41,11 +41,6 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
           MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
           Seq(
-            // Ignore SparkContext.createTaskScheduler because it's a private method.
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
-          ) ++
-          Seq(
             // Added normL1 and normL2 to trait MultivariateStatisticalSummary
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),

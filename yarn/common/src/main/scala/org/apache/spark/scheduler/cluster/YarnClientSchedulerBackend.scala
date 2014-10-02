@@ -155,7 +155,7 @@ private[spark] class YarnClientSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
-  override def applicationId() =
+  override def applicationId(): String =
     Option(appId).map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
       super.applicationId
