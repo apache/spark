@@ -1437,12 +1437,10 @@ private[spark] object Utils extends Logging {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
-      val _tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
-      // Do not bind to port 1-1024
-      val tryPort = if (_tryPort > 0 && _tryPort <= 1024) {
-        _tryPort + 1024
+      val tryPort = if (startPort == 0) {
+        startPort
       } else {
-        _tryPort
+        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
       }
       try {
         val (service, port) = startService(tryPort)
