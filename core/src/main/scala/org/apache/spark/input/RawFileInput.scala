@@ -35,7 +35,7 @@ import java.io.{ ByteArrayInputStream, ByteArrayOutputStream, DataOutputStream, 
  *  A general format for reading whole files in as streams, byte arrays,
  *  or other functions to be added
  */
-abstract class StreamFileInputFormat[T]
+private[spark] abstract class StreamFileInputFormat[T]
   extends CombineFileInputFormat[String, T] {
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
   /**
@@ -152,7 +152,7 @@ class PortableDataStream(@transient isplit: CombineFileSplit,
  * An abstract class of [[org.apache.hadoop.mapreduce.RecordReader RecordReader]]
  * to reading files out as streams
  */
-abstract class StreamBasedRecordReader[T](
+private[spark] abstract class StreamBasedRecordReader[T](
   split: CombineFileSplit,
   context: TaskAttemptContext,
   index: Integer)
