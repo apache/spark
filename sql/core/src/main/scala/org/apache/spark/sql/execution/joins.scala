@@ -139,6 +139,143 @@ trait HashJoin {
 
 /**
  * :: DeveloperApi ::
+ * Performs an outer hash join of two child relations by first shuffling the data using the join
+ * keys.
+ */
+@DeveloperApi
+case class ShuffledHashOuterJoin(
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    buildSide: BuildSide,
+    joinType: JoinType,
+    condition: Option[Expression],
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode with HashJoin {
+
+  override def outputPartitioning: Partitioning = joinType match {
+    case LeftOuter => left.outputPartitioning
+    case RightOuter => right.outputPartitioning
+  }
+
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+  override def output = {
+    joinType match {
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+      case x =>
+        throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+    }
+  }
+
+  private def buildHashTable(buildIter: Iterator[Row]) = {
+    val hashTable = new java.util.HashMap[Row, CompactBuffer[Row]]()
+    var currentRow: Row = null
+    while (buildIter.hasNext) {
+      currentRow = buildIter.next()
+      val rowKey = buildSideKeyGenerator(currentRow)
+      if (!rowKey.anyNull) {
+        val existingMatchList = hashTable.get(rowKey)
+        val matchList = if (existingMatchList == null) {
+          val newMatchList = new CompactBuffer[Row]()
+          hashTable.put(rowKey, newMatchList)
+          newMatchList
+        } else {
+          existingMatchList
+        }
+        matchList += currentRow.copy()
+      }
+    }
+    hashTable
+  }
+
+  override def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] = {
+    // TODO: Use Spark's HashMap implementation.
+    val hashTable = buildHashTable(buildIter)
+    val nullRow = buildSide match {
+      case BuildRight => new GenericRow(right.output.length)
+      case BuildLeft => new GenericRow(left.output.length)
+    }
+    val boundCondition =
+      condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
+  
+    new Iterator[Row] {
+      private[this] var currentStreamedRow: Row = _
+      private[this] var currentHashMatches: CompactBuffer[Row] = _
+      private[this] var currentMatchPosition: Int = -1
+
+      // Mutable per row objects.
+      private[this] val joinRow = new JoinedRow2
+
+      private[this] val joinKeys = streamSideKeyGenerator()
+
+      override final def hasNext: Boolean =
+        (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
+          (streamIter.hasNext && fetchNext())
+
+      override final def next() = {
+        val ret = buildSide match {
+          case BuildRight => 
+            if (currentMatchPosition == -1) {
+              joinRow(currentStreamedRow, nullRow)
+            } else {
+              currentMatchPosition += 1
+              val rightRow = currentHashMatches(currentMatchPosition - 1)
+              val joinedRow = joinRow(currentStreamedRow, rightRow)
+              if (!boundCondition(joinedRow)) {
+                joinRow(currentStreamedRow, nullRow)
+              } else { 
+                joinedRow
+              }
+            }
+          case BuildLeft => 
+           if (currentMatchPosition == -1) {
+              joinRow(nullRow, currentStreamedRow)
+            } else {
+              currentMatchPosition += 1
+              val leftRow = currentHashMatches(currentMatchPosition - 1)
+              val joinedRow = joinRow(leftRow, currentStreamedRow)
+              if (!boundCondition(joinedRow)) {
+                joinRow(nullRow, currentStreamedRow)
+              } else { 
+                joinedRow
+              }
+            }
+        }
+        ret
+      }
+
+      private final def fetchNext(): Boolean = {
+        currentMatchPosition = -1
+        currentHashMatches = null
+        currentStreamedRow = streamIter.next() 
+        if (!joinKeys(currentStreamedRow).anyNull) {
+          currentHashMatches = hashTable.get(joinKeys.currentValue)
+        }
+        if (currentHashMatches != null) {
+          currentMatchPosition = 0
+        }
+        true
+      }
+    }
+  }
+
+  def execute() = {
+    buildPlan.execute().zipPartitions(streamedPlan.execute()) {
+      (buildIter, streamIter) => joinIterators(buildIter, streamIter)
+    }
+  }
+
+
+}
+
+/**
+ * :: DeveloperApi ::
  * Performs a hash based outer join for two child relations by shuffling the data using
  * the join keys. This operator requires loading the associated partition in both side into memory.
  */
