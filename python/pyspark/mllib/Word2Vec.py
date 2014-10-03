@@ -18,9 +18,9 @@
 """
 Python package for Word2Vec in MLlib.
 """
-from numpy import random
-
 from sys import maxint
+
+from numpy import random
 
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
@@ -46,7 +46,10 @@ class Word2VecModel(object):
 
     def transform(self, word):
         """
-        local use only
+        :param word: a word
+        :return: vector representation of word
+
+        Note: local use only
         TODO: make transform usable in RDD operations from python side
         """
         result = self._java_model.transform(word)
@@ -54,7 +57,11 @@ class Word2VecModel(object):
 
     def findSynonyms(self, x, num):
         """
-        local use only
+        :param x: a word or a vector representation of word
+        :param num: number of synonyms to find
+        :return: array of (word, cosineSimilarity)
+
+        Note: local use only
         TODO: make findSynonyms usable in RDD operations from python side
         """
         jlist = self._java_model.findSynonyms(x, num)
@@ -95,37 +102,62 @@ class Word2Vec(object):
     10
     """
     def __init__(self):
+        """
+        Construct Word2Vec instance
+        """
         self.vectorSize = 100
-        self.startingAlpha = 0.025
+        self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
         self.seed = random.randint(0, high=maxint)
 
     def setVectorSize(self, vectorSize):
+        """
+        Sets vector size (default: 100).
+        """
         self.vectorSize = vectorSize
         return self
 
     def setLearningRate(self, learningRate):
-        self.startingAlpha = learningRate
+        """
+        Sets initial learning rate (default: 0.025).
+        """
+        self.learningRate = learningRate
         return self
 
     def setNumPartitions(self, numPartitions):
+        """
+        Sets number of partitions (default: 1). Use a small number for accuracy.
+        """
         self.numPartitions = numPartitions
         return self
 
     def setNumIterations(self, numIterations):
+        """
+        Sets number of iterations (default: 1), which should be smaller than or equal to number of
+        partitions.
+        """
         self.numIterations = numIterations
         return self
 
     def setSeed(self, seed):
+        """
+        Sets random seed (default: a random long integer).
+        """
         self.seed = seed
         return self
 
     def fit(self, data):
+        """
+        Computes the vector representation of each word in vocabulary.
+
+        :param data: training data.
+        :return: python Word2VecModel instance
+        """
         sc = data.context
         ser = PickleSerializer()
         vectorSize = self.vectorSize
-        startingAlpha = self.startingAlpha
+        learningRate = self.learningRate
         numPartitions = self.numPartitions
         numIterations = self.numIterations
         seed = self.seed
@@ -133,7 +165,7 @@ class Word2Vec(object):
         # cached = data._reserialize(AutoBatchedSerializer(ser)).cache()
         model = sc._jvm.PythonMLLibAPI().trainWord2Vec(
             data._to_java_object_rdd(), vectorSize,
-            startingAlpha, numPartitions, numIterations, seed)
+            learningRate, numPartitions, numIterations, seed)
         return Word2VecModel(sc, model)
 
 

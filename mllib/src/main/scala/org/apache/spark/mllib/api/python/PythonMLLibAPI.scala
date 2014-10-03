@@ -289,24 +289,28 @@ class PythonMLLibAPI extends Serializable {
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
-   * @param dataJRDD Input JavaRDD
+   * @param dataJRDD input JavaRDD
+   * @param vectorSize size of vector
+   * @param learningRate initial learning rate
+   * @param numPartitions number of partitions
+   * @param numIterations number of iterations
+   * @param seed initial seed for random generator
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
   def trainWord2Vec(
     dataJRDD: JavaRDD[java.util.ArrayList[String]],
     vectorSize: Int,
-    startingAlpha: Double,
+    learningRate: Double,
     numPartitions: Int,
     numIterations: Int,
-    seed: Long
-    ): Word2VecModelWrapper = {
+    seed: Long): Word2VecModelWrapper = {
     val data = dataJRDD.rdd.cache()
     val word2vec = new Word2Vec()
-                    .setVectorSize(vectorSize)
-                    .setLearningRate(startingAlpha)
-                    .setNumPartitions(numPartitions)
-                    .setNumIterations(numIterations)
-                    .setSeed(seed)
+        .setVectorSize(vectorSize)
+        .setLearningRate(learningRate)
+        .setNumPartitions(numPartitions)
+        .setNumIterations(numIterations)
+        .setSeed(seed)
     val model = word2vec.fit(data)
     new Word2VecModelWrapper(model)
   }
