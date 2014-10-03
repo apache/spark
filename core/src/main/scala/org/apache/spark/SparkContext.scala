@@ -353,9 +353,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get an unique identifier which identifies each application.
-   *
-   * @return Application ID which is an unique identifier assigned to each application.
+   * Return a unique identifier for this application.
    */
   def getApplicationId(): String = appId
 

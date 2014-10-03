@@ -58,19 +58,13 @@ private[spark] class EventLoggingListener(
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  val logDir = EventLoggingListener.getLogDirName(logBaseDir, appId)
+  val logDir = EventLoggingListener.getLogDirPath(logBaseDir, appId)
+  val logDirName: String = logDir.split("/").last
   protected val logger = new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize,
     shouldCompress, shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
-
-  /**
-   * Return only the unique application directory without the base directory.
-   */
-  def getApplicationLogDir(): String = {
-    logDir.split("/").last
-  }
 
   /**
    * Begin logging events.
@@ -181,8 +175,15 @@ private[spark] object EventLoggingListener extends Logging {
     } else ""
   }
 
-  def getLogDirName(logBaseDir: String, appId: String) = {
-    val name = appId.toString.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
+  /**
+   * Return a file-system-safe path to the log directory for the given application.
+   *
+   * @param logBaseDir A base directory for the path to the log directory for given application.
+   * @param appId A unique app ID.
+   * @return A path which consists of file-system-safe characters.
+   */
+  def getLogDirPath(logBaseDir: String, appId: String): String = {
+    val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
     Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
   }
 

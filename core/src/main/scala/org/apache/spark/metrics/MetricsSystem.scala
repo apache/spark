@@ -97,8 +97,9 @@ private[spark] class MetricsSystem private (
   }
 
   /**
-   * Build a unique name for each combination of application, executor/driver and metric source.
-   * The name is built like <Application ID>.<Executor ID( or "driver" for Driver)>.<Metric name>
+   * Build a name that uniquely identifies each metric source.
+   * The name is structured as follows: <app ID>.<executor ID (or "driver")>.<source name>.
+   * If either ID is not available, this defaults to just using <source name>.
    *
    * @param source Metric source to be named by this method.
    * @return An unique metric name for each combination of

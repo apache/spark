@@ -693,7 +693,7 @@ private[spark] class Master(
       return false
     }
 
-    val appEventLogDir = EventLoggingListener.getLogDirName(eventLogDir, app.id)
+    val appEventLogDir = EventLoggingListener.getLogDirPath(eventLogDir, app.id)
     val fileSystem = Utils.getHadoopFileSystem(appEventLogDir,
       SparkHadoopUtil.get.newConfiguration(conf))
     val eventLogInfo = EventLoggingListener.parseLoggingInfo(appEventLogDir, fileSystem)

@@ -35,11 +35,9 @@ private[spark] trait SchedulerBackend {
   def isReady(): Boolean = true
 
   /**
-   * The application ID associated with the job, if any.
-   * It is expected that the subclasses of TaskScheduler or SchedulerBackend
-   * override this method and return an unique application ID.
+   * Get an application ID associated with the job.
    *
-   * @return The application ID, if the backend does not provide an ID.
+   * @return An application ID
    */
   def applicationId(): String = appId
 
