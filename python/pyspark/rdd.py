@@ -787,8 +787,6 @@ class RDD(object):
         >>> sc.parallelize([1.0, 2.0, 3.0]).sum()
         6.0
         """
-        if not self.getNumPartitions():
-            return 0  # empty RDD can not been reduced
         return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def count(self):
