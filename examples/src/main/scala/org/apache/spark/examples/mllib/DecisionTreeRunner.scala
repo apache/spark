@@ -235,7 +235,10 @@ object DecisionTreeRunner {
           minInstancesPerNode = params.minInstancesPerNode,
           minInfoGain = params.minInfoGain)
     if (params.numTrees == 1) {
+      val startTime = System.nanoTime()
       val model = DecisionTree.train(training, strategy)
+      val elapsedTime = (System.nanoTime() - startTime) / 1e9
+      println(s"Training time: $elapsedTime seconds")
       if (model.numNodes < 20) {
         println(model.toDebugString) // Print full model.
       } else {
@@ -259,8 +262,11 @@ object DecisionTreeRunner {
     } else {
       val randomSeed = Utils.random.nextInt()
       if (params.algo == Classification) {
+        val startTime = System.nanoTime()
         val model = RandomForest.trainClassifier(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
+        val elapsedTime = (System.nanoTime() - startTime) / 1e9
+        println(s"Training time: $elapsedTime seconds")
         if (model.totalNumNodes < 30) {
           println(model.toDebugString) // Print full model.
         } else {
@@ -275,8 +281,11 @@ object DecisionTreeRunner {
         println(s"Test accuracy = $testAccuracy")
       }
       if (params.algo == Regression) {
+        val startTime = System.nanoTime()
         val model = RandomForest.trainRegressor(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
+        val elapsedTime = (System.nanoTime() - startTime) / 1e9
+        println(s"Training time: $elapsedTime seconds")
         if (model.totalNumNodes < 30) {
           println(model.toDebugString) // Print full model.
         } else {
