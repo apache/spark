@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
 import org.apache.spark.util.Utils
 
 /**
@@ -406,6 +406,43 @@ case class MapType(
     keyType: DataType,
     valueType: DataType,
     valueContainsNull: Boolean) extends DataType {
+  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
+    builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
+    builder.append(s"${prefix}-- value: ${valueType.simpleString} " +
+      s"(valueContainsNull = ${valueContainsNull})\n")
+    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
+    DataType.buildFormattedString(valueType, s"$prefix    |", builder)
+  }
+
+  def simpleString: String = "map"
+}
+
+// TODO: Where should this go?
+trait UserDefinedType[T] {
+  def dataType: StructType
+  def serialize(obj: T): Row
+  def deserialize(row: Row): T
+}
+
+object UDTType {
+  /**
+   * Construct a [[UDTType]] object with the given key type and value type.
+   * The `valueContainsNull` is true.
+   */
+  def apply(keyType: DataType, valueType: DataType): MapType =
+    MapType(keyType: DataType, valueType: DataType, true)
+}
+
+/**
+ * The data type for Maps. Keys in a map are not allowed to have `null` values.
+ * @param keyType The data type of map keys.
+ * @param valueType The data type of map values.
+ * @param valueContainsNull Indicates if map values have `null` values.
+ */
+case class UDTType(
+                    keyType: DataType,
+                    valueType: DataType,
+                    valueContainsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
     builder.append(s"${prefix}-- value: ${valueType.simpleString} " +
