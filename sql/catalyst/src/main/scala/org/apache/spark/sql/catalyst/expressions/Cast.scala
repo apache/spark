@@ -36,6 +36,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case (BooleanType, DateType)      => true
     case (DateType, _: NumericType)   => true
     case (DateType, BooleanType)      => true
+    case (_, DecimalType.Fixed(_, _)) => true  // TODO: not all upcasts here can really give null
     case _                            => child.nullable
   }
 
@@ -76,7 +77,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Short](_, _ != 0)
     case ByteType =>
       buildCast[Byte](_, _ != 0)
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _ != 0)
     case DoubleType =>
       buildCast[Double](_, _ != 0)
@@ -109,7 +110,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DateType =>
       buildCast[Date](_, d => new Timestamp(d.getTime))
     // TimestampWritable.decimalToTimestamp
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
@@ -196,7 +197,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => dateToLong(d))
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t))
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _.toLong)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
@@ -214,7 +215,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => dateToLong(d))
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t).toInt)
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _.toInt)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
@@ -232,7 +233,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => dateToLong(d))
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t).toShort)
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _.toShort)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -250,27 +251,46 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => dateToLong(d))
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t).toByte)
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _.toByte)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
 
-  // DecimalConverter
-  private[this] def castToDecimal: Any => Any = child.dataType match {
+  /**
+   * Convert a decimal to the precision / scale in decimalType (if any), returning null if it
+   * overflows or the new value if the conversion is successful.
+   */
+  private[this] def changePrecision(value: BigDecimal, decimalType: DecimalType): BigDecimal = {
+    decimalType match {
+      case DecimalType.Unlimited =>
+        value
+      case DecimalType.Fixed(precision, scale) =>
+        if (value.scale == scale && value.precision <= precision) {
+          value
+        } else {
+          val rounded = value.setScale(scale, BigDecimal.RoundingMode.HALF_UP)
+          if (rounded.precision <= precision) rounded else null
+        }
+    }
+  }
+
+  private[this] def castToDecimal(target: DecimalType): Any => Any = child.dataType match {
     case StringType =>
-      buildCast[String](_, s => try BigDecimal(s.toDouble) catch {
+      buildCast[String](_, s => try changePrecision(BigDecimal(s.toDouble), target) catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => if (b) BigDecimal(1) else BigDecimal(0))
+      buildCast[Boolean](_, b => changePrecision(if (b) BigDecimal(1) else BigDecimal(0), target))
     case DateType =>
-      buildCast[Date](_, d => dateToDouble(d))
+      buildCast[Date](_, d => changePrecision(null, target)) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
-      buildCast[Timestamp](_, t => BigDecimal(timestampToDouble(t)))
+      buildCast[Timestamp](_, t => changePrecision(BigDecimal(timestampToDouble(t)), target))
+    case DecimalType() =>
+      b => changePrecision(b.asInstanceOf[BigDecimal], target)
     case x: NumericType =>
-      b => BigDecimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b))
+      b => changePrecision(BigDecimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
   }
 
   // DoubleConverter
@@ -285,7 +305,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => dateToDouble(d))
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToDouble(t))
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _.toDouble)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
@@ -303,7 +323,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => dateToDouble(d))
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToDouble(t).toFloat)
-    case DecimalType =>
+    case DecimalType() =>
       buildCast[BigDecimal](_, _.toFloat)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
@@ -313,8 +333,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case dt if dt == child.dataType => identity[Any]
     case StringType    => castToString
     case BinaryType    => castToBinary
-    case DecimalType   => castToDecimal
     case DateType      => castToDate
+    case decimal: DecimalType => castToDecimal(decimal)
     case TimestampType => castToTimestamp
     case BooleanType   => castToBoolean
     case ByteType      => castToByte

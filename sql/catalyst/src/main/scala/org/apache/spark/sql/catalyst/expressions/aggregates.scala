@@ -286,7 +286,16 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = false
-  override def dataType = if (child.dataType == DecimalType) DecimalType else DoubleType
+
+  override def dataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
+    case DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
+      DoubleType
+  }
+
   override def toString = s"AVG($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -306,7 +315,16 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = false
-  override def dataType = child.dataType
+
+  override def dataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+    case DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
+      child.dataType
+  }
+
   override def toString = s"SUM($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -322,9 +340,17 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class SumDistinct(child: Expression)
   extends AggregateExpression with trees.UnaryNode[Expression] {
 
-
   override def nullable = false
-  override def dataType = child.dataType
+
+  override def dataType = child.dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+    case DecimalType.Unlimited =>
+      DecimalType.Unlimited
+    case _ =>
+      child.dataType
+  }
+
   override def toString = s"SUM(DISTINCT $child)"
 
   override def newInstance() = new SumDistinctFunction(child, this)

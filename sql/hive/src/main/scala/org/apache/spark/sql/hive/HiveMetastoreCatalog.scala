@@ -321,7 +321,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "bigint" ^^^ LongType |
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
-    HiveShim.metastoreDecimal ^^^ DecimalType |
+    HiveShim.metastoreDecimal ^^^ DecimalType.Unlimited |  // TODO: fixed precision
     "date" ^^^ DateType |
     "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
@@ -373,7 +373,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BinaryType => "binary"
     case BooleanType => "boolean"
     case DateType => "date"
-    case DecimalType => "decimal"
+    case DecimalType.Unlimited => "decimal" // TODO: fixed precision
     case TimestampType => "timestamp"
     case NullType => "void"
   }
@@ -441,7 +441,7 @@ private[hive] case class MetastoreRelation
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getCols.map(_.toAttribute) 
+  val attributes = hiveQlTable.getCols.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 

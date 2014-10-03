@@ -183,7 +183,11 @@ package object dsl {
       def date = AttributeReference(s, DateType, nullable = true)()
 
       /** Creates a new AttributeReference of type decimal */
-      def decimal = AttributeReference(s, DecimalType, nullable = true)()
+      def decimal = AttributeReference(s, DecimalType.Unlimited, nullable = true)()
+
+      /** Creates a new AttributeReference of type decimal */
+      def decimal(precision: Int, scale: Int) =
+        AttributeReference(s, DecimalType(precision, scale), nullable = true)()
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp = AttributeReference(s, TimestampType, nullable = true)()

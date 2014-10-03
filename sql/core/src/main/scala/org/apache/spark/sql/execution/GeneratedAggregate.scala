@@ -78,8 +78,15 @@ case class GeneratedAggregate(
         AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
       case Sum(expr) =>
-        val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
-        val initialValue = Cast(Literal(0L), expr.dataType)
+        val resultType = expr.dataType match {
+          case DecimalType.Fixed(precision, scale) =>
+            DecimalType(precision + 10, scale)
+          case _ =>
+            expr.dataType
+        }
+
+        val currentSum = AttributeReference("currentSum", resultType, nullable = false)()
+        val initialValue = Cast(Literal(0L), resultType)
 
         // Coalasce avoids double calculation...
         // but really, common sub expression elimination would be better....
@@ -96,7 +103,14 @@ case class GeneratedAggregate(
         val updateCount = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
         val updateSum = Coalesce(Add(expr, currentSum) :: currentSum :: Nil)
 
-        val resultType = if (expr.dataType == DecimalType) DecimalType else DoubleType
+        val resultType = expr.dataType match {
+          case DecimalType.Fixed(precision, scale) =>
+            DecimalType(precision + 4, scale + 4)
+          case DecimalType.Unlimited =>
+            DecimalType.Unlimited
+          case _ =>
+            DoubleType
+        }
         val result = Divide(Cast(currentSum, resultType), Cast(currentCount, resultType))
 
         AggregateEvaluation(

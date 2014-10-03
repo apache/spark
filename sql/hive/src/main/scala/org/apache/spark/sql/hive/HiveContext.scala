@@ -21,6 +21,8 @@ import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList}
 
+import org.apache.spark.sql.catalyst.types.DecimalType
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -354,7 +356,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType, DateType, TimestampType, BinaryType)
+        ShortType, DateType, TimestampType, BinaryType)
 
     protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -372,6 +374,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       case (d: Date, DateType) => new DateWritable(d).toString
       case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
       case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
+      case (decimal, DecimalType()) => decimal.toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -390,6 +393,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "null"
       case (s: String, StringType) => "\"" + s + "\""
+      case (decimal, DecimalType()) => decimal.toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 

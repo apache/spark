@@ -83,7 +83,7 @@ object ScalaReflection {
     case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
     case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
-    case t if t <:< typeOf[BigDecimal] => Schema(DecimalType, nullable = true)
+    case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
     case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
     case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
     case t if t <:< typeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
@@ -111,8 +111,8 @@ object ScalaReflection {
     case obj: LongType.JvmType => LongType
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
-    case obj: DecimalType.JvmType => DecimalType
     case obj: DateType.JvmType => DateType
+    case obj: BigDecimal => DecimalType.Unlimited
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a
