@@ -106,19 +106,18 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
     // Use properties file as fallback for values which have a direct analog to
     // arguments in this script.
-    master = Option(master).getOrElse(properties.get("spark.master").orNull)
-    executorMemory = Option(executorMemory)
-      .getOrElse(properties.get("spark.executor.memory").orNull)
-    executorCores = Option(executorCores)
-      .getOrElse(properties.get("spark.executor.cores").orNull)
+    master = Option(master).orElse(properties.get("spark.master")).orNull
+    executorMemory = Option(executorMemory).orElse(properties.get("spark.executor.memory")).orNull
+    executorCores = Option(executorCores).orElse(properties.get("spark.executor.cores")).orNull
     totalExecutorCores = Option(totalExecutorCores)
-      .getOrElse(properties.get("spark.cores.max").orNull)
-    name = Option(name).getOrElse(properties.get("spark.app.name").orNull)
-    jars = Option(jars).getOrElse(properties.get("spark.jars").orNull)
+      .orElse(properties.get("spark.cores.max"))
+      .orNull
+    name = Option(name).orElse(properties.get("spark.app.name")).orNull
+    jars = Option(jars).orElse(properties.get("spark.jars")).orNull
 
     // This supports env vars in older versions of Spark
-    master = Option(master).getOrElse(env.get("MASTER").orNull)
-    deployMode = Option(deployMode).getOrElse(env.get("DEPLOY_MODE").orNull)
+    master = Option(master).orElse(env.get("MASTER")).orNull
+    deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && primaryResource != null) {
