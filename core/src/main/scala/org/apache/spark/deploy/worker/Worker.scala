@@ -194,8 +194,7 @@ private[spark] class Worker(
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
       if (CLEANUP_ENABLED) {
-        logInfo("Worker cleanup is enabled, so old application directories will be deleted"
-          + " in: " + workDir)
+        logInfo(s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
         context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
           CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
       }
@@ -218,7 +217,7 @@ private[spark] class Worker(
           dir.isDirectory && !isAppStillRunning &&
           !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
         }.foreach { dir => 
-          logInfo("Removing directory: %s".format(dir.getPath))
+          logInfo(s"Removing directory: ${dir.getPath}")
           Utils.deleteRecursively(dir)
         }
       }
@@ -267,13 +266,13 @@ private[spark] class Worker(
           master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
         } catch {
           case e: Exception => {
-            logError("Failed to launch executor %s/%d for %s. Caused by exception: %s"
-              .format(appId, execId, appDesc.name, e.toString))
+            logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None)
+            master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
+              Some(e.toString), None)
           }
         }
       }
