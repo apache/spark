@@ -168,7 +168,7 @@ private[spark] class ExecutorRunner(
         killProcess(None)
       }
       case e: Exception => {
-        logError("Error running executor", e)
+        logError(e.toString, e)
         state = ExecutorState.FAILED
         killProcess(Some(e.toString))
       }
