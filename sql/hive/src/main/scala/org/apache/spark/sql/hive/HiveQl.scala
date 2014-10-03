@@ -126,6 +126,9 @@ private[hive] object HiveQl {
     "TOK_CREATETABLE",
     "TOK_DESCTABLE"
   ) ++ nativeCommands
+  
+  // It parses hive sql query along with with several Spark SQL specific extensions
+  protected val hiveSqlParser = new ExtendedHiveQlParser
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
@@ -215,40 +218,19 @@ private[hive] object HiveQl {
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
+  def parseSql(sql: String): LogicalPlan = hiveSqlParser(sql)
+
+  /** Creates LogicalPlan for a given HiveQL string. */
+  def createPlan(sql: String) = {
     try {
-      if (sql.trim.toLowerCase.startsWith("set")) {
-        // Split in two parts since we treat the part before the first "="
-        // as key, and the part after as value, which may contain other "=" signs.
-        sql.trim.drop(3).split("=", 2).map(_.trim) match {
-          case Array("") => // "set"
-            SetCommand(None, None)
-          case Array(key) => // "set key"
-            SetCommand(Some(key), None)
-          case Array(key, value) => // "set key=value"
-            SetCommand(Some(key), Some(value))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        sql.trim.drop(12).trim.split(" ").toSeq match {
-          case Seq(tableName) => 
-            CacheCommand(tableName, true)
-          case Seq(tableName, _, select @ _*) => 
-            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
-        CacheCommand(sql.trim.drop(14).trim, false)
-      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8).trim)
-      } else if (sql.trim.toLowerCase.startsWith("add file")) {
-        AddFile(sql.trim.drop(9))
-      } else if (sql.trim.toLowerCase.startsWith("dfs")) {
+      val tree = getAst(sql)
+      if (nativeCommands contains tree.getText) {
         NativeCommand(sql)
-      } else if (sql.trim.startsWith("source")) {
-        SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.trim.startsWith("!")) {
-        ShellCommand(sql.drop(1))
       } else {
-        createPlan(sql)
+        nodeToPlan(tree) match {
+          case NativePlaceholder => NativeCommand(sql)
+          case other => other
+        }
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
@@ -257,19 +239,6 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
-    }
-  }
-  
-  /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
-    val tree = getAst(sql)
-    if (nativeCommands contains tree.getText) {
-      NativeCommand(sql)
-    } else {
-      nodeToPlan(tree) match {
-        case NativePlaceholder => NativeCommand(sql)
-        case other => other
-      }
     }
   }
 
