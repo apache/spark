@@ -36,7 +36,7 @@ import org.apache.spark.streaming.api.java._
 
 
 /**
- * Interface for Python callback function with three arguments
+ * Interface for Python callback function which is used to transform RDDs
  */
 private[python] trait PythonTransformFunction {
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]

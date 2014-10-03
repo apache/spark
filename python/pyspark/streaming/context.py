@@ -84,17 +84,18 @@ class StreamingContext(object):
     """
     _transformerSerializer = None
 
-    def __init__(self, sparkContext, duration=None, jssc=None):
+    def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
         Create a new StreamingContext.
 
         @param sparkContext: L{SparkContext} object.
-        @param duration: number of seconds.
+        @param batchDuration: the time interval (in seconds) at which streaming
+                              data will be divided into batches
         """
 
         self._sc = sparkContext
         self._jvm = self._sc._jvm
-        self._jssc = jssc or self._initialize_context(self._sc, duration)
+        self._jssc = jssc or self._initialize_context(self._sc, batchDuration)
 
     def _initialize_context(self, sc, duration):
         self._ensure_initialized()
@@ -134,26 +135,27 @@ class StreamingContext(object):
             SparkContext._active_spark_context, CloudPickleSerializer(), gw)
 
     @classmethod
-    def getOrCreate(cls, path, setupFunc):
+    def getOrCreate(cls, checkpointPath, setupFunc):
         """
-        Get the StreamingContext from checkpoint file at `path`, or setup
-        it by `setupFunc`.
+        Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+        If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+        recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
+        will be used to create a JavaStreamingContext.
 
-        :param path: directory of checkpoint
-        :param setupFunc: a function used to create StreamingContext and
-                          setup DStreams.
-        :return: a StreamingContext
+        @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
+        @param setupFunc      Function to create a new JavaStreamingContext and setup DStreams
         """
-        if not os.path.exists(path) or not os.path.isdir(path) or not os.listdir(path):
+        # TODO: support checkpoint in HDFS
+        if not os.path.exists(checkpointPath) or not os.listdir(checkpointPath):
             ssc = setupFunc()
-            ssc.checkpoint(path)
+            ssc.checkpoint(checkpointPath)
             return ssc
 
         cls._ensure_initialized()
         gw = SparkContext._gateway
 
         try:
-            jssc = gw.jvm.JavaStreamingContext(path)
+            jssc = gw.jvm.JavaStreamingContext(checkpointPath)
         except Exception:
             print >>sys.stderr, "failed to load StreamingContext from checkpoint"
             raise
@@ -249,12 +251,12 @@ class StreamingContext(object):
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
-    def _check_serialzers(self, rdds):
+    def _check_serializers(self, rdds):
         # make sure they have same serializer
         if len(set(rdd._jrdd_deserializer for rdd in rdds)) > 1:
             for i in range(len(rdds)):
                 # reset them to sc.serializer
-                rdds[i] = rdds[i].map(lambda x: x, preservesPartitioning=True)
+                rdds[i] = rdds[i]._reserialize()
 
     def queueStream(self, rdds, oneAtATime=True, default=None):
         """
@@ -275,7 +277,7 @@ class StreamingContext(object):
 
         if rdds and not isinstance(rdds[0], RDD):
             rdds = [self._sc.parallelize(input) for input in rdds]
-        self._check_serialzers(rdds)
+        self._check_serializers(rdds)
 
         jrdds = ListConverter().convert([r._jrdd for r in rdds],
                                         SparkContext._gateway._gateway_client)
@@ -313,6 +315,10 @@ class StreamingContext(object):
             raise ValueError("should have at least one DStream to union")
         if len(dstreams) == 1:
             return dstreams[0]
+        if len(set(s._jrdd_deserializer for s in dstreams)) > 1:
+            raise ValueError("All DStreams should have same serializer")
+        if len(set(s._slideDuration for s in dstreams)) > 1:
+            raise ValueError("All DStreams should have same slide duration")
         first = dstreams[0]
         jrest = ListConverter().convert([d._jdstream for d in dstreams[1:]],
                                         SparkContext._gateway._gateway_client)

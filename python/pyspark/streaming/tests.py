@@ -496,11 +496,11 @@ class TestCheckpoint(PySparkStreamingTestCase):
         def setup():
             conf = SparkConf().set("spark.default.parallelism", 1)
             sc = SparkContext(conf=conf)
-            ssc = StreamingContext(sc, 0.2)
+            ssc = StreamingContext(sc, 0.5)
             dstream = ssc.textFileStream(inputd).map(lambda x: (x, 1))
             wc = dstream.updateStateByKey(updater)
             wc.map(lambda x: "%s,%d" % x).saveAsTextFiles(outputd + "test")
-            wc.checkpoint(.2)
+            wc.checkpoint(.5)
             return ssc
 
         cpd = tempfile.mkdtemp("test_streaming_cps")
