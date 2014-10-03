@@ -21,9 +21,6 @@ import java.net.{InetSocketAddress, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.annotation.tailrec
-import scala.language.implicitConversions
-import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import org.eclipse.jetty.server.Server
@@ -31,10 +28,10 @@ import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
-import org.json4s.jackson.JsonMethods.{parse, pretty, render}
+import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -156,12 +153,10 @@ private[spark] object JettyUtils extends Logging {
              }
           }
 
-          // Process json-encoded params if defined.
-          conf.getOption("spark." + filter + ".jsonParams").foreach { json =>
-            JsonProtocol.mapFromJson(parse(json)).foreach { case (k, v) =>
-              holder.setInitParameter(k, v)
-            }
-          }
+          val prefix = s"spark.$filter.param."
+          conf.getAll
+            .filter { case (k, v) => k.length() > prefix.length() && k.startsWith(prefix) }
+            .foreach { case (k, v) => holder.setInitParameter(k.substring(prefix.length()), v) }
 
           val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
             DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)

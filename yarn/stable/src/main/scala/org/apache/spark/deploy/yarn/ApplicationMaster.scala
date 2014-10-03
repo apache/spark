@@ -36,11 +36,10 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.{JsonProtocol, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, Utils}
 
 
 /**
@@ -135,9 +134,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     System.setProperty("spark.ui.filters", amFilter)
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     val params = getAmIpFilterParams(yarnConf, proxyBase)
-    System.setProperty(
-      "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.jsonParams",
-      compact(JsonProtocol.mapToJson(params)))
+    params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
   }
 
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
