@@ -20,6 +20,7 @@ package org.apache.spark.sql.columnar
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{QueryTest, TestData}
+import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
 class InMemoryColumnarQuerySuite extends QueryTest {
   import org.apache.spark.sql.TestData._
@@ -27,7 +28,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("simple columnar query") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, 5, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
@@ -42,7 +43,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("projection") {
     val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, 5, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -51,7 +52,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = InMemoryRelation(useCompression = true, 5, plan)
+    val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)

@@ -79,6 +79,10 @@ class HiveUdfSuite extends HiveComparisonTest {
     sql("SELECT testUdf(pair) FROM hiveUdfTestTable")
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
   }
+
+  test("SPARK-2693 udaf aggregates test") {
+    assert(sql("SELECT percentile(key,1) FROM src").first === sql("SELECT max(key) FROM src").first)
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {

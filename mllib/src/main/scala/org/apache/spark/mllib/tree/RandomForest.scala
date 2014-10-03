@@ -171,8 +171,8 @@ private class RandomForest (
 
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
-      DecisionTree.findBestSplits(baggedInput,
-        metadata, topNodes, nodesForGroup, treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
+      DecisionTree.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
+        treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
       timer.stop("findBestSplits")
     }
 
@@ -382,6 +382,7 @@ object RandomForest extends Serializable with Logging {
    * @param maxMemoryUsage  Bound on size of aggregate statistics.
    * @return  (nodesForGroup, treeToNodeToIndexInfo).
    *          nodesForGroup holds the nodes to split: treeIndex --> nodes in tree.
+   *
    *          treeToNodeToIndexInfo holds indices selected features for each node:
    *            treeIndex --> (global) node index --> (node index in group, feature indices).
    *          The (global) node index is the index in the tree; the node index in group is the
