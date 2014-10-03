@@ -107,31 +107,24 @@ private[spark] class MetricsSystem private (
    * @return An unique metric name for each combination of
    *         application, executor/driver and metric source.
    */
-  def buildRegistryName(source: Source): String =
-    instance match {
-      /**
-       *  Only Driver and Executor are set spark.app.id and spark.executor.id.
-       *  For instance, Master and Worker are not related to a specific application.
-       */
-      case "driver" | "executor" =>
-        val appIdOpt = conf.getOption("spark.app.id")
-        val executorIdOpt = conf.getOption("spark.executor.id")
-        (for {
-          appId <- appIdOpt
-          executorId <- executorIdOpt
-        } yield {
-          MetricRegistry.name(appId, executorId, source.sourceName)
-        }).getOrElse {
-          if (appIdOpt == None) {
-            logWarning("spark.app.id is not set.")
-          }
-          if (executorIdOpt == None) {
-            logWarning("spark.executor.id is not set")
-          }
-          MetricRegistry.name(source.sourceName)
-        }
-      case _ => MetricRegistry.name(source.sourceName)
-    }
+  def buildRegistryName(source: Source): String = {
+    val appId = conf.getOption("spark.app.id")
+    val executorId = conf.getOption("spark.executor.id")
+    val defaultName = MetricRegistry.name(source.sourceName)
+
+    if (instance == "driver" || instance == "executor") {
+      if (appId.isDefined && executorId.isDefined) {
+        MetricRegistry.name(appId.get, executorId.get, source.sourceName)
+      } else {
+        // Only Driver and Executor are set spark.app.id and spark.executor.id.
+        // For instance, Master and Worker are not related to a specific application.
+        val warningMsg = s"Using default name $defaultName for source because %s is not set."
+        if (appId.isEmpty) { logWarning(warningMsg.format("spark.app.id")) }
+        if (executorId.isEmpty) { logWarning(warningMsg.format("spark.executor.id")) }
+        defaultName
+      }
+    } else { defaultName }
+  }
 
   def registerSource(source: Source) {
     sources += source
