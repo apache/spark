@@ -192,7 +192,7 @@ private[hive] case class HiveGenericUdaf(
 
   override def toString = s"$nodeName#$functionClassName(${children.mkString(",")})"
 
-  def newInstance() = new HiveUdafFunction(functionClassName, children, this, createFunction())
+  def newInstance() = new HiveUdafFunction(functionClassName, children, this)
 }
 
 /** It is used as a wrapper for the hive functions which uses UDAF interface */
@@ -223,7 +223,7 @@ private[hive] case class HiveUdaf(
   override def toString = s"$nodeName#$functionClassName(${children.mkString(",")})"
 
   def newInstance() =
-    new HiveUdafFunction(functionClassName, children, this, new GenericUDAFBridge(createFunction()))
+    new HiveUdafFunction(functionClassName, children, this, true)
 }
 
 /**
@@ -308,12 +308,19 @@ private[hive] case class HiveUdafFunction(
     functionClassName: String,
     exprs: Seq[Expression],
     base: AggregateExpression,
-    resolver: AbstractGenericUDAFResolver)
+    isUDAFBridgeRequired: Boolean = false)
   extends AggregateFunction
   with HiveInspectors
   with HiveFunctionFactory {
 
-  def this() = this(null, null, null, null)
+  def this() = this(null, null, null)
+
+  private val resolver =
+    if (isUDAFBridgeRequired) {
+      new GenericUDAFBridge(createFunction[UDAF]())
+    } else {
+      createFunction[AbstractGenericUDAFResolver]()
+    }
 
   private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
 
