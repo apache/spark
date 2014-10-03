@@ -19,6 +19,7 @@ log4j.properties
 log4j.properties.template
 metrics.properties.template
 slaves
+slaves.template
 spark-env.sh
 spark-env.cmd
 spark-env.sh.template

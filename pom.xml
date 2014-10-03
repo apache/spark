@@ -138,6 +138,7 @@
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
     <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
+    <commons.httpclient.version>4.2.6</commons.httpclient.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -215,18 +216,6 @@
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
       <url>https://repo.spring.io/libs-release</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <!-- TODO: remove this as soon as 1.1.0 is published on Maven central -->
-    <repository>
-      <id>spark-staging-1030</id>
-      <name>Spark 1.1.0 Staging (1030)</name>
-      <url>https://repository.apache.org/content/repositories/orgapachespark-1030/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
