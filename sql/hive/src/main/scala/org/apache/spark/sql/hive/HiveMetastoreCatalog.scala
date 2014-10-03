@@ -144,7 +144,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       val childOutputDataTypes = child.output.map(_.dataType)
       // Only check attributes, not partitionKeys since they are always strings.
       // TODO: Fully support inserting into partitioned tables.
-      val tableOutputDataTypes = table.attributes.map(_.dataType)
+      val tableOutputDataTypes =
+        table.attributes.map(_.dataType) ++ table.partitionKeys.map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
