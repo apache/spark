@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.HashSet
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -63,11 +63,11 @@ private[spark] class Stage(
   var numAvailableOutputs = 0
 
   /** Set of jobs that this stage belongs to. */
-  val jobIds = new HashSet[Int]
+  val jobIds = new mutable.HashSet[Int]
 
   /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
   var resultOfJob: Option[ActiveJob] = None
-  var pendingTasks = new HashSet[Task[_]]
+  var pendingTasks = new mutable.HashSet[Task[_]]
 
   private var nextAttemptId = 0
 

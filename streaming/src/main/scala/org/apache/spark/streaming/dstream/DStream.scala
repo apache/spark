@@ -20,18 +20,17 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.deprecated
+import org.apache.spark.rdd.{BlockRDD, RDD}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.util.{CallSite, MetadataCleaner}
+import org.apache.spark.{Logging, SparkException}
+
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
-
-import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.{CallSite, MetadataCleaner}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -291,7 +290,7 @@ abstract class DStream[T: ClassTag] (
         // Note that this `getOrCompute` may get called from another DStream which may have
         // set its own call site. So we store its call site in a temporary variable,
         // set this DStream's creation site, generate RDDs and then restore the previous call site.
-        val prevCallSite = ssc.sparkContext.getCallSite()
+        val prevCallSite = ssc.sparkContext.getCallSite
         ssc.sparkContext.setCallSite(creationSite)
         val rddOption = compute(time)
         ssc.sparkContext.setCallSite(prevCallSite)

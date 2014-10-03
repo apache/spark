@@ -19,7 +19,8 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -63,8 +64,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
-    private val addressToExecutorId = new HashMap[Address, String]
-    private val executorDataMap = new HashMap[String, ExecutorData]
+    private val addressToExecutorId = new mutable.HashMap[Address, String]
+    private val executorDataMap = new mutable.HashMap[String, ExecutorData]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -84,10 +85,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor
-          executorDataMap.put(executorId, new ExecutorData(sender, sender.path.address,
+          executorDataMap.put(executorId, new ExecutorData(sender(), sender().path.address,
             Utils.parseHostPort(hostPort)._1, cores, cores))
 
-          addressToExecutorId(sender.path.address) = executorId
+          addressToExecutorId(sender().path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           makeOffers()
@@ -107,8 +108,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           }
         }
 
-      case ReviveOffers =>
-        makeOffers()
+      case ReviveOffers => makeOffers()
 
       case KillTask(taskId, executorId, interruptThread) =>
         executorDataMap(executorId).executorActor ! KillTask(taskId, executorId, interruptThread)
@@ -195,7 +195,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   }
 
   var driverActor: ActorRef = null
-  val taskIdsOnSlave = new HashMap[String, HashSet[String]]
+  val taskIdsOnSlave = new mutable.HashMap[String, mutable.HashSet[String]]
 
   override def start() {
     val properties = new ArrayBuffer[(String, String)]
@@ -260,8 +260,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   def sufficientResourcesRegistered(): Boolean = true
 
-  override def isReady(): Boolean = {
-    if (sufficientResourcesRegistered) {
+  override def isReady: Boolean = {
+    if (sufficientResourcesRegistered()) {
       logInfo("SchedulerBackend is ready for scheduling beginning after " +
         s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
@@ -280,8 +280,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       System.setProperty("spark.ui.proxyBase", proxyBase)
     }
 
-    val hasFilter = (filterName != null && filterName.nonEmpty &&
-      filterParams != null && filterParams.nonEmpty)
+    val hasFilter = filterName != null && filterName.nonEmpty && filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       conf.set("spark.ui.filters", filterName)
