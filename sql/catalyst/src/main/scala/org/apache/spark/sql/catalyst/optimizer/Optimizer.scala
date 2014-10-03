@@ -237,7 +237,6 @@ object OptimizedIn extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsDown {
       case In(v, list) if list.exists {
           case Literal(_ , _) => true
-          case UnaryMinus(_) => true
           case _ => false
         } => {
           val hSet = list.map(e => e.eval(null))
