@@ -196,6 +196,15 @@ SPARK_MASTER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
+  <td><code>spark.dead.worker.persistence</code></td>
+  <td>15</td>
+  <td>
+    This parameter controls when Spark will remove the worker information from the UI if it is dead.
+            If it has been longer than (<code>spark.dead.worker.persistence</code> + 1) * <code> spark.worker.timeout
+            </code> seconds since the worker is dead, Spark will remove it from UI.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>

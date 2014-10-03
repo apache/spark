@@ -104,6 +104,13 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.logging.exceptionPrintInterval</code></td>
+  <td>10000</td>
+  <td>
+    Frequency to reprint duplicate exceptions in full, in milliseconds
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
@@ -296,6 +303,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.safetyFraction</code></td>
+  <td>0.8</td>
+  <td>
+    Specify the safety margin of the memory space used by shuffle. The total size of memory size used by 
+    Shuffle is (Runtime.getRuntime.maxMemory * <code>spark.shuffle.memoryFraction</code> * 
+    <code>spark.shuffle.safetyFraction</code>)
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -337,6 +353,42 @@ Apart from these, the following properties are also available, and may be useful
     map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.io.port</code></td>
+  <td>Random</td>
+  <td>
+    Port the Netty-based BlockServer listens on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.mode</code></td>
+  <td>nio</td>
+  <td>
+    IO mode of the Netty-based BlockServer, nio, oio, epoll, or auto.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>60s</td>
+  <td>
+    Connect timeout of Netty-based BlockServer.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.netty.ioRatio</code></td>
+  <td>80</td>
+  <td>
+    Percentage of the desired amount of time spent for I/O in the child event loops. Only applicable in nio and epoll of 
+    Netty-based BlockServer
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.backLog</code></td>
+  <td>50</td>
+  <td>
+    Requested maximum length of the queue of incoming connections (for Netty-based BlockServer).
+  </td>
+</tr>
 </table>
 
 #### Spark UI
@@ -376,6 +428,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.overwrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to overwrite the log directory if it already exists.
   </td>
 </tr>
 <tr>
@@ -556,6 +615,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.safetyFraction</code></td>
+  <td>0.9</td>
+  <td>
+    Specify the safety margin of the memory space used by storage. The total size of memory size used by 
+        Shuffle is (Runtime.getRuntime.maxMemory * <code>spark.storage.memoryFraction</code> * 
+        <code>spark.storage.safetyFraction</code>)
+  </td>
+</tr>
+<tr>
   <td><code>spark.storage.unrollFraction</code></td>
   <td>0.2</td>
   <td>
@@ -580,6 +648,20 @@ Apart from these, the following properties are also available, and may be useful
     Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
     mapping has high overhead for blocks close to or below the page size of the operating system.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.blockManagerTimeoutIntervalMs</code></td>
+  <td>60000ms</code></td>
+  <td>
+    The interval length between two checking of timeout BlockManagerSlaves.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.blockManagerSlaveTimeoutMs</code></td>
+  <td><code>max(<code>spark.executor.heartbeatInterval</code>, 10000) * 3, 45000)</code></td>
+  <td>
+    Communication timeout between BlockManagerMaster and BlockManagerSlave.
   </td>
 </tr>
 <tr>
@@ -883,6 +965,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Maximum amount of time to wait for resources to register before scheduling begins
     (in milliseconds).  
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.executorTaskBlacklistTime</code></td>
+  <td>0</td>
+  <td>
+    The allowed failure number of a task before the executor is put into black list. 
   </td>
 </tr>
 <tr>
