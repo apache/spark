@@ -90,8 +90,16 @@ private[spark] class CoarseMesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = CoarseMesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
-          driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
+          val fwBuilder = FrameworkInfo.newBuilder().setUser("").setName(sc.appName)
+          val role = sc.conf.get("spark.mesos.role", null)
+          val checkpoint = sc.conf.get("spark.mesos.checkpoint", null)
+          if (role != null) {
+            fwBuilder.setRole(role)
+          }
+          if (checkpoint != null) {
+            fwBuilder.setCheckpoint(checkpoint.toBoolean)
+          }
+          driver = new MesosSchedulerDriver(scheduler, fwBuilder.build(), master)
           try { {
             val ret = driver.run()
             logInfo("driver.run() returned with code " + ret)
@@ -196,8 +204,12 @@ private[spark] class CoarseMesosSchedulerBackend(
 
       for (offer <- offers) {
         val slaveId = offer.getSlaveId.toString
-        val mem = getResource(offer.getResourcesList, "mem")
-        val cpus = getResource(offer.getResourcesList, "cpus").toInt
+        val memResource = getResource(offer.getResourcesList, "mem")
+        val mem = memResource.getScalar.getValue
+        val memRole = memResource.getRole
+        val cpusResource = getResource(offer.getResourcesList, "cpus")
+        val cpus = cpusResource.getScalar.getValue.toInt
+        val cpusRole = cpusResource.getRole
         if (totalCoresAcquired < maxCores && mem >= sc.executorMemory && cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
             !slaveIdsWithExecutors.contains(slaveId)) {
@@ -213,8 +225,8 @@ private[spark] class CoarseMesosSchedulerBackend(
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
-            .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem", sc.executorMemory))
+            .addResources(createResource("cpus", cpusToUse, cpusRole))
+            .addResources(createResource("mem", sc.executorMemory, memRole))
             .build()
           d.launchTasks(
             Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
@@ -228,20 +240,25 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Helper function to pull out a resource from a Mesos Resources protobuf */
-  private def getResource(res: JList[Resource], name: String): Double = {
+  private def getResource(res: JList[Resource], name: String): Resource = {
     for (r <- res if r.getName == name) {
-      return r.getScalar.getValue
+      return r
     }
     // If we reached here, no resource with the required name was present
     throw new IllegalArgumentException("No resource called " + name + " in " + res)
   }
 
   /** Build a Mesos resource protobuf object */
-  private def createResource(resourceName: String, quantity: Double): Protos.Resource = {
+  private def createResource(
+    resourceName: String,
+    quantity: Double,
+    role: String): Protos.Resource = {
+
     Resource.newBuilder()
       .setName(resourceName)
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder().setValue(quantity).build())
+      .setRole(role)
       .build()
   }
 

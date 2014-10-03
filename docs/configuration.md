@@ -794,6 +794,24 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.role</code></td>
+  <td>(not set)</td>
+  <td>
+    Allocation role of the framework when running on Mesos. If not set, the default value of Mesos
+    framework will be used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.checkpoint</code></td>
+  <td>(not set)</td>
+  <td>
+    Whether to checkpoint task information to disk when running on Mesos, using the Mesos
+    <a href="http://mesos.apache.org/documentation/latest/slave-recovery/">slave recovery feature</a>.
+    If not set, the default value of Mesos framework will be used.
+    <b>Note</b>: if you use this, Spark will only accept offers from Mesos slaves with checkpointing enabled.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>

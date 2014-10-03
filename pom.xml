@@ -115,7 +115,7 @@
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <scala.macros.version>2.0.1</scala.macros.version>
-    <mesos.version>0.18.1</mesos.version>
+    <mesos.version>0.19.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <akka.group>org.spark-project.akka</akka.group>
     <akka.version>2.2.3-shaded-protobuf</akka.version>
