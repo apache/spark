@@ -73,17 +73,27 @@ class RandomForestModel(val trees: Array[DecisionTreeModel], val algo: Algo) ext
   def numTrees: Int = trees.size
 
   /**
-   * Print full model.
+   * Get total number of nodes, summed over all trees in the forest.
    */
-  override def toString: String = {
-    val header = algo match {
-      case Classification =>
-        s"RandomForestModel classifier with $numTrees trees\n"
-      case Regression =>
-        s"RandomForestModel regressor with $numTrees trees\n"
-      case _ => throw new IllegalArgumentException(
-        s"RandomForestModel given unknown algo parameter: $algo.")
-    }
+  def totalNumNodes: Int = trees.map(tree => tree.numNodes).sum
+
+  /**
+   * Print a summary of the model.
+   */
+  override def toString: String = algo match {
+    case Classification =>
+      s"RandomForestModel classifier with $numTrees trees"
+    case Regression =>
+      s"RandomForestModel regressor with $numTrees trees"
+    case _ => throw new IllegalArgumentException(
+      s"RandomForestModel given unknown algo parameter: $algo.")
+  }
+
+  /**
+   * Print the full model to a string.
+   */
+  def toDebugString: String = {
+    val header = toString + "\n"
     header + trees.zipWithIndex.map { case (tree, treeIndex) =>
       s"  Tree $treeIndex:\n" + tree.topNode.subtreeToString(4)
     }.fold("")(_ + _)
