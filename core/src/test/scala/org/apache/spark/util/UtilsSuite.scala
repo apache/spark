@@ -189,17 +189,28 @@ class UtilsSuite extends FunSuite {
     assert(Utils.getIteratorSize(iterator) === 5L)
   }
 
-  test("findOldFiles") {
+  test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
     val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
     val child2: File = Utils.createTempDir(parent.getCanonicalPath)
-    // set the last modified time of child1 to 10 secs old
-    child1.setLastModified(System.currentTimeMillis() - (1000 * 10))
+    val child3: File = Utils.createTempDir(child1.getCanonicalPath)
+    // set the last modified time of child1 to 30 secs old
+    child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
-    val result = Utils.findOldFiles(parent, 5) // find files older than 5 secs
-    assert(result.size.equals(1))
-    assert(result(0).getCanonicalPath.equals(child1.getCanonicalPath))
+    // although child1 is old, child2 is still new so return true
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    child2.setLastModified(System.currentTimeMillis - (1000 * 30))
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    parent.setLastModified(System.currentTimeMillis - (1000 * 30))
+    // although parent and its immediate children are new, child3 is still old
+    // we expect a full recursive search for new files.
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    child3.setLastModified(System.currentTimeMillis - (1000 * 30))
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
   }
 
   test("resolveURI") {
