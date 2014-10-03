@@ -437,7 +437,7 @@ class Word2VecModel private[mllib] (
    * Find synonyms of a word
    * @param word a word
    * @param num number of synonyms to find  
-   * @return array of (word, similarity)
+   * @return array of (word, cosineSimilarity)
    */
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)

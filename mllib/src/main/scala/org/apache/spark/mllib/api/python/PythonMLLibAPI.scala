@@ -298,12 +298,12 @@ class PythonMLLibAPI extends Serializable {
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
   def trainWord2Vec(
-    dataJRDD: JavaRDD[java.util.ArrayList[String]],
-    vectorSize: Int,
-    learningRate: Double,
-    numPartitions: Int,
-    numIterations: Int,
-    seed: Long): Word2VecModelWrapper = {
+      dataJRDD: JavaRDD[java.util.ArrayList[String]],
+      vectorSize: Int,
+      learningRate: Double,
+      numPartitions: Int,
+      numIterations: Int,
+      seed: Long): Word2VecModelWrapper = {
     val data = dataJRDD.rdd.cache()
     val word2vec = new Word2Vec()
         .setVectorSize(vectorSize)
