@@ -169,7 +169,7 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 compile
+    sbt/sbt -Pyarn -Phadoop-2.3 assembly
 
 # Speeding up Compilation with Zinc
 
