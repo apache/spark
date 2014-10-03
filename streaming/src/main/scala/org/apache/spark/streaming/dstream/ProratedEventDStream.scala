@@ -44,7 +44,8 @@ class ProratedEventDStream[T: ClassTag](parent: DStream[T],
     // Assumption: start(x) <= end(x) <= boundaryEnd
     //
 
-    def binStart = (validTime - Duration(1)).floor(slideDuration * sizeNumBatches) - slideDuration * sizeNumBatches * delayNumBins
+    def binStart = (validTime - Duration(1)).floor(slideDuration * sizeNumBatches) - 
+      slideDuration * sizeNumBatches * delayNumBins
     def binEnd = binStart + slideDuration * sizeNumBatches
 
     parent.getOrCompute(validTime).map(

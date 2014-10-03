@@ -36,11 +36,14 @@ class BinAlignedWindowDStream[T: ClassTag](
 
   override def slideDuration: Duration = parent.slideDuration
 
-  override def parentRememberDuration: Duration = rememberDuration + parent.slideDuration * sizeNumBatches * (delayNumBins + 1)
+  override def parentRememberDuration: Duration = 
+    rememberDuration + parent.slideDuration * sizeNumBatches * (delayNumBins + 1)
 
   override def compute(validTime: Time): Option[RDD[T]] = {
 
-    val binStart = (validTime - Duration(1)).floor(slideDuration * sizeNumBatches) - slideDuration * sizeNumBatches * delayNumBins
+    val binStart = 
+      (validTime - Duration(1)).floor(slideDuration * sizeNumBatches) - 
+      slideDuration * sizeNumBatches * delayNumBins
 
     if ((validTime - binStart).isMultipleOf(slideDuration * sizeNumBatches)) {
       val currentWindow = new Interval(binStart + slideDuration, validTime)

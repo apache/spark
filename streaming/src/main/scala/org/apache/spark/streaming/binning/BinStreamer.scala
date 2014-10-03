@@ -22,7 +22,9 @@ import org.apache.spark.streaming.Time
 import scala.reflect.ClassTag
 
 
-class BinStreamer[T: ClassTag](@transient ds: DStream[T], getStartTime: (T) => Time, getEndTime: (T) => Time) extends Serializable {
+class BinStreamer[T: ClassTag](
+    @transient ds: DStream[T], getStartTime: (T) => Time, getEndTime: (T) => Time
+  ) extends Serializable {
 
   def prorate(binStart: Time, binEnd: Time)(x: T) = {
 
@@ -34,7 +36,8 @@ class BinStreamer[T: ClassTag](@transient ds: DStream[T], getStartTime: (T) => T
       }
       else {
 
-        // Even though binStart is not inclusive, setting s = binStart  implies limit s as x approaches binStart+
+        // Even though binStart is not inclusive, 
+        // setting s = binStart  implies limit s as x approaches binStart+
         val s = if (sx > binStart) sx else binStart
 
         val e = if (ex < binEnd) ex else binEnd
