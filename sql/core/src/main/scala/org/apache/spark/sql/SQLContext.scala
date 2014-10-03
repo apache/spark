@@ -50,6 +50,7 @@ import org.apache.spark.{Logging, SparkContext}
 class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
   with SQLConf
+  with CacheManager
   with ExpressionConversions
   with UDFRegistration
   with Serializable {
@@ -96,7 +97,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
     SparkPlan.currentContext.set(self)
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
+    new SchemaRDD(this,
+      LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
   }
 
   /**
@@ -133,7 +135,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
     // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))(self)
+    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
     new SchemaRDD(this, logicalPlan)
   }
 
@@ -272,45 +274,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
 
-  /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = {
-    val currentTable = table(tableName).queryExecution.analyzed
-    val asInMemoryRelation = currentTable match {
-      case _: InMemoryRelation =>
-        currentTable
-
-      case _ =>
-        InMemoryRelation(useCompression, columnBatchSize, executePlan(currentTable).executedPlan)
-    }
-
-    catalog.registerTable(None, tableName, asInMemoryRelation)
-  }
-
-  /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = {
-    table(tableName).queryExecution.analyzed match {
-      // This is kind of a hack to make sure that if this was just an RDD registered as a table,
-      // we reregister the RDD as a table.
-      case inMem @ InMemoryRelation(_, _, _, e: ExistingRdd) =>
-        inMem.cachedColumnBuffers.unpersist()
-        catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
-      case inMem: InMemoryRelation =>
-        inMem.cachedColumnBuffers.unpersist()
-        catalog.unregisterTable(None, tableName)
-      case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
-    }
-  }
-
-  /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = {
-    val relation = table(tableName).queryExecution.analyzed
-    relation match {
-      case _: InMemoryRelation => true
-      case _ => false
-    }
-  }
-
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
 
@@ -401,10 +364,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
     lazy val optimizedPlan = optimizer(analyzed)
+    lazy val withCachedData = useCachedData(optimizedPlan)
+
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(optimizedPlan).next()
+      planner(withCachedData).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
@@ -526,6 +491,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { m => new GenericRow(m): Row}
     }
 
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd))(self))
+    new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 }
