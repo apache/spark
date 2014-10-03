@@ -26,12 +26,11 @@ import scala.concurrent.duration._
 import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{ActorLogReceive, JsonProtocol, SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
 import org.apache.spark.ui.JettyUtils
 
 /**
@@ -294,7 +293,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     if (hasFilter) {
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       conf.set("spark.ui.filters", filterName)
-      conf.set(s"spark.$filterName.jsonParams", compact(JsonProtocol.mapToJson(filterParams)))
+      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }

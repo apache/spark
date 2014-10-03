@@ -28,14 +28,13 @@ import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.AddWebUIFilter
-import org.apache.spark.util.{AkkaUtils, JsonProtocol, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 /**
  * Common application master functionality for Spark on Yarn.
@@ -340,7 +339,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     if (isDriver) {
       System.setProperty("spark.ui.filters", amFilter)
-      System.setProperty(s"spark.$amFilter.jsonParams", compact(JsonProtocol.mapToJson(params)))
+      params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     } else {
       actor ! AddWebUIFilter(amFilter, params.toMap, proxyBase)
     }
