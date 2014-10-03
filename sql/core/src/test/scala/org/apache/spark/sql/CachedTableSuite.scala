@@ -20,12 +20,29 @@ package org.apache.spark.sql
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext._
 
 case class BigData(s: String)
 
 class CachedTableSuite extends QueryTest {
+  import TestSQLContext._
   TestData // Load test tables.
+
+  /**
+   * Throws a test failed exception when the number of cached tables differs from the expected
+   * number.
+   */
+  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val cachedData = planWithCaching collect {
+      case cached: InMemoryRelation => cached
+    }
+
+    if (cachedData.size != numCachedTables) {
+      fail(
+        s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
+        planWithCaching)
+    }
+  }
 
   test("too big for memory") {
     val data = "*" * 10000
@@ -35,19 +52,21 @@ class CachedTableSuite extends QueryTest {
     uncacheTable("bigData")
   }
 
+  test("calling .cache() should use inmemory columnar caching") {
+    table("testData").cache()
+
+    assertCached(table("testData"))
+  }
+
   test("SPARK-1669: cacheTable should be idempotent") {
     assume(!table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
 
     cacheTable("testData")
-    table("testData").queryExecution.analyzed match {
-      case _: InMemoryRelation =>
-      case _ =>
-        fail("testData should be cached")
-    }
+    assertCached(table("testData"))
 
     cacheTable("testData")
     table("testData").queryExecution.analyzed match {
-      case InMemoryRelation(_, _, _, _: InMemoryColumnarTableScan) =>
+      case InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan) =>
         fail("cacheTable is not idempotent")
 
       case _ =>
@@ -55,81 +74,69 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("read from cached table and uncache") {
-    TestSQLContext.cacheTable("testData")
+    cacheTable("testData")
 
     checkAnswer(
-      TestSQLContext.table("testData"),
+      table("testData"),
       testData.collect().toSeq
     )
 
-    TestSQLContext.table("testData").queryExecution.analyzed match {
-      case _ : InMemoryRelation => // Found evidence of caching
-      case noCache => fail(s"No cache node found in plan $noCache")
-    }
+    assertCached(table("testData"))
 
-    TestSQLContext.uncacheTable("testData")
+    uncacheTable("testData")
 
     checkAnswer(
-      TestSQLContext.table("testData"),
+      table("testData"),
       testData.collect().toSeq
     )
 
-    TestSQLContext.table("testData").queryExecution.analyzed match {
-      case cachePlan: InMemoryRelation =>
-        fail(s"Table still cached after uncache: $cachePlan")
-      case noCache => // Table uncached successfully
-    }
+    assertCached(table("testData"), 0)
   }
 
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
-      TestSQLContext.uncacheTable("testData")
+      uncacheTable("testData")
     }
   }
 
   test("SELECT Star Cached Table") {
-    TestSQLContext.sql("SELECT * FROM testData").registerTempTable("selectStar")
-    TestSQLContext.cacheTable("selectStar")
-    TestSQLContext.sql("SELECT * FROM selectStar WHERE key = 1").collect()
-    TestSQLContext.uncacheTable("selectStar")
+    sql("SELECT * FROM testData").registerTempTable("selectStar")
+    cacheTable("selectStar")
+    sql("SELECT * FROM selectStar WHERE key = 1").collect()
+    uncacheTable("selectStar")
   }
 
   test("Self-join cached") {
     val unCachedAnswer =
-      TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
-    TestSQLContext.cacheTable("testData")
+      sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
+    cacheTable("testData")
     checkAnswer(
-      TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
+      sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
       unCachedAnswer.toSeq)
-    TestSQLContext.uncacheTable("testData")
+    uncacheTable("testData")
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
-    TestSQLContext.sql("CACHE TABLE testData")
-    TestSQLContext.table("testData").queryExecution.executedPlan match {
-      case _: InMemoryColumnarTableScan => // Found evidence of caching
-      case _ => fail(s"Table 'testData' should be cached")
-    }
-    assert(TestSQLContext.isCached("testData"), "Table 'testData' should be cached")
+    sql("CACHE TABLE testData")
+    assertCached(table("testData"))
 
-    TestSQLContext.sql("UNCACHE TABLE testData")
-    TestSQLContext.table("testData").queryExecution.executedPlan match {
-      case _: InMemoryColumnarTableScan => fail(s"Table 'testData' should not be cached")
-      case _ => // Found evidence of uncaching
-    }
-    assert(!TestSQLContext.isCached("testData"), "Table 'testData' should not be cached")
+    assert(isCached("testData"), "Table 'testData' should be cached")
+
+    sql("UNCACHE TABLE testData")
+    assertCached(table("testData"), 0)
+    assert(!isCached("testData"), "Table 'testData' should not be cached")
   }
   
   test("CACHE TABLE tableName AS SELECT Star Table") {
-    TestSQLContext.sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
-    TestSQLContext.sql("SELECT * FROM testCacheTable WHERE key = 1").collect()
-    assert(TestSQLContext.isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
-    TestSQLContext.uncacheTable("testCacheTable")
+    sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
+    sql("SELECT * FROM testCacheTable WHERE key = 1").collect()
+    assert(isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
+    uncacheTable("testCacheTable")
   }
   
   test("'CACHE TABLE tableName AS SELECT ..'") {
-    TestSQLContext.sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
-    assert(TestSQLContext.isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
-    TestSQLContext.uncacheTable("testCacheTable")
+    sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
+    assert(isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
+    uncacheTable("testCacheTable")
   }
 }

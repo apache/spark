@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.SparkLogicalPlan
+import org.apache.spark.sql.execution.LogicalRDD
 
 /**
  * Contains functions that are shared between all SchemaRDD types (i.e., Scala, Java)
@@ -55,8 +55,7 @@ private[sql] trait SchemaRDDLike {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
     // happen right away to let these side effects take place eagerly.
     case _: Command | _: InsertIntoTable | _: CreateTableAsSelect |_: WriteToFile =>
-      queryExecution.toRdd
-      SparkLogicalPlan(queryExecution.executedPlan)(sqlContext)
+      LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       baseLogicalPlan
   }

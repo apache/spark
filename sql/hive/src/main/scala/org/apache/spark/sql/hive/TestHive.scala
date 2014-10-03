@@ -353,7 +353,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   var cacheTables: Boolean = false
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
-      // Marks the table as loaded first to prevent infite mutually recursive table loading.
+      // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       loadedTables += name
       logInfo(s"Loading test table $name")
       val createCmds =
@@ -383,6 +383,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
+      clearCache()
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
@@ -428,7 +429,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       loadTestTable("srcpart")
     } catch {
       case e: Exception =>
-        logError(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        logError("FATAL ERROR: Failed to reset TestDB state.", e)
         // At this point there is really no reason to continue, but the test framework traps exits.
         // So instead we just pause forever so that at least the developer can see where things
         // started to go wrong.

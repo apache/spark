@@ -105,8 +105,8 @@ case class InsertIntoTable(
     child: LogicalPlan,
     overwrite: Boolean)
   extends LogicalPlan {
-  // The table being inserted into is a child for the purposes of transformations.
-  override def children = table :: child :: Nil
+
+  override def children = child :: Nil
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {

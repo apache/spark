@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
-import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
@@ -161,10 +160,7 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-      case logical.InsertIntoTable(
-             InMemoryRelation(_, _, _,
-               HiveTableScan(_, table, _)), partition, child, overwrite) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+
       case logical.CreateTableAsSelect(database, tableName, child) =>
         val query = planLater(child)
         CreateTableAsSelect(

@@ -62,7 +62,7 @@ abstract class Attribute extends NamedExpression {
   def withName(newName: String): Attribute
 
   def toAttribute = this
-  def newInstance: Attribute
+  def newInstance(): Attribute
 
 }
 
@@ -131,7 +131,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     h
   }
 
-  override def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  override def newInstance() = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
