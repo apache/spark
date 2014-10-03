@@ -76,8 +76,12 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     resourceManager.finishApplicationMaster(finishReq)
   }
 
-  override def getProxyHostAndPort(conf: YarnConfiguration) =
-    YarnConfiguration.getProxyHostAndPort(conf)
+  override def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String) = {
+    val proxy = YarnConfiguration.getProxyHostAndPort(conf)
+    val parts = proxy.split(":")
+    val uriBase = "http://" + proxy + proxyBase
+    Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
+  }
 
   override def getMaxRegAttempts(conf: YarnConfiguration) =
     conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES, YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)
