@@ -18,10 +18,6 @@
 """
 Python package for Word2Vec in MLlib.
 """
-from sys import maxint
-
-from numpy import random
-
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
 from pyspark.mllib.linalg import _convert_to_vector
@@ -122,7 +118,7 @@ class Word2Vec(object):
         self.learningRate = 0.025
         self.numPartitions = 1
         self.numIterations = 1
-        self.seed = random.randint(0, high=maxint)
+        self.seed = 42L
 
     def setVectorSize(self, vectorSize):
         """
