@@ -90,13 +90,13 @@ private[spark] class BlockManager(
     executorId, blockTransferService.hostName, blockTransferService.port)
 
   // Whether to compress broadcast variables that are stored
-  private val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
+  private val compressBroadcast = conf.getBoolean("spark.broadcast.compress", defaultValue = true)
   // Whether to compress shuffle output that are stored
-  private val compressShuffle = conf.getBoolean("spark.shuffle.compress", true)
+  private val compressShuffle = conf.getBoolean("spark.shuffle.compress", defaultValue = true)
   // Whether to compress RDD partitions that are stored serialized
-  private val compressRdds = conf.getBoolean("spark.rdd.compress", false)
+  private val compressRdds = conf.getBoolean("spark.rdd.compress", defaultValue = false)
   // Whether to compress shuffle output temporarily spilled to disk
-  private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
+  private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", defaultValue = true)
 
   private val slaveActor = actorSystem.actorOf(
     Props(new BlockManagerSlaveActor(this, mapOutputTracker)),
@@ -571,7 +571,7 @@ private[spark] class BlockManager(
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
-    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
+    val syncWrites = conf.getBoolean("spark.shuffle.sync", defaultValue = false)
     new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites,
       writeMetrics)
   }

@@ -24,7 +24,7 @@ import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
-import scala.collection.{Map, Set}
+import scala.collection.{mutable, Map, Set}
 import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
@@ -170,7 +170,7 @@ class SparkContext(config: SparkConf) extends Logging {
     throw new SparkException("An application name must be set in your configuration")
   }
 
-  if (conf.getBoolean("spark.logConf", false)) {
+  if (conf.getBoolean("spark.logConf", defaultValue = false)) {
     logInfo("Spark configuration:\n" + conf.toDebugString)
   }
 
@@ -189,10 +189,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
-  val tachyonFolderName = "spark-" + randomUUID.toString()
+  val tachyonFolderName = "spark-" + randomUUID.toString
   conf.set("spark.tachyonStore.folderName", tachyonFolderName)
 
-  val isLocal = (master == "local" || master.startsWith("local["))
+  val isLocal = master == "local" || master.startsWith("local[")
 
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
@@ -211,8 +211,8 @@ class SparkContext(config: SparkConf) extends Logging {
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
-  private[spark] val addedFiles = HashMap[String, Long]()
-  private[spark] val addedJars = HashMap[String, Long]()
+  private[spark] val addedFiles = mutable.HashMap[String, Long]()
+  private[spark] val addedJars = mutable.HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedWeakValueHashMap[Int, RDD[_]]
@@ -221,7 +221,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui: Option[SparkUI] =
-    if (conf.getBoolean("spark.ui.enabled", true)) {
+    if (conf.getBoolean("spark.ui.enabled", defaultValue = true)) {
       Some(new SparkUI(this))
     } else {
       // For tests, do not enable the UI
@@ -234,7 +234,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+    if (conf.getBoolean("spark.eventLog.enabled", defaultValue = false)) {
       val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
       logger.start()
       listenerBus.addListener(logger)
@@ -269,7 +269,7 @@ class SparkContext(config: SparkConf) extends Logging {
     .getOrElse(512)
 
   // Environment variables to pass to our executors.
-  private[spark] val executorEnvs = HashMap[String, String]()
+  private[spark] val executorEnvs = mutable.HashMap[String, String]()
 
   // Convert java options to env vars as a work around
   // since we can't set env vars directly in sbt.
@@ -310,7 +310,7 @@ class SparkContext(config: SparkConf) extends Logging {
   taskScheduler.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
-    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
+    if (conf.getBoolean("spark.cleaner.referenceTracking", defaultValue = true)) {
       Some(new ContextCleaner(this))
     } else {
       None
@@ -359,7 +359,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * [[org.apache.spark.SparkContext.setLocalProperty]].
    */
   def getLocalProperty(key: String): String =
-    Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
+    Option(localProperties.get).map(_.getProperty(key)).orNull
 
   /** Set a human readable description of the current job. */
   @deprecated("use setJobGroup", "0.8.1")
@@ -955,7 +955,7 @@ class SparkContext(config: SparkConf) extends Logging {
               // In order for this to work in yarn-cluster mode the user must specify the
               // --addJars option to the client to upload the file into the distributed cache
               // of the AM to make it show up in the current working directory.
-              val fileName = new Path(uri.getPath).getName()
+              val fileName = new Path(uri.getPath).getName
               try {
                 env.httpFileServer.addJar(new File(fileName))
               } catch {
@@ -1025,7 +1025,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * or the spark.home Java property, or the SPARK_HOME environment variable
    * (in that order of preference). If neither of these is set, return None.
    */
-  private[spark] def getSparkHome(): Option[String] = {
+  private[spark] def getSparkHome: Option[String] = {
     conf.getOption("spark.home").orElse(Option(System.getenv("SPARK_HOME")))
   }
 
@@ -1059,7 +1059,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Capture the current user callsite and return a formatted version for printing. If the user
    * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
-  private[spark] def getCallSite(): CallSite = {
+  private[spark] def getCallSite: CallSite = {
     Option(getLocalProperty(CallSite.SHORT_FORM)).map { case shortCallSite =>
       val longCallSite = Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse("")
       CallSite(shortCallSite, longCallSite)
@@ -1081,7 +1081,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dagScheduler == null) {
       throw new SparkException("SparkContext has been shutdown")
     }
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
@@ -1122,14 +1122,14 @@ class SparkContext(config: SparkConf) extends Logging {
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.size, allowLocal = false)
   }
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.partitions.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.size, allowLocal = false)
   }
 
   /**
@@ -1140,7 +1140,7 @@ class SparkContext(config: SparkConf) extends Logging {
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit)
   {
-    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.size, false, resultHandler)
+    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.size, allowLocal = false, resultHandler)
   }
 
   /**
@@ -1152,7 +1152,7 @@ class SparkContext(config: SparkConf) extends Logging {
       resultHandler: (Int, U) => Unit)
   {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, false, resultHandler)
+    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, allowLocal = false, resultHandler)
   }
 
   /**
@@ -1256,7 +1256,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def getCheckpointDir = checkpointDir
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
-  def defaultParallelism: Int = taskScheduler.defaultParallelism
+  def defaultParallelism: Int = taskScheduler.defaultParallelism()
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   @deprecated("use defaultMinPartitions", "1.0.0")
@@ -1267,12 +1267,12 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private val nextShuffleId = new AtomicInteger(0)
 
-  private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
+  private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement
 
   private val nextRddId = new AtomicInteger(0)
 
   /** Register a new RDD, returning its RDD ID */
-  private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+  private[spark] def newRddId(): Int = nextRddId.getAndIncrement
 
   /** Post the application start event */
   private def postApplicationStart() {
@@ -1465,7 +1465,7 @@ object SparkContext extends Logging {
     if (sparkHome != null) {
       res.setSparkHome(sparkHome)
     }
-    if (jars != null && !jars.isEmpty) {
+    if (jars != null && jars.nonEmpty) {
       res.setJars(jars)
     }
     res.setExecutorEnv(environment.toSeq)
@@ -1602,7 +1602,7 @@ object SparkContext extends Logging {
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
-        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
+        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
           new CoarseMesosSchedulerBackend(scheduler, sc, url)

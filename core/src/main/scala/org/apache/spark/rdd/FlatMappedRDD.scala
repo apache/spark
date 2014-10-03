@@ -17,9 +17,9 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.{Partition, TaskContext}
+
+import scala.reflect.ClassTag
 
 private[spark]
 class FlatMappedRDD[U: ClassTag, T: ClassTag](

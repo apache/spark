@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
+import scala.collection.mutable
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
@@ -37,7 +38,7 @@ private[spark] object ClosureCleaner extends Logging {
     if (resourceStream == null) return new ClassReader(resourceStream)
 
     val baos = new ByteArrayOutputStream(128)
-    Utils.copyStream(resourceStream, baos, true)
+    Utils.copyStream(resourceStream, baos, closeStreams = true)
     new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
@@ -78,19 +79,19 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
-    val seen = Set[Class[_]](obj.getClass)
+    val seen = mutable.Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
-    while (!stack.isEmpty) {
+    while (stack.nonEmpty) {
       val cr = getClassReader(stack.head)
       stack = stack.tail
-      val set = Set[Class[_]]()
+      val set = mutable.Set[Class[_]]()
       cr.accept(new InnerClosureFinder(set), 0)
       for (cls <- set -- seen) {
         seen += cls
         stack = cls :: stack
       }
     }
-    return (seen - obj.getClass).toList
+    (seen - obj.getClass).toList
   }
 
   private def createNullValue(cls: Class[_]): AnyRef = {
@@ -107,12 +108,12 @@ private[spark] object ClosureCleaner extends Logging {
     val innerClasses = getInnerClasses(func)
     val outerObjects = getOuterObjects(func)
 
-    val accessedFields = Map[Class[_], Set[String]]()
+    val accessedFields = mutable.Map[Class[_], mutable.Set[String]]()
     
     getClassReader(func.getClass).accept(new ReturnStatementFinder(), 0)
     
     for (cls <- outerClasses)
-      accessedFields(cls) = Set[String]()
+      accessedFields(cls) = mutable.Set[String]()
     for (cls <- func.getClass :: innerClasses)
       getClassReader(cls).accept(new FieldAccessFinder(accessedFields), 0)
     // logInfo("accessedFields: " + accessedFields)
@@ -177,11 +178,11 @@ private[spark] object ClosureCleaner extends Logging {
       if (outer != null) {
         params(0) = outer // First param is always outer object
       }
-      return cons.newInstance(params: _*).asInstanceOf[AnyRef]
+      cons.newInstance(params: _*).asInstanceOf[AnyRef]
     } else {
       // Use reflection to instantiate object without calling constructor
-      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
-      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+      val rf = sun.reflect.ReflectionFactory.getReflectionFactory
+      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor
       val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
       val obj = newCtor.newInstance().asInstanceOf[AnyRef]
       if (outer != null) {
@@ -214,7 +215,7 @@ class ReturnStatementFinder extends ClassVisitor(ASM4) {
 }
 
 private[spark]
-class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor(ASM4) {
+class FieldAccessFinder(output: mutable.Map[Class[_], mutable.Set[String]]) extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     new MethodVisitor(ASM4) {
@@ -240,7 +241,7 @@ class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor
   }
 }
 
-private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
+private[spark] class InnerClosureFinder(output: mutable.Set[Class[_]]) extends ClassVisitor(ASM4) {
   var myName: String = null
 
   override def visit(version: Int, access: Int, name: String, sig: String,

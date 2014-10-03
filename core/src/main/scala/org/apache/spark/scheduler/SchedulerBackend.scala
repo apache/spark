@@ -24,13 +24,17 @@ package org.apache.spark.scheduler
  */
 private[spark] trait SchedulerBackend {
   def start(): Unit
+
   def stop(): Unit
+
   def reviveOffers(): Unit
+
   def defaultParallelism(): Int
 
   def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
     throw new UnsupportedOperationException
-  def isReady(): Boolean = true
+
+  def isReady: Boolean = true
 
   /**
    * The application ID associated with the job, if any.
@@ -38,5 +42,4 @@ private[spark] trait SchedulerBackend {
    * @return The application ID, or None if the backend does not provide an ID.
    */
   def applicationId(): Option[String] = None
-
 }

@@ -170,7 +170,7 @@ private[spark] object Utils extends Logging {
 
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
-    val absolutePath = file.getAbsolutePath()
+    val absolutePath = file.getAbsolutePath
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths += absolutePath
     }
@@ -178,7 +178,7 @@ private[spark] object Utils extends Logging {
 
   // Register the tachyon path to be deleted via shutdown hook
   def registerShutdownDeleteDir(tachyonfile: TachyonFile) {
-    val absolutePath = tachyonfile.getPath()
+    val absolutePath = tachyonfile.getPath
     shutdownDeleteTachyonPaths.synchronized {
       shutdownDeleteTachyonPaths += absolutePath
     }
@@ -186,7 +186,7 @@ private[spark] object Utils extends Logging {
 
   // Is the path already registered to be deleted via a shutdown hook ?
   def hasShutdownDeleteDir(file: File): Boolean = {
-    val absolutePath = file.getAbsolutePath()
+    val absolutePath = file.getAbsolutePath
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths.contains(absolutePath)
     }
@@ -194,7 +194,7 @@ private[spark] object Utils extends Logging {
 
   // Is the path already registered to be deleted via a shutdown hook ?
   def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
-    val absolutePath = file.getPath()
+    val absolutePath = file.getPath
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths.contains(absolutePath)
     }
@@ -204,7 +204,7 @@ private[spark] object Utils extends Logging {
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
-    val absolutePath = file.getAbsolutePath()
+    val absolutePath = file.getAbsolutePath
     val retval = shutdownDeletePaths.synchronized {
       shutdownDeletePaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
@@ -220,7 +220,7 @@ private[spark] object Utils extends Logging {
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in Exception and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
-    val absolutePath = file.getPath()
+    val absolutePath = file.getPath
     val retval = shutdownDeleteTachyonPaths.synchronized {
       shutdownDeleteTachyonPaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
@@ -265,15 +265,15 @@ private[spark] object Utils extends Logging {
 
   /** Copy all data from an InputStream to an OutputStream */
   def copyStream(in: InputStream,
-                 out: OutputStream,
-                 closeStreams: Boolean = false): Long =
+    out: OutputStream,
+    closeStreams: Boolean = false): Long =
   {
     var count = 0L
     try {
       if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]) {
         // When both streams are File stream, use transferTo to improve copy performance.
-        val inChannel = in.asInstanceOf[FileInputStream].getChannel()
-        val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
+        val inChannel = in.asInstanceOf[FileInputStream].getChannel
+        val outChannel = out.asInstanceOf[FileOutputStream].getChannel
         val size = inChannel.size()
 
         // In case transferTo method transferred less data than we have required.
@@ -315,8 +315,8 @@ private[spark] object Utils extends Logging {
     val userCred = securityMgr.getSecretKey()
     if (userCred == null) throw new Exception("Secret key is null with authentication on")
     val userInfo = securityMgr.getHttpUser()  + ":" + userCred
-    new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(),
-      uri.getQuery(), uri.getFragment())
+    new URI(uri.getScheme, userInfo, uri.getHost, uri.getPort, uri.getPath,
+      uri.getQuery, uri.getFragment)
   }
 
   /**
@@ -333,7 +333,7 @@ private[spark] object Utils extends Logging {
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
-    val fileOverwrite = conf.getBoolean("spark.files.overwrite", false)
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
@@ -342,7 +342,7 @@ private[spark] object Utils extends Logging {
         if (securityMgr.isAuthenticationEnabled()) {
           logDebug("fetchFile with security enabled")
           val newuri = constructURIForAuthentication(uri, securityMgr)
-          uc = newuri.toURL().openConnection()
+          uc = newuri.toURL.openConnection()
           uc.setAllowUserInteraction(false)
         } else {
           logDebug("fetchFile not using security")
@@ -353,9 +353,9 @@ private[spark] object Utils extends Logging {
         uc.setConnectTimeout(timeout)
         uc.setReadTimeout(timeout)
         uc.connect()
-        val in = uc.getInputStream()
+        val in = uc.getInputStream
         val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, true)
+        Utils.copyStream(in, out, closeStreams = true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
           if (fileOverwrite) {
             targetFile.delete()
@@ -402,7 +402,7 @@ private[spark] object Utils extends Logging {
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, true)
+        Utils.copyStream(in, out, closeStreams = true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
           if (fileOverwrite) {
             targetFile.delete()
@@ -666,7 +666,7 @@ private[spark] object Utils extends Logging {
    */
   def deleteRecursively(file: File) {
     if (file != null) {
-      if ((file.isDirectory) && !isSymlink(file)) {
+      if (file.isDirectory && !isSymlink(file)) {
         for (child <- listFilesSafely(file)) {
           deleteRecursively(child)
         }
@@ -684,7 +684,7 @@ private[spark] object Utils extends Logging {
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(dir.getPath(), true)) {
+    if (!client.delete(dir.getPath, true)) {
       throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
@@ -695,16 +695,16 @@ private[spark] object Utils extends Logging {
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")
     if (isWindows) return false
-    val fileInCanonicalDir = if (file.getParent() == null) {
+    val fileInCanonicalDir = if (file.getParent == null) {
       file
     } else {
-      new File(file.getParentFile().getCanonicalFile(), file.getName())
+      new File(file.getParentFile.getCanonicalFile, file.getName)
     }
 
-    if (fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())) {
-      return false
+    if (fileInCanonicalDir.getCanonicalFile.equals(fileInCanonicalDir.getAbsoluteFile)) {
+      false
     } else {
-      return true
+      true
     }
   }
 
@@ -804,7 +804,7 @@ private[spark] object Utils extends Logging {
         .start()
     new Thread("read stdout for " + command(0)) {
       override def run() {
-        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines()) {
           System.err.println(line)
         }
       }
@@ -829,7 +829,7 @@ private[spark] object Utils extends Logging {
     val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
-        for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
+        for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
           System.err.println(line)
         }
       }
@@ -846,7 +846,7 @@ private[spark] object Utils extends Logging {
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
-      logError(s"Process $command exited with code $exitCode: ${output}")
+      logError(s"Process $command exited with code $exitCode: $output")
       throw new SparkException("Process " + command + " exited with code " + exitCode)
     }
     output.toString
@@ -884,7 +884,7 @@ private[spark] object Utils extends Logging {
    * @param skipClass Function that is used to exclude non-user-code classes.
    */
   def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
-    val trace = Thread.currentThread.getStackTrace()
+    val trace = Thread.currentThread.getStackTrace
       .filterNot { ste:StackTraceElement =>
         // When running under some profilers, the current stack trace might contain some bogus
         // frames. This is intended to ensure that we don't crash in these situations by
@@ -1114,7 +1114,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Returns a copy of the system properties that is thread-safe to iterator over. */
-  def getSystemProperties(): Map[String, String] = {
+  def getSystemProperties: Map[String, String] = {
     System.getProperties.clone().asInstanceOf[java.util.Properties].toMap[String, String]
   }
 
@@ -1162,10 +1162,10 @@ private[spark] object Utils extends Logging {
    * @param dst relative path for the destination
    */
   def symlink(src: File, dst: File) {
-    if (!src.isAbsolute()) {
+    if (!src.isAbsolute) {
       throw new IOException("Source must be absolute")
     }
-    if (dst.isAbsolute()) {
+    if (dst.isAbsolute) {
       throw new IOException("Destination must be relative")
     }
     var cmdSuffix = ""
@@ -1178,8 +1178,8 @@ private[spark] object Utils extends Logging {
       "ln -sf "
     }
     import scala.sys.process._
-    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_!
-      ProcessLogger(line => (logInfo(line)))
+    (linkCmd + src.getAbsolutePath + " " + dst.getPath + cmdSuffix) lines_!
+      ProcessLogger(line => logInfo(line))
   }
 
 

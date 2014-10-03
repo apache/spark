@@ -17,11 +17,11 @@
 
 package org.apache.spark.ui
 
-import scala.util.Random
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.util.Random
 
 /**
  * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
@@ -49,7 +49,7 @@ private[spark] object UIWorkloadGenerator {
     val sc = new SparkContext(conf)
 
     def setProperties(s: String) = {
-      if(schedulingMode == SchedulingMode.FAIR) {
+      if (schedulingMode == SchedulingMode.FAIR) {
         sc.setLocalProperty("spark.scheduler.pool", s)
       }
       sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
@@ -64,8 +64,8 @@ private[spark] object UIWorkloadGenerator {
       ("Single Shuffle", baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count),
       ("Entirely failed phase", baseData.map(x => throw new Exception).count),
       ("Partially failed phase", {
-        baseData.map{x =>
-          val probFailure = (4.0 / NUM_PARTITIONS)
+        baseData.map { x =>
+          val probFailure = 4.0 / NUM_PARTITIONS
           if (nextFloat() < probFailure) {
             throw new Exception("This is a task failure")
           }
@@ -73,8 +73,8 @@ private[spark] object UIWorkloadGenerator {
         }.count
       }),
       ("Partially failed phase (longer tasks)", {
-        baseData.map{x =>
-          val probFailure = (4.0 / NUM_PARTITIONS)
+        baseData.map { x =>
+          val probFailure = 4.0 / NUM_PARTITIONS
           if (nextFloat() < probFailure) {
             Thread.sleep(100)
             throw new Exception("This is a task failure")
@@ -98,7 +98,7 @@ private[spark] object UIWorkloadGenerator {
                 println("Job Failed: " + desc)
             }
           }
-        }.start
+        }.start()
         Thread.sleep(INTER_JOB_WAIT_MS)
       }
     }
