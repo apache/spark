@@ -1109,6 +1109,8 @@
 
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
 
+    <!-- NOTE: If you change the default versions for each profile,
+	 also corresponding section in project/SparkBuild.scala should be changed. -->
     <profile>
       <id>hadoop-0.23</id>
       <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->

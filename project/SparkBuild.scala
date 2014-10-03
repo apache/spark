@@ -99,6 +99,30 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
   }
 
+  // NOTE: If you change the default version for each profile,
+  // also corresponding section in pom.xml should be cnahged.
+  if (System.getProperty("hadoop.version") == null) {
+    val hadoopVersion = {
+      if (profiles.contains("hadoop-0.23")) {
+        "0.23.10"
+      } else if (profiles.contains("hadoop-2.2")) {
+        "2.2.0"
+      } else if (profiles.contains("hadoop-2.3")) {
+        "2.3.0"
+      } else if (profiles.contains("hadoop-2.4")) {
+        "2.4.0"
+      } else if (profiles.contains("mapr3")) {
+        "1.0.3-mapr-3.0.3"
+      } else if (profiles.contains("mapr4")) {
+        "2.3.0-mapr-4.0.0-FCS"
+      } else {
+        // Default
+        "1.0.4"
+      }
+    }
+    System.setProperty("hadoop.version", hadoopVersion)
+  }
+
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
     case Some(v) =>
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.split("=")).foreach(x => System.setProperty(x(0), x(1)))
@@ -263,7 +287,7 @@ object Assembly {
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
-      Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
+      System.getProperty("hadoop.version") + ".jar" },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
