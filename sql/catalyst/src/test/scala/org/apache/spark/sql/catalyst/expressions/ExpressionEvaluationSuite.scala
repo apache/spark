@@ -23,6 +23,8 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
 
+import scala.collection.immutable.HashSet
+
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
@@ -136,6 +138,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
   }
 
+  test("INSET") {
+    val hS = HashSet[Any]() + 1 + 2
+    val s = Seq(Literal(1), Literal(2))
+    val one = Literal(1)
+    val two = Literal(2)
+    val three = Literal(3)
+    checkEvaluation(InSet(one, hS, one +: s), true)
+    checkEvaluation(InSet(two, hS, two +: s), true)
+    checkEvaluation(InSet(three, hS, three +: s), false)
+    checkEvaluation(InSet(one, hS, one +: s) && InSet(two, hS, two +: s), true)
+  }
+ 
   test("MaxOf") {
     checkEvaluation(MaxOf(1, 2), 2)
     checkEvaluation(MaxOf(2, 1), 2)
