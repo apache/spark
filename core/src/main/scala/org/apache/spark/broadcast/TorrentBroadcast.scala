@@ -68,6 +68,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](
   /** Total number of blocks this broadcast variable contains. */
   private val numBlocks: Int = writeBlocks()
 
+  /**
+   * Embed the serialized object into Broadcast to reduce the overhead of RPC when the object
+   * is small enough.
+   */
+  private var embeddedBlock: Array[Byte] = _
+
   override protected def getValue() = _value
 
   /**
@@ -82,12 +88,17 @@ private[spark] class TorrentBroadcast[T: ClassTag](
 
     if (!isLocal) {
       val blocks = TorrentBroadcast.blockifyObject(_value)
-      blocks.zipWithIndex.foreach { case (block, i) =>
-        SparkEnv.get.blockManager.putBytes(
-          BroadcastBlockId(id, "piece" + i),
-          block,
-          StorageLevel.MEMORY_AND_DISK_SER,
-          tellMaster = true)
+      if (blocks.size == 1 && blocks(0).limit < TorrentBroadcast.EMBEDDED_SIZE) {
+        // embed small object inside Broadcast to avoid RPC
+        embeddedBlock = blocks(0).array()
+      } else {
+        blocks.zipWithIndex.foreach { case (block, i) =>
+          SparkEnv.get.blockManager.putBytes(
+            BroadcastBlockId(id, "piece" + i),
+            block,
+            StorageLevel.MEMORY_AND_DISK_SER,
+            tellMaster = true)
+        }
       }
       blocks.length
     } else {
@@ -100,6 +111,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     // Fetch chunks of data. Note that all these chunks are stored in the BlockManager and reported
     // to the driver, so other executors can pull these chunks from this executor as well.
     val blocks = new Array[ByteBuffer](numBlocks)
+    if (embeddedBlock != null) {
+      // get blocks from embedded one
+      blocks(0) = ByteBuffer.wrap(embeddedBlock)
+      embeddedBlock = null  // release
+      return blocks
+    }
     val bm = SparkEnv.get.blockManager
 
     for (pid <- Random.shuffle(Seq.range(0, numBlocks))) {
@@ -122,7 +139,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
               tellMaster = true)
 
           case None =>
-            throw new SparkException("Failed to get " + pieceId + " of " + broadcastId)
+            throw new IOException("Failed to get " + pieceId + " of " + broadcastId)
         }
       }
       // If we get here, the option is defined.
@@ -161,6 +178,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](
           _value = x.asInstanceOf[T]
 
         case None =>
+          if (numBlocks == 0) {
+            throw new IOException("Broadcast is lost locally")
+          }
+
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime()
           val blocks = readBlocks()
@@ -181,6 +202,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
 private object TorrentBroadcast extends Logging {
   /** Size of each block. Default value is 4MB. */
   private lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
+  private lazy val EMBEDDED_SIZE = conf.getInt("spark.broadcast.embeddedSize", 4) * 1024
   private var initialized = false
   private var conf: SparkConf = null
   private var compress: Boolean = false
