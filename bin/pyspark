@@ -52,9 +52,19 @@ fi
 
 # Figure out which Python executable to use
 if [[ -z "$PYSPARK_PYTHON" ]]; then
-  PYSPARK_PYTHON="python"
+  if [[ "$IPYTHON" = "1" || -n "$IPYTHON_OPTS" ]]; then
+    # for backward compatibility
+    PYSPARK_PYTHON="ipython"
+  else
+    PYSPARK_PYTHON="python"
+  fi
 fi
 export PYSPARK_PYTHON
+
+if [[ -z "$PYSPARK_PYTHON_OPTS" && -n "$IPYTHON_OPTS" ]]; then
+  # for backward compatibility
+  PYSPARK_PYTHON_OPTS="$IPYTHON_OPTS"
+fi
 
 # Add the PySpark classes to the Python path:
 export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"
@@ -63,11 +73,6 @@ export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"
 export PYTHONSTARTUP="$FWDIR/python/pyspark/shell.py"
-
-# If IPython options are specified, assume user wants to run IPython
-if [[ -n "$IPYTHON_OPTS" ]]; then
-  IPYTHON=1
-fi
 
 # Build up arguments list manually to preserve quotes and backslashes.
 # We export Spark submit arguments as an environment variable because shell.py must run as a
@@ -106,10 +111,5 @@ if [[ "$1" =~ \.py$ ]]; then
 else
   # PySpark shell requires special handling downstream
   export PYSPARK_SHELL=1
-  # Only use ipython if no command line arguments were provided [SPARK-1134]
-  if [[ "$IPYTHON" = "1" ]]; then
-    exec ${PYSPARK_PYTHON:-ipython} $IPYTHON_OPTS
-  else
-    exec "$PYSPARK_PYTHON"
-  fi
+  exec "$PYSPARK_PYTHON" $PYSPARK_PYTHON_OPTS
 fi
