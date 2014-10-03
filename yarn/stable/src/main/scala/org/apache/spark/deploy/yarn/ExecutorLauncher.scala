@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.net.Socket
-import java.util.{List => JList}
 import scala.collection.JavaConversions._
 import scala.util._
 import org.apache.hadoop.conf.Configuration
@@ -36,7 +35,6 @@ import org.apache.spark.scheduler.SplitInfo
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 /**
  * An application master that allocates executors on behalf of a driver that is running outside
@@ -148,7 +146,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   // add the yarn amIpFilter that Yarn requires for properly securing the UI
   private def addAmIpFilter() {
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-    val amFilter = getAmIpFilterParams(yarnConf, proxyBase)
+    val amFilter = YarnStableUtils.getAmIpFilterParams(yarnConf, proxyBase)
     val amFilterName = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     actor ! AddWebUIFilter(amFilterName, amFilter, proxyBase)
   }
@@ -261,29 +259,6 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
         amClient.unregisterApplicationMaster(status, appMessage, trackingUrl)
       }
       isFinished = true
-    }
-  }
-
-  private def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String) = {
-    // Figure out which scheme Yarn is using. Note the method seems to have been added after 2.2,
-    // so not all stable releases have it.
-    val prefix = Try(classOf[WebAppUtils].getMethod("getHttpSchemePrefix", classOf[Configuration])
-        .invoke(null, conf).asInstanceOf[String]).getOrElse("http://")
-
-    // If running a new enough Yarn, use the HA-aware API for retrieving the RM addresses.
-    try {
-      val method = classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
-        classOf[Configuration])
-      val proxies = method.invoke(null, conf).asInstanceOf[JList[String]]
-      val hosts = proxies.map { proxy => proxy.split(":")(0) }
-      val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
-      Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
-    } catch {
-      case e: NoSuchMethodException =>
-        val proxy = WebAppUtils.getProxyHostAndPort(conf)
-        val parts = proxy.split(":")
-        val uriBase = prefix + proxy + proxyBase
-        Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
     }
   }
 
