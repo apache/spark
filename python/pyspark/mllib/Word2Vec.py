@@ -64,8 +64,14 @@ class Word2VecModel(object):
         Note: local use only
         TODO: make findSynonyms usable in RDD operations from python side
         """
-        jlist = self._java_model.findSynonyms(x, num)
-        words, similarity = PickleSerializer().loads(str(self._sc._jvm.SerDe.dumps(jlist)))
+        ser = PickleSerializer()
+        if type(x) == str:
+            jlist = self._java_model.findSynonyms(x, num)
+        else:
+            bytes = bytearray(ser.dumps(_convert_to_vector(x)))
+            vec = self._sc._jvm.SerDe.loads(bytes)
+            jlist = self._java_model.findSynonyms(vec, num)
+        words, similarity = ser.loads(str(self._sc._jvm.SerDe.dumps(jlist)))
         return zip(words, similarity)
 
 
@@ -100,6 +106,13 @@ class Word2Vec(object):
     >>> vec = model.transform("a")
     >>> len(vec)
     10
+    >>> syms = model.findSynonyms(vec, 2)
+    >>> str(syms[0][0])
+    'b'
+    >>> str(syms[1][0])
+    'c'
+    >>> len(syms)
+    2
     """
     def __init__(self):
         """
