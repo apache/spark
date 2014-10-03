@@ -21,6 +21,7 @@ import java.net.{InetSocketAddress, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.language.implicitConversions
 import scala.xml.Node
 
 import org.eclipse.jetty.server.Server
