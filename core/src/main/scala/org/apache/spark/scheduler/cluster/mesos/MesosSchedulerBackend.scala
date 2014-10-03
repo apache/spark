@@ -124,15 +124,24 @@ private[spark] class MesosSchedulerBackend(
       command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
+    val cpus = Resource.newBuilder()
+      .setName("cpus")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Value.Scalar.newBuilder()
+        .setValue(scheduler.CPUS_PER_TASK).build())
+      .build()
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(sc.executorMemory).build())
+      .setScalar(
+        Value.Scalar.newBuilder()
+          .setValue(MemoryUtils.calculateTotalMemory(sc)).build())
       .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
+      .addResources(cpus)
       .addResources(memory)
       .build()
   }
@@ -204,18 +213,31 @@ private[spark] class MesosSchedulerBackend(
         val offerableWorkers = new ArrayBuffer[WorkerOffer]
         val offerableIndices = new HashMap[String, Int]
 
-        def enoughMemory(o: Offer) = {
+        def sufficientOffer(o: Offer) = {
           val mem = getResource(o.getResourcesList, "mem")
+          val cpus = getResource(o.getResourcesList, "cpus")
           val slaveId = o.getSlaveId.getValue
-          mem >= sc.executorMemory || slaveIdsWithExecutors.contains(slaveId)
+          (mem >= MemoryUtils.calculateTotalMemory(sc) &&
+            // need at least 1 for executor, 1 for task
+            cpus >= 2 * scheduler.CPUS_PER_TASK) ||
+            (slaveIdsWithExecutors.contains(slaveId) &&
+              cpus >= scheduler.CPUS_PER_TASK)
         }
 
-        for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
-          offerableIndices.put(offer.getSlaveId.getValue, index)
+        for ((offer, index) <- offers.zipWithIndex if sufficientOffer(offer)) {
+          val slaveId = offer.getSlaveId.getValue
+          offerableIndices.put(slaveId, index)
+          val cpus = if (slaveIdsWithExecutors.contains(slaveId)) {
+            getResource(offer.getResourcesList, "cpus").toInt
+          } else {
+            // If the executor doesn't exist yet, subtract CPU for executor
+            getResource(offer.getResourcesList, "cpus").toInt -
+              scheduler.CPUS_PER_TASK
+          }
           offerableWorkers += new WorkerOffer(
             offer.getSlaveId.getValue,
             offer.getHostname,
-            getResource(offer.getResourcesList, "cpus").toInt)
+            cpus)
         }
 
         // Call into the TaskSchedulerImpl
