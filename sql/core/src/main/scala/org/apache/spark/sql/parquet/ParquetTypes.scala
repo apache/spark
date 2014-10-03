@@ -59,6 +59,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.INT96 =>
         // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
         sys.error("Potential loss of precision: cannot convert INT96")
+      case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => 
+        FixedLenByteArrayType(parquetType.getTypeLength)
       case _ => sys.error(
         s"Unsupported parquet datatype $parquetType")
     }
@@ -195,6 +197,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     case ShortType => Some(ParquetPrimitiveTypeName.INT32, None)
     case ByteType => Some(ParquetPrimitiveTypeName.INT32, None)
     case LongType => Some(ParquetPrimitiveTypeName.INT64, None)
+    case FixedLenByteArrayType(_) => Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, None)
     case _ => None
   }
 
@@ -246,9 +249,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
         if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
     val primitiveType = fromPrimitiveDataType(ctype)
+    val typeLength = ctype match {
+      case FixedLenByteArrayType(_) => ctype.asInstanceOf[FixedLenByteArrayType].length
+      case _ => 0
+    }
     primitiveType.map {
       case (primitiveType, originalType) =>
-        new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
+        new ParquetPrimitiveType(repetition, primitiveType, typeLength, name, originalType.orNull)
     }.getOrElse {
       ctype match {
         case ArrayType(elementType, false) => {
