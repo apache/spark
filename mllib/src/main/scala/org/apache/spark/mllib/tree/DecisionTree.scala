@@ -519,13 +519,14 @@ object DecisionTree extends Serializable with Logging {
      * @return
      */
     def getNodeToFeatures(treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]])
-      : Option[Map[Int, Option[Array[Int]]]] = if (metadata.subsamplingFeatures) {
+      : Option[Map[Int, Array[Int]]] = if (!metadata.subsamplingFeatures) {
       None
     } else {
-      val mutableNodeToFeatures = new mutable.HashMap[Int, Option[Array[Int]]]()
+      val mutableNodeToFeatures = new mutable.HashMap[Int, Array[Int]]()
       treeToNodeToIndexInfo.values.foreach { nodeIdToNodeInfo =>
         nodeIdToNodeInfo.values.foreach { nodeIndexInfo =>
-          mutableNodeToFeatures(nodeIndexInfo.nodeIndexInGroup) = nodeIndexInfo.featureSubset
+          assert(nodeIndexInfo.featureSubset.isDefined)
+          mutableNodeToFeatures(nodeIndexInfo.nodeIndexInGroup) = nodeIndexInfo.featureSubset.get
         }
       }
       Some(mutableNodeToFeatures.toMap)
@@ -547,7 +548,9 @@ object DecisionTree extends Serializable with Logging {
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
         val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
-          val featuresForNode = nodeToFeaturesBc.value.flatMap(_.apply(nodeIndex))
+          val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
+            Some(nodeToFeatures(nodeIndex))
+          }
           new DTStatsAggregator(metadata, featuresForNode)
         }
 
@@ -559,7 +562,9 @@ object DecisionTree extends Serializable with Logging {
         nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
       }.reduceByKey((a, b) => a.merge(b))
         .map { case (nodeIndex, aggStats) =>
-          val featuresForNode = nodeToFeaturesBc.value.flatMap(_.apply(nodeIndex))
+          val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
+            Some(nodeToFeatures(nodeIndex))
+          }
 
           // find best split for each node
           val (split: Split, stats: InformationGainStats, predict: Predict) =

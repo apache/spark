@@ -88,7 +88,7 @@ private[tree] class DTStatsAggregator(
 
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
-   * @param FeatureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   * @param featureOffset  For ordered features, this is a pre-computed (node, feature) offset
    *                           from [[getFeatureOffset]].
    *                           For unordered features, this is a pre-computed
    *                           (node, feature, left/right child) offset from
