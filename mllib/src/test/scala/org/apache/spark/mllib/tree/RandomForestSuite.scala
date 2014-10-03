@@ -145,6 +145,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
         assert(nodesForGroup.size === numTrees, failString)
         assert(nodesForGroup.values.forall(_.size == 1), failString) // 1 node per tree
+
         if (numFeaturesPerNode == numFeatures) {
           // featureSubset values should all be None
           assert(treeToNodeToIndexInfo.values.forall(_.values.forall(_.featureSubset.isEmpty)),
