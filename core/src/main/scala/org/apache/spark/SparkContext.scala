@@ -310,8 +310,9 @@ class SparkContext(config: SparkConf) extends Logging {
   conf.set("spark.app.id", appId)
 
   val metricsSystem = env.metricsSystem
-  metricsSystem.registerSources()
-  metricsSystem.registerSinks()
+
+  // The metrics system for Driver need to be set spark.app.id to app ID.
+  // So it should start after we get app ID from the task scheduler and set spark.app.id.
   metricsSystem.start()
 
   // Optionally log Spark events
@@ -1542,7 +1543,7 @@ object SparkContext extends Logging {
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, sc.eventLogDir)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         scheduler
 
@@ -1559,7 +1560,7 @@ object SparkContext extends Logging {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, sc.eventLogDir)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()

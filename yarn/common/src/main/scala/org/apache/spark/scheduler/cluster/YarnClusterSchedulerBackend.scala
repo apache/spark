@@ -49,11 +49,9 @@ private[spark] class YarnClusterSchedulerBackend(
   }
 
   override def applicationId(): String =
-    /**
-     *  In YARN Cluster mode, spark.yarn.app.id is expect to be set
-     *  before user application is launched.
-     *  So, if spark.yarn.app.id is not set, it is something wrong.
-     */
+    // In YARN Cluster mode, spark.yarn.app.id is expect to be set
+    // before user application is launched.
+    // So, if spark.yarn.app.id is not set, it is something wrong.
     sc.getConf.getOption("spark.yarn.app.id").map(_.toString).getOrElse {
       logError("Application ID is not set.")
       super.applicationId

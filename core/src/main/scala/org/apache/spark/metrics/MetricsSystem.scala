@@ -85,6 +85,8 @@ private[spark] class MetricsSystem private (
   metricsConfig.initialize()
 
   def start() {
+    registerSources()
+    registerSinks()
     sinks.foreach(_.start)
   }
 
@@ -160,7 +162,7 @@ private[spark] class MetricsSystem private (
         val source = Class.forName(classPath).newInstance()
         registerSource(source.asInstanceOf[Source])
       } catch {
-        case e: Exception => logError("Source class " + classPath + " cannot be instantialized", e)
+        case e: Exception => logError("Source class " + classPath + " cannot be instantiated", e)
       }
     }
   }
