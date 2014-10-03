@@ -36,13 +36,13 @@ class StorageStatusListenerSuite extends FunSuite {
 
     // Block manager add
     assert(listener.executorIdToStorageStatus.size === 0)
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm1, 1000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     assert(listener.executorIdToStorageStatus.size === 1)
     assert(listener.executorIdToStorageStatus.get("big").isDefined)
     assert(listener.executorIdToStorageStatus("big").blockManagerId === bm1)
     assert(listener.executorIdToStorageStatus("big").maxMem === 1000L)
     assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm2, 2000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm2, 2000L))
     assert(listener.executorIdToStorageStatus.size === 2)
     assert(listener.executorIdToStorageStatus.get("fat").isDefined)
     assert(listener.executorIdToStorageStatus("fat").blockManagerId === bm2)
@@ -50,11 +50,11 @@ class StorageStatusListenerSuite extends FunSuite {
     assert(listener.executorIdToStorageStatus("fat").numBlocks === 0)
 
     // Block manager remove
-    listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(bm1))
+    listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(1L, bm1))
     assert(listener.executorIdToStorageStatus.size === 1)
     assert(!listener.executorIdToStorageStatus.get("big").isDefined)
     assert(listener.executorIdToStorageStatus.get("fat").isDefined)
-    listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(bm2))
+    listener.onBlockManagerRemoved(SparkListenerBlockManagerRemoved(1L, bm2))
     assert(listener.executorIdToStorageStatus.size === 0)
     assert(!listener.executorIdToStorageStatus.get("big").isDefined)
     assert(!listener.executorIdToStorageStatus.get("fat").isDefined)
@@ -62,8 +62,8 @@ class StorageStatusListenerSuite extends FunSuite {
 
   test("task end without updated blocks") {
     val listener = new StorageStatusListener
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm1, 1000L))
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm2, 2000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm2, 2000L))
     val taskMetrics = new TaskMetrics
 
     // Task end with no updated blocks
@@ -79,8 +79,8 @@ class StorageStatusListenerSuite extends FunSuite {
 
   test("task end with updated blocks") {
     val listener = new StorageStatusListener
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm1, 1000L))
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm2, 2000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm2, 2000L))
     val taskMetrics1 = new TaskMetrics
     val taskMetrics2 = new TaskMetrics
     val block1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.DISK_ONLY, 0L, 100L, 0L))
@@ -128,7 +128,7 @@ class StorageStatusListenerSuite extends FunSuite {
 
   test("unpersist RDD") {
     val listener = new StorageStatusListener
-    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(bm1, 1000L))
+    listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     val taskMetrics1 = new TaskMetrics
     val taskMetrics2 = new TaskMetrics
     val block1 = (RDDBlockId(1, 1), BlockStatus(StorageLevel.DISK_ONLY, 0L, 100L, 0L))

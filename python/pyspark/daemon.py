@@ -25,6 +25,7 @@ import socket
 import sys
 import traceback
 import time
+import gc
 from errno import EINTR, ECHILD, EAGAIN
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGPROF
@@ -62,10 +63,6 @@ def worker(sock):
     """
     Called by a worker process after the fork().
     """
-    # Redirect stdout to stderr
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr  # The sys.stdout object is different from file descriptor 1
-
     signal.signal(SIGHUP, SIG_DFL)
     signal.signal(SIGCHLD, SIG_DFL)
     signal.signal(SIGTERM, SIG_DFL)
@@ -107,17 +104,13 @@ def worker(sock):
     resource.setrlimit(resource.RLIMIT_AS, (soft_limit, -1))
 
     try:
-        # Acknowledge that the fork was successful
-        write_int(os.getpid(), outfile)
-        outfile.flush()
         worker_main(infile, outfile)
     except SystemExit as exc:
-        exit_code = exc.code
+        exit_code = compute_real_exit_code(exc.code)
     finally:
         outfile.flush()
-        # The Scala side will close the socket upon task completion.
-        waitSocketClose(sock)
-        os._exit(compute_real_exit_code(exit_code))
+        if exit_code:
+            os._exit(exit_code)
 
 
 # Cleanup zombie children
@@ -141,6 +134,7 @@ def manager():
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
     write_int(listen_port, sys.stdout)
+    sys.stdout.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
@@ -153,8 +147,9 @@ def manager():
     signal.signal(SIGTERM, handle_sigterm)  # Gracefully exit on SIGTERM
     signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
 
+    reuse = os.environ.get("SPARK_REUSE_WORKER")
+
     # Initialization complete
-    sys.stdout.close()
     try:
         while True:
             try:
@@ -206,7 +201,19 @@ def manager():
                     # in child process
                     listen_sock.close()
                     try:
-                        worker(sock)
+                        # Acknowledge that the fork was successful
+                        outfile = sock.makefile("w")
+                        write_int(os.getpid(), outfile)
+                        outfile.flush()
+                        outfile.close()
+                        while True:
+                            worker(sock)
+                            if not reuse:
+                                # wait for closing
+                                while sock.recv(1024):
+                                    pass
+                                break
+                            gc.collect()
                     except:
                         traceback.print_exc()
                         os._exit(1)

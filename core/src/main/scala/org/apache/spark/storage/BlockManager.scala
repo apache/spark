@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -58,18 +60,14 @@ private[spark] class BlockManager(
     defaultSerializer: Serializer,
     maxMemory: Long,
     val conf: SparkConf,
-    securityManager: SecurityManager,
     mapOutputTracker: MapOutputTracker,
-    shuffleManager: ShuffleManager)
-  extends BlockDataProvider with Logging {
+    shuffleManager: ShuffleManager,
+    blockTransferService: BlockTransferService)
+  extends BlockDataManager with Logging {
 
-  private val port = conf.getInt("spark.blockManager.port", 0)
-  val shuffleBlockManager = new ShuffleBlockManager(this, shuffleManager)
-  val diskBlockManager = new DiskBlockManager(shuffleBlockManager, conf)
-  val connectionManager =
-    new ConnectionManager(port, conf, securityManager, "Connection manager for block manager")
+  blockTransferService.init(this)
 
-  implicit val futureExecContext = connectionManager.futureExecContext
+  val diskBlockManager = new DiskBlockManager(this, conf)
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
@@ -83,17 +81,13 @@ private[spark] class BlockManager(
     val tachyonStorePath = s"$storeDir/$appFolderName/${this.executorId}"
     val tachyonMaster = conf.get("spark.tachyonStore.url",  "tachyon://localhost:19998")
     val tachyonBlockManager =
-      new TachyonBlockManager(shuffleBlockManager, tachyonStorePath, tachyonMaster)
+      new TachyonBlockManager(this, tachyonStorePath, tachyonMaster)
     tachyonInitialized = true
     new TachyonStore(this, tachyonBlockManager)
   }
 
   val blockManagerId = BlockManagerId(
-    executorId, connectionManager.id.host, connectionManager.id.port)
-
-  // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
-  // for receiving shuffle outputs)
-  val maxBytesInFlight = conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024
+    executorId, blockTransferService.hostName, blockTransferService.port)
 
   // Whether to compress broadcast variables that are stored
   private val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
@@ -136,11 +130,11 @@ private[spark] class BlockManager(
       master: BlockManagerMaster,
       serializer: Serializer,
       conf: SparkConf,
-      securityManager: SecurityManager,
       mapOutputTracker: MapOutputTracker,
-      shuffleManager: ShuffleManager) = {
+      shuffleManager: ShuffleManager,
+      blockTransferService: BlockTransferService) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, securityManager, mapOutputTracker, shuffleManager)
+      conf, mapOutputTracker, shuffleManager, blockTransferService)
   }
 
   /**
@@ -149,7 +143,6 @@ private[spark] class BlockManager(
    */
   private def initialize(): Unit = {
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
-    BlockManagerWorker.startBlockManagerWorker(this)
   }
 
   /**
@@ -212,18 +205,31 @@ private[spark] class BlockManager(
     }
   }
 
-  override def getBlockData(blockId: String): Either[FileSegment, ByteBuffer] = {
+  /**
+   * Interface to get local block data.
+   *
+   * @return Some(buffer) if the block exists locally, and None if it doesn't.
+   */
+  override def getBlockData(blockId: String): Option[ManagedBuffer] = {
     val bid = BlockId(blockId)
     if (bid.isShuffle) {
-      Left(diskBlockManager.getBlockLocation(bid))
+      Some(shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId]))
     } else {
       val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
-        Right(blockBytesOpt.get)
+        val buffer = blockBytesOpt.get
+        Some(new NioByteBufferManagedBuffer(buffer))
       } else {
-        throw new BlockNotFoundException(blockId)
+        None
       }
     }
+  }
+
+  /**
+   * Put the block locally, using the given storage level.
+   */
+  override def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit = {
+    putBytes(BlockId(blockId), data.nioByteBuffer(), level)
   }
 
   /**
@@ -333,10 +339,10 @@ private[spark] class BlockManager(
    * shuffle blocks. It is safe to do so without a lock on block info since disk store
    * never deletes (recent) items.
    */
-  def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    diskStore.getValues(blockId, serializer).orElse {
-      throw new BlockException(blockId, s"Block $blockId not found on disk, though it should be")
-    }
+  def getLocalShuffleFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+    val buf = shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+    val is = wrapForCompression(blockId, buf.inputStream())
+    Some(serializer.newInstance().deserializeStream(is).asIterator)
   }
 
   /**
@@ -355,7 +361,8 @@ private[spark] class BlockManager(
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
-      diskStore.getBytes(blockId) match {
+      val shuffleBlockManager = shuffleManager.shuffleBlockManager
+      shuffleBlockManager.getBytes(blockId.asInstanceOf[ShuffleBlockId]) match {
         case Some(bytes) =>
           Some(bytes)
         case None =>
@@ -506,8 +513,9 @@ private[spark] class BlockManager(
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
-      val data = BlockManagerWorker.syncGetBlock(
-        GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
+      val data = blockTransferService.fetchBlockSync(
+        loc.host, loc.port, blockId.toString).nioByteBuffer()
+
       if (data != null) {
         if (asBlockResult) {
           return Some(new BlockResult(
@@ -539,22 +547,6 @@ private[spark] class BlockManager(
       return remote
     }
     None
-  }
-
-  /**
-   * Get multiple blocks from local and remote block manager using their BlockManagerIds. Returns
-   * an Iterator of (block ID, value) pairs so that clients may handle blocks in a pipelined
-   * fashion as they're received. Expects a size in bytes to be provided for each block fetched,
-   * so that we can control the maxMegabytesInFlight for the fetch.
-   */
-  def getMultiple(
-      blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer,
-      readMetrics: ShuffleReadMetrics): BlockFetcherIterator = {
-    val iter = new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer,
-      readMetrics)
-    iter.initialize()
-    iter
   }
 
   def putIterator(
@@ -809,12 +801,15 @@ private[spark] class BlockManager(
       data.rewind()
       logDebug(s"Try to replicate $blockId once; The size of the data is ${data.limit()} Bytes. " +
         s"To node: $peer")
-      val putBlock = PutBlock(blockId, data, tLevel)
-      val cmId = new ConnectionManagerId(peer.host, peer.port)
-      val syncPutBlockSuccess = BlockManagerWorker.syncPutBlock(putBlock, cmId)
-      if (!syncPutBlockSuccess) {
-        logError(s"Failed to call syncPutBlock to $peer")
+
+      try {
+        blockTransferService.uploadBlockSync(
+          peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
+      } catch {
+        case e: Exception =>
+          logError(s"Failed to replicate block to $peer", e)
       }
+
       logDebug("Replicating BlockId %s once used %fs; The size of the data is %d bytes."
         .format(blockId, (System.nanoTime - start) / 1e6, data.limit()))
     }
@@ -1044,8 +1039,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    connectionManager.stop()
-    shuffleBlockManager.stop()
+    blockTransferService.stop()
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

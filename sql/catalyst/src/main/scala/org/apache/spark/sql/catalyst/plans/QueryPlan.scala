@@ -50,11 +50,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpressionDown(e: Expression) = {
       val newE = e.transformDown(rule)
-      if (newE.id != e.id && newE != e) {
+      if (newE.fastEquals(e)) {
+        e
+      } else {
         changed = true
         newE
-      } else {
-        e
       }
     }
 
@@ -82,11 +82,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpressionUp(e: Expression) = {
       val newE = e.transformUp(rule)
-      if (newE.id != e.id && newE != e) {
+      if (newE.fastEquals(e)) {
+        e
+      } else {
         changed = true
         newE
-      } else {
-        e
       }
     }
 

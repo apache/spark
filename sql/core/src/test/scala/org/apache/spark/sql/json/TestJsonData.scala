@@ -82,4 +82,65 @@ object TestJsonData {
       """{"c":[33, 44]}""" ::
       """{"d":{"field":true}}""" ::
       """{"e":"str"}""" :: Nil)
+
+  val complexFieldAndType2 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
+          "complexArrayOfStruct": [
+          {
+            "field1": [
+            {
+              "inner1": "str1"
+            },
+            {
+              "inner2": ["str2", "str22"]
+            }],
+            "field2": [[1, 2], [3, 4]]
+          },
+          {
+            "field1": [
+            {
+              "inner2": ["str3", "str33"]
+            },
+            {
+              "inner1": "str4"
+            }],
+            "field2": [[5, 6], [7, 8]]
+          }],
+          "arrayOfArray1": [
+          [
+            [5]
+          ],
+          [
+            [6, 7],
+            [8]
+          ]],
+          "arrayOfArray2": [
+          [
+            [
+              {
+                "inner1": "str1"
+              }
+            ]
+          ],
+          [
+            [],
+            [
+              {"inner2": ["str3", "str33"]},
+              {"inner2": ["str4"], "inner1": "str11"}
+            ]
+          ],
+          [
+            [
+              {"inner3": [[{"inner4": 2}]]}
+            ]
+          ]]
+      }""" :: Nil)
+
+  val jsonArray =
+    TestSQLContext.sparkContext.parallelize(
+      """[{"a":"str_a_1"}]""" ::
+      """[{"a":"str_a_2"}, {"b":"str_b_3"}]""" ::
+      """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
+      """[]""" :: Nil)
 }

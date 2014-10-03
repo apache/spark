@@ -243,8 +243,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         pruneFilterProject(
           projectList,
           filters,
-          identity[Seq[Expression]], // No filters are pushed down.
-          InMemoryColumnarTableScan(_, mem)) :: Nil
+          identity[Seq[Expression]], // All filters still need to be evaluated.
+          InMemoryColumnarTableScan(_,  filters, mem)) :: Nil
       case _ => Nil
     }
   }
@@ -305,6 +305,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
       case logical.CacheCommand(tableName, cache) =>
         Seq(execution.CacheCommand(tableName, cache)(context))
+      case logical.CacheTableAsSelectCommand(tableName, plan) =>
+        Seq(execution.CacheTableAsSelectCommand(tableName, plan))
       case _ => Nil
     }
   }

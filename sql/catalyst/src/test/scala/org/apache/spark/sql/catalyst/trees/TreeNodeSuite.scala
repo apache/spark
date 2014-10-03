@@ -51,7 +51,10 @@ class TreeNodeSuite extends FunSuite {
     val after = before transform { case Literal(5, _) => Literal(1)}
 
     assert(before === after)
-    assert(before.map(_.id) === after.map(_.id))
+    // Ensure that the objects after are the same objects before the transformation.
+    before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach {
+      case (b, a) => assert(b eq a)
+    }
   }
 
   test("collect") {

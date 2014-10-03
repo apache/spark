@@ -21,19 +21,19 @@
 
 # resolve links - $0 may be a softlink
 this="${BASH_SOURCE-$0}"
-common_bin=$(cd -P -- "$(dirname -- "$this")" && pwd -P)
+common_bin="$(cd -P -- "$(dirname -- "$this")" && pwd -P)"
 script="$(basename -- "$this")"
 this="$common_bin/$script"
 
 # convert relative path to absolute path
-config_bin=`dirname "$this"`
-script=`basename "$this"`
-config_bin=`cd "$config_bin"; pwd`
+config_bin="`dirname "$this"`"
+script="`basename "$this"`"
+config_bin="`cd "$config_bin"; pwd`"
 this="$config_bin/$script"
 
-export SPARK_PREFIX=`dirname "$this"`/..
-export SPARK_HOME=${SPARK_PREFIX}
+export SPARK_PREFIX="`dirname "$this"`"/..
+export SPARK_HOME="${SPARK_PREFIX}"
 export SPARK_CONF_DIR="$SPARK_HOME/conf"
 # Add the PySpark classes to the PYTHONPATH:
-export PYTHONPATH=$SPARK_HOME/python:$PYTHONPATH
-export PYTHONPATH=$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH
+export PYTHONPATH="$SPARK_HOME/python:$PYTHONPATH"
+export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"

@@ -162,7 +162,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
 
   // always add the current user and SPARK_USER to the viewAcls
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
-    Option(System.getenv("SPARK_USER")).getOrElse(""))
+    Option(System.getenv("SPARK_USER")).getOrElse("")).filter(!_.isEmpty)
 
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
@@ -294,7 +294,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    if (aclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
+    !aclsEnabled || user == null || viewAcls.contains(user)
   }
 
   /**
@@ -309,7 +309,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    if (aclsEnabled() && (user != null) && (!modifyAcls.contains(user))) false else true
+    !aclsEnabled || user == null || modifyAcls.contains(user)
   }
 
 

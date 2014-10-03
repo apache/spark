@@ -18,17 +18,19 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.parquet.{ParquetRelation, ParquetTableScan}
+import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
+import org.apache.spark.sql.hive
+import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
 import scala.collection.JavaConversions._
 
@@ -53,7 +55,7 @@ private[hive] trait HiveStrategies {
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: SchemaRDD) {
       def lowerCase =
-        new SchemaRDD(s.sqlContext, LowerCaseSchema(s.logicalPlan))
+        new SchemaRDD(s.sqlContext, s.logicalPlan)
 
       def addPartitioningAttributes(attrs: Seq[Attribute]) =
         new SchemaRDD(
@@ -163,6 +165,16 @@ private[hive] trait HiveStrategies {
              InMemoryRelation(_, _, _,
                HiveTableScan(_, table, _)), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.CreateTableAsSelect(database, tableName, child) =>
+        val query = planLater(child)
+        CreateTableAsSelect(
+          database.get,
+          tableName,
+          query,
+          InsertIntoHiveTable(_: MetastoreRelation, 
+            Map(), 
+            query, 
+            true)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
@@ -193,12 +205,13 @@ private[hive] trait HiveStrategies {
 
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.NativeCommand(sql) =>
-        NativeCommand(sql, plan.output)(context) :: Nil
+      case logical.NativeCommand(sql) => NativeCommand(sql, plan.output)(context) :: Nil
 
-      case DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
+      case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
-      case AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
+      case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
+      case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 
       case describe: logical.DescribeCommand =>
         val resolvedTable = context.executePlan(describe.table).analyzed

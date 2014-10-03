@@ -21,10 +21,10 @@ import java.io.{ByteArrayOutputStream, InputStream}
 import java.net.{URI, URL, URLEncoder}
 import java.util.concurrent.{Executors, ExecutorService}
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 import org.apache.spark.util.ParentClassLoader
 
@@ -36,7 +36,7 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
  * used to load classes defined by the interpreter when the REPL is used.
  * Allows the user to specify if user class path should be first
  */
-class ExecutorClassLoader(classUri: String, parent: ClassLoader,
+class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader {
   val uri = new URI(classUri)
   val directory = uri.getPath
@@ -48,7 +48,7 @@ class ExecutorClassLoader(classUri: String, parent: ClassLoader,
     if (uri.getScheme() == "http") {
       null
     } else {
-      FileSystem.get(uri, new Configuration())
+      FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
     }
   }
 

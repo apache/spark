@@ -17,16 +17,15 @@
 
 package org.apache.spark.deploy.yarn
 
+import scala.util.control.NonFatal
+
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
-import scala.util.Try
-
 import akka.actor._
 import akka.remote._
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
@@ -35,6 +34,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.AddWebUIFilter
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -48,7 +48,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   // optimal as more containers are available. Might need to handle this better.
 
   private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = new YarnConfiguration(new Configuration())
+  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    .asInstanceOf[YarnConfiguration]
   private val isDriver = args.userClass != null
 
   // Default to numExecutors * 2, with minimum of 3
@@ -57,6 +58,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   @volatile private var finished = false
   @volatile private var finalStatus = FinalApplicationStatus.UNDEFINED
+  @volatile private var userClassThread: Thread = _
 
   private var reporterThread: Thread = _
   private var allocator: YarnAllocator = _
@@ -69,6 +71,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
   final def run(): Int = {
+    val appAttemptId = client.getAttemptId()
+
     if (isDriver) {
       // Set the web ui port to be ephemeral for yarn so we don't conflict with
       // other spark processes running on the same box
@@ -76,9 +80,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
       // Set the master property to match the requested mode.
       System.setProperty("spark.master", "yarn-cluster")
+
+      // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+      System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
     }
 
-    logInfo("ApplicationAttemptId: " + client.getAttemptId())
+    logInfo("ApplicationAttemptId: " + appAttemptId)
 
     val cleanupHook = new Runnable {
       override def run() {
@@ -100,8 +107,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       }
     }
-    // Use priority 30 as it's higher than HDFS. It's the same priority MapReduce is using.
-    ShutdownHookManager.get().addShutdownHook(cleanupHook, 30)
+
+    // Use higher priority than FileSystem.
+    assert(ApplicationMaster.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager
+      .get().addShutdownHook(cleanupHook, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
 
     // Call this to force generation of secret so it gets populated into the
     // Hadoop UGI. This has to happen before the startUserClass which does a
@@ -109,7 +119,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val securityMgr = new SecurityManager(sparkConf)
 
     if (isDriver) {
-      runDriver()
+      runDriver(securityMgr)
     } else {
       runExecutorLauncher(securityMgr)
     }
@@ -150,19 +160,27 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkContextRef.compareAndSet(sc, null)
   }
 
-  private def registerAM(uiAddress: String, uiHistoryAddress: String) = {
+  private def registerAM(uiAddress: String, securityMgr: SecurityManager) = {
     val sc = sparkContextRef.get()
+
+    val appId = client.getAttemptId().getApplicationId().toString()
+    val historyAddress =
+      sparkConf.getOption("spark.yarn.historyServer.address")
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}" }
+        .getOrElse("")
+
     allocator = client.register(yarnConf,
       if (sc != null) sc.getConf else sparkConf,
       if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
-      uiHistoryAddress)
+      historyAddress,
+      securityMgr)
 
     allocator.allocateResources()
     reporterThread = launchReporterThread()
   }
 
-  private def runDriver(): Unit = {
+  private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
     val userThread = startUserClass()
 
@@ -174,7 +192,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     if (sc == null) {
       finish(FinalApplicationStatus.FAILED, "Timed out waiting for SparkContext.")
     } else {
-      registerAM(sc.ui.appUIHostPort, YarnSparkHadoopUtil.getUIHistoryAddress(sc, sparkConf))
+      registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       try {
         userThread.join()
       } finally {
@@ -189,8 +207,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       conf = sparkConf, securityManager = securityMgr)._1
     actor = waitForSparkDriver()
     addAmIpFilter()
-    registerAM(sparkConf.get("spark.driver.appUIAddress", ""),
-      sparkConf.get("spark.driver.appUIHistoryAddress", ""))
+    registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -208,18 +225,48 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     // must be <= expiryInterval / 2.
     val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
 
+    // The number of failures in a row until Reporter thread give up
+    val reporterMaxFailures = sparkConf.getInt("spark.yarn.scheduler.reporterThread.maxFailures", 5)
+
     val t = new Thread {
       override def run() {
+        var failureCount = 0
+
         while (!finished) {
-          checkNumExecutorsFailed()
-          if (!finished) {
-            logDebug("Sending progress")
-            allocator.allocateResources()
-            try {
-              Thread.sleep(interval)
-            } catch {
-              case e: InterruptedException =>
+          try {
+            checkNumExecutorsFailed()
+            if (!finished) {
+              logDebug("Sending progress")
+              allocator.allocateResources()
             }
+            failureCount = 0
+          } catch {
+            case e: Throwable => {
+              failureCount += 1
+              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+                logError("Exception was thrown from Reporter thread.", e)
+                finish(FinalApplicationStatus.FAILED, "Exception was thrown" +
+                  s"${failureCount} time(s) from Reporter thread.")
+
+                /**
+                 * If exception is thrown from ReporterThread,
+                 * interrupt user class to stop.
+                 * Without this interrupting, if exception is
+                 * thrown before allocating enough executors,
+                 * YarnClusterScheduler waits until timeout even though
+                 * we cannot allocate executors.
+                 */
+                logInfo("Interrupting user class to stop.")
+                userClassThread.interrupt
+              } else {
+                logWarning(s"Reporter thread fails ${failureCount} time(s) in a row.", e)
+              }
+            }
+          }
+          try {
+            Thread.sleep(interval)
+          } catch {
+            case e: InterruptedException =>
           }
         }
       }
@@ -269,11 +316,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
 
         val sparkContext = sparkContextRef.get()
-        assert(sparkContext != null || count >= numTries)
         if (sparkContext == null) {
-          logError(
-            "Unable to retrieve sparkContext inspite of waiting for %d, numTries = %d".format(
-              count * waitTime, numTries))
+          logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
+            + " log output for errors. Failing the application.").format(numTries * waitTime))
         }
         sparkContext
       }
@@ -344,7 +389,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
-    val t = new Thread {
+    userClassThread = new Thread {
       override def run() {
         var status = FinalApplicationStatus.FAILED
         try {
@@ -355,15 +400,23 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
           // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
           status = FinalApplicationStatus.SUCCEEDED
+        } catch {
+          case e: InvocationTargetException =>
+            e.getCause match {
+              case _: InterruptedException =>
+                // Reporter thread can interrupt to stop user class
+
+              case e => throw e
+            }
         } finally {
           logDebug("Finishing main")
+          finalStatus = status
         }
-        finalStatus = status
       }
     }
-    t.setName("Driver")
-    t.start()
-    t
+    userClassThread.setName("Driver")
+    userClassThread.start()
+    userClassThread
   }
 
   // Actor used to monitor the driver when running in client deploy mode.
@@ -394,6 +447,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 }
 
 object ApplicationMaster extends Logging {
+
+  val SHUTDOWN_HOOK_PRIORITY: Int = 30
 
   private var master: ApplicationMaster = _
 

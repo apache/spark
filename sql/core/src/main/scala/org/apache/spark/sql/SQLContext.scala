@@ -75,6 +75,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
+  sparkContext.getConf.getAll.foreach {
+    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
+    case _ =>
+  }
+
   /**
    * :: DeveloperApi ::
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
@@ -246,7 +251,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.logicalPlan)
+    catalog.registerTable(None, tableName, rdd.queryExecution.logical)
   }
 
   /**
@@ -272,7 +277,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val currentTable = table(tableName).queryExecution.analyzed
     val asInMemoryRelation = currentTable match {
       case _: InMemoryRelation =>
-        currentTable.logicalPlan
+        currentTable
 
       case _ =>
         InMemoryRelation(useCompression, columnBatchSize, executePlan(currentTable).executedPlan)
@@ -411,10 +416,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = 
+    def simpleString: String =
       s"""== Physical Plan ==
          |${stringOrError(executedPlan)}
-      """
+      """.stripMargin.trim
 
     override def toString: String =
       // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
@@ -460,7 +465,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
     import scala.collection.JavaConversions._
-    import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
@@ -482,8 +486,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case (null, _) => null
 
       case (c: java.util.List[_], ArrayType(elementType, _)) =>
-        val converted = c.map { e => convert(e, elementType)}
-        JListWrapper(converted)
+        c.map { e => convert(e, elementType)}: Seq[Any]
 
       case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
         c.asInstanceOf[Array[_]].map(e => convert(e, elementType)): Seq[Any]

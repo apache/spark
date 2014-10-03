@@ -37,8 +37,8 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 . "$sbin/spark-config.sh"
 
@@ -50,14 +50,14 @@ sbin=`cd "$sbin"; pwd`
 if [ "$1" == "--config" ]
 then
   shift
-  conf_dir=$1
+  conf_dir="$1"
   if [ ! -d "$conf_dir" ]
   then
     echo "ERROR : $conf_dir is not a directory"
     echo $usage
     exit 1
   else
-    export SPARK_CONF_DIR=$conf_dir
+    export SPARK_CONF_DIR="$conf_dir"
   fi
   shift
 fi
@@ -100,12 +100,12 @@ if [ "$SPARK_LOG_DIR" = "" ]; then
   export SPARK_LOG_DIR="$SPARK_HOME/logs"
 fi
 mkdir -p "$SPARK_LOG_DIR"
-touch $SPARK_LOG_DIR/.spark_test > /dev/null 2>&1
+touch "$SPARK_LOG_DIR"/.spark_test > /dev/null 2>&1
 TEST_LOG_DIR=$?
 if [ "${TEST_LOG_DIR}" = "0" ]; then
-  rm -f $SPARK_LOG_DIR/.spark_test
+  rm -f "$SPARK_LOG_DIR"/.spark_test
 else
-  chown $SPARK_IDENT_STRING $SPARK_LOG_DIR
+  chown "$SPARK_IDENT_STRING" "$SPARK_LOG_DIR"
 fi
 
 if [ "$SPARK_PID_DIR" = "" ]; then
@@ -113,8 +113,8 @@ if [ "$SPARK_PID_DIR" = "" ]; then
 fi
 
 # some variables
-log=$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out
-pid=$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid
+log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
+pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
 
 # Set default scheduling priority
 if [ "$SPARK_NICENESS" = "" ]; then
@@ -136,7 +136,7 @@ case $startStop in
     fi
 
     if [ "$SPARK_MASTER" != "" ]; then
-      echo rsync from $SPARK_MASTER
+      echo rsync from "$SPARK_MASTER"
       rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $SPARK_MASTER/ "$SPARK_HOME"
     fi
 

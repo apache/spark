@@ -81,7 +81,7 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
         Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("zookeeper.connect", testSuite.zkConnect());
+    kafkaParams.put("zookeeper.connect", testSuite.zkHost() + ":" + testSuite.zkPort());
     kafkaParams.put("group.id", "test-consumer-" + KafkaTestUtils.random().nextInt(10000));
     kafkaParams.put("auto.offset.reset", "smallest");
 

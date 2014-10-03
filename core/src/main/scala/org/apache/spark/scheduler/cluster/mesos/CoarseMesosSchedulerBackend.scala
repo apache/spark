@@ -71,11 +71,6 @@ private[spark] class CoarseMesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Int, String]
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
-  val executorSparkHome = conf.getOption("spark.mesos.executor.home")
-    .orElse(sc.getSparkHome())
-    .getOrElse {
-      throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
-    }
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
@@ -112,6 +107,11 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
+    val executorSparkHome = conf.getOption("spark.mesos.executor.home")
+      .orElse(sc.getSparkHome())
+      .getOrElse {
+        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+      }
     val environment = Environment.newBuilder()
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
@@ -309,4 +309,5 @@ private[spark] class CoarseMesosSchedulerBackend(
     logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
     slaveLost(d, s)
   }
+
 }

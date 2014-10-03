@@ -73,6 +73,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val ASC = Keyword("ASC")
   protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AVG = Keyword("AVG")
+  protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
   protected val CACHE = Keyword("CACHE")
   protected val CAST = Keyword("CAST")
@@ -81,6 +82,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val DISTINCT = Keyword("DISTINCT")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
+  protected val LAST = Keyword("LAST")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
@@ -114,6 +116,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
   protected val TABLE = Keyword("TABLE")
+  protected val TIMESTAMP = Keyword("TIMESTAMP")
   protected val TRUE = Keyword("TRUE")
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
@@ -122,6 +125,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val EXCEPT = Keyword("EXCEPT")
   protected val SUBSTR = Keyword("SUBSTR")
   protected val SUBSTRING = Keyword("SUBSTRING")
+  protected val SQRT = Keyword("SQRT")
+  protected val ABS = Keyword("ABS")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -146,7 +151,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
-    | insert | cache
+    | insert | cache | unCache
   )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -178,9 +183,17 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     }
 
   protected lazy val cache: Parser[LogicalPlan] =
-    (CACHE ^^^ true | UNCACHE ^^^ false) ~ TABLE ~ ident ^^ {
-      case doCache ~ _ ~ tableName => CacheCommand(tableName, doCache)
+    CACHE ~ TABLE ~> ident ~ opt(AS ~> select) <~ opt(";") ^^ {
+      case tableName ~ None => 
+        CacheCommand(tableName, true)
+      case tableName ~ Some(plan) =>
+        CacheTableAsSelectCommand(tableName, plan)
     }
+    
+  protected lazy val unCache: Parser[LogicalPlan] =
+    UNCACHE ~ TABLE ~> ident <~ opt(";") ^^ {
+      case tableName => CacheCommand(tableName, false)
+    }    
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
 
@@ -270,6 +283,9 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     termExpression ~ ">=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => GreaterThanOrEqual(e1, e2) } |
     termExpression ~ "!=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(EqualTo(e1, e2)) } |
     termExpression ~ "<>" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(EqualTo(e1, e2)) } |
+    termExpression ~ BETWEEN ~ termExpression ~ AND ~ termExpression ^^ { 
+      case e ~ _ ~ el ~ _  ~ eu => And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
+    } |
     termExpression ~ RLIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
     termExpression ~ REGEXP ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
     termExpression ~ LIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => Like(e1, e2) } |
@@ -309,6 +325,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
     } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
+    LAST ~> "(" ~> expression <~ ")" ^^ { case exp => Last(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
     MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
     MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
@@ -323,6 +340,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
+    SQRT ~> "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) } |
+    ABS ~> "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)
     }
@@ -346,18 +365,27 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     expression ~ "[" ~ expression <~ "]" ^^ {
       case base ~ _ ~ ordinal => GetItem(base, ordinal)
     } |
+    (expression <~ ".") ~ ident ^^ {
+      case base ~ fieldName => GetField(base, fieldName)
+    } |
     TRUE ^^^ Literal(true, BooleanType) |
     FALSE ^^^ Literal(false, BooleanType) |
     cast |
     "(" ~> expression <~ ")" |
     function |
     "-" ~> literal ^^ UnaryMinus |
+    dotExpressionHeader |
     ident ^^ UnresolvedAttribute |
     "*" ^^^ Star(None) |
     literal
 
+  protected lazy val dotExpressionHeader: Parser[Expression] =
+    (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
+      case i1 ~ i2 ~ rest => UnresolvedAttribute(i1 + "." + i2 + rest.mkString(".", ".", ""))
+    }
+
   protected lazy val dataType: Parser[DataType] =
-    STRING ^^^ StringType
+    STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
 }
 
 class SqlLexical(val keywords: Seq[String]) extends StdLexical {
@@ -369,7 +397,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   delimiters += (
       "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-      ",", ";", "%", "{", "}", ":", "[", "]"
+      ",", ";", "%", "{", "}", ":", "[", "]", "."
   )
 
   override lazy val token: Parser[Token] = (
@@ -390,7 +418,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
       | failure("illegal character")
     )
 
-  override def identChar = letter | elem('_') | elem('.')
+  override def identChar = letter | elem('_')
 
   override def whitespace: Parser[Any] = rep(
     whitespaceChar

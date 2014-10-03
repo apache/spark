@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.Vectors
 /**
  * An example k-means app. Run with
  * {{{
- * ./bin/spark-example org.apache.spark.examples.mllib.DenseKMeans [options] <input>
+ * ./bin/run-example org.apache.spark.examples.mllib.DenseKMeans [options] <input>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
