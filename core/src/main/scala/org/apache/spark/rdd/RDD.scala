@@ -1084,10 +1084,9 @@ abstract class RDD[T: ClassTag](
         if (buf.size == 0) {
           numPartsToTry = partsScanned * 4
         } else {
-          numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
+          numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt - partsScanned
         }
       }
-      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = num - buf.size
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
