@@ -194,13 +194,8 @@ private[spark] object JettyUtils extends Logging {
       httpConnector.setHost(hostName)
 
       if (conf.get("spark.ui.https.enabled", "false").toBoolean) {
-        // do not use 1 - 1024 ports for securePort
-        val tmpPort = (currentPort + 1) % 65536
-        val securePort = if ( tmpPort <= 1024) {
-          tmpPort + 1024
-        } else {
-          tmpPort
-        }
+        // / If the new port wraps around, do not try a privilege port
+        val securePort = (currentPort + 1 - 1024) % (65536 - 1024) + 1024
         val schema = "https"
         // Create a connector on port securePort to listen for HTTPS requests
         val connector = buildSslSelectChannelConnector(securePort, conf)

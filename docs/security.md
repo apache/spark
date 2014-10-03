@@ -28,6 +28,11 @@ Spark use SSL(Secure Sockets Layer) to establish an encrypted link between UI se
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
+    <td>spark.ui.https.enabled</td>
+    <td>false</td>
+    <td>Whether to enable https in web ui.</td>
+  </tr>
+  <tr>
     <td>spark.ui.ssl.server.keystore.keypassword</td>
     <td>(none)</td>
     <td>The password for the specific key within the key store.</td>
