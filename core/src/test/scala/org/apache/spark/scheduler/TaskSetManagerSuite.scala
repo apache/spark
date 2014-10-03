@@ -642,6 +642,28 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("execC", "host3", ANY) !== None)
   }
 
+  test("Test that locations with HDFSCacheTaskLocation are treated as PROCESS_LOCAL.") {
+    // Regression test for SPARK-2931
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc,
+        ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+    val taskSet = FakeTask.createTaskSet(3,
+      Seq(HostTaskLocation("host1")),
+      Seq(HostTaskLocation("host2")),
+      Seq(HDFSCacheTaskLocation("host3")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    sched.removeExecutor("execA")
+    manager.executorAdded()
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    sched.removeExecutor("execB")
+    manager.executorAdded()
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    sched.removeExecutor("execC")
+    manager.executorAdded()
+    assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+  }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()

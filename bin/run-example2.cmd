@@ -52,7 +52,7 @@ if exist "%FWDIR%RELEASE" (
 )
 if "x%SPARK_EXAMPLES_JAR%"=="x" (
   echo Failed to find Spark examples assembly JAR.
-  echo You need to build Spark with sbt\sbt assembly before running this program.
+  echo You need to build Spark before running this program.
   goto exit
 )
 
