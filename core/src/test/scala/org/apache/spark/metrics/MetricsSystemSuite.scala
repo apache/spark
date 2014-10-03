@@ -79,7 +79,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
-    assert(metricName == s"$appId.$executorId.${source.sourceName}")
+    assert(metricName === s"$appId.$executorId.${source.sourceName}")
   }
 
   test("MetricsSystem with Driver instance and spark.app.id is not set") {
@@ -95,7 +95,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
-    assert(metricName == source.sourceName)
+    assert(metricName === source.sourceName)
   }
 
   test("MetricsSystem with Driver instance and spark.executor.id is not set") {
@@ -111,7 +111,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
-    assert(metricName == source.sourceName)
+    assert(metricName === source.sourceName)
   }
 
   test("MetricsSystem with Executor instance") {
@@ -129,7 +129,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
-    assert(metricName == s"$appId.$executorId.${source.sourceName}")
+    assert(metricName === s"$appId.$executorId.${source.sourceName}")
   }
 
   test("MetricsSystem with Executor instance and spark.app.id is not set") {
@@ -145,7 +145,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
-    assert(metricName == source.sourceName)
+    assert(metricName === source.sourceName)
   }
 
   test("MetricsSystem with Executor instance and spark.executor.id is not set") {
@@ -161,7 +161,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
-    assert(metricName == source.sourceName)
+    assert(metricName === source.sourceName)
   }
 
   test("MetricsSystem with instance which is neither Driver nor Executor") {
@@ -182,6 +182,6 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
 
     // Even if spark.app.id and spark.executor.id are set, they are not used for the metric name.
     assert(metricName != s"$appId.$executorId.${source.sourceName}")
-    assert(metricName == source.sourceName)
+    assert(metricName === source.sourceName)
   }
 }

@@ -187,8 +187,8 @@ class SparkContext(config: SparkConf) extends Logging {
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
 
-  val isEventLogEnabled = conf.getBoolean("spark.eventLog.enabled", false)
-  val eventLogDir: Option[String] = {
+  private[spark] val isEventLogEnabled = conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] val eventLogDir: Option[String] = {
     if (isEventLogEnabled) {
       Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
     } else {
@@ -306,8 +306,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // constructor
   taskScheduler.start()
 
-  private val appId = taskScheduler.applicationId()
-  conf.set("spark.app.id", appId)
+  val applicationId: String = taskScheduler.applicationId()
+  conf.set("spark.app.id", applicationId)
 
   val metricsSystem = env.metricsSystem
 
@@ -318,7 +318,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (isEventLogEnabled) {
-      val logger = new EventLoggingListener(appId, eventLogDir.get, conf, hadoopConfiguration)
+      val logger =
+        new EventLoggingListener(applicationId, eventLogDir.get, conf, hadoopConfiguration)
       logger.start()
       listenerBus.addListener(logger)
       Some(logger)
@@ -352,11 +353,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def setLocalProperties(props: Properties) {
     localProperties.set(props)
   }
-
-  /**
-   * Return a unique identifier for this application.
-   */
-  def getApplicationId(): String = appId
 
   @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
   def initLocalProperties() {
@@ -1302,7 +1298,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
-    listenerBus.post(SparkListenerApplicationStart(appName, Some(getApplicationId()),
+    listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser))
   }
 

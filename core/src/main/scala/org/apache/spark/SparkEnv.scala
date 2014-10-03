@@ -259,9 +259,9 @@ object SparkEnv extends Logging {
       }
 
     val metricsSystem = if (isDriver) {
-       // Don't start metrics system right now for Driver.
-       // We need to wait for the task scheduler to give us an app ID.
-       // Then we can start the metrics system.
+      // Don't start metrics system right now for Driver.
+      // We need to wait for the task scheduler to give us an app ID.
+      // Then we can start the metrics system.
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
       val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
