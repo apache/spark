@@ -404,7 +404,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       actor ! AddWebUIFilter(amFilter, params, proxyBase)
     }
   }
-   '
+
   /**
    * This system security manager applies to the entire process.
    * It's main purpose is to handle the case if the user code does a System.exit.
