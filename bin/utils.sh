@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Gather all all spark-submit options into SUBMISSION_OPTS
+# Gather all spark-submit options into SUBMISSION_OPTS
 function gatherSparkSubmitOpts() {
 
   if [ -z "$SUBMIT_USAGE_FUNCTION" ]; then
