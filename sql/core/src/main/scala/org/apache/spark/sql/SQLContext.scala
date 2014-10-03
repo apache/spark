@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.hadoop.conf.Configuration
 
@@ -282,6 +283,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
+
+  /**
+   * Register a user-defined type and its serializer, to allow automatic conversion between
+   * RDDs of user types and SchemaRDDs.
+   * Fails if this type has been registered already.
+   */
+  def registerUserType[UserType, UDT <: UserDefinedType[UserType]](
+      //userType: Class[UserType],
+      udt: UDT): Unit = {
+    val userType: TypeTag[UserType] = typeTag[UserType]
+    require(!registeredUserTypes.contains(userType),
+      "registerUserType called on type which was already registered.")
+    registeredUserTypes(userType) = udt
+  }
+
+  /** Map: UserType --> UserDefinedType */
+  protected[sql] val registeredUserTypes = new mutable.HashMap[TypeTag[_], UserDefinedType[_]]()
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext

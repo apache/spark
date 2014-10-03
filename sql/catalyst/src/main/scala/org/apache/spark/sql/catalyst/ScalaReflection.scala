@@ -65,7 +65,7 @@ object ScalaReflection {
   def schemaFor[T: TypeTag]: Schema = schemaFor(typeOf[T])
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`): Schema = tpe match {
+  def schemaFor(tpe: `Type`, udtRegistry: Map[TypeTag[_], UserDefinedType[_]]): Schema = tpe match {
     case t if t <:< typeOf[Option[_]] =>
       val TypeRef(_, _, Seq(optType)) = t
       Schema(schemaFor(optType).dataType, nullable = true)
