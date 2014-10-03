@@ -88,4 +88,10 @@ class CachedTableSuite extends HiveComparisonTest {
     }
     assert(!TestHive.isCached("src"), "Table 'src' should not be cached")
   }
+  
+ test("'CACHE TABLE tableName AS SELECT ..'") {
+    TestHive.sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
+    assert(TestHive.isCached("testCacheTable"), "Table 'testCacheTable' should be cached")
+    TestHive.uncacheTable("testCacheTable")
+  }  
 }
