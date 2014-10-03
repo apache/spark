@@ -37,7 +37,8 @@ class SameResultSuite extends FunSuite {
     val bAnalyzed = b.analyze
 
     if (aAnalyzed.sameResult(bAnalyzed) != result) {
-      fail(s"Plans should return sameResult = $result\n" + sideBySide(aAnalyzed.toString, bAnalyzed.toString).mkString("\n"))
+      val comparison = sideBySide(aAnalyzed.toString, bAnalyzed.toString).mkString("\n")
+      fail(s"Plans should return sameResult = $result\n$comparison")
     }
   }
 

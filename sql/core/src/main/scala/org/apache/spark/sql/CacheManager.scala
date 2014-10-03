@@ -124,7 +124,10 @@ private[sql] trait CacheManager {
     }
   }
 
-  /** Invalidates the cache of any data that contains `plan`. */
+  /**
+   * Invalidates the cache of any data that contains `plan`. Note that it is possible that this
+   * function will over invalidate.
+   */
   private[sql] def invalidateCache(plan: LogicalPlan): Unit = writeLock {
     cachedData.foreach {
       case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
