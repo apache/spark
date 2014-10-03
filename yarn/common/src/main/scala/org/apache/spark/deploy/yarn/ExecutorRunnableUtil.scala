@@ -43,6 +43,7 @@ trait ExecutorRunnableUtil extends Logging {
       hostname: String,
       executorMemory: Int,
       executorCores: Int,
+      appId: String,
       localResources: HashMap[String, LocalResource]): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
@@ -114,6 +115,7 @@ trait ExecutorRunnableUtil extends Logging {
       slaveId.toString,
       hostname.toString,
       executorCores.toString,
+      appId,
       "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
       "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

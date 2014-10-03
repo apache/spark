@@ -57,6 +57,7 @@ object AllocationType extends Enumeration {
 private[yarn] abstract class YarnAllocator(
     conf: Configuration,
     sparkConf: SparkConf,
+    appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
     preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
     securityMgr: SecurityManager)
@@ -295,6 +296,7 @@ private[yarn] abstract class YarnAllocator(
             executorHostname,
             executorMemory,
             executorCores,
+            appAttemptId.getApplicationId.toString,
             securityMgr)
           launcherPool.execute(executorRunnable)
         }

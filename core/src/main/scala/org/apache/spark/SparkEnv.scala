@@ -259,11 +259,15 @@ object SparkEnv extends Logging {
       }
 
     val metricsSystem = if (isDriver) {
+      // Don't start metrics system right now for Driver.
+      // We need to wait for the task scheduler to give us an app ID.
+      // Then we can start the metrics system.
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
-      MetricsSystem.createMetricsSystem("executor", conf, securityManager)
+      val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
+      ms.start()
+      ms
     }
-    metricsSystem.start()
 
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working
