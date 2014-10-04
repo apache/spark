@@ -6,7 +6,7 @@ include many well known models in machine learning, such as
 principal components analysis (PCA), matrix completion, robust PCA,
 nonnegative matrix factorization, k-means, and many more.
 
-For more information on GLRMs, see [our paper](http://www.stanford.edu/~udell/doc/glrm.pdf).
+For more information on GLRMs, see [our paper](http://www.stanford.edu/~rezab/papers/glrm.pdf).
 
 SparkGLRM makes it easy to mix and match loss functions and regularizers
 to construct a model suitable for a particular data set.
