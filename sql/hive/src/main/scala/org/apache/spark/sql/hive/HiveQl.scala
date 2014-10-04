@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
+import org.apache.hadoop.hive.ql.Context
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -215,15 +217,19 @@ private[hive] object HiveQl {
   /**
    * Returns the AST for the given SQL string.
    */
-  def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
+  def getAst(sql: String, hiveConf: HiveConf): ASTNode =
+    ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, new Context(hiveConf)))
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = hiveSqlParser(sql)
+  def parseSql(sql: String, hiveConf: HiveConf): LogicalPlan = {
+    hiveSqlParser.hiveConf = hiveConf
+    hiveSqlParser(sql)
+  }
 
   /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
+  def createPlan(sql: String, hiveConf: HiveConf) = {
     try {
-      val tree = getAst(sql)
+      val tree = getAst(sql, hiveConf)
       if (nativeCommands contains tree.getText) {
         NativeCommand(sql)
       } else {
@@ -237,7 +243,7 @@ private[hive] object HiveQl {
       case e: NotImplementedError => sys.error(
         s"""
           |Unsupported language features in query: $sql
-          |${dumpTree(getAst(sql))}
+          |${dumpTree(getAst(sql, hiveConf))}
         """.stripMargin)
     }
   }

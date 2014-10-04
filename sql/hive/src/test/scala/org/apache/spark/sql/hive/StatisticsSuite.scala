@@ -34,7 +34,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = HiveQl.parseSql(analyzeCommand)
+      val parsed = HiveQl.parseSql(analyzeCommand, TestHive.hiveconf)
       val operators = parsed.collect {
         case a: AnalyzeTable => a
         case o => o
