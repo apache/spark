@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Queue
 
-import org.apache.spark.{TaskContext, Logging, SparkException}
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.network.{ManagedBuffer, BlockFetchingListener, BlockTransferService}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
@@ -121,7 +121,7 @@ final class ShuffleBlockFetcherIterator(
         }
 
         override def onBlockFetchFailure(e: Throwable): Unit = {
-          logError("Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
           // Note that there is a chance that some blocks have been fetched successfully, but we
           // still add them to the failed queue. This is fine because when the caller see a
           // FetchFailedException, it is going to fail the entire task anyway.

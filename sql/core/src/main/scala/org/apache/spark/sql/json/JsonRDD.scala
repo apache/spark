@@ -287,9 +287,13 @@ private[sql] object JsonRDD extends Logging {
       // the ObjectMapper will take the last value associated with this duplicate key.
       // For example: for {"key": 1, "key":2}, we will get "key"->2.
       val mapper = new ObjectMapper()
-      iter.map { record =>
-        val parsed = scalafy(mapper.readValue(record, classOf[java.util.Map[String, Any]]))
-        parsed.asInstanceOf[Map[String, Any]]
+      iter.flatMap { record =>
+        val parsed = mapper.readValue(record, classOf[Object]) match {
+          case map: java.util.Map[_, _] => scalafy(map).asInstanceOf[Map[String, Any]] :: Nil
+          case list: java.util.List[_] => scalafy(list).asInstanceOf[Seq[Map[String, Any]]]
+        }
+
+        parsed
       }
     })
   }

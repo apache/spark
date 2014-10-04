@@ -45,7 +45,7 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
-from pyspark.sql import SQLContext, IntegerType
+from pyspark.sql import SQLContext, IntegerType, Row
 from pyspark import shuffle
 
 _have_scipy = False
@@ -213,6 +213,24 @@ class SerializationTestCase(unittest.TestCase):
         out2 = ser.loads(ser.dumps(out1))
         self.assertEquals(out1, out2)
 
+    def test_func_globals(self):
+
+        class Unpicklable(object):
+            def __reduce__(self):
+                raise Exception("not picklable")
+
+        global exit
+        exit = Unpicklable()
+
+        ser = CloudPickleSerializer()
+        self.assertRaises(Exception, lambda: ser.dumps(exit))
+
+        def foo():
+            sys.exit(0)
+
+        self.assertTrue("exit" in foo.func_code.co_names)
+        ser.dumps(foo)
+
 
 class PySparkTestCase(unittest.TestCase):
 
@@ -322,6 +340,18 @@ class TestAddFile(PySparkTestCase):
         self.sc.addPyFile(path)
         from userlib import UserClass
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
+
+    def test_overwrite_system_module(self):
+        self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
+
+        import SimpleHTTPServer
+        self.assertEqual("My Server", SimpleHTTPServer.__name__)
+
+        def func(x):
+            import SimpleHTTPServer
+            return SimpleHTTPServer.__name__
+
+        self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
 class TestRDDFunctions(PySparkTestCase):
@@ -433,6 +463,16 @@ class TestRDDFunctions(PySparkTestCase):
         bdata = self.sc.broadcast(data)  # 270MB
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEquals(N, m)
+
+    def test_large_closure(self):
+        N = 1000000
+        data = [float(i) for i in xrange(N)]
+        rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
+        self.assertEquals(N, rdd.first())
+        self.assertTrue(rdd._broadcast is not None)
+        rdd = self.sc.parallelize(range(1), 1).map(lambda x: 1)
+        self.assertEqual(1, rdd.first())
+        self.assertTrue(rdd._broadcast is None)
 
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
@@ -587,6 +627,44 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEquals(partitions[1], [(1, 3), (3, 8), (3, 8)])
 
+    def test_distinct(self):
+        rdd = self.sc.parallelize((1, 2, 3)*10, 10)
+        self.assertEquals(rdd.getNumPartitions(), 10)
+        self.assertEquals(rdd.distinct().count(), 3)
+        result = rdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
+
+
+class TestProfiler(PySparkTestCase):
+
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.python.profile", "true")
+        self.sc = SparkContext('local[4]', class_name, batchSize=2, conf=conf)
+
+    def test_profiler(self):
+
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
+        rdd = self.sc.parallelize(range(100))
+        rdd.foreach(heavy_foo)
+        profiles = self.sc._profile_stats
+        self.assertEqual(1, len(profiles))
+        id, acc, _ = profiles[0]
+        stats = acc.value
+        self.assertTrue(stats is not None)
+        width, stat_list = stats.get_print_list([])
+        func_names = [func_name for fname, n, func_name in stat_list]
+        self.assertTrue("heavy_foo" in func_names)
+
+        self.sc.show_profiles()
+        d = tempfile.gettempdir()
+        self.sc.dump_profiles(d)
+        self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
+
 
 class TestSQL(PySparkTestCase):
 
@@ -635,6 +713,45 @@ class TestSQL(PySparkTestCase):
         srdd = self.sqlCtx.sql("select foo from temp")
         srdd.count()
         srdd.collect()
+
+    def test_distinct(self):
+        rdd = self.sc.parallelize(['{"a": 1}', '{"b": 2}', '{"c": 3}']*10, 10)
+        srdd = self.sqlCtx.jsonRDD(rdd)
+        self.assertEquals(srdd.getNumPartitions(), 10)
+        self.assertEquals(srdd.distinct().count(), 3)
+        result = srdd.distinct(5)
+        self.assertEquals(result.getNumPartitions(), 5)
+        self.assertEquals(result.count(), 3)
+
+    def test_apply_schema_to_row(self):
+        srdd = self.sqlCtx.jsonRDD(self.sc.parallelize(["""{"a":2}"""]))
+        srdd2 = self.sqlCtx.applySchema(srdd.map(lambda x: x), srdd.schema())
+        self.assertEqual(srdd.collect(), srdd2.collect())
+
+        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
+        srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
+        self.assertEqual(10, srdd3.count())
+
+    def test_serialize_nested_array_and_map(self):
+        d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        row = srdd.first()
+        self.assertEqual(1, len(row.l))
+        self.assertEqual(1, row.l[0].a)
+        self.assertEqual("2", row.d["key"].d)
+
+        l = srdd.map(lambda x: x.l).first()
+        self.assertEqual(1, len(l))
+        self.assertEqual('s', l[0].b)
+
+        d = srdd.map(lambda x: x.d).first()
+        self.assertEqual(1, len(d))
+        self.assertEqual(1.0, d["key"].c)
+
+        row = srdd.map(lambda x: x.d["key"]).first()
+        self.assertEqual(1.0, row.c)
+        self.assertEqual("2", row.d)
 
 
 class TestIO(PySparkTestCase):
@@ -956,8 +1073,6 @@ class TestOutputFormat(PySparkTestCase):
             conf=input_conf).collect())
         self.assertEqual(new_dataset, data)
 
-    @unittest.skipIf(sys.version_info[:2] <= (2, 6) or python_implementation() == "PyPy",
-                     "Skipped on 2.6 and PyPy until SPARK-2951 is fixed")
     def test_newhadoop_with_array(self):
         basepath = self.tempdir.name
         # use custom ArrayWritable types and converters to handle arrays
@@ -1077,7 +1192,7 @@ class TestOutputFormat(PySparkTestCase):
     def test_unbatched_save_and_read(self):
         basepath = self.tempdir.name
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei, numSlices=len(ei)).saveAsSequenceFile(
+        self.sc.parallelize(ei, len(ei)).saveAsSequenceFile(
             basepath + "/unbatched/")
 
         unbatched_sequence = sorted(self.sc.sequenceFile(
@@ -1123,7 +1238,7 @@ class TestOutputFormat(PySparkTestCase):
         basepath = self.tempdir.name
         # non-batch-serialized RDD[[(K, V)]] should be rejected
         data = [[(1, "a")], [(2, "aa")], [(3, "aaa")]]
-        rdd = self.sc.parallelize(data, numSlices=len(data))
+        rdd = self.sc.parallelize(data, len(data))
         self.assertRaises(Exception, lambda: rdd.saveAsSequenceFile(
             basepath + "/malformed/sequence"))
 

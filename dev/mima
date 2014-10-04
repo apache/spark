@@ -25,11 +25,19 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
 echo -e "q\n" | sbt/sbt oldDeps/update
+rm -f .generated-mima*
+
+# Generate Mima Ignore is called twice, first with latest built jars 
+# on the classpath and then again with previous version jars on the classpath.
+# Because of a bug in GenerateMIMAIgnore that when old jars are ahead on classpath
+# it did not process the new classes (which are in assembly jar). 
+./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
 
 export SPARK_CLASSPATH="`find lib_managed \( -name '*spark*jar' -a -type f \) | tr "\\n" ":"`"
 echo "SPARK_CLASSPATH=$SPARK_CLASSPATH"
 
 ./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
+
 echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?
 

@@ -80,6 +80,22 @@ def python_left_outer_join(rdd, other, numPartitions):
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
+def python_full_outer_join(rdd, other, numPartitions):
+    def dispatch(seq):
+        vbuf, wbuf = [], []
+        for (n, v) in seq:
+            if n == 1:
+                vbuf.append(v)
+            elif n == 2:
+                wbuf.append(v)
+        if not vbuf:
+            vbuf.append(None)
+        if not wbuf:
+            wbuf.append(None)
+        return [(v, w) for v in vbuf for w in wbuf]
+    return _do_python_join(rdd, other, numPartitions, dispatch)
+
+
 def python_cogroup(rdds, numPartitions):
     def make_mapper(i):
         return lambda (k, v): (k, (i, v))

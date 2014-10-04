@@ -59,9 +59,10 @@ abstract class Attribute extends NamedExpression {
 
   def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
+  def withName(newName: String): Attribute
 
   def toAttribute = this
-  def newInstance: Attribute
+  def newInstance(): Attribute
 
 }
 
@@ -85,7 +86,6 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
-
 
   override def toAttribute = {
     if (resolved) {
@@ -131,7 +131,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     h
   }
 
-  override def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  override def newInstance() = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -141,6 +141,14 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
       this
     } else {
       AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+    }
+  }
+
+  override def withName(newName: String): AttributeReference = {
+    if (name == newName) {
+      this
+    } else {
+      AttributeReference(newName, dataType, nullable)(exprId, qualifiers)
     }
   }
 

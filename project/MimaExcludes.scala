@@ -38,13 +38,21 @@ object MimaExcludes {
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("graphx")
           ) ++
-          // This is @DeveloperAPI, but Mima still gives false-positives:
-          MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
           Seq(
-            // This is @Experimental, but Mima still gives false-positives:
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.TaskLocation"),
+            // Added normL1 and normL2 to trait MultivariateStatisticalSummary
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaRDDLike.foreachAsync")
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2"),
+            // MapStatus should be private[spark]
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.MapStatus")
           )
+
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),

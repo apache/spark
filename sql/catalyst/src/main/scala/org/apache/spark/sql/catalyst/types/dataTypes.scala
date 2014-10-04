@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
+import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
 import scala.util.parsing.combinator.RegexParsers
@@ -122,6 +123,16 @@ object NativeType {
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
+
+  val defaultSizeOf: Map[NativeType, Int] = Map(
+    IntegerType -> 4,
+    BooleanType -> 1,
+    LongType -> 8,
+    DoubleType -> 8,
+    FloatType -> 4,
+    ShortType -> 2,
+    ByteType -> 1,
+    StringType -> 4096)
 }
 
 trait PrimitiveType extends DataType {
@@ -146,8 +157,18 @@ case object StringType extends NativeType with PrimitiveType {
   def simpleString: String = "string"
 }
 
-case object BinaryType extends DataType with PrimitiveType {
+case object BinaryType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Array[Byte]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val ordering = new Ordering[JvmType] {
+    def compare(x: Array[Byte], y: Array[Byte]): Int = {
+      for (i <- 0 until x.length; if i < y.length) {
+        val res = x(i).compareTo(y(i))
+        if (res != 0) return res
+      }
+      return x.length - y.length
+    }
+  }
   def simpleString: String = "binary"
 }
 
@@ -240,6 +261,7 @@ object FractionalType {
 }
 abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
+  private[sql] val asIntegral: Integral[JvmType]
 }
 
 case object DecimalType extends FractionalType {
@@ -248,6 +270,7 @@ case object DecimalType extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[BigDecimal]]
   private[sql] val fractional = implicitly[Fractional[BigDecimal]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val asIntegral = BigDecimalAsIfIntegral
   def simpleString: String = "decimal"
 }
 
@@ -257,6 +280,7 @@ case object DoubleType extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val asIntegral = DoubleAsIfIntegral
   def simpleString: String = "double"
 }
 
@@ -266,6 +290,7 @@ case object FloatType extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  private[sql] val asIntegral = FloatAsIfIntegral
   def simpleString: String = "float"
 }
 
@@ -308,13 +333,9 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
-
-  private def validateFields(fields: Seq[StructField]): Boolean =
-    fields.map(field => field.name).distinct.size == fields.size
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
-  require(StructType.validateFields(fields), "Found fields with the same name.")
 
   /**
    * Returns all field names in a [[Seq]].

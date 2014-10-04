@@ -46,21 +46,21 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
 private[spark] class EventLoggingListener(
-    appName: String,
+    appId: String,
+    logBaseDir: String,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  def this(appName: String, sparkConf: SparkConf) =
-    this(appName, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
+  def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
+    this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logBaseDir), hadoopConf)
 
   // Only defined if the file system scheme is not local
@@ -79,13 +79,8 @@ private[spark] class EventLoggingListener(
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
-  val logPath = new StringBuilder()
-    .append(logBaseDir)
-    .append("/")
-    .append(appName.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_"))
-    .append("-")
-    .append(System.currentTimeMillis())
-    .toString()
+  // Visible for tests only.
+  private[scheduler] val logPath = getLogPath(logBaseDir, appId)
 
   /**
    * Creates the log file in the configured log directory.
@@ -105,7 +100,6 @@ private[spark] class EventLoggingListener(
      * Therefore, for local files, use FileOutputStream instead. */
     val dstream =
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
-        // Second parameter is whether to append
         new FileOutputStream(uri.getPath)
       } else {
         hadoopDataStream = Some(fileSystem.create(path))
@@ -187,8 +181,8 @@ private[spark] class EventLoggingListener(
 private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
+  val DEFAULT_LOG_DIR = "/tmp/spark-events"
 
-  private val DEFAULT_LOG_DIR = "/tmp/spark-events"
   private val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8)
     .toShort)
 
@@ -239,6 +233,18 @@ private[spark] object EventLoggingListener extends Logging {
     header.flush()
 
     compressionCodec.map(_.compressedOutputStream(logStream)).getOrElse(logStream)
+  }
+
+  /**
+   * Return a file-system-safe path to the log file for the given application.
+   *
+   * @param logBaseDir Directory where the log file will be written.
+   * @param appId A unique app ID.
+   * @return A path which consists of file-system-safe characters.
+   */
+  def getLogPath(logBaseDir: String, appId: String): String = {
+    val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
+    Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
   }
 
   /**

@@ -27,10 +27,15 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
+import org.apache.spark.storage.StorageLevel
 
 private[sql] object InMemoryRelation {
-  def apply(useCompression: Boolean, batchSize: Int, child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, child)()
+  def apply(
+      useCompression: Boolean,
+      batchSize: Int,
+      storageLevel: StorageLevel,
+      child: SparkPlan): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child)()
 }
 
 private[sql] case class CachedBatch(buffers: Array[ByteBuffer], stats: Row)
@@ -39,6 +44,7 @@ private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
     batchSize: Int,
+    storageLevel: StorageLevel,
     child: SparkPlan)
     (private var _cachedColumnBuffers: RDD[CachedBatch] = null)
   extends LogicalPlan with MultiInstanceRelation {
@@ -51,6 +57,16 @@ private[sql] case class InMemoryRelation(
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
+    buildBuffers()
+  }
+
+  def recache() = {
+    _cachedColumnBuffers.unpersist()
+    _cachedColumnBuffers = null
+    buildBuffers()
+  }
+
+  private def buildBuffers(): Unit = {
     val output = child.output
     val cached = child.execute().mapPartitions { rowIterator =>
       new Iterator[CachedBatch] {
@@ -80,10 +96,15 @@ private[sql] case class InMemoryRelation(
 
         def hasNext = rowIterator.hasNext
       }
-    }.cache()
+    }.persist(storageLevel)
 
     cached.setName(child.toString)
     _cachedColumnBuffers = cached
+  }
+
+  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
+    InMemoryRelation(
+      newOutput, useCompression, batchSize, storageLevel, child)(_cachedColumnBuffers)
   }
 
   override def children = Seq.empty
@@ -93,6 +114,7 @@ private[sql] case class InMemoryRelation(
       output.map(_.newInstance),
       useCompression,
       batchSize,
+      storageLevel,
       child)(
       _cachedColumnBuffers).asInstanceOf[this.type]
   }

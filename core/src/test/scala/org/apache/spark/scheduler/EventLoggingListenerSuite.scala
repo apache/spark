@@ -60,7 +60,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
   test("Verify log file exist") {
     // Verify logging directory exists
     val conf = getLoggingConf(testDirPath)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener("test", testDirPath.toUri().toString(), conf)
     eventLogger.start()
 
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
@@ -108,7 +108,8 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
    */
   private def testEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(testDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val logName = compressionCodec.map("test-" + _).getOrElse("test")
+    val eventLogger = new EventLoggingListener(logName, testDirPath.toUri().toString(), conf)
     val listenerBus = new LiveListenerBus
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey")
@@ -146,7 +147,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     val sc = new SparkContext("local", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
-    val expectedLogDir = testDir.getAbsolutePath()
+    val expectedLogDir = testDir.toURI().toString()
     assert(eventLogger.logPath.startsWith(expectedLogDir + "/"))
 
     // Begin listening for events that trigger asserts
@@ -238,4 +239,6 @@ object EventLoggingListenerSuite {
     }
     conf
   }
+
+  def getUniqueApplicationId = "test-" + System.currentTimeMillis
 }

@@ -151,7 +151,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
-    | insert | cache
+    | insert | cache | unCache
   )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -166,7 +166,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         val withFilter = f.map(f => Filter(f, base)).getOrElse(base)
         val withProjection =
           g.map {g =>
-            Aggregate(assignAliases(g), assignAliases(p), withFilter)
+            Aggregate(g, assignAliases(p), withFilter)
           }.getOrElse(Project(assignAliases(p), withFilter))
         val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
         val withHaving = h.map(h => Filter(h, withDistinct)).getOrElse(withDistinct)
@@ -183,9 +183,17 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     }
 
   protected lazy val cache: Parser[LogicalPlan] =
-    (CACHE ^^^ true | UNCACHE ^^^ false) ~ TABLE ~ ident ^^ {
-      case doCache ~ _ ~ tableName => CacheCommand(tableName, doCache)
+    CACHE ~ TABLE ~> ident ~ opt(AS ~> select) <~ opt(";") ^^ {
+      case tableName ~ None => 
+        CacheCommand(tableName, true)
+      case tableName ~ Some(plan) =>
+        CacheTableAsSelectCommand(tableName, plan)
     }
+    
+  protected lazy val unCache: Parser[LogicalPlan] =
+    UNCACHE ~ TABLE ~> ident <~ opt(";") ^^ {
+      case tableName => CacheCommand(tableName, false)
+    }    
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
 

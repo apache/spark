@@ -38,7 +38,7 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
-DEFAULT_SPARK_VERSION = "1.0.0"
+DEFAULT_SPARK_VERSION = "1.1.0"
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
@@ -52,7 +52,7 @@ class UsageError(Exception):
 def parse_args():
     parser = OptionParser(
         usage="spark-ec2 [options] <action> <cluster_name>"
-        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master",
+        + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, reboot-slaves",
         add_help_option=False)
     parser.add_option(
         "-h", "--help", action="help",
@@ -158,6 +158,9 @@ def parse_args():
     parser.add_option(
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
+    parser.add_option(
+        "--copy-aws-credentials", action="store_true", default=False,
+        help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -214,8 +217,15 @@ def is_active(instance):
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
     spark_shark_map = {
-        "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1",
-        "1.0.0": "1.0.0"
+        "0.7.3": "0.7.1",
+        "0.8.0": "0.8.0",
+        "0.8.1": "0.8.1",
+        "0.9.0": "0.9.0",
+        "0.9.1": "0.9.1",
+        "1.0.0": "1.0.0",
+        "1.0.1": "1.0.1",
+        "1.0.2": "1.0.2",
+        "1.1.0": "1.1.0",
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
@@ -224,49 +234,49 @@ def get_spark_shark_version(opts):
     return (version, spark_shark_map[version])
 
 
-# Attempt to resolve an appropriate AMI given the architecture and
-# region of the request.
-# Information regarding Amazon Linux AMI instance type was update on 2014-6-20:
-# http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
+# Attempt to resolve an appropriate AMI given the architecture and region of the request.
+# Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
+# Last Updated: 2014-06-20
+# For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 def get_spark_ami(opts):
     instance_types = {
-        "m1.small":    "pvm",
-        "m1.medium":   "pvm",
-        "m1.large":    "pvm",
-        "m1.xlarge":   "pvm",
-        "t1.micro":    "pvm",
         "c1.medium":   "pvm",
         "c1.xlarge":   "pvm",
-        "m2.xlarge":   "pvm",
-        "m2.2xlarge":  "pvm",
-        "m2.4xlarge":  "pvm",
-        "cc1.4xlarge": "hvm",
-        "cc2.8xlarge": "hvm",
-        "cg1.4xlarge": "hvm",
-        "hs1.8xlarge": "pvm",
-        "hi1.4xlarge": "pvm",
-        "m3.medium":   "hvm",
-        "m3.large":    "hvm",
-        "m3.xlarge":   "hvm",
-        "m3.2xlarge":  "hvm",
-        "cr1.8xlarge": "hvm",
-        "i2.xlarge":   "hvm",
-        "i2.2xlarge":  "hvm",
-        "i2.4xlarge":  "hvm",
-        "i2.8xlarge":  "hvm",
-        "c3.large":    "pvm",
-        "c3.xlarge":   "pvm",
         "c3.2xlarge":  "pvm",
         "c3.4xlarge":  "pvm",
         "c3.8xlarge":  "pvm",
-        "r3.large":    "hvm",
-        "r3.xlarge":   "hvm",
+        "c3.large":    "pvm",
+        "c3.xlarge":   "pvm",
+        "cc1.4xlarge": "hvm",
+        "cc2.8xlarge": "hvm",
+        "cg1.4xlarge": "hvm",
+        "cr1.8xlarge": "hvm",
+        "hi1.4xlarge": "pvm",
+        "hs1.8xlarge": "pvm",
+        "i2.2xlarge":  "hvm",
+        "i2.4xlarge":  "hvm",
+        "i2.8xlarge":  "hvm",
+        "i2.xlarge":   "hvm",
+        "m1.large":    "pvm",
+        "m1.medium":   "pvm",
+        "m1.small":    "pvm",
+        "m1.xlarge":   "pvm",
+        "m2.2xlarge":  "pvm",
+        "m2.4xlarge":  "pvm",
+        "m2.xlarge":   "pvm",
+        "m3.2xlarge":  "hvm",
+        "m3.large":    "hvm",
+        "m3.medium":   "hvm",
+        "m3.xlarge":   "hvm",
         "r3.2xlarge":  "hvm",
         "r3.4xlarge":  "hvm",
         "r3.8xlarge":  "hvm",
+        "r3.large":    "hvm",
+        "r3.xlarge":   "hvm",
+        "t1.micro":    "pvm",
+        "t2.medium":   "hvm",
         "t2.micro":    "hvm",
         "t2.small":    "hvm",
-        "t2.medium":   "hvm"
     }
     if opts.instance_type in instance_types:
         instance_type = instance_types[opts.instance_type]
@@ -502,9 +512,10 @@ def tag_instance(instance, name):
     for i in range(0, 5):
         try:
             instance.add_tag(key='Name', value=name)
+            break
         except:
             print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
-            if (i == 5):
+            if i == 5:
                 raise "Error - failed max attempts to add name tag"
             time.sleep(5)
 
@@ -526,7 +537,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             for res in reservations:
                 active = [i for i in res.instances if is_active(i)]
                 for instance in active:
-                    if (instance.tags.get(u'Name') is None):
+                    if instance.tags.get(u'Name') is None:
                         tag_instance(instance, name)
     # Now proceed to detect master and slaves instances.
     reservations = conn.get_all_instances()
@@ -541,7 +552,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
             elif name.startswith(cluster_name + "-slave"):
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
-        print ("Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes)))
+        print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
     if master_nodes != [] or not die_on_error:
         return (master_nodes, slave_nodes)
     else:
@@ -620,45 +631,45 @@ def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
 
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
-    # From http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Updated 2014-6-20
+    # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
+    # Last Updated: 2014-06-20
+    # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
-        "m1.small":    1,
-        "m1.medium":   1,
-        "m1.large":    2,
-        "m1.xlarge":   4,
-        "t1.micro":    1,
         "c1.medium":   1,
         "c1.xlarge":   4,
-        "m2.xlarge":   1,
-        "m2.2xlarge":  1,
-        "m2.4xlarge":  2,
-        "cc1.4xlarge": 2,
-        "cc2.8xlarge": 4,
-        "cg1.4xlarge": 2,
-        "hs1.8xlarge": 24,
-        "cr1.8xlarge": 2,
-        "hi1.4xlarge": 2,
-        "m3.medium":   1,
-        "m3.large":    1,
-        "m3.xlarge":   2,
-        "m3.2xlarge":  2,
-        "i2.xlarge":   1,
-        "i2.2xlarge":  2,
-        "i2.4xlarge":  4,
-        "i2.8xlarge":  8,
-        "c3.large":    2,
-        "c3.xlarge":   2,
         "c3.2xlarge":  2,
         "c3.4xlarge":  2,
         "c3.8xlarge":  2,
-        "r3.large":    1,
-        "r3.xlarge":   1,
+        "c3.large":    2,
+        "c3.xlarge":   2,
+        "cc1.4xlarge": 2,
+        "cc2.8xlarge": 4,
+        "cg1.4xlarge": 2,
+        "cr1.8xlarge": 2,
+        "g2.2xlarge":  1,
+        "hi1.4xlarge": 2,
+        "hs1.8xlarge": 24,
+        "i2.2xlarge":  2,
+        "i2.4xlarge":  4,
+        "i2.8xlarge":  8,
+        "i2.xlarge":   1,
+        "m1.large":    2,
+        "m1.medium":   1,
+        "m1.small":    1,
+        "m1.xlarge":   4,
+        "m2.2xlarge":  1,
+        "m2.4xlarge":  2,
+        "m2.xlarge":   1,
+        "m3.2xlarge":  2,
+        "m3.large":    1,
+        "m3.medium":   1,
+        "m3.xlarge":   2,
         "r3.2xlarge":  1,
         "r3.4xlarge":  1,
         "r3.8xlarge":  2,
-        "g2.2xlarge":  1,
-        "t1.micro":    0
+        "r3.large":    1,
+        "r3.xlarge":   1,
+        "t1.micro":    0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
@@ -713,6 +724,13 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_worker_instances": "%d" % opts.worker_instances,
         "spark_master_opts": opts.master_opts
     }
+
+    if opts.copy_aws_credentials:
+        template_vars["aws_access_key_id"] = conn.aws_access_key_id
+        template_vars["aws_secret_access_key"] = conn.aws_secret_access_key
+    else:
+        template_vars["aws_access_key_id"] = ""
+        template_vars["aws_secret_access_key"] = ""
 
     # Create a temp directory in which we will place all the files to be
     # deployed after we substitue template parameters in them
@@ -774,7 +792,7 @@ def ssh(host, opts, command):
                 ssh_command(opts) + ['-t', '-t', '%s@%s' % (opts.user, host),
                                      stringify_command(command)])
         except subprocess.CalledProcessError as e:
-            if (tries > 5):
+            if tries > 5:
                 # If this was an ssh failure, provide the user with hints.
                 if e.returncode == 255:
                     raise UsageError(
@@ -809,18 +827,18 @@ def ssh_read(host, opts, command):
         ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)])
 
 
-def ssh_write(host, opts, command, input):
+def ssh_write(host, opts, command, arguments):
     tries = 0
     while True:
         proc = subprocess.Popen(
             ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)],
             stdin=subprocess.PIPE)
-        proc.stdin.write(input)
+        proc.stdin.write(arguments)
         proc.stdin.close()
         status = proc.wait()
         if status == 0:
             break
-        elif (tries > 5):
+        elif tries > 5:
             raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
         else:
             print >> stderr, \
@@ -949,6 +967,20 @@ def real_main():
             proxy_opt = ['-D', opts.proxy_port]
         subprocess.check_call(
             ssh_command(opts) + proxy_opt + ['-t', '-t', "%s@%s" % (opts.user, master)])
+
+    elif action == "reboot-slaves":
+        response = raw_input(
+            "Are you sure you want to reboot the cluster " +
+            cluster_name + " slaves?\n" +
+            "Reboot cluster slaves " + cluster_name + " (y/N): ")
+        if response == "y":
+            (master_nodes, slave_nodes) = get_existing_cluster(
+                conn, opts, cluster_name, die_on_error=False)
+            print "Rebooting slaves..."
+            for inst in slave_nodes:
+                if inst.state not in ["shutting-down", "terminated"]:
+                    print "Rebooting " + inst.id
+                    inst.reboot()
 
     elif action == "get-master":
         (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)

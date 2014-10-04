@@ -17,7 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
+import scala.util.control.NonFatal
+
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 
@@ -55,6 +58,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   @volatile private var finished = false
   @volatile private var finalStatus = FinalApplicationStatus.UNDEFINED
+  @volatile private var userClassThread: Thread = _
 
   private var reporterThread: Thread = _
   private var allocator: YarnAllocator = _
@@ -221,18 +225,48 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     // must be <= expiryInterval / 2.
     val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
 
+    // The number of failures in a row until Reporter thread give up
+    val reporterMaxFailures = sparkConf.getInt("spark.yarn.scheduler.reporterThread.maxFailures", 5)
+
     val t = new Thread {
       override def run() {
+        var failureCount = 0
+
         while (!finished) {
-          checkNumExecutorsFailed()
-          if (!finished) {
-            logDebug("Sending progress")
-            allocator.allocateResources()
-            try {
-              Thread.sleep(interval)
-            } catch {
-              case e: InterruptedException =>
+          try {
+            checkNumExecutorsFailed()
+            if (!finished) {
+              logDebug("Sending progress")
+              allocator.allocateResources()
             }
+            failureCount = 0
+          } catch {
+            case e: Throwable => {
+              failureCount += 1
+              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+                logError("Exception was thrown from Reporter thread.", e)
+                finish(FinalApplicationStatus.FAILED, "Exception was thrown" +
+                  s"${failureCount} time(s) from Reporter thread.")
+
+                /**
+                 * If exception is thrown from ReporterThread,
+                 * interrupt user class to stop.
+                 * Without this interrupting, if exception is
+                 * thrown before allocating enough executors,
+                 * YarnClusterScheduler waits until timeout even though
+                 * we cannot allocate executors.
+                 */
+                logInfo("Interrupting user class to stop.")
+                userClassThread.interrupt
+              } else {
+                logWarning(s"Reporter thread fails ${failureCount} time(s) in a row.", e)
+              }
+            }
+          }
+          try {
+            Thread.sleep(interval)
+          } catch {
+            case e: InterruptedException =>
           }
         }
       }
@@ -334,18 +368,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter() = {
-    val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
-    val proxy = client.getProxyHostAndPort(yarnConf)
-    val parts = proxy.split(":")
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-    val uriBase = "http://" + proxy + proxyBase
-    val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-
+    val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     if (isDriver) {
       System.setProperty("spark.ui.filters", amFilter)
-      System.setProperty(s"spark.$amFilter.params", params)
+      params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     } else {
-      actor ! AddWebUIFilter(amFilter, params, proxyBase)
+      actor ! AddWebUIFilter(amFilter, params.toMap, proxyBase)
     }
   }
 
@@ -355,7 +385,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
-    val t = new Thread {
+    userClassThread = new Thread {
       override def run() {
         var status = FinalApplicationStatus.FAILED
         try {
@@ -366,15 +396,23 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
           // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
           status = FinalApplicationStatus.SUCCEEDED
+        } catch {
+          case e: InvocationTargetException =>
+            e.getCause match {
+              case _: InterruptedException =>
+                // Reporter thread can interrupt to stop user class
+
+              case e => throw e
+            }
         } finally {
           logDebug("Finishing main")
+          finalStatus = status
         }
-        finalStatus = status
       }
     }
-    t.setName("Driver")
-    t.start()
-    t
+    userClassThread.setName("Driver")
+    userClassThread.start()
+    userClassThread
   }
 
   // Actor used to monitor the driver when running in client deploy mode.

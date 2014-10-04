@@ -15,16 +15,13 @@
 # limitations under the License.
 #
 
-from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
-from collections import namedtuple
 from itertools import chain, ifilter, imap
 import operator
 import os
 import sys
 import shlex
-import traceback
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
@@ -34,17 +31,19 @@ import bisect
 from random import Random
 from math import sqrt, log, isinf, isnan
 
+from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, CompressedSerializer
+    PickleSerializer, pack_long, AutoBatchedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
-    python_right_outer_join, python_cogroup
+    python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
     get_used_memory, ExternalSorter
+from pyspark.traceback_utils import SCCallSiteSync
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -79,57 +78,6 @@ def portable_hash(x):
             h = -2
         return h
     return hash(x)
-
-
-def _extract_concise_traceback():
-    """
-    This function returns the traceback info for a callsite, returns a dict
-    with function name, file name and line number
-    """
-    tb = traceback.extract_stack()
-    callsite = namedtuple("Callsite", "function file linenum")
-    if len(tb) == 0:
-        return None
-    file, line, module, what = tb[len(tb) - 1]
-    sparkpath = os.path.dirname(file)
-    first_spark_frame = len(tb) - 1
-    for i in range(0, len(tb)):
-        file, line, fun, what = tb[i]
-        if file.startswith(sparkpath):
-            first_spark_frame = i
-            break
-    if first_spark_frame == 0:
-        file, line, fun, what = tb[0]
-        return callsite(function=fun, file=file, linenum=line)
-    sfile, sline, sfun, swhat = tb[first_spark_frame]
-    ufile, uline, ufun, uwhat = tb[first_spark_frame - 1]
-    return callsite(function=sfun, file=ufile, linenum=uline)
-
-_spark_stack_depth = 0
-
-
-class _JavaStackTrace(object):
-
-    def __init__(self, sc):
-        tb = _extract_concise_traceback()
-        if tb is not None:
-            self._traceback = "%s at %s:%s" % (
-                tb.function, tb.file, tb.linenum)
-        else:
-            self._traceback = "Error! Could not extract traceback info"
-        self._context = sc
-
-    def __enter__(self):
-        global _spark_stack_depth
-        if _spark_stack_depth == 0:
-            self._context._jsc.setCallSite(self._traceback)
-        _spark_stack_depth += 1
-
-    def __exit__(self, type, value, tb):
-        global _spark_stack_depth
-        _spark_stack_depth -= 1
-        if _spark_stack_depth == 0:
-            self._context._jsc.setCallSite(None)
 
 
 class BoundedFloat(float):
@@ -353,7 +301,7 @@ class RDD(object):
             return ifilter(f, iterator)
         return self.mapPartitions(func, True)
 
-    def distinct(self):
+    def distinct(self, numPartitions=None):
         """
         Return a new RDD containing the distinct elements in this RDD.
 
@@ -361,7 +309,7 @@ class RDD(object):
         [1, 2, 3]
         """
         return self.map(lambda x: (x, None)) \
-                   .reduceByKey(lambda x, _: x) \
+                   .reduceByKey(lambda x, _: x, numPartitions) \
                    .map(lambda (x, _): x)
 
     def sample(self, withReplacement, fraction, seed=None):
@@ -704,7 +652,7 @@ class RDD(object):
         """
         Return a list that contains all of the elements in this RDD.
         """
-        with _JavaStackTrace(self.context) as st:
+        with SCCallSiteSync(self.context) as css:
             bytesInJava = self._jrdd.collect().iterator()
         return list(self._collect_iterator_through_file(bytesInJava))
 
@@ -1427,7 +1375,7 @@ class RDD(object):
 
         For each element (k, v) in C{self}, the resulting RDD will either
         contain all pairs (k, (v, w)) for w in C{other}, or the pair
-        (k, (v, None)) if no elements in other have key k.
+        (k, (v, None)) if no elements in C{other} have key k.
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
@@ -1454,6 +1402,27 @@ class RDD(object):
         [('a', (2, 1)), ('b', (None, 4))]
         """
         return python_right_outer_join(self, other, numPartitions)
+
+    def fullOuterJoin(self, other, numPartitions=None):
+        """
+        Perform a right outer join of C{self} and C{other}.
+
+        For each element (k, v) in C{self}, the resulting RDD will either
+        contain all pairs (k, (v, w)) for w in C{other}, or the pair
+        (k, (v, None)) if no elements in C{other} have key k.
+
+        Similarly, for each element (k, w) in C{other}, the resulting RDD will
+        either contain all pairs (k, (v, w)) for v in C{self}, or the pair
+        (k, (None, w)) if no elements in C{self} have key k.
+
+        Hash-partitions the resulting RDD into the given number of partitions.
+
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2), ("c", 8)])
+        >>> sorted(x.fullOuterJoin(y).collect())
+        [('a', (1, 2)), ('b', (4, None)), ('c', (None, 8))]
+        """
+        return python_full_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
     # portable_hash is used as default, because builtin hash of None is different
@@ -1515,7 +1484,7 @@ class RDD(object):
 
         keyed = self.mapPartitionsWithIndex(add_shuffle_key)
         keyed._bypass_serializer = True
-        with _JavaStackTrace(self.context) as st:
+        with SCCallSiteSync(self.context) as css:
             pairRDD = self.ctx._jvm.PairwiseRDD(
                 keyed._jrdd.rdd()).asJavaPairRDD()
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
@@ -1979,10 +1948,10 @@ class RDD(object):
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.
         """
-        if not self._is_pickled():
-            self = self._reserialize(BatchedSerializer(PickleSerializer(), 1024))
-        batched = isinstance(self._jrdd_deserializer, BatchedSerializer)
-        return self.ctx._jvm.PythonRDD.pythonToJava(self._jrdd, batched)
+        rdd = self._reserialize(AutoBatchedSerializer(PickleSerializer())) \
+            if not self._is_pickled() else self
+        is_batch = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
+        return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, is_batch)
 
     def countApprox(self, timeout, confidence=0.95):
         """
@@ -2104,6 +2073,12 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
+        self._broadcast = None
+
+    def __del__(self):
+        if self._broadcast:
+            self._broadcast.unpersist()
+            self._broadcast = None
 
     @property
     def _jrdd(self):
@@ -2111,10 +2086,16 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-        command = (self.func, self._prev_jrdd_deserializer,
+        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        command = (self.func, profileStats, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
+        # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
+        if len(pickled_command) > (1 << 20):  # 1M
+            self._broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(self._broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
@@ -2129,6 +2110,10 @@ class PipelinedRDD(RDD):
                                              self.ctx.pythonExec,
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
+
+        if enable_profile:
+            self._id = self._jrdd_val.id()
+            self.ctx._add_profile(self._id, profileStats)
         return self._jrdd_val
 
     def id(self):
