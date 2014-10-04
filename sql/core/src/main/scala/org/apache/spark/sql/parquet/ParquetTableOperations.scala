@@ -283,7 +283,8 @@ case class InsertIntoParquetTable(
         1
       } else {
         FileSystemHelper
-          .findMaxTaskId(NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration, "parquet") + 1
+          .findMaxTaskId(
+            NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration, "parquet") + 1
       }
 
     def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {

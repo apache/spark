@@ -288,7 +288,8 @@ private[sql] case class InsertIntoOrcTable(
         1
       } else {
         FileSystemHelper
-          .findMaxTaskId(FileOutputFormat.getOutputPath(job).toString, job.getConfiguration, "orc") + 1
+          .findMaxTaskId(
+            FileOutputFormat.getOutputPath(job).toString, job.getConfiguration, "orc") + 1
       }
 
     def getWriter(
