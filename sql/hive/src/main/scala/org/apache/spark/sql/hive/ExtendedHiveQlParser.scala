@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.combinator.PackratParsers
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
 
@@ -27,8 +28,20 @@ import org.apache.spark.sql.catalyst.SqlLexical
  * A parser that recognizes all HiveQL constructs together with several Spark SQL specific 
  * extensions like CACHE TABLE and UNCACHE TABLE.
  */
-private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {  
+private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {
   
+  var hiveConf: HiveConf = _
+  var initialized: Boolean = false
+
+  def initialize(hcf: HiveConf): Unit = {
+    synchronized {
+      if (!initialized) {
+        initialized = true
+        hiveConf = hcf
+      }
+    }
+  }
+
   def apply(input: String): LogicalPlan = {
     // Special-case out set commands since the value fields can be
     // complex to handle without RegexParsers. Also this approach
@@ -84,7 +97,7 @@ private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with Packr
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
     remainingQuery ^^ {
-      case r => HiveQl.createPlan(r.trim())
+      case r => HiveQl.createPlan(r.trim(), hiveConf)
     }
 
   /** It returns all remaining query */
