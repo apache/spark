@@ -1,8 +1,6 @@
-# LowRankModels.jl
+# SparkGLRM
 
-[![Build Status](https://travis-ci.org/madeleineudell/LowRankModels.jl.svg?branch=master)](https://travis-ci.org/madeleineudell/LowRankModels.jl)
-
-LowRankModels.jl is a julia package for modeling and fitting generalized low rank models (GLRMs).
+SparkGLRM is a Spark package for modeling and fitting generalized low rank models (GLRMs).
 GLRMs model a data array by a low rank matrix, and
 include many well known models in data analysis, such as 
 principal components analysis (PCA), matrix completion, robust PCA,
@@ -10,22 +8,21 @@ nonnegative matrix factorization, k-means, and many more.
 
 For more information on GLRMs, see [our paper](http://www.stanford.edu/~udell/doc/glrm.pdf).
 
-LowRankModels.jl makes it easy to mix and match loss functions and regularizers
+SparkGLRM makes it easy to mix and match loss functions and regularizers
 to construct a model suitable for a particular data set.
 In particular, it supports 
 
-* using different loss functions for different columns of the data array, 
+* using different loss functions for different entries of the matrix, 
   which is useful when data types are heterogeneous 
   (eg, real, boolean, and ordinal columns);
-* fitting the model to only *some* of the entries in the talbe, which is useful for data tables with many missing (unobserved) entries; and
-* adding offsets and scalings to the model without destroying sparsity,
-  which is useful when the data is poorly scaled.
+* fitting the model to only *some* of the entries in the table, 
+  which is useful for data tables with many missing (unobserved) entries; and
 
-## Installation
+## Compilation
 
-To install, just call
+To compile and run, run the following from the Spark root directory
 ```
-Pkg.install("https://github.com/madeleineudell/LowRankModels.jl.git")
+sbt/sbt assembly
 ```
 at the julia prompt.
 
