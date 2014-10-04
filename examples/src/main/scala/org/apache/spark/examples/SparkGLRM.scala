@@ -185,9 +185,10 @@ object SparkGLRM {
     val numIterations = 100
     // regularization parameter
     val regPen = 0.1
+
+
     // Number of partitions for data
     val numChunks = 4
-
     // Build non-zeros
     val R = sc.parallelize(0 until M, numChunks).flatMap{i =>
       val inds = new scala.collection.mutable.TreeSet[Int]()
