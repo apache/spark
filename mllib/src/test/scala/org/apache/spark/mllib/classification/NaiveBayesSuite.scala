@@ -21,10 +21,13 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.HashPartitioner
+import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.rdd.RDD
 
 object NaiveBayesSuite {
 
@@ -71,6 +74,13 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
     assert(numOfWrongPredictions < input.length / 5)
   }
 
+  def validatePairPrediction(predictions: RDD[(Long, Double)], input: RDD[(Long, LabeledPoint)]) {
+    assert(predictions.partitioner == input.partitioner)
+    assert(predictions.sortByKey().keys.collect().deep == input.sortByKey().keys.collect().deep)
+    val joined = predictions.join(input).values
+    validatePrediction(joined.map(_._1).collect(), joined.map(_._2).collect())
+  }
+
   test("Naive Bayes") {
     val nPoints = 10000
 
@@ -95,12 +105,18 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test prediction on PairRDD.
+    val validationPairRDD = validationRDD.zipWithUniqueId().map(_.swap).partitionBy(
+      new HashPartitioner(2))
+    val predicted = model.predictValues(validationPairRDD.mapValues(_.features))
+    validatePairPrediction(predicted, validationPairRDD)
   }
 
   test("distributed naive bayes") {
     val nPoints = 10000
-    val nLabels = 150
-    val nFeatures = 300
+    val nLabels = 10
+    val nFeatures = 30
 
     def logNormalize(s: Seq[Int]) = {
       s.map(_.toDouble / s.sum).map(math.log)
@@ -108,7 +124,7 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
     val pi = logNormalize(1 to nLabels).toArray
     val theta = (for(l <- 1 to nLabels; f <- 1 to nFeatures)
-      yield if (f == l) 10000 else 1 // Each label is dominated by a different feature.
+      yield if (f == l) 1000 else 1 // Each label is dominated by a different feature.
     ).grouped(nFeatures).map(logNormalize).map(_.toArray).toArray
 
     val trainData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
@@ -124,8 +140,14 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    val shortValData = validationData.take(nPoints / 10)
+    val shortValData = validationData.take(nPoints / 100)
     validatePrediction(shortValData.map(row => model.predict(row.features)), shortValData)
+
+    // Test prediction on PairRDD.
+    val validationPairRDD = validationRDD.zipWithUniqueId().map(_.swap).partitionBy(
+      new HashPartitioner(2))
+    val predicted = model.predictValues(validationPairRDD.mapValues(_.features))
+    validatePairPrediction(predicted, validationPairRDD)
   }
 
   test("distributed naive bayes with empty train RDD") {

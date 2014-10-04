@@ -17,8 +17,11 @@
 
 package org.apache.spark.mllib.classification
 
+import scala.reflect.ClassTag
+
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
+import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
@@ -29,7 +32,16 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Abstract model for a naive bayes classifier.
  */
-abstract class NaiveBayesModel extends ClassificationModel with Serializable
+abstract class NaiveBayesModel extends ClassificationModel with Serializable {
+  /**
+   * Predict values for the given data set using the trained model.
+   *
+   * @param testData PairRDD with values representing data points to be predicted
+   * @return an RDD[(K, Double)] where each entry contains the corresponding prediction,
+   *              partitioned consistently with testData.
+   */
+  def predictValues[K: ClassTag](testData: RDD[(K, Vector)]): RDD[(K, Double)]
+}
 
 /**
  * Local model for a naive bayes classifier.
@@ -60,7 +72,7 @@ private class LocalNaiveBayesModel(
     }
   }
 
-  override def predict(testData: RDD[Vector]): RDD[Double] = {
+  def predict(testData: RDD[Vector]): RDD[Double] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
       val model = bcModel.value
@@ -68,56 +80,51 @@ private class LocalNaiveBayesModel(
     }
   }
 
-  override def predict(testData: Vector): Double = {
+  def predict(testData: Vector): Double = {
     labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
+  }
+
+  def predictValues[K: ClassTag](testData: RDD[(K, Vector)]): RDD[(K, Double)] = {
+    val bcModel = testData.context.broadcast(this)
+    testData.mapValues { test =>
+      bcModel.value.predict(test)
+    }    
   }
 }
 
 /**
- * One block from a distributed model for a naive bayes classifier. The model is divided into
- * blocks, each containing the complete model state for a group of labels.
- *
- * @param labels array of labels
- * @param pi log of class priors, with dimension C, the number of labels in this block
- * @param theta log of class conditional probabilities, with dimensions C-by-D,
- *              where D is the number of features
- */
-private case class NBModelBlock(labels: Array[Double], pi: BDV[Double], theta: BDM[Double])
-
-/**
  * Distributed model for a naive bayes classifier.
  *
- * @param modelBlocks RDD of NBModelBlock, comprising the model
+ * @param model RDD of (label, pi, theta) rows comprising the model.
  */
-private class DistNaiveBayesModel(val modelBlocks: RDD[NBModelBlock]) extends NaiveBayesModel {
+private class DistNaiveBayesModel(val model: RDD[(Double, Double, BDV[Double])])
+  extends NaiveBayesModel {
 
-  override def predict(testData: RDD[Vector]): RDD[Double] = {
-    // Pair each test data point with all model blocks.
-    val testXModel = testData.map(_.toBreeze).zipWithIndex().cartesian(modelBlocks)
-
-    // Find the maximum a posteriori label for each (test_data_point, model_block) pair.
-    val testXModelMaxes = testXModel.map { case ((test, i), model) => {
-      val posterior = model.pi + model.theta * test
-      val maxIdx = brzArgmax(posterior)
-      (i, (posterior(maxIdx), model.labels(maxIdx)))
-    }}
-
-    // Find the maximum for each test data point, across all model blocks.
-    val testMaxes = testXModelMaxes.reduceByKey(Ordering[(Double,Double)].max)
-
-    // Reorder based on the original testData index, then project the labels.
-    testMaxes.sortByKey().map{ case (_, (_, label)) => label }
+  def predict(testData: RDD[Vector]): RDD[Double] = {
+    val indexed = testData.zipWithIndex().map(_.swap)
+    // Predict, reorder the results to match the input order, then project the labels.
+    predictValues(indexed).sortByKey().map(_._2)
   }
 
-  override def predict(testData: Vector): Double = {
+  def predict(testData: Vector): Double = {
     val testBreeze = testData.toBreeze
+    model.map { case (label, pi, theta) =>
+      (pi + theta.dot(testBreeze), label)
+    }.max._2
+  }
 
-    // Find the max a posteriori label for each model block, then the max of these block maxes.
-    modelBlocks.map( m => {
-      val posterior = m.pi + m.theta * testBreeze
-      val maxIdx = brzArgmax(posterior)
-      (posterior(maxIdx), m.labels(maxIdx))
-    }).max._2
+  def predictValues[K: ClassTag](testData: RDD[(K, Vector)]): RDD[(K, Double)] = {
+    // Pair each test data point with all model rows.
+    val testXModel = testData.mapValues(_.toBreeze).cartesian(model)
+
+    // Compute the posterior distribution for every test point.
+    val posterior = testXModel.map { case ((key, test), (label, pi, theta)) =>
+      (key, (pi + theta.dot(test), label))
+    }
+
+    // Find the maximum a posteriori value for each test data point, then project labels.
+    val partitioner = testData.partitioner.getOrElse(defaultPartitioner(posterior))
+    posterior.reduceByKey(partitioner, Ordering[(Double, Double)].max _).mapValues(_._2)
   }
 }
 
@@ -142,7 +149,7 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
   }
 
   /** Set the model distribution mode, either "local" or "dist" (for distributed). */
-  def setDistMode(distMode: String) = {
+  def setDistMode(distMode: String): NaiveBayes = {
     this.distMode = distMode
     this
   }
@@ -218,37 +225,24 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
   }
 
   private def trainDistModel(labelAggregates: RDD[(Double, (Long, BDV[Double]))]) = {
-    case class LabelAggregate(label: Double, numDocuments: Long, sumFeatures: BDV[Double])
-    val aggregated = labelAggregates.map(x => LabelAggregate(x._1, x._2._1, x._2._2))
-
-    // Compute the model's prior (pi) vector and conditional (theta) matrix for each batch of
-    // labels.
+    // Compute the model's prior (pi) value and conditional (theta) vector for each label.
     // NOTE In contrast to the local trainer, the piLogDenom normalization term is omitted here.
     // Computing this term requires an additional aggregation on 'aggregated', and because the
     // term is an additive constant it does not affect maximum a posteriori model prediction.
-    val modelBlocks = aggregated.mapPartitions(p => p.grouped(100).map { batch =>
-      val numFeatures = batch.head.sumFeatures.length
-      val pi = batch.map(l => math.log(l.numDocuments + lambda))
-
-      // Assemble values of the theta matrix in row major order.
-      val theta = new Array[Double](batch.length * numFeatures)
-      batch.flatMap( l => {
-        val thetaLogDenom = math.log(brzSum(l.sumFeatures) + numFeatures * lambda)
-        l.sumFeatures.iterator.map(f => math.log(f._2 + lambda) - thetaLogDenom)
-      }).copyToArray(theta)
-
-      NBModelBlock(labels = batch.map(_.label).toArray,
-                   pi     = new BDV[Double](pi.toArray),
-                   theta  = new BDM[Double](batch.length, numFeatures, theta,
-                                            offset=0, majorStride=numFeatures, isTranspose=true))
-    })
+    val model = labelAggregates.map { case (label, (numDocuments, sumFeatures)) =>
+      val pi = math.log(numDocuments + lambda)
+      val thetaLogDenom = math.log(brzSum(sumFeatures) + sumFeatures.length * lambda)
+      val theta = new Array[Double](sumFeatures.length)
+      sumFeatures.iterator.map(f => math.log(f._2 + lambda) - thetaLogDenom).copyToArray(theta)
+      (label, pi, new BDV[Double](theta))
+    }
 
     // Materialize and persist the model, check that it is nonempty.
-    if (modelBlocks.persist(StorageLevel.MEMORY_AND_DISK).count() == 0) {
+    if (model.persist(StorageLevel.MEMORY_AND_DISK).count() == 0) {
       throw new SparkException("Naive Bayes requires a nonempty training RDD.")
     }
 
-    new DistNaiveBayesModel(modelBlocks)
+    new DistNaiveBayesModel(model)
   }
 }
 
