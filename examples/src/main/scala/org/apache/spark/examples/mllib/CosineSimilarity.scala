@@ -60,7 +60,7 @@ object CosineSimilarity {
     // Compute similar columns perfectly, with brute force.
     val simsPerfect = mat.columnSimilarities().entries.collect
 
-    // Compute similar columns with estimation focusing on pairs more similar than threshold
+    // Compute similar columns with estimation using DIMSUM
     val simsEstimate = mat.columnSimilarities(threshold).entries.collect
 
     val n = mat.numCols().toInt
