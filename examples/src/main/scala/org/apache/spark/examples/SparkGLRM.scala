@@ -1,1 +1,1 @@
-Moved into the glrm directory.
+moved to http://git.io/glrmspark
