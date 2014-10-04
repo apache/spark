@@ -191,6 +191,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
 
     checkAnswer(
+      sql("SELECT b FROM binaryData ORDER BY a ASC"),
+      (1 to 5).map(Row(_)).toSeq)
+
+    checkAnswer(
+      sql("SELECT b FROM binaryData ORDER BY a DESC"),
+      (1 to 5).map(Row(_)).toSeq.reverse)
+
+    checkAnswer(
       sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
       arrayData.collect().sortBy(_.data(0)).toSeq)
 
@@ -672,4 +680,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       ("true", "false") :: Nil)
   }
+  
+  test("SPARK-3371 Renaming a function expression with group by gives error") {
+    registerFunction("len", (s: String) => s.length)
+    checkAnswer(
+      sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"), 1)}    
 }

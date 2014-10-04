@@ -76,6 +76,8 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   var nextMesosTaskId = 0
 
+  @volatile var appId: String = _
+
   def newMesosTaskId(): Int = {
     val id = nextMesosTaskId
     nextMesosTaskId += 1
@@ -167,7 +169,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
-    logInfo("Registered as framework ID " + frameworkId.getValue)
+    appId = frameworkId.getValue
+    logInfo("Registered as framework ID " + appId)
     registeredLock.synchronized {
       isRegistered = true
       registeredLock.notifyAll()
@@ -198,7 +201,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        if (totalCoresAcquired < maxCores && mem >= sc.executorMemory && cpus >= 1 &&
+        if (totalCoresAcquired < maxCores &&
+            mem >= MemoryUtils.calculateTotalMemory(sc) &&
+            cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
             !slaveIdsWithExecutors.contains(slaveId)) {
           // Launch an executor on the slave
@@ -214,7 +219,8 @@ private[spark] class CoarseMesosSchedulerBackend(
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem", sc.executorMemory))
+            .addResources(createResource("mem",
+              MemoryUtils.calculateTotalMemory(sc)))
             .build()
           d.launchTasks(
             Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
@@ -309,5 +315,11 @@ private[spark] class CoarseMesosSchedulerBackend(
     logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
     slaveLost(d, s)
   }
+
+  override def applicationId(): String =
+    Option(appId).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
 
 }

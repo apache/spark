@@ -187,6 +187,15 @@ class SparkContext(config: SparkConf) extends Logging {
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
 
+  private[spark] val isEventLogEnabled = conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] val eventLogDir: Option[String] = {
+    if (isEventLogEnabled) {
+      Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
+    } else {
+      None
+    }
+  }
+
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
   val tachyonFolderName = "spark-" + randomUUID.toString()
@@ -200,6 +209,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val listenerBus = new LiveListenerBus
 
   // Create the Spark execution environment (cache, map output tracker, etc)
+  conf.set("spark.executor.id", "driver")
   private[spark] val env = SparkEnv.create(
     conf,
     "<driver>",
@@ -231,19 +241,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
-
-  // Optionally log Spark events
-  private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
-      logger.start()
-      listenerBus.addListener(logger)
-      Some(logger)
-    } else None
-  }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
 
   val startTime = System.currentTimeMillis()
 
@@ -308,6 +305,29 @@ class SparkContext(config: SparkConf) extends Logging {
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
   // constructor
   taskScheduler.start()
+
+  val applicationId: String = taskScheduler.applicationId()
+  conf.set("spark.app.id", applicationId)
+
+  val metricsSystem = env.metricsSystem
+
+  // The metrics system for Driver need to be set spark.app.id to app ID.
+  // So it should start after we get app ID from the task scheduler and set spark.app.id.
+  metricsSystem.start()
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (isEventLogEnabled) {
+      val logger =
+        new EventLoggingListener(applicationId, eventLogDir.get, conf, hadoopConfiguration)
+      logger.start()
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
@@ -411,8 +431,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // Post init
   taskScheduler.postStartHook()
 
-  private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
-  private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
+  private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
+  private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
 
   private def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
@@ -1278,7 +1298,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
-    listenerBus.post(SparkListenerApplicationStart(appName, taskScheduler.applicationId(),
+    listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser))
   }
 
