@@ -44,34 +44,35 @@ object DataType {
     }
   }
 
-  private def parseDataType(asJValue: JValue): DataType = asJValue match {
-    case JString("boolean") => BooleanType
-    case JString("byte") => ByteType
-    case JString("short") => ShortType
-    case JString("integer") => IntegerType
-    case JString("long") => LongType
-    case JString("float") => FloatType
-    case JString("double") => DoubleType
-    case JString("decimal") => DecimalType
-    case JString("string") => StringType
-    case JString("binary") => BinaryType
-    case JString("timestamp") => TimestampType
-    case JString("null") => NullType
-    case JObject(List(("array", JSortedObject(
-        ("containsNull", JBool(n)), ("type", t: JValue))))) =>
+  // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
+  private def parseDataType(json: JValue): DataType = json match {
+    case JObject(("type", JString(name)) :: Nil) =>
+      PrimitiveType.nameToType(name)
+
+    case JSortedObject(
+        ("containsNull", JBool(n)),
+        ("elementType", t: JValue),
+        ("type", JString("array"))) =>
       ArrayType(parseDataType(t), n)
-    case JObject(List(("struct", JObject(List(("fields", JArray(fields))))))) =>
-      StructType(fields.map(parseStructField))
-    case JObject(List(("map", JSortedObject(
-        ("key", k: JValue), ("value", v: JValue), ("valueContainsNull", JBool(n)))))) =>
+
+    case JSortedObject(
+        ("keyType", k: JValue),
+        ("type", JString("map")),
+        ("valueContainsNull", JBool(n)),
+        ("valueType", v: JValue)) =>
       MapType(parseDataType(k), parseDataType(v), n)
+
+    case JSortedObject(
+        ("fields", JArray(fields)),
+        ("type", JString("struct"))) =>
+      StructType(fields.map(parseStructField))
   }
 
-  private def parseStructField(asJValue: JValue): StructField = asJValue match {
-    case JObject(Seq(("field", JSortedObject(
+  private def parseStructField(json: JValue): StructField = json match {
+    case JSortedObject(
         ("name", JString(name)),
         ("nullable", JBool(nullable)),
-        ("type", dataType: JValue))))) =>
+        ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
   }
 
@@ -164,21 +165,19 @@ abstract class DataType {
 
   def isPrimitive: Boolean = false
 
-  def simpleString: String
+  def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
 
-  private[sql] def jsonValue: JValue = simpleString
+  private[sql] def jsonValue: JValue = "type" -> typeName
 
-  def jsonString: String = compact(render(jsonValue))
+  def json: String = compact(render(jsonValue))
 
-  def prettyJsonString: String = pretty(render(jsonValue))
+  def prettyJson: String = pretty(render(jsonValue))
 }
 
-case object NullType extends DataType {
-  def simpleString: String = "null"
-}
+case object NullType extends DataType
 
 object NativeType {
-  def all = Seq(
+  val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
@@ -198,6 +197,12 @@ trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
 
+object PrimitiveType {
+  private[sql] val all = Seq(DecimalType, TimestampType, BinaryType) ++ NativeType.all
+
+  private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
+}
+
 abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
@@ -213,7 +218,6 @@ case object StringType extends NativeType with PrimitiveType {
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  def simpleString: String = "string"
 }
 
 case object BinaryType extends NativeType with PrimitiveType {
@@ -228,14 +232,12 @@ case object BinaryType extends NativeType with PrimitiveType {
       return x.length - y.length
     }
   }
-  def simpleString: String = "binary"
 }
 
 case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  def simpleString: String = "boolean"
 }
 
 case object TimestampType extends NativeType {
@@ -246,8 +248,6 @@ case object TimestampType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }
-
-  def simpleString: String = "timestamp"
 }
 
 abstract class NumericType extends NativeType with PrimitiveType {
@@ -281,7 +281,6 @@ case object LongType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  def simpleString: String = "long"
 }
 
 case object IntegerType extends IntegralType {
@@ -290,7 +289,6 @@ case object IntegerType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  def simpleString: String = "integer"
 }
 
 case object ShortType extends IntegralType {
@@ -299,7 +297,6 @@ case object ShortType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  def simpleString: String = "short"
 }
 
 case object ByteType extends IntegralType {
@@ -308,7 +305,6 @@ case object ByteType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  def simpleString: String = "byte"
 }
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
@@ -330,7 +326,6 @@ case object DecimalType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[BigDecimal]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = BigDecimalAsIfIntegral
-  def simpleString: String = "decimal"
 }
 
 case object DoubleType extends FractionalType {
@@ -340,7 +335,6 @@ case object DoubleType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = DoubleAsIfIntegral
-  def simpleString: String = "double"
 }
 
 case object FloatType extends FractionalType {
@@ -350,13 +344,12 @@ case object FloatType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = FloatAsIfIntegral
-  def simpleString: String = "float"
 }
 
 object ArrayType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
-  def simpleString: String = "array"
+  def typeName: String = "array"
 }
 
 /**
@@ -369,15 +362,13 @@ object ArrayType {
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
-      s"$prefix-- element: ${elementType.simpleString} (containsNull = $containsNull)\n")
+      s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
     DataType.buildFormattedString(elementType, s"$prefix    |", builder)
   }
 
-  def simpleString: String = ArrayType.simpleString
-
   override private[sql] def jsonValue =
-    simpleString ->
-      ("type" -> elementType.jsonValue) ~
+    ("type" -> typeName) ~
+      ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
 }
 
@@ -390,13 +381,12 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- $name: ${dataType.simpleString} (nullable = $nullable)\n")
+    builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
 
   private[sql] def jsonValue: JValue = {
-    "field" ->
-      ("name" -> name) ~
+    ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
       ("nullable" -> nullable)
   }
@@ -406,7 +396,7 @@ object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
 
-  def simpleName = "struct"
+  def typeName = "struct"
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -457,9 +447,9 @@ case class StructType(fields: Seq[StructField]) extends DataType {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
   }
 
-  def simpleString: String = StructType.simpleName
-
-  override private[sql] def jsonValue = simpleString -> ("fields" -> fields.map(_.jsonValue))
+  override private[sql] def jsonValue =
+    ("type" -> typeName) ~
+      ("fields" -> fields.map(_.jsonValue))
 }
 
 object MapType {
@@ -484,18 +474,16 @@ case class MapType(
     valueType: DataType,
     valueContainsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- key: ${keyType.simpleString}\n")
-    builder.append(s"$prefix-- value: ${valueType.simpleString} " +
+    builder.append(s"$prefix-- key: ${keyType.typeName}\n")
+    builder.append(s"$prefix-- value: ${valueType.typeName} " +
       s"(valueContainsNull = $valueContainsNull)\n")
     DataType.buildFormattedString(keyType, s"$prefix    |", builder)
     DataType.buildFormattedString(valueType, s"$prefix    |", builder)
   }
 
-  def simpleString: String = MapType.simpleName
-
   override private[sql] def jsonValue: JValue =
-    simpleString ->
-      ("key" -> keyType.jsonValue) ~
-      ("value" -> valueType.jsonValue) ~
+    ("type" -> typeName) ~
+      ("keyType" -> keyType.jsonValue) ~
+      ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
 }

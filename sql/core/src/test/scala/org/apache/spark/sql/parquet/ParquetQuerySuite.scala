@@ -805,7 +805,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       StructField("c2", BinaryType, false)))
 
     val fromCaseClassString = ParquetTypesConverter.convertFromString(schema.toString)
-    val fromJson = ParquetTypesConverter.convertFromString(schema.jsonString)
+    val fromJson = ParquetTypesConverter.convertFromString(schema.json)
 
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)

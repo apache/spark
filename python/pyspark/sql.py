@@ -46,10 +46,6 @@ __all__ = [
     "SQLContext", "HiveContext", "SchemaRDD", "Row"]
 
 
-def _get_simple_string(clz):
-    return clz.__name__[:-4].lower()
-
-
 class DataType(object):
 
     """Spark SQL DataType"""
@@ -67,13 +63,14 @@ class DataType(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def simpleString(self):
-        return _get_simple_string(self.__class__)
+    @classmethod
+    def typeName(cls):
+        return cls.__name__[:-4].lower()
 
     def jsonValue(self):
-        return self.simpleString()
+        return {"type": self.typeName()}
 
-    def jsonString(self):
+    def json(self):
         return json.dumps(self.jsonValue(),
                           separators=(',', ':'),
                           sort_keys=True)
@@ -222,8 +219,14 @@ class ArrayType(DataType):
                                      str(self.containsNull).lower())
 
     def jsonValue(self):
-        return {self.simpleString(): {'type': self.elementType.jsonValue(),
-                                      'containsNull': self.containsNull}}
+        return {"type": self.typeName(),
+                "elementType": self.elementType.jsonValue(),
+                "containsNull": self.containsNull}
+
+    @classmethod
+    def fromJson(cls, json):
+        return ArrayType(_parse_datatype_json_value(json["elementType"]),
+                         json["containsNull"])
 
 
 class MapType(DataType):
@@ -266,10 +269,16 @@ class MapType(DataType):
                                       str(self.valueContainsNull).lower())
 
     def jsonValue(self):
-        return {self.simpleString():
-                {'key': self.keyType.jsonValue(),
-                 'value': self.valueType.jsonValue(),
-                 'valueContainsNull': self.valueContainsNull}}
+        return {"type": self.typeName(),
+                "keyType": self.keyType.jsonValue(),
+                "valueType": self.valueType.jsonValue(),
+                "valueContainsNull": self.valueContainsNull}
+
+    @classmethod
+    def fromJson(cls, json):
+        return MapType(_parse_datatype_json_value(json["keyType"]),
+                       _parse_datatype_json_value(json["valueType"]),
+                       json["valueContainsNull"])
 
 
 class StructField(DataType):
@@ -310,9 +319,15 @@ class StructField(DataType):
                                           str(self.nullable).lower())
 
     def jsonValue(self):
-        return {'field': {'name': self.name,
-                          'type': self.dataType.jsonValue(),
-                          'nullable': self.nullable}}
+        return {"name": self.name,
+                "type": self.dataType.jsonValue(),
+                "nullable": self.nullable}
+
+    @classmethod
+    def fromJson(cls, json):
+        return StructField(json["name"],
+                           _parse_datatype_json_value(json["type"]),
+                           json["nullable"])
 
 
 class StructType(DataType):
@@ -344,23 +359,29 @@ class StructType(DataType):
                 ",".join(str(field) for field in self.fields))
 
     def jsonValue(self):
-        return {self.simpleString():
-                {'fields': map(lambda f: f.jsonValue(), self.fields)}}
+        return {"type": self.typeName(),
+                "fields": map(lambda f: f.jsonValue(), self.fields)}
+
+    @classmethod
+    def fromJson(cls, json):
+        return StructType(map(StructField.fromJson, json["fields"]))
 
 
-_all_primitive_types = dict((_get_simple_string(v), v)
+_all_primitive_types = dict((v.typeName(), v)
                             for v in globals().itervalues()
                             if type(v) is PrimitiveTypeSingleton and
                             v.__base__ == PrimitiveType)
 
 
+_all_complex_types = dict((v.typeName(), v)
+                          for v in [ArrayType, MapType, StructType])
+
+
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
     >>> def check_datatype(datatype):
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(
-    ...                          datatype.jsonString())
-    ...     python_datatype = _parse_datatype_json_string(
-    ...                          scala_datatype.jsonString())
+    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.json())
+    ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     return datatype == python_datatype
     >>> all(check_datatype(cls()) for cls in _all_primitive_types.values())
     True
@@ -402,31 +423,10 @@ def _parse_datatype_json_string(json_string):
 
 
 def _parse_datatype_json_value(json_value):
-    if type(json_value) is unicode and json_value in _all_primitive_types.keys():
-        return _all_primitive_types[json_value]()
-    elif 'array' in json_value:
-        array_type = json_value['array']
-        element_type = _parse_datatype_json_value(array_type['type'])
-        contains_null = array_type['containsNull']
-        return ArrayType(element_type, contains_null)
-    elif 'map' in json_value:
-        map_type = json_value['map']
-        key_type = _parse_datatype_json_value(map_type['key'])
-        value_type = _parse_datatype_json_value(map_type['value'])
-        value_contains_null = map_type['valueContainsNull']
-        return MapType(key_type, value_type, value_contains_null)
-    elif 'field' in json_value:
-        field = json_value['field']
-        name = field['name']
-        datatype = _parse_datatype_json_value(field['type'])
-        nullable = field['nullable']
-        return StructField(name, datatype, nullable)
-    elif 'struct' in json_value:
-        struct_type = json_value['struct']
-        fields = map(_parse_datatype_json_value, struct_type['fields'])
-        return StructType(fields)
+    if json_value["type"] in _all_primitive_types.keys():
+        return _all_primitive_types[json_value["type"]]()
     else:
-        raise ValueError('Unrecognized type: %s' % json_value)
+        return _all_complex_types[json_value["type"]].fromJson(json_value)
 
 
 # Mapping Python types to Spark SQL DateType
@@ -980,7 +980,7 @@ class SQLContext(object):
                                       self._sc.pythonExec,
                                       broadcast_vars,
                                       self._sc._javaAccumulator,
-                                      returnType.jsonString())
+                                      returnType.json())
 
     def inferSchema(self, rdd):
         """Infer and apply a schema to an RDD of L{Row}.
@@ -1116,7 +1116,7 @@ class SQLContext(object):
 
         batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
         jrdd = self._pythonToJava(rdd._jrdd, batched)
-        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.jsonString())
+        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
     def registerRDDAsTable(self, rdd, tableName):
@@ -1206,7 +1206,7 @@ class SQLContext(object):
         if schema is None:
             srdd = self._ssql_ctx.jsonFile(path)
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema.jsonString())
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
             srdd = self._ssql_ctx.jsonFile(path, scala_datatype)
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
@@ -1276,7 +1276,7 @@ class SQLContext(object):
         if schema is None:
             srdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(schema.jsonString())
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
             srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
@@ -1611,7 +1611,7 @@ class SchemaRDD(RDD):
     def schema(self):
         """Returns the schema of this SchemaRDD (represented by
         a L{StructType})."""
-        return _parse_datatype_json_string(self._jschema_rdd.baseSchemaRDD().schema().jsonString())
+        return _parse_datatype_json_string(self._jschema_rdd.baseSchemaRDD().schema().json())
 
     def schemaString(self):
         """Returns the output schema in the tree format."""

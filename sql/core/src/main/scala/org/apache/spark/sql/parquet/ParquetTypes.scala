@@ -332,7 +332,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
-    StructType.fromAttributes(schema).jsonString
+    StructType.fromAttributes(schema).json
   }
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {

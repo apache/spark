@@ -60,7 +60,7 @@ class DataTypeSuite extends FunSuite {
 
   def checkDataTypeJsonRepr(dataType: DataType): Unit = {
     test(s"JSON - $dataType") {
-      assert(DataType.fromJson(dataType.jsonString) === dataType)
+      assert(DataType.fromJson(dataType.json) === dataType)
     }
   }
 
