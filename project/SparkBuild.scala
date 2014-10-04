@@ -100,7 +100,7 @@ object SparkBuild extends PomBuild {
   }
 
   // NOTE: If you change the default version for each profile,
-  // also corresponding section in pom.xml should be cnahged.
+  // also corresponding section in pom.xml should be changed.
   if (System.getProperty("hadoop.version") == null) {
     val hadoopVersion = {
       if (profiles.contains("hadoop-0.23")) {
