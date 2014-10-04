@@ -34,11 +34,12 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
   private val memOnly = StorageLevel.MEMORY_ONLY
   private val none = StorageLevel.NONE
   private val taskInfo = new TaskInfo(0, 0, 0, 0, "big", "dog", TaskLocality.ANY, false)
+  private val taskInfo1 = new TaskInfo(1, 1, 1, 1, "big", "cat", TaskLocality.ANY, false)
   private def rddInfo0 = new RDDInfo(0, "freedom", 100, memOnly)
   private def rddInfo1 = new RDDInfo(1, "hostage", 200, memOnly)
   private def rddInfo2 = new RDDInfo(2, "sanity", 300, memAndDisk)
   private def rddInfo3 = new RDDInfo(3, "grace", 400, memAndDisk)
-  private val bm1 = BlockManagerId("big", "dog", 1, 1)
+  private val bm1 = BlockManagerId("big", "dog", 1)
 
   before {
     bus = new LiveListenerBus
@@ -107,7 +108,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     val myRddInfo1 = rddInfo1
     val myRddInfo2 = rddInfo2
     val stageInfo0 = new StageInfo(0, 0, "0", 100, Seq(myRddInfo0, myRddInfo1, myRddInfo2), "details")
-    bus.postToAll(SparkListenerBlockManagerAdded(bm1, 1000L))
+    bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener._rddInfoMap.size === 3)
     assert(storageListener.rddInfoList.size === 0) // not cached
@@ -162,4 +163,30 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     assert(storageListener._rddInfoMap(2).numCachedPartitions === 0)
   }
 
+  test("verify StorageTab contains all cached rdds") {
+
+    val rddInfo0 = new RDDInfo(0, "rdd0", 1, memOnly)
+    val rddInfo1 = new RDDInfo(1, "rdd1", 1 ,memOnly)
+    val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo0), "details")
+    val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfo1), "details")
+    val taskMetrics0 = new TaskMetrics
+    val taskMetrics1 = new TaskMetrics
+    val block0 = (RDDBlockId(0, 1), BlockStatus(memOnly, 100L, 0L, 0L))
+    val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L, 0L))
+    taskMetrics0.updatedBlocks = Some(Seq(block0))
+    taskMetrics1.updatedBlocks = Some(Seq(block1))
+    bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
+    assert(storageListener.rddInfoList.size === 0)
+    bus.postToAll(SparkListenerTaskEnd(0, 0, "big", Success, taskInfo, taskMetrics0))
+    assert(storageListener.rddInfoList.size === 1)
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
+    assert(storageListener.rddInfoList.size === 1)
+    bus.postToAll(SparkListenerStageCompleted(stageInfo0))
+    assert(storageListener.rddInfoList.size === 1)
+    bus.postToAll(SparkListenerTaskEnd(1, 0, "small", Success, taskInfo1, taskMetrics1))
+    assert(storageListener.rddInfoList.size === 2)
+    bus.postToAll(SparkListenerStageCompleted(stageInfo1))
+    assert(storageListener.rddInfoList.size === 2)
+  }
 }

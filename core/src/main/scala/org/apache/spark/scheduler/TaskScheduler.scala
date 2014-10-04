@@ -31,6 +31,8 @@ import org.apache.spark.storage.BlockManagerId
  */
 private[spark] trait TaskScheduler {
 
+  private val appId = "spark-application-" + System.currentTimeMillis
+
   def rootPool: Pool
 
   def schedulingMode: SchedulingMode
@@ -64,4 +66,12 @@ private[spark] trait TaskScheduler {
    */
   def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
     blockManagerId: BlockManagerId): Boolean
+
+  /**
+   * Get an application ID associated with the job.
+   *
+   * @return An application ID
+   */
+  def applicationId(): String = appId
+
 }

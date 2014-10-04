@@ -25,7 +25,6 @@ import scala.collection.Map
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
-import org.json4s.jackson.JsonMethods._
 
 
 import org.apache.spark.executor.{DataReadMethod, InputMetrics, ShuffleReadMetrics,
@@ -152,13 +151,15 @@ private[spark] object JsonProtocol {
     val blockManagerId = blockManagerIdToJson(blockManagerAdded.blockManagerId)
     ("Event" -> Utils.getFormattedClassName(blockManagerAdded)) ~
     ("Block Manager ID" -> blockManagerId) ~
-    ("Maximum Memory" -> blockManagerAdded.maxMem)
+    ("Maximum Memory" -> blockManagerAdded.maxMem) ~
+    ("Timestamp" -> blockManagerAdded.time)
   }
 
   def blockManagerRemovedToJson(blockManagerRemoved: SparkListenerBlockManagerRemoved): JValue = {
     val blockManagerId = blockManagerIdToJson(blockManagerRemoved.blockManagerId)
     ("Event" -> Utils.getFormattedClassName(blockManagerRemoved)) ~
-    ("Block Manager ID" -> blockManagerId)
+    ("Block Manager ID" -> blockManagerId) ~
+    ("Timestamp" -> blockManagerRemoved.time)
   }
 
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
@@ -169,6 +170,7 @@ private[spark] object JsonProtocol {
   def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
     ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
     ("App Name" -> applicationStart.appName) ~
+    ("App ID" -> applicationStart.appId.map(JString(_)).getOrElse(JNothing)) ~
     ("Timestamp" -> applicationStart.time) ~
     ("User" -> applicationStart.sparkUser)
   }
@@ -202,7 +204,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
-    val accumUpdateMap = taskInfo.accumulables
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
     ("Attempt" -> taskInfo.attempt) ~
@@ -253,7 +254,6 @@ private[spark] object JsonProtocol {
   }
 
   def shuffleReadMetricsToJson(shuffleReadMetrics: ShuffleReadMetrics): JValue = {
-    ("Shuffle Finish Time" -> shuffleReadMetrics.shuffleFinishTime) ~
     ("Remote Blocks Fetched" -> shuffleReadMetrics.remoteBlocksFetched) ~
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
@@ -295,8 +295,7 @@ private[spark] object JsonProtocol {
   def blockManagerIdToJson(blockManagerId: BlockManagerId): JValue = {
     ("Executor ID" -> blockManagerId.executorId) ~
     ("Host" -> blockManagerId.host) ~
-    ("Port" -> blockManagerId.port) ~
-    ("Netty Port" -> blockManagerId.nettyPort)
+    ("Port" -> blockManagerId.port)
   }
 
   def jobResultToJson(jobResult: JobResult): JValue = {
@@ -467,12 +466,14 @@ private[spark] object JsonProtocol {
   def blockManagerAddedFromJson(json: JValue): SparkListenerBlockManagerAdded = {
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
     val maxMem = (json \ "Maximum Memory").extract[Long]
-    SparkListenerBlockManagerAdded(blockManagerId, maxMem)
+    val time = Utils.jsonOption(json \ "Timestamp").map(_.extract[Long]).getOrElse(-1L)
+    SparkListenerBlockManagerAdded(time, blockManagerId, maxMem)
   }
 
   def blockManagerRemovedFromJson(json: JValue): SparkListenerBlockManagerRemoved = {
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
-    SparkListenerBlockManagerRemoved(blockManagerId)
+    val time = Utils.jsonOption(json \ "Timestamp").map(_.extract[Long]).getOrElse(-1L)
+    SparkListenerBlockManagerRemoved(time, blockManagerId)
   }
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
@@ -481,9 +482,10 @@ private[spark] object JsonProtocol {
 
   def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {
     val appName = (json \ "App Name").extract[String]
+    val appId = Utils.jsonOption(json \ "App ID").map(_.extract[String])
     val time = (json \ "Timestamp").extract[Long]
     val sparkUser = (json \ "User").extract[String]
-    SparkListenerApplicationStart(appName, time, sparkUser)
+    SparkListenerApplicationStart(appName, appId, time, sparkUser)
   }
 
   def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {
@@ -586,7 +588,6 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
-    metrics.shuffleFinishTime = (json \ "Shuffle Finish Time").extract[Long]
     metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
     metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
     metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]
@@ -644,8 +645,7 @@ private[spark] object JsonProtocol {
     val executorId = (json \ "Executor ID").extract[String]
     val host = (json \ "Host").extract[String]
     val port = (json \ "Port").extract[Int]
-    val nettyPort = (json \ "Netty Port").extract[Int]
-    BlockManagerId(executorId, host, port, nettyPort)
+    BlockManagerId(executorId, host, port)
   }
 
   def jobResultFromJson(json: JValue): JobResult = {

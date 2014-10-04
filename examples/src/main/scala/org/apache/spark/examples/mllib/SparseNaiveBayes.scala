@@ -27,7 +27,7 @@ import org.apache.spark.mllib.util.MLUtils
 /**
  * An example naive Bayes app. Run with
  * {{{
- * ./bin/spark-example org.apache.spark.examples.mllib.SparseNaiveBayes [options] <input>
+ * ./bin/run-example org.apache.spark.examples.mllib.SparseNaiveBayes [options] <input>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */

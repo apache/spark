@@ -184,10 +184,10 @@ object OldDeps {
 
   def versionArtifact(id: String): Option[sbt.ModuleID] = {
     val fullId = id + "_2.10"
-    Some("org.apache.spark" % fullId % "1.0.0")
+    Some("org.apache.spark" % fullId % "1.1.0")
   }
 
-  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+  def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
     retrieveManaged := true,
@@ -221,7 +221,8 @@ object SQL {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
-        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
+    cleanupCommands in console := "sparkContext.stop()"
   )
 }
 
@@ -249,7 +250,8 @@ object Hive {
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
-        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
+    cleanupCommands in console := "sparkContext.stop()"
   )
 
 }
@@ -290,9 +292,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -314,7 +316,7 @@ object Unidoc {
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
         "streaming.api.java", "streaming.flume", "streaming.kafka",
-        "streaming.mqtt", "streaming.twitter", "streaming.zeromq"
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
@@ -336,8 +338,8 @@ object TestSettings {
     fork := true,
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
-    javaOptions in Test += "-Dspark.ports.maxRetries=100",
-    javaOptions in Test += "-Dspark.ui.port=0",
+    javaOptions in Test += "-Dspark.port.maxRetries=100",
+    javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,

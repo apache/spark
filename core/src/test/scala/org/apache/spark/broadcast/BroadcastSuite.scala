@@ -132,7 +132,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       val statuses = bmm.getBlockStatus(blockId, askSlaves = true)
       assert(statuses.size === 1)
       statuses.head match { case (bm, status) =>
-        assert(bm.executorId === "<driver>", "Block should only be on the driver")
+        assert(bm.isDriver, "Block should only be on the driver")
         assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
         assert(status.memSize > 0, "Block should be in memory store on the driver")
         assert(status.diskSize === 0, "Block should not be in disk store on the driver")

@@ -19,17 +19,12 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.log4j.Logger
-import org.apache.log4j.Level
-
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
-
-import scala.language.postfixOps
 
 class DriverSuite extends FunSuite with Timeouts {
 
@@ -54,7 +49,7 @@ class DriverSuite extends FunSuite with Timeouts {
  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
-    Logger.getRootLogger().setLevel(Level.WARN)
+    Utils.configTestLog4j("INFO")
     val sc = new SparkContext(args(0), "DriverWithoutCleanup")
     sc.parallelize(1 to 100, 4).count()
   }

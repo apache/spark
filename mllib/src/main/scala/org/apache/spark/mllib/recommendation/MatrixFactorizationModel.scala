@@ -106,19 +106,4 @@ class MatrixFactorizationModel private[mllib] (
     }
     scored.top(num)(Ordering.by(_._2))
   }
-
-  /**
-   * :: DeveloperApi ::
-   * Predict the rating of many users for many products.
-   * This is a Java stub for python predictAll()
-   *
-   * @param usersProductsJRDD A JavaRDD with serialized tuples (user, product)
-   * @return JavaRDD of serialized Rating objects.
-   */
-  @DeveloperApi
-  def predict(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    val usersProducts = usersProductsJRDD.rdd.map(xBytes => SerDe.unpackTuple(xBytes))
-    predict(usersProducts).map(rate => SerDe.serializeRating(rate))
-  }
-
 }

@@ -19,7 +19,7 @@
 
 echo -e "q\n" | sbt/sbt -Phive scalastyle > scalastyle.txt
 # Check style with YARN alpha built too
-echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-0.23 -Dhadoop.version=0.23.9 yarn-alpha/scalastyle \
+echo -e "q\n" | sbt/sbt -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.9 yarn-alpha/scalastyle \
   >> scalastyle.txt
 # Check style with YARN built too
 echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 yarn/scalastyle \

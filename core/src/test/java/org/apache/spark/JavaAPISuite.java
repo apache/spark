@@ -29,19 +29,14 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.DefaultCodec;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
-import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.junit.After;
 import org.junit.Assert;
@@ -49,7 +44,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaHadoopRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -187,6 +181,36 @@ public class JavaAPISuite implements Serializable {
     sortedPairs = sortedRDD.collect();
     Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+  }
+
+  @Test
+  public void repartitionAndSortWithinPartitions() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(0, 5));
+    pairs.add(new Tuple2<Integer, Integer>(3, 8));
+    pairs.add(new Tuple2<Integer, Integer>(2, 6));
+    pairs.add(new Tuple2<Integer, Integer>(0, 8));
+    pairs.add(new Tuple2<Integer, Integer>(3, 8));
+    pairs.add(new Tuple2<Integer, Integer>(1, 3));
+
+    JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs);
+
+    Partitioner partitioner = new Partitioner() {
+      public int numPartitions() {
+        return 2;
+      }
+      public int getPartition(Object key) {
+        return ((Integer)key).intValue() % 2;
+      }
+    };
+
+    JavaPairRDD<Integer, Integer> repartitioned =
+        rdd.repartitionAndSortWithinPartitions(partitioner);
+    List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
+    Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<Integer, Integer>(0, 5),
+        new Tuple2<Integer, Integer>(0, 8), new Tuple2<Integer, Integer>(2, 6)));
+    Assert.assertEquals(partitions.get(1), Arrays.asList(new Tuple2<Integer, Integer>(1, 3),
+        new Tuple2<Integer, Integer>(3, 8), new Tuple2<Integer, Integer>(3, 8)));
   }
 
   @Test
@@ -752,7 +776,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContext(0, 0, 0, false, new TaskMetrics());
+    TaskContext context = new TaskContext(0, 0, 0L, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
@@ -1284,22 +1308,29 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(data.size(), collected.length);
   }
 
-  public void getHadoopInputSplits() {
-    String outDir = new File(tempDir, "output").getAbsolutePath();
-    sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2).saveAsTextFile(outDir);
-
-    JavaHadoopRDD<LongWritable, Text> hadoopRDD = (JavaHadoopRDD<LongWritable, Text>)
-        sc.hadoopFile(outDir, TextInputFormat.class, LongWritable.class, Text.class);
-    List<String> inputPaths = hadoopRDD.mapPartitionsWithInputSplit(
-        new Function2<InputSplit, Iterator<Tuple2<LongWritable, Text>>, Iterator<String>>() {
-      @Override
-      public Iterator<String> call(InputSplit split, Iterator<Tuple2<LongWritable, Text>> it)
-          throws Exception {
-        FileSplit fileSplit = (FileSplit) split;
-        return Lists.newArrayList(fileSplit.getPath().toUri().getPath()).iterator();
-      }
-    }, true).collect();
-    Assert.assertEquals(Sets.newHashSet(inputPaths),
-        Sets.newHashSet(outDir + "/part-00000", outDir + "/part-00001"));
+  /**
+   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
+   * since that's the only artifact where Guava classes have been relocated.
+   */
+  @Test
+  public void testGuavaOptional() {
+    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
+    // assembly.
+    sc.stop();
+    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,512]", "JavaAPISuite");
+    try {
+      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
+      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
+        new Function<Integer, Optional<Integer>>() {
+          @Override
+          public Optional<Integer> call(Integer i) {
+            return Optional.fromNullable(i);
+          }
+        });
+      rdd2.collect();
+    } finally {
+      localCluster.stop();
+    }
   }
+
 }

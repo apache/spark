@@ -21,6 +21,9 @@ import java.util.Properties
 
 import scala.collection.Map
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -52,12 +55,12 @@ class JsonProtocolSuite extends FunSuite {
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
-    val blockManagerAdded = SparkListenerBlockManagerAdded(
-      BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
-    val blockManagerRemoved = SparkListenerBlockManagerRemoved(
-      BlockManagerId("Scarce", "to be counted...", 100, 200))
+    val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
+      BlockManagerId("Stars", "In your multitude...", 300), 500)
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
+      BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
+    val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
@@ -81,7 +84,7 @@ class JsonProtocolSuite extends FunSuite {
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
-    testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
+    testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -104,7 +107,7 @@ class JsonProtocolSuite extends FunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15, 16), 17, 18, 19)
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19)
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
@@ -151,6 +154,35 @@ class JsonProtocolSuite extends FunSuite {
     assert(newMetrics.inputMetrics.isEmpty)
   }
 
+  test("BlockManager events backward compatibility") {
+    // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
+    val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
+      BlockManagerId("Stars", "In your multitude...", 300), 500)
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
+      BlockManagerId("Scarce", "to be counted...", 100))
+
+    val oldBmAdded = JsonProtocol.blockManagerAddedToJson(blockManagerAdded)
+      .removeField({ _._1 == "Timestamp" })
+
+    val deserializedBmAdded = JsonProtocol.blockManagerAddedFromJson(oldBmAdded)
+    assert(SparkListenerBlockManagerAdded(-1L, blockManagerAdded.blockManagerId,
+      blockManagerAdded.maxMem) === deserializedBmAdded)
+
+    val oldBmRemoved = JsonProtocol.blockManagerRemovedToJson(blockManagerRemoved)
+      .removeField({ _._1 == "Timestamp" })
+
+    val deserializedBmRemoved = JsonProtocol.blockManagerRemovedFromJson(oldBmRemoved)
+    assert(SparkListenerBlockManagerRemoved(-1L, blockManagerRemoved.blockManagerId) ===
+      deserializedBmRemoved)
+  }
+
+  test("SparkListenerApplicationStart backwards compatibility") {
+    // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
+    val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
+    val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
+      .removeField({ _._1 == "App ID" })
+    assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
+  }
 
   /** -------------------------- *
    | Helper test running methods |
@@ -242,8 +274,10 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
         assert(e1.maxMem === e2.maxMem)
+        assert(e1.time === e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
+        assert(e1.time === e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
         assert(e1.rddId == e2.rddId)
@@ -322,7 +356,6 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
-    assert(metrics1.shuffleFinishTime === metrics2.shuffleFinishTime)
     assert(metrics1.remoteBlocksFetched === metrics2.remoteBlocksFetched)
     assert(metrics1.localBlocksFetched === metrics2.localBlocksFetched)
     assert(metrics1.fetchWaitTime === metrics2.fetchWaitTime)
@@ -343,7 +376,6 @@ class JsonProtocolSuite extends FunSuite {
     assert(bm1.executorId === bm2.executorId)
     assert(bm1.host === bm2.host)
     assert(bm1.port === bm2.port)
-    assert(bm1.nettyPort === bm2.nettyPort)
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
@@ -535,7 +567,6 @@ class JsonProtocolSuite extends FunSuite {
       t.inputMetrics = Some(inputMetrics)
     } else {
       val sr = new ShuffleReadMetrics
-      sr.shuffleFinishTime = b + c
       sr.remoteBytesRead = b + d
       sr.localBlocksFetched = e
       sr.fetchWaitTime = a + d
@@ -773,7 +804,6 @@ class JsonProtocolSuite extends FunSuite {
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
       |    "Shuffle Read Metrics": {
-      |      "Shuffle Finish Time": 900,
       |      "Remote Blocks Fetched": 800,
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
@@ -944,10 +974,10 @@ class JsonProtocolSuite extends FunSuite {
       |  "Block Manager ID": {
       |    "Executor ID": "Stars",
       |    "Host": "In your multitude...",
-      |    "Port": 300,
-      |    "Netty Port": 400
+      |    "Port": 300
       |  },
-      |  "Maximum Memory": 500
+      |  "Maximum Memory": 500,
+      |  "Timestamp": 1
       |}
     """
 
@@ -958,9 +988,9 @@ class JsonProtocolSuite extends FunSuite {
       |  "Block Manager ID": {
       |    "Executor ID": "Scarce",
       |    "Host": "to be counted...",
-      |    "Port": 100,
-      |    "Netty Port": 200
-      |  }
+      |    "Port": 100
+      |  },
+      |  "Timestamp": 2
       |}
     """
 

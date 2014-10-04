@@ -37,6 +37,25 @@ case class Duration (private val millis: Long) {
 
   def / (that: Duration): Double = millis.toDouble / that.millis.toDouble
 
+  // Java-friendlier versions of the above.
+
+  def less(that: Duration): Boolean = this < that
+
+  def lessEq(that: Duration): Boolean = this <= that
+
+  def greater(that: Duration): Boolean = this > that
+
+  def greaterEq(that: Duration): Boolean = this >= that
+
+  def plus(that: Duration): Duration = this + that
+
+  def minus(that: Duration): Duration = this - that
+
+  def times(times: Int): Duration = this * times
+
+  def div(that: Duration): Double = this / that
+
+
   def isMultipleOf(that: Duration): Boolean =
     (this.millis % that.millis == 0)
 
@@ -80,4 +99,24 @@ object Minutes {
   def apply(minutes: Long) = new Duration(minutes * 60000)
 }
 
+// Java-friendlier versions of the objects above.
+// Named "Durations" instead of "Duration" to avoid changing the case class's implied API.
 
+object Durations {
+
+  /**
+   * @return [[org.apache.spark.streaming.Duration]] representing given number of milliseconds.
+   */
+  def milliseconds(milliseconds: Long) = Milliseconds(milliseconds)
+
+  /**
+   * @return [[org.apache.spark.streaming.Duration]] representing given number of seconds.
+   */
+  def seconds(seconds: Long) = Seconds(seconds)
+
+  /**
+   * @return [[org.apache.spark.streaming.Duration]] representing given number of minutes.
+   */
+  def minutes(minutes: Long) = Minutes(minutes)
+
+}

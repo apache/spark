@@ -254,7 +254,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Picks a random vertex from the graph and returns its ID.
    */
   def pickRandomVertex(): VertexId = {
-    val probability = 50 / graph.numVertices
+    val probability = 50.0 / graph.numVertices
     var found = false
     var retVal: VertexId = null.asInstanceOf[VertexId]
     while (!found) {
