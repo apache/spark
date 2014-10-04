@@ -2,7 +2,7 @@
 
 SparkGLRM is a Spark package for modeling and fitting generalized low rank models (GLRMs).
 GLRMs model a matrix by two low rank matrices, and
-include many well known models in data analysis, such as 
+include many well known models in machine learning, such as 
 principal components analysis (PCA), matrix completion, robust PCA,
 nonnegative matrix factorization, k-means, and many more.
 
@@ -50,12 +50,15 @@ To fit a GLRM, the user specifies
 * the regularizers `moviesProx` and `usersProx`
 * the rank `rank`
 
-There are currently several losses implemented, including:
+There are currently several features implemented, including:
 
 * quadratic loss
 * L1 loss `lossL1Grad`
 * L2 loss `lossL2Grad`
 * funnyLoss `funnyLossGrad`, for demonstration of per-entry loss function
+* quadratic regularization `proxL2`
+* L1 regularization `proxL1`
+* nonnegative constraint `proxNonneg`
 
 Users may also implement their own losses and regularizers; 
 see `SparkGLRM.scala` for more details.
@@ -104,11 +107,9 @@ To see how well the model performs using RMSE:
         }.mean()
 
 
-# Missing data
+## Missing data
 
 The input is a sparse matrix, and so missing data are simply left out of the sparse representation.
-
-# Technical details
 
 ## Optimization
 
