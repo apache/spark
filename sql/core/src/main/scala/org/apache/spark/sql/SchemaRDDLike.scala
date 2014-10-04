@@ -18,9 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.LogicalRDD
 
 /**
@@ -81,6 +80,7 @@ private[sql] trait SchemaRDDLike {
    * Saves the contents of this `SchemaRDD` as a orc file, preserving the schema.  Files that
    * are written out using this method can be read back in as a SchemaRDD using the `orcFile`
    * function.
+   * Note: you can only use it in HiveContext
    *
    * @group schema
    */

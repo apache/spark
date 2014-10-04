@@ -54,21 +54,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-       <groupId>org.spark-project.hive</groupId>
-       <artifactId>hive-exec</artifactId>
-       <version>${hive.version}</version>
-       <exclusions>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-api</artifactId>
-        </exclusion>
-       </exclusions>
-    </dependency>
-    <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>parquet-column</artifactId>
       <version>${parquet.version}</version>

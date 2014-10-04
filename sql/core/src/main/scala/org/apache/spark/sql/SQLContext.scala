@@ -36,8 +36,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.sql.orc.OrcRelation
+import org.apache.spark.SparkContext
 
 /**
  * :: AlphaComponent ::
@@ -149,14 +148,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
-   * Loads a Orc file, returning the result as a [[SchemaRDD]].
-   *
-   * @group userf
-   */
-  def orcFile(path: String): SchemaRDD =
-    new SchemaRDD(this, orc.OrcRelation(path, Some(sparkContext.hadoopConfiguration), this))
-
-  /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
    * It goes through the entire dataset once to determine the schema.
    *
@@ -256,40 +247,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * :: Experimental ::
-   * Creates an empty parquet file with the schema of class `A`, which can be registered as a table.
-   * This registered table can be used as the target of future `insertInto` operations.
-   *
-   * {{{
-   *   val sqlContext = new SQLContext(...)
-   *   import sqlContext._
-   *
-   *   case class Person(name: String, age: Int)
-   *   createOrcFile[Person]("path/to/file.orc").registerTempTable("people")
-   *   sql("INSERT INTO people SELECT 'michael', 29")
-   * }}}
-   *
-   * @tparam A A case class type that describes the desired schema of the parquet file to be
-   *           created.
-   * @param path The path where the directory containing parquet metadata should be created.
-   *             Data inserted into this table will also be stored at this location.
-   * @param allowExisting When false, an exception will be thrown if this directory already exists.
-   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
-   *             output format.
-   *
-   * @group userf
-   */
-  @Experimental
-  def createOrcFile[A <: Product : TypeTag](
-      path: String,
-      allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): SchemaRDD = {
-    new SchemaRDD(
-      this,
-      OrcRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
-  }
-
-  /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
    * during the lifetime of this instance of SQLContext.
    *
@@ -334,7 +291,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       HashJoin ::
       InMemoryScans ::
       ParquetOperations ::
-      OrcOperations::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil

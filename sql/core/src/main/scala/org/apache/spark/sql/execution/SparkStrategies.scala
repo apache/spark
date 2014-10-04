@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.parquet._
-import org.apache.spark.sql.orc.{OrcTableScan, InsertIntoOrcTable, OrcRelation}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -233,27 +232,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           filters,
           prunePushedDownFilters,
           ParquetTableScan(_, relation, filters)) :: Nil
-
-      case _ => Nil
-    }
-  }
-
-  object OrcOperations extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.WriteToOrcFile(path, child) =>
-        val relation =
-          OrcRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
-        InsertIntoOrcTable(relation, planLater(child), overwrite=true) :: Nil
-      case logical.InsertIntoOrcTable(table: OrcRelation, partition, child, overwrite) =>
-        InsertIntoOrcTable(table, planLater(child), overwrite) :: Nil
-      case PhysicalOperation(projectList, filters, relation: OrcRelation) =>
-        // TODO: need to implement predict push down.
-        val prunePushedDownFilters = identity[Seq[Expression]] _
-        pruneFilterProject(
-          projectList,
-          filters,
-          prunePushedDownFilters,
-          OrcTableScan(_, relation, None)) :: Nil
 
       case _ => Nil
     }

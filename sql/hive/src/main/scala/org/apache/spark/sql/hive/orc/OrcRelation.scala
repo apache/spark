@@ -15,27 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.orc
+package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedException, MultiInstanceRelation}
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.types._
+import java.util.Properties
+import java.io.IOException
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
+
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 import org.apache.hadoop.hive.ql.io.orc._
-import org.apache.hadoop.mapred.{FileInputFormat => NewFileInputFormat, JobConf}
 import org.apache.hadoop.hive.ql.io.orc.OrcProto.Type.Kind
-import org.apache.hadoop.mapreduce.Job
-import parquet.hadoop.util.ContextUtil
-import java.util.Properties
-import java.io.IOException
-import scala.collection.mutable
+
+import org.apache.spark.sql.parquet.FileSystemHelper
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedException, MultiInstanceRelation}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.types._
 
 
 private[sql] case class OrcRelation(
@@ -56,9 +57,11 @@ private[sql] case class OrcRelation(
 
   override val output = orcSchema
 
+  override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
+
   def orcSchema: Seq[Attribute] = {
     val origPath = new Path(path)
-    val reader = OrcFileOperator.readMetaData(origPath)
+    val reader = OrcFileOperator.readMetaData(origPath, conf)
 
     if (null != reader) {
       val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
@@ -98,9 +101,9 @@ private[sql] case class OrcRelation(
   }
 
   def convertToAttributes(
-     reader: Reader,
-     keys: java.util.List[String],
-     types: java.util.List[Integer]): Seq[Attribute] = {
+      reader: Reader,
+      keys: java.util.List[String],
+      types: java.util.List[Integer]): Seq[Attribute] = {
     val range = 0.until(keys.size())
     range.map {
       i => reader.getTypes.get(types.get(i)).getKind match {
@@ -132,16 +135,6 @@ private[sql] case class OrcRelation(
 }
 
 private[sql] object OrcRelation {
-
-
-  // The orc compression short names
-  val shortOrcCompressionCodecNames = Map(
-    "NONE"         -> CompressionKind.NONE,
-    "UNCOMPRESSED" -> CompressionKind.NONE,
-    "SNAPPY"       -> CompressionKind.SNAPPY,
-    "ZLIB"         -> CompressionKind.ZLIB,
-    "LZO"          -> CompressionKind.LZO)
-
   /**
    * Creates a new OrcRelation and underlying Orcfile for the given LogicalPlan. Note that
    * this is used inside [[org.apache.spark.sql.execution.SparkStrategies]] to
@@ -152,10 +145,11 @@ private[sql] object OrcRelation {
    * @param conf A configuration to be used.
    * @return An empty OrcRelation with inferred metadata.
    */
-  def create(pathString: String,
-             child: LogicalPlan,
-             conf: Configuration,
-             sqlContext: SQLContext): OrcRelation = {
+  def create(
+      pathString: String,
+      child: LogicalPlan,
+      conf: Configuration,
+      sqlContext: SQLContext): OrcRelation = {
     if (!child.resolved) {
       throw new UnresolvedException[LogicalPlan](
         child,
@@ -173,19 +167,20 @@ private[sql] object OrcRelation {
    * @param conf A configuration to be used.
    * @return An empty OrcRelation.
    */
-  def createEmpty(pathString: String,
-                  attributes: Seq[Attribute],
-                  allowExisting: Boolean,
-                  conf: Configuration,
-                  sqlContext: SQLContext): OrcRelation = {
+  def createEmpty(
+      pathString: String,
+      attributes: Seq[Attribute],
+      allowExisting: Boolean,
+      conf: Configuration,
+      sqlContext: SQLContext): OrcRelation = {
     val path = checkPath(pathString, allowExisting, conf)
 
-   /** set compression kind in hive 0.13.1
-    * conf.set(
-    *   HiveConf.ConfVars.OHIVE_ORC_DEFAULT_COMPRESS.varname,
-    *   shortOrcCompressionCodecNames.getOrElse(
-    *    sqlContext.orcCompressionCodec.toUpperCase, CompressionKind.NONE).name)
-    */
+    /** set compression kind in hive 0.13.1
+      * conf.set(
+      *   HiveConf.ConfVars.OHIVE_ORC_DEFAULT_COMPRESS.varname,
+      *   shortOrcCompressionCodecNames.getOrElse(
+      *    sqlContext.orcCompressionCodec.toUpperCase, CompressionKind.NONE).name)
+      */
     val orcRelation = new OrcRelation(path.toString, Some(conf), sqlContext)
 
     orcRelation
@@ -219,20 +214,11 @@ private[sql] object OrcRelation {
 }
 
 private[sql] object OrcFileOperator {
-  final val COMPRESSION: String = "orcfiles.compression"
-
-  /**
-   *
-   * @param origPath
-   * @return
-   */
-  def readMetaData(origPath: Path): Reader = {
-    val job = new Job()
-    val conf = ContextUtil.getConfiguration(job).asInstanceOf[JobConf]
+  def readMetaData(origPath: Path, configuration: Option[Configuration]): Reader = {
+    val conf = configuration.getOrElse(new Configuration())
     val fs: FileSystem = origPath.getFileSystem(conf)
     val orcFiles = FileSystemHelper.listFiles(origPath, conf, ".orc")
     if (orcFiles != Seq.empty) {
-//      NewFileInputFormat.setInputPaths(conf, orcFiles(0))// why set inputpath here
       if (fs.exists(origPath)) {
         OrcFile.createReader(fs, orcFiles(0))
       } else {
@@ -260,4 +246,3 @@ private[sql] object OrcFileOperator {
     }
   }
 }
-
