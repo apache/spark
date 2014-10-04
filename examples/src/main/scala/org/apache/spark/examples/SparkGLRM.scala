@@ -1,7 +1,7 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
+ * this work for additional information regPenarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
@@ -42,26 +42,6 @@ import scala.collection.BitSet
  */
 
 object SparkGLRM {
-  // Number of movies
-  var M = 1000000
-  // Number of users
-  var U = 1000000
-  // Number of nonzeros per row
-  var NNZ = 10
-  // Number of features
-  var rank = 5
-  // Number of iterations
-  var ITERATIONS = 3
-  // Regularization parameter
-  var REG = 0.1
-  // Number of partitions for data
-  var NUMCHUNKS = 4
-
-  // GLRM settings, change prox and loss here
-  val lossFunction = funnyLossGrad _
-  val moviesProx = proxL1 _
-  val usersProx = proxL2 _
-
   /*********************************
    * GLRM: Bank of loss functions
    *********************************/
@@ -83,29 +63,28 @@ object SparkGLRM {
    * GLRM: Bank of prox functions
    **********************************/
   // L2 prox
-  def proxL2(v:BDV[Double], stepSize:Double): BDV[Double] = {
-    val arr = v.toArray.map(x => x / (1.0 + stepSize * REG))
+  def proxL2(v:BDV[Double], stepSize:Double, regPen:Double): BDV[Double] = {
+    val arr = v.toArray.map(x => x / (1.0 + stepSize * regPen))
     new BDV[Double](arr)
   }
 
   // L1 prox
-  def proxL1(v:BDV[Double], stepSize:Double): BDV[Double] = {
+  def proxL1(v:BDV[Double], stepSize:Double, regPen:Double): BDV[Double] = {
     val arr = v.toArray.map(x =>
-      if (math.abs(x) < REG) 0
-      else if (x < -REG) x + REG
-      else x - REG
+      if (math.abs(x) < regPen) 0
+      else if (x < -regPen) x + regPen
+      else x - regPen
     )
     new BDV[Double](arr)
   }
 
   // Non-negative prox
-  def proxNonneg(v:BDV[Double], stepSize:Double): BDV[Double] = {
+  def proxNonneg(v:BDV[Double], stepSize:Double, regPen:Double): BDV[Double] = {
     val arr = v.toArray.map(x => math.max(x, 0))
     new BDV[Double](arr)
   }
 
   /* End of GLRM libarry */
-
 
 
   // Helper functions for updating
@@ -119,41 +98,32 @@ object SparkGLRM {
   def update(us: Broadcast[Array[BDV[Double]]], ms: Broadcast[Array[BDV[Double]]],
              loss_grads: RDD[(Int, Int, Double)], stepSize: Double,
              norms: Array[Double],
-             prox: (BDV[Double], Double) => BDV[Double])
+             prox: (BDV[Double], Double, Double) => BDV[Double], regPen: Double)
   : Array[BDV[Double]] = {
+    val rank = ms.value(0).length
     val ret = Array.fill(ms.value.size)(BDV.zeros[Double](rank))
 
     val retu = loss_grads.map { case (i, j, lossij) => (i, us.value(j) * lossij) } // vector/scalar multiply
                 .reduceByKey(_ + _).collect() // vector addition through breeze
 
     for (entry <- retu) {
-      ret(entry._1) = prox(ms.value(entry._1) - entry._2 * (stepSize / (norms(entry._1) + 1.0)), stepSize)
+      ret(entry._1) = prox(ms.value(entry._1) - entry._2 * stepSize, stepSize, regPen)
     }
 
     ret
   }
 
-  def main(args: Array[String]) {
-    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%f\n", M, U, NNZ, rank, ITERATIONS, REG)
-
-    val sparkConf = new SparkConf().setAppName("SparkGLRM")
-    val sc = new SparkContext(sparkConf)
-
-    // Create data
-    val R = sc.parallelize(0 until M, NUMCHUNKS).flatMap{i =>
-      val inds = new scala.collection.mutable.TreeSet[Int]()
-      while (inds.size < NNZ) {
-        inds += scala.util.Random.nextInt(U)
-      }
-      inds.toArray.map(j => (i, j, scala.math.random))
-    }
-
+  def fitGLRM(R: RDD[(Int, Int, Double)], M:Int, U:Int,
+              lossFunction: (Int, Int, Double, Double) => Double,
+              moviesProx: (BDV[Double], Double, Double) => BDV[Double],
+              usersProx: (BDV[Double], Double, Double) => BDV[Double],
+              rank: Int,
+              numIterations: Int,
+              regPen: Double) : (Array[BDV[Double]], Array[BDV[Double]]) = {
     // Transpose data
     val RT = R.map { case (i, j, rij) => (j, i, rij) }
 
-    // Initialize m and u
-    var ms = Array.fill(M)(BDV[Double](Array.tabulate(rank)(x => math.random / (M * U))))
-    var us = Array.fill(U)(BDV[Double](Array.tabulate(rank)(x => math.random / (M * U))))
+    val sc = R.context
 
     // Compute number of nonzeros per row and column
     val mCountRDD = R.map { case (i, j, rij) => (i, 1) }.reduceByKey(_ + _).collect()
@@ -167,38 +137,79 @@ object SparkGLRM {
       uCount(entry._1) = entry._2
     val maxU = uCount.max
 
+    // Initialize m and u
+    var ms = Array.fill(M)(BDV[Double](Array.tabulate(rank)(x => math.random / (M * U))))
+    var us = Array.fill(U)(BDV[Double](Array.tabulate(rank)(x => math.random / (M * U))))
 
     // Iteratively update movies then users
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
 
-    val errs = Array.ofDim[Double](ITERATIONS)
+    val stepSize = 1.0 / (maxU + maxM)
 
-    val stepSize = 0.1 / (maxU + maxM)
-
-    for (iter <- 1 to ITERATIONS) {
+    for (iter <- 1 to numIterations) {
       println("Iteration " + iter + ":")
 
       // Update ms
       println("Computing gradient losses")
       var lg = computeLossGrads(msb, usb, R, lossFunction)
       println("Updating M factors")
-      ms = update(usb, msb, lg, stepSize, mCount, moviesProx)
+      ms = update(usb, msb, lg, stepSize, mCount, moviesProx, regPen)
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
       lg = computeLossGrads(usb, msb, RT, lossFunction)
       println("Updating U factors")
-      us = update(msb, usb, lg, stepSize, uCount, usersProx)
+      us = update(msb, usb, lg, stepSize, uCount, usersProx, regPen)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
-
-      // Comment this out in large runs to avoid an extra pass
-      //errs(iter-1) = R.map { case (i, j, rij) =>
-      //  val err = msb.value(i).dot(usb.value(j)) - rij
-      //  err * err
-      //}.mean()
     }
+
+    (msb.value, usb.value)
+  }
+
+
+  def main(args: Array[String]) {
+    val sparkConf = new SparkConf().setAppName("SparkGLRM")
+    val sc = new SparkContext(sparkConf)
+
+    // Number of movies
+    val M = 1000
+    // Number of users
+    val U = 1000
+    // Number of non-zeros per row
+    val NNZ = 10
+    // Number of features
+    val rank = 5
+    // Number of iterations
+    val numIterations = 100
+    // regularization parameter
+    val regPen = 0.1
+    // Number of partitions for data
+    val numChunks = 4
+
+    // Build non-zeros
+    val R = sc.parallelize(0 until M, numChunks).flatMap{i =>
+      val inds = new scala.collection.mutable.TreeSet[Int]()
+      while (inds.size < NNZ) {
+        inds += scala.util.Random.nextInt(U)
+      }
+      inds.toArray.map(j => (i, j, scala.math.random))
+    }
+
+    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, regPen=%f\n",
+      M, U, NNZ, rank, numIterations, regPen)
+
+    // Fit GLRM
+    val (ms, us) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
+
+    // Output RMSE using learned model
+    val finalRMSE = R.map { case (i, j, rij) =>
+      val err = ms(i).dot(us(j)) - rij
+      err * err
+    }.mean()
+
+    println(s"RMSE: $finalRMSE")
 
     sc.stop()
   }
