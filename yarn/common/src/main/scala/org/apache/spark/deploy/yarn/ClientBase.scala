@@ -23,6 +23,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
+import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -791,7 +792,7 @@ private[spark] object ClientBase extends Logging {
       }
     }
 
-    srcHost == dstHost && srcUri.getPort() == dstUri.getPort()
+    Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
   }
 
 }
