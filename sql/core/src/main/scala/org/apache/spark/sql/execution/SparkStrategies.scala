@@ -272,10 +272,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
+      case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil
       case logical.LocalRelation(output, data) =>
-        ExistingRdd(
+        PhysicalRDD(
           output,
-          ExistingRdd.productToRowRdd(sparkContext.parallelize(data, numPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, numPartitions))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
@@ -287,12 +288,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Generate(generator, join, outer, _, child) =>
         execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
       case logical.NoRelation =>
-        execution.ExistingRdd(Nil, singleRowRdd) :: Nil
+        execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
       case e @ EvaluatePython(udf, child) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
-      case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
+      case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
       case _ => Nil
     }
   }

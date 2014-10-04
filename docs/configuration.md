@@ -253,6 +253,17 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.executor.uri</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.executor.memoryOverhead</code></td>
+  <td>executor memory * 0.07, with minimum of 384</td>
+  <td>
+    This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
+    which is used to calculate the total Mesos task memory. A value of <code>384</code>
+    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
+    overhead. The final overhead will be the larger of either
+    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior
@@ -1108,3 +1119,10 @@ compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
+
+# Overriding configuration directory
+
+To specify a different configuration directory other than the default "SPARK_HOME/conf",
+you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
+from this directory.
+

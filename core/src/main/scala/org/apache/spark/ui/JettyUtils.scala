@@ -21,9 +21,6 @@ import java.net.URL
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import org.eclipse.jetty.http.HttpStatus
-import org.eclipse.jetty.util.ssl.SslContextFactory
-
 import scala.collection.mutable.StringBuilder
 import scala.language.implicitConversions
 import scala.xml.Node
@@ -34,6 +31,8 @@ import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
+import org.eclipse.jetty.http.HttpStatus
+import org.eclipse.jetty.util.ssl.SslContextFactory
 
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
@@ -152,15 +151,19 @@ private[spark] object JettyUtils extends Logging {
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
-          val paramName = "spark." + filter + ".params"
-          val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
-          params.foreach {
-            case param : String =>
+          conf.get("spark." + filter + ".params", "").split(',').map(_.trim()).toSet.foreach {
+            param: String =>
               if (!param.isEmpty) {
                 val parts = param.split("=")
                 if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
              }
           }
+
+          val prefix = s"spark.$filter.param."
+          conf.getAll
+            .filter { case (k, v) => k.length() > prefix.length() && k.startsWith(prefix) }
+            .foreach { case (k, v) => holder.setInitParameter(k.substring(prefix.length()), v) }
+
           val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
             DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
           handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
