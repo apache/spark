@@ -19,7 +19,7 @@ name := "Spark Release Auditor"
 
 version := "1.0"
 
-scalaVersion := "2.9.3"
+scalaVersion := "2.10.4"
 
 libraryDependencies += "org.apache.spark" % System.getenv.get("SPARK_MODULE") % System.getenv.get("SPARK_VERSION")
 
