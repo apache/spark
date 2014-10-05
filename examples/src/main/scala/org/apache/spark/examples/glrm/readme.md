@@ -109,7 +109,7 @@ To see how well the model performs using RMSE:
 ## Design
 
 The matrix to be factored is split entry-wise across many machines. 
-The model (factors $X$ and $Y$) is repeated and held in memory on every machine. 
+The model (factors `X` and `Y`) is repeated and held in memory on every machine. 
 Thus the total computation time required to fit the model is proportional to 
 the number of non-zeros divided by the number of cores, 
 with the restriction that the model should fit in memory on a single machine.
