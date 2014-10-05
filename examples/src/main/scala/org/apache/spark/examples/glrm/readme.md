@@ -129,6 +129,13 @@ The input is a sparse matrix, and so missing data are simply left out of the spa
 
 ## Optimization
 
+### Algorithm
+The proximal gradient algorithm is as follows
+![proximal gradient](glrm1.png)
+With 
+![proximal gradient](glrm2.png)
+![proximal gradient](glrm3.png)
+
 The function `fitGLRM` uses an alternating directions proximal gradient method
 to minimize the objective. This method is *not* guaranteed to converge to 
 the optimum, or even to a local minimum. If your code is not converging
