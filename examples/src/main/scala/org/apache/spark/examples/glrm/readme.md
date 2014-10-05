@@ -6,7 +6,7 @@ include many well known models in machine learning, such as
 principal components analysis (PCA), matrix completion, robust PCA,
 nonnegative matrix factorization, k-means, and many more.
 
-For more information on GLRMs, see [our paper](http://www.stanford.edu/~rezab/papers/glrm.pdf).
+For more information on GLRMs, see [our paper](http://arxiv.org/abs/1410.0342).
 
 SparkGLRM makes it easy to mix and match loss functions and regularizers
 to construct a model suitable for a particular data set.
@@ -72,8 +72,8 @@ There are currently several features implemented, including:
 
 * quadratic loss
 * L1 loss `lossL1Grad`
-* L2 loss `lossL2Grad`
-* funnyLoss `funnyLossGrad`, for demonstration of per-entry loss function
+* L2squared loss `lossL2squaredGrad`
+* mixedLoss `mixedLossGrad`, for demonstration of per-entry loss function
 * quadratic regularization `proxL2`
 * L1 regularization `proxL1`
 * nonnegative constraint `proxNonneg`
@@ -112,7 +112,7 @@ regularization with `rank=5` on the matrix `A`:
        
 To fit the model, call:
 
-        val (ms, us) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
+        val (ms, us) = fitGLRM(R, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
 
 which runs an alternating directions proximal gradient method on to find the 
 `ms` and `us` minimizing the objective function.

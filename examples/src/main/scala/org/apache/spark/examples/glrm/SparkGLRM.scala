@@ -45,7 +45,7 @@ object SparkGLRM {
   /*********************************
    * GLRM: Bank of loss functions
    *********************************/
-  def lossL2Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+  def lossL2squaredGrad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
     prediction - actual
   }
 
@@ -54,9 +54,9 @@ object SparkGLRM {
     math.signum(prediction - actual)
   }
 
-  def funnyLossGrad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
+  def mixedLossGrad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
     // weird loss function for demonstration
-    if (i + j % 2 == 0) lossL1Grad(i, j, prediction, actual) else lossL2Grad(i, j, prediction, actual)
+    if (i + j % 2 == 0) lossL1Grad(i, j, prediction, actual) else lossL2squaredGrad(i, j, prediction, actual)
   }
 
   /***********************************
@@ -202,7 +202,7 @@ object SparkGLRM {
       M, U, NNZ, rank, numIterations, regPen)
 
     // Fit GLRM
-    val (ms, us) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
+    val (ms, us) = fitGLRM(R, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
 
     // Output RMSE using learned model
     val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
