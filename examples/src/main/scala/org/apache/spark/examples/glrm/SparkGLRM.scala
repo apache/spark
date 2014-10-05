@@ -202,13 +202,13 @@ object SparkGLRM {
       M, U, NNZ, rank, numIterations, regPen)
 
     // Fit GLRM
-    val (ms, us) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
+    val (X, Y) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
 
     // Output RMSE using learned model
-    val finalRMSE = R.map { case (i, j, rij) =>
-      val err = ms(i).dot(us(j)) - rij
+    val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
+      val err = X(i).dot(Y(j)) - rij
       err * err
-    }.mean()
+    }.mean())
 
     println(s"RMSE: $finalRMSE")
 

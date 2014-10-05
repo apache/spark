@@ -94,17 +94,34 @@ regularization with `rank=5` on the matrix `A`:
        
 To fit the model, call:
 
-        val (ms, us) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
+        val (X, Y) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
 
 which runs an alternating directions proximal gradient method on to find the 
 `X` and `Y` minimizing the objective function.
 To see how well the model performs using RMSE:
 
         // Output RMSE using learned model
-        val finalRMSE = R.map { case (i, j, rij) =>
-          val err = ms(i).dot(us(j)) - rij
+        val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
+          val err = X(i).dot(Y(j)) - rij
           err * err
-        }.mean()
+        }.mean())
+
+## Design
+
+The matrix to be factored is split entry-wise across many machines. 
+The model (factors $X$ and $Y$) is repeated and held in memory on every machine. 
+Thus the total computation time required to fit the model is proportional to 
+the number of non-zeros divided by the number of cores, 
+with the restriction that the model should fit in memory on a single machine.
+Where possible, hardware acceleration is used for local linear algebraic operations, 
+via breeze and BLAS. 
+
+At every iteration, the current model is broadcast to all machines, 
+such that there is only one copy of the model on each machine. 
+This particularly important in machines with many cores, 
+because it avoids duplicating the model those machines.
+Each core on a machine will process a partition of the input matrix, 
+using the local copy of the model available.
 
 
 ## Missing data
