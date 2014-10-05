@@ -232,27 +232,17 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def newURI(scheme: String, server: String, port: Int, path: String, query: String) = {
-    val builder = newURIBuilder(scheme, server, port)
+    val builder = new StringBuilder
+
+    if (server.indexOf(':') >= 0 && server.charAt(0) != '[') {
+      builder.append(scheme).append("://").append('[').append(server).append(']')
+    } else {
+      builder.append(scheme).append("://").append(server)
+    }
+    builder.append(':').append(port)
     builder.append(path)
     if (query != null && query.length > 0) builder.append('?').append(query)
     builder.toString
-  }
-
-  private def newURIBuilder(scheme: String, server: String, port: Int) = {
-    val builder = new StringBuilder
-    appendSchemeHostPort(builder, scheme, server, port)
-    builder
-  }
-
-  private def appendSchemeHostPort(url: StringBuilder, scheme: String, server: String, port: Int) {
-    if (server.indexOf(':') >= 0 && server.charAt(0) != '[') {
-      url.append(scheme).append("://").append('[').append(server).append(']')
-    } else {
-      url.append(scheme).append("://").append(server)
-    }
-    if (port > 0) {
-      url.append(':').append(port)
-    }
   }
 
   private def createRedirectHttpsHandler(securePort: Int, schema: String): ContextHandler = {
@@ -267,14 +257,10 @@ private[spark] object JettyUtils extends Logging {
         if (baseRequest.isSecure) {
           return
         }
-        if (securePort > 0) {
-          val url = newURI(schema, baseRequest.getServerName, securePort,
-            baseRequest.getRequestURI, baseRequest.getQueryString)
-          response.setContentLength(0)
-          response.sendRedirect(url)
-        }else {
-          response.sendError(HttpStatus.FORBIDDEN_403, "!Secure")
-        }
+        val url = newURI(schema, baseRequest.getServerName, securePort,
+          baseRequest.getRequestURI, baseRequest.getQueryString)
+        response.setContentLength(0)
+        response.sendRedirect(url)
         baseRequest.setHandled(true)
       }
     })
@@ -298,7 +284,7 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def setSslContextFactoryProps(
-      key: String, value: String, ctxFactory:SslContextFactory) = {
+      key: String, value: String, ctxFactory: SslContextFactory) = {
     key match {
       case "spark.ui.ssl.client.https.needAuth" => ctxFactory.setNeedClientAuth(value.toBoolean)
       case "spark.ui.ssl.server.keystore.keypassword" => ctxFactory.setKeyManagerPassword(value)
