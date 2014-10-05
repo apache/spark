@@ -719,8 +719,7 @@ private[spark] object Utils extends Logging {
     } else {
       val files = FileUtils.listFilesAndDirs(dir, TrueFileFilter.TRUE, TrueFileFilter.TRUE)
       val cutoffTimeInMillis = (currentTimeMillis - (cutoff * 1000))
-      val newFiles = files.filter { _.lastModified > cutoffTimeInMillis }
-      newFiles.nonEmpty
+      files.exists { _.lastModified > cutoffTimeInMillis }
     }
   }
 
