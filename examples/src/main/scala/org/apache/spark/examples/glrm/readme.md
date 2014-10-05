@@ -142,6 +142,8 @@ With `update` implemented as
 
 <img src="glrm3.png" width="250">
 
+### Convergence
+
 The function `fitGLRM` uses an alternating directions proximal gradient method
 to minimize the objective. This method is *not* guaranteed to converge to 
 the optimum, or even to a local minimum. If your code is not converging
