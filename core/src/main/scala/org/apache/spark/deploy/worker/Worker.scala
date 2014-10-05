@@ -68,7 +68,7 @@ private[spark] class Worker(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
-  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
+  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", true)
   // How often worker will clean up old app folders
   val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
