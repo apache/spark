@@ -70,7 +70,6 @@ To fit a GLRM, the user specifies
 
 There are currently several features implemented, including:
 
-* quadratic loss
 * L1 loss `lossL1Grad`
 * L2squared loss `lossL2squaredGrad`
 * mixedLoss `mixedLossGrad`, for demonstration of per-entry loss function
