@@ -64,7 +64,7 @@ To fit a GLRM, the user specifies
 
 * the data `R` via observed entries
 * the dimensions `M` and `U`
-* the loss function (sug)gradient `lossGrad`
+* the loss function (sub)gradient `lossGrad`
 * the regularizers `moviesProx` and `usersProx`
 * the rank `rank`
 
