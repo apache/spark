@@ -46,7 +46,7 @@ object DataType {
 
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private def parseDataType(json: JValue): DataType = json match {
-    case JObject(("type", JString(name)) :: Nil) =>
+    case JString(name) =>
       PrimitiveType.nameToType(name)
 
     case JSortedObject(
@@ -167,7 +167,7 @@ abstract class DataType {
 
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
 
-  private[sql] def jsonValue: JValue = "type" -> typeName
+  private[sql] def jsonValue: JValue = typeName
 
   def json: String = compact(render(jsonValue))
 
@@ -229,7 +229,7 @@ case object BinaryType extends NativeType with PrimitiveType {
         val res = x(i).compareTo(y(i))
         if (res != 0) return res
       }
-      return x.length - y.length
+      x.length - y.length
     }
   }
 }

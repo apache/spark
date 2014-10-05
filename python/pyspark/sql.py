@@ -68,7 +68,7 @@ class DataType(object):
         return cls.__name__[:-4].lower()
 
     def jsonValue(self):
-        return {"type": self.typeName()}
+        return self.typeName()
 
     def json(self):
         return json.dumps(self.jsonValue(),
@@ -360,11 +360,11 @@ class StructType(DataType):
 
     def jsonValue(self):
         return {"type": self.typeName(),
-                "fields": map(lambda f: f.jsonValue(), self.fields)}
+                "fields": [f.jsonValue() for f in self.fields]}
 
     @classmethod
     def fromJson(cls, json):
-        return StructType(map(StructField.fromJson, json["fields"]))
+        return StructType([StructField.fromJson(f) for f in json["fields"]])
 
 
 _all_primitive_types = dict((v.typeName(), v)
@@ -423,8 +423,8 @@ def _parse_datatype_json_string(json_string):
 
 
 def _parse_datatype_json_value(json_value):
-    if json_value["type"] in _all_primitive_types.keys():
-        return _all_primitive_types[json_value["type"]]()
+    if type(json_value) is unicode and json_value in _all_primitive_types.keys():
+        return _all_primitive_types[json_value]()
     else:
         return _all_complex_types[json_value["type"]].fromJson(json_value)
 
