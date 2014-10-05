@@ -18,6 +18,24 @@ In particular, it supports
   which is useful for data tables with many missing (unobserved) entries
 * custom regularization of the model
 
+## Design
+
+The matrix to be factored is split entry-wise across many machines. 
+The model (factors `X` and `Y`) is repeated and held in memory on every machine. 
+Thus the total computation time required to fit the model is proportional to 
+the number of non-zeros divided by the number of cores, 
+with the restriction that the model should fit in memory on a single machine.
+Where possible, hardware acceleration is used for local linear algebraic operations, 
+via breeze and BLAS. 
+
+At every iteration, the current model is broadcast to all machines, 
+such that there is only one copy of the model on each machine. 
+This particularly important in machines with many cores, 
+because it avoids duplicating the model those machines.
+Each core on a machine will process a partition of the input matrix, 
+using the local copy of the model available.
+
+
 ## Compilation
 
 To compile and run, run the following from the Spark root directory. Compilation:
@@ -105,24 +123,6 @@ To see how well the model performs using RMSE:
       val err = ms(i).dot(us(j)) - rij
       err * err
     }.mean())
-
-## Design
-
-The matrix to be factored is split entry-wise across many machines. 
-The model (factors `X` and `Y`) is repeated and held in memory on every machine. 
-Thus the total computation time required to fit the model is proportional to 
-the number of non-zeros divided by the number of cores, 
-with the restriction that the model should fit in memory on a single machine.
-Where possible, hardware acceleration is used for local linear algebraic operations, 
-via breeze and BLAS. 
-
-At every iteration, the current model is broadcast to all machines, 
-such that there is only one copy of the model on each machine. 
-This particularly important in machines with many cores, 
-because it avoids duplicating the model those machines.
-Each core on a machine will process a partition of the input matrix, 
-using the local copy of the model available.
-
 
 ## Missing data
 
