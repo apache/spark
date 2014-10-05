@@ -31,4 +31,10 @@ for file in "$TARGET_DIR"/*.cmd ; do
   fi
 done
 
+if [ $HAS_ERROR -eq 0 ];then
+  echo -e "Windows batch file style checks passed."
+else
+  echo -e "Windows batch file style  checks failed."
+fi
+
 exit $HAS_ERROR
