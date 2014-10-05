@@ -39,7 +39,7 @@ private[sql] trait UDFRegistration {
       envVars: JMap[String, String],
       pythonIncludes: JList[String],
       pythonExec: String,
-      broadcastVars: JList[Broadcast[Array[Byte]]],
+      broadcastVars: JList[Broadcast[Array[Array[Byte]]]],
       accumulator: Accumulator[JList[Array[Byte]]],
       stringDataType: String): Unit = {
     log.debug(

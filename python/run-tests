@@ -69,8 +69,8 @@ run_test "pyspark/sql.py"
 export PYSPARK_DOC_TEST=1
 run_test "pyspark/broadcast.py"
 run_test "pyspark/accumulators.py"
-run_test "pyspark/serializers.py"
 unset PYSPARK_DOC_TEST
+run_test "pyspark/serializers.py"
 run_test "pyspark/shuffle.py"
 run_test "pyspark/tests.py"
 run_test "pyspark/mllib/classification.py"

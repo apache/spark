@@ -31,7 +31,6 @@ import tempfile
 import time
 import zipfile
 import random
-from platform import python_implementation
 
 if sys.version_info[:2] <= (2, 6):
     import unittest2 as unittest
@@ -43,7 +42,7 @@ from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer
+    CloudPickleSerializer, SizeLimitedStream, CompressedSerializer, LargeObjectSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row
 from pyspark import shuffle
@@ -230,6 +229,27 @@ class SerializationTestCase(unittest.TestCase):
 
         self.assertTrue("exit" in foo.func_code.co_names)
         ser.dumps(foo)
+
+    def _test_serializer(self, ser):
+        from StringIO import StringIO
+        io = StringIO()
+        ser.dump_stream(["abc", u"123", range(5)], io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(io)))
+        size = io.tell()
+        ser.dump_stream(range(1000), io)
+        io.seek(0)
+        first = SizeLimitedStream(io, size)
+        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(first)))
+        self.assertEqual(range(1000), list(ser.load_stream(io)))
+
+    def test_compressed_serializer(self):
+        ser = CompressedSerializer(PickleSerializer())
+        self._test_serializer(ser)
+
+    def test_large_object_serializer(self):
+        ser = LargeObjectSerializer()
+        self._test_serializer(ser)
 
 
 class PySparkTestCase(unittest.TestCase):
