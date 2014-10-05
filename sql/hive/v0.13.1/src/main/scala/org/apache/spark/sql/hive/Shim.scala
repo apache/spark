@@ -60,7 +60,7 @@ private[hive] object HiveShim {
     context.runSqlHive("USE default")
   }
 
-  /** The string used to denote an empty comments field in the schema. */
+  /* The string used to denote an empty comments field in the schema. */
   def getEmptyCommentsFieldValue = ""
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
