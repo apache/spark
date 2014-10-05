@@ -137,10 +137,10 @@ The algorith implemented is proximal gradient, described as follows, with more d
 
 With
  
-<img src="glrm2.png" width="500">
+<img src="glrm2.png" width="250">
 
 
-<img src="glrm2.png" width="500">
+<img src="glrm2.png" width="250">
 
 The function `fitGLRM` uses an alternating directions proximal gradient method
 to minimize the objective. This method is *not* guaranteed to converge to 
