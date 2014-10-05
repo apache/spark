@@ -372,6 +372,13 @@ private[spark] class MesosSchedulerBackend(
     recordSlaveLost(d, slaveId, ExecutorExited(status))
   }
 
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+    driver.killTask(
+      TaskID.newBuilder()
+        .setValue(taskId.toString).build()
+    )
+  }
+
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
 
