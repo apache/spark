@@ -30,7 +30,7 @@ private[spark] class BroadcastManager(
   extends Logging {
 
   private var initialized = false
-  private var broadcastFactory: BroadcastFactory = null
+  var broadcastFactory: BroadcastFactory = null
 
   initialize()
 
