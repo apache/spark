@@ -136,11 +136,11 @@ The algorith implemented is proximal gradient, described as follows, with more d
 <img src="glrm1.png" width="500">
 
 With `update` implemented as
+
+<img src="glrm3.png" width="250">
  
 <img src="glrm2.png" width="250">
 
-
-<img src="glrm3.png" width="250">
 
 ### Convergence
 
