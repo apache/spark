@@ -135,15 +135,11 @@ to minimize the objective. This method is *not* guaranteed to converge to
 the optimum, or even to a local minimum. If your code is not converging
 or is converging to a model you dislike, there are a number of parameters you can tweak.
 
-### Warm start
-
 The algorithm starts with `X` and `Y` initialized randomly.
 If you have a good guess for a model, try setting them explicitly.
 If you think that you're getting stuck in a local minimum, try reinitializing your
 GLRM (so as to construct a new initial random point) and see if the model you obtain improves.
  
-
-### Step Size
 
 The step size controls the speed of convergence. Small step sizes will slow convergence,
 while large ones will cause divergence.
