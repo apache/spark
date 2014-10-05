@@ -154,7 +154,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
         process.destroy()
       }
     }
-    process.waitFor()
+    val returnCode = process.waitFor()
+    sys.exit(returnCode)
   }
 
 }
