@@ -69,7 +69,7 @@ private[hive] object HiveShim {
     ColumnProjectionUtils.appendReadColumnNames(conf, names)
   }
 
-  def getExternalTmpPath(context: Context, uri: URI): String = {
+  def getExternalTmpPath(context: Context, uri: URI) = {
     context.getExternalTmpFileURI(uri)
   }
 

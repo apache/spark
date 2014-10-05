@@ -557,7 +557,8 @@ class HiveQuerySuite extends HiveComparisonTest {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // now only verify 0.12.0, and ignore other versions due to binary compatability
+    // Now only verify 0.12.0, and ignore other versions due to binary compatability
+    // current TestSerDe.jar is from 0.12.0
     if (HiveShim.version == "0.12.0") {
       sql(s"ADD JAR $testJar")
       sql(

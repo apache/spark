@@ -40,10 +40,10 @@ import scala.language.implicitConversions
 private[hive] object HiveShim {
   val version = "0.13.1"
   /*
-   * TODO: hive-0.13 support DECIMAL(precision, scale), DECIMAL in hive-0.12 is actually DECIMAL(10,0)
+   * TODO: hive-0.13 support DECIMAL(precision, scale), DECIMAL in hive-0.12 is actually DECIMAL(38,unbounded)
    * Full support of new decimal feature need to be fixed in seperate PR.
    */
-  val metastoreDecimal = "decimal(10,0)"
+  val metastoreDecimal = "decimal\\((\\d+),(\\d+)\\)".r
 
   def getTableDesc(
     serdeClass: Class[_ <: Deserializer],
@@ -82,8 +82,7 @@ private[hive] object HiveShim {
     for (col <- cols) {
       if (first) {
         first = false
-      }
-      else {
+      } else {
         result.append(',')
       }
       result.append(col)
@@ -98,7 +97,9 @@ private[hive] object HiveShim {
     if (ids != null && ids.size > 0) {
       ColumnProjectionUtils.appendReadColumns(conf, ids)
     }
-    appendReadColumnNames(conf, names)
+    if (names == null && names.size > 0) {
+      appendReadColumnNames(conf, names)
+    }
   }
 
   def getExternalTmpPath(context: Context, path: Path) = {
@@ -110,17 +111,16 @@ private[hive] object HiveShim {
   def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsOf(tbl)
 
   /*
-   * Bug introdiced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.
+   * Bug introdiced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
    * Fix it through wrapper.
    * */
   implicit def wrapperToFileSinkDesc(w: ShimFileSinkDesc): FileSinkDesc = {
-        var f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
-        f.setCompressed(w.compressed)
-        f.setCompressCodec(w.compressCodec)
-        f.setCompressType(w.compressType)
-        f.setTableInfo(w.tableInfo)
-        f.setDestTableId(w.destTableId)
-        f
+    var f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
+    f.setCompressCodec(w.compressCodec)
+    f.setCompressType(w.compressType)
+    f.setTableInfo(w.tableInfo)
+    f.setDestTableId(w.destTableId)
+    f
   }
 }
 

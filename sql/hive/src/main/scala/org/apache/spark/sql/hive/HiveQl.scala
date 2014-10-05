@@ -216,7 +216,7 @@ private[hive] object HiveQl {
    */
   def getAst(sql: String): ASTNode = {
     /*
-     * Context has to be passed in in hive0.13.1.
+     * Context has to be passed in hive0.13.1.
      * Otherwise, there will be Null pointer exception,
      * when retrieving properties form HiveConf.
      */

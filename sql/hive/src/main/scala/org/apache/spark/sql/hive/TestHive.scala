@@ -61,6 +61,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
+  CommandProcessorFactory.clean(hiveconf)
 
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
@@ -79,7 +80,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
 
-  CommandProcessorFactory.clean(hiveconf)
   configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
@@ -371,6 +371,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * tests.
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
+
+  // Database default may not exist in 0.13.1, create it if not exist
   HiveShim.createDefaultDBIfNeeded(this)
 
   /**

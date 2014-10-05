@@ -81,7 +81,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
-    // TODO: How it works? needs to add it back for other hive version.
+    // TODO: How does it works? needs to add it back for other hive version.
     if (HiveShim.version =="0.12.0") {
       assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
     }
