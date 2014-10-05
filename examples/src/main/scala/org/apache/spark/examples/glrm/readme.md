@@ -94,17 +94,17 @@ regularization with `rank=5` on the matrix `A`:
        
 To fit the model, call:
 
-        val (X, Y) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
+        val (ms, us) = fitGLRM(R, M, U, lossL2Grad, proxL2, proxL2, rank, numIterations, regPen)
 
 which runs an alternating directions proximal gradient method on to find the 
-`X` and `Y` minimizing the objective function.
+`ms` and `us` minimizing the objective function.
 To see how well the model performs using RMSE:
 
-        // Output RMSE using learned model
-        val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
-          val err = X(i).dot(Y(j)) - rij
-          err * err
-        }.mean())
+    // Output RMSE using learned model
+    val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
+      val err = ms(i).dot(us(j)) - rij
+      err * err
+    }.mean())
 
 ## Design
 
