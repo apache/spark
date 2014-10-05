@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -32,6 +33,7 @@ object Literal {
     case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(d, DecimalType.Unlimited)
+    case d: Decimal => Literal(d, DecimalType.Unlimited)
     case t: Timestamp => Literal(t, TimestampType)
     case d: Date => Literal(d, DateType)
     case a: Array[Byte] => Literal(a, BinaryType)

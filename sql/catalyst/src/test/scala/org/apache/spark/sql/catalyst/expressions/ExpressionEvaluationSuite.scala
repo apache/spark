@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 import org.scalactic.TripleEqualsSupport.Spread
@@ -267,7 +268,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abdef" cast StringType, "abdef")
     checkEvaluation("abdef" cast DecimalType.Unlimited, null)
     checkEvaluation("abdef" cast TimestampType, null)
-    checkEvaluation("12.65" cast DecimalType.Unlimited, BigDecimal(12.65))
+    checkEvaluation("12.65" cast DecimalType.Unlimited, Decimal(12.65))
 
     checkEvaluation(Literal(1) cast LongType, 1)
     checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
@@ -302,7 +303,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("23" cast DoubleType, 23d)
     checkEvaluation("23" cast IntegerType, 23)
     checkEvaluation("23" cast FloatType, 23f)
-    checkEvaluation("23" cast DecimalType.Unlimited, 23: BigDecimal)
+    checkEvaluation("23" cast DecimalType.Unlimited, Decimal(23))
     checkEvaluation("23" cast ByteType, 23.toByte)
     checkEvaluation("23" cast ShortType, 23.toShort)
     checkEvaluation("2012-12-11" cast DoubleType, null)
@@ -311,7 +312,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(23d) + Cast(true, DoubleType), 24d)
     checkEvaluation(Literal(23) + Cast(true, IntegerType), 24)
     checkEvaluation(Literal(23f) + Cast(true, FloatType), 24f)
-    checkEvaluation(Literal(BigDecimal(23)) + Cast(true, DecimalType.Unlimited), 24: BigDecimal)
+    checkEvaluation(Literal(Decimal(23)) + Cast(true, DecimalType.Unlimited), Decimal(24))
     checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24.toByte)
     checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24.toShort)
 
@@ -348,53 +349,53 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(Cast(Literal(123), DecimalType.Unlimited).nullable === false)
     assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === false)
     assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(BigDecimal(10.03)), DecimalType.Unlimited).nullable === false)
+    assert(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable === false)
 
     assert(Cast(Literal(123), DecimalType(2, 1)).nullable === true)
     assert(Cast(Literal(10.03f), DecimalType(2, 1)).nullable === true)
     assert(Cast(Literal(10.03), DecimalType(2, 1)).nullable === true)
-    assert(Cast(Literal(BigDecimal(10.03)), DecimalType(2, 1)).nullable === true)
+    assert(Cast(Literal(Decimal(10.03)), DecimalType(2, 1)).nullable === true)
 
-    checkEvaluation(Cast(Literal(123), DecimalType.Unlimited), BigDecimal(123))
-    checkEvaluation(Cast(Literal(123), DecimalType(3, 0)), BigDecimal(123))
+    checkEvaluation(Cast(Literal(123), DecimalType.Unlimited), Decimal(123))
+    checkEvaluation(Cast(Literal(123), DecimalType(3, 0)), Decimal(123))
     checkEvaluation(Cast(Literal(123), DecimalType(3, 1)), null)
     checkEvaluation(Cast(Literal(123), DecimalType(2, 0)), null)
 
-    checkEvaluation(Cast(Literal(10.03), DecimalType.Unlimited), BigDecimal(10.03))
-    checkEvaluation(Cast(Literal(10.03), DecimalType(4, 2)), BigDecimal(10.03))
-    checkEvaluation(Cast(Literal(10.03), DecimalType(3, 1)), BigDecimal(10.0))
-    checkEvaluation(Cast(Literal(10.03), DecimalType(2, 0)), BigDecimal(10))
+    checkEvaluation(Cast(Literal(10.03), DecimalType.Unlimited), Decimal(10.03))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(4, 2)), Decimal(10.03))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(10.03), DecimalType(2, 0)), Decimal(10))
     checkEvaluation(Cast(Literal(10.03), DecimalType(1, 0)), null)
     checkEvaluation(Cast(Literal(10.03), DecimalType(2, 1)), null)
     checkEvaluation(Cast(Literal(10.03), DecimalType(3, 2)), null)
-    checkEvaluation(Cast(Literal(BigDecimal(10.03)), DecimalType(3, 1)), BigDecimal(10.0))
-    checkEvaluation(Cast(Literal(BigDecimal(10.03)), DecimalType(3, 2)), null)
+    checkEvaluation(Cast(Literal(Decimal(10.03)), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(Decimal(10.03)), DecimalType(3, 2)), null)
 
-    checkEvaluation(Cast(Literal(10.05), DecimalType.Unlimited), BigDecimal(10.05))
-    checkEvaluation(Cast(Literal(10.05), DecimalType(4, 2)), BigDecimal(10.05))
-    checkEvaluation(Cast(Literal(10.05), DecimalType(3, 1)), BigDecimal(10.1))
-    checkEvaluation(Cast(Literal(10.05), DecimalType(2, 0)), BigDecimal(10))
+    checkEvaluation(Cast(Literal(10.05), DecimalType.Unlimited), Decimal(10.05))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(4, 2)), Decimal(10.05))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(3, 1)), Decimal(10.1))
+    checkEvaluation(Cast(Literal(10.05), DecimalType(2, 0)), Decimal(10))
     checkEvaluation(Cast(Literal(10.05), DecimalType(1, 0)), null)
     checkEvaluation(Cast(Literal(10.05), DecimalType(2, 1)), null)
     checkEvaluation(Cast(Literal(10.05), DecimalType(3, 2)), null)
-    checkEvaluation(Cast(Literal(BigDecimal(10.05)), DecimalType(3, 1)), BigDecimal(10.1))
-    checkEvaluation(Cast(Literal(BigDecimal(10.05)), DecimalType(3, 2)), null)
+    checkEvaluation(Cast(Literal(Decimal(10.05)), DecimalType(3, 1)), Decimal(10.1))
+    checkEvaluation(Cast(Literal(Decimal(10.05)), DecimalType(3, 2)), null)
 
-    checkEvaluation(Cast(Literal(9.95), DecimalType(3, 2)), BigDecimal(9.95))
-    checkEvaluation(Cast(Literal(9.95), DecimalType(3, 1)), BigDecimal(10.0))
-    checkEvaluation(Cast(Literal(9.95), DecimalType(2, 0)), BigDecimal(10))
+    checkEvaluation(Cast(Literal(9.95), DecimalType(3, 2)), Decimal(9.95))
+    checkEvaluation(Cast(Literal(9.95), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(9.95), DecimalType(2, 0)), Decimal(10))
     checkEvaluation(Cast(Literal(9.95), DecimalType(2, 1)), null)
     checkEvaluation(Cast(Literal(9.95), DecimalType(1, 0)), null)
-    checkEvaluation(Cast(Literal(BigDecimal(9.95)), DecimalType(3, 1)), BigDecimal(10.0))
-    checkEvaluation(Cast(Literal(BigDecimal(9.95)), DecimalType(1, 0)), null)
+    checkEvaluation(Cast(Literal(Decimal(9.95)), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(Cast(Literal(Decimal(9.95)), DecimalType(1, 0)), null)
 
-    checkEvaluation(Cast(Literal(-9.95), DecimalType(3, 2)), BigDecimal(-9.95))
-    checkEvaluation(Cast(Literal(-9.95), DecimalType(3, 1)), BigDecimal(-10.0))
-    checkEvaluation(Cast(Literal(-9.95), DecimalType(2, 0)), BigDecimal(-10))
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(3, 2)), Decimal(-9.95))
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
+    checkEvaluation(Cast(Literal(-9.95), DecimalType(2, 0)), Decimal(-10))
     checkEvaluation(Cast(Literal(-9.95), DecimalType(2, 1)), null)
     checkEvaluation(Cast(Literal(-9.95), DecimalType(1, 0)), null)
-    checkEvaluation(Cast(Literal(BigDecimal(-9.95)), DecimalType(3, 1)), BigDecimal(-10.0))
-    checkEvaluation(Cast(Literal(BigDecimal(-9.95)), DecimalType(1, 0)), null)
+    checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(3, 1)), Decimal(-10.0))
+    checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(1, 0)), null)
   }
 
   test("timestamp") {
@@ -433,7 +434,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       millis.toFloat / 1000)
     checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
       millis.toDouble / 1000)
-    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType.Unlimited), 1)
+    checkEvaluation(Cast(Literal(Decimal(1)) cast TimestampType, DecimalType.Unlimited), Decimal(1))
 
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)

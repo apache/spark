@@ -23,6 +23,7 @@ import java.text.{DateFormat, SimpleDateFormat}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
@@ -78,7 +79,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[BigDecimal](_, _ != 0)
+      buildCast[Decimal](_, _ != 0)
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -111,18 +112,18 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Date](_, d => new Timestamp(d.getTime))
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
-      buildCast[BigDecimal](_, d => decimalToTimestamp(d))
+      buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => decimalToTimestamp(d))
+      buildCast[Double](_, d => decimalToTimestamp(Decimal(d)))
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => decimalToTimestamp(f))
+      buildCast[Float](_, f => decimalToTimestamp(Decimal(f)))
   }
 
-  private[this]  def decimalToTimestamp(d: BigDecimal) = {
+  private[this]  def decimalToTimestamp(d: Decimal) = {
     val seconds = Math.floor(d.toDouble).toLong
-    val bd = (d - seconds) * 1000000000
+    val bd = (d.toBigDecimal - seconds) * 1000000000
     val nanos = bd.intValue()
 
     val millis = seconds * 1000
@@ -198,7 +199,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t))
     case DecimalType() =>
-      buildCast[BigDecimal](_, _.toLong)
+      buildCast[Decimal](_, _.toLong)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
@@ -216,7 +217,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t).toInt)
     case DecimalType() =>
-      buildCast[BigDecimal](_, _.toInt)
+      buildCast[Decimal](_, _.toInt)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
@@ -234,7 +235,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t).toShort)
     case DecimalType() =>
-      buildCast[BigDecimal](_, _.toShort)
+      buildCast[Decimal](_, _.toShort)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
   }
@@ -252,45 +253,45 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToLong(t).toByte)
     case DecimalType() =>
-      buildCast[BigDecimal](_, _.toByte)
+      buildCast[Decimal](_, _.toByte)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
 
   /**
-   * Convert a decimal to the precision / scale in decimalType (if any), returning null if it
-   * overflows or the new value if the conversion is successful.
+   * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
+   * returning null if it overflows or modifying `value` in-place and returning it if successful.
+   *
+   * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
-  private[this] def changePrecision(value: BigDecimal, decimalType: DecimalType): BigDecimal = {
+  private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
     decimalType match {
       case DecimalType.Unlimited =>
         value
       case DecimalType.Fixed(precision, scale) =>
-        if (value.scale == scale && value.precision <= precision) {
-          value
-        } else {
-          val rounded = value.setScale(scale, BigDecimal.RoundingMode.HALF_UP)
-          if (rounded.precision <= precision) rounded else null
-        }
+        if (value.changePrecision(precision, scale)) value else null
     }
   }
 
   private[this] def castToDecimal(target: DecimalType): Any => Any = child.dataType match {
+    // TODO: handle casts of null to decimal?
     case StringType =>
-      buildCast[String](_, s => try changePrecision(BigDecimal(s.toDouble), target) catch {
+      buildCast[String](_, s => try changePrecision(Decimal(s.toDouble), target) catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => changePrecision(if (b) BigDecimal(1) else BigDecimal(0), target))
+      buildCast[Boolean](_, b => changePrecision(if (b) Decimal(1) else Decimal(0), target))
     case DateType =>
       buildCast[Date](_, d => changePrecision(null, target)) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
-      buildCast[Timestamp](_, t => changePrecision(BigDecimal(timestampToDouble(t)), target))
+      buildCast[Timestamp](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case DecimalType() =>
-      b => changePrecision(b.asInstanceOf[BigDecimal], target)
-    case x: NumericType =>
-      b => changePrecision(BigDecimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+      b => changePrecision(b.asInstanceOf[Decimal].clone(), target)
+    case LongType =>
+      b => changePrecision(Decimal(b.asInstanceOf[Long]), target)
+    case x: NumericType =>  // All other numeric types can be represented precisely as Doubles
+      b => changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
   }
 
   // DoubleConverter
@@ -306,7 +307,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToDouble(t))
     case DecimalType() =>
-      buildCast[BigDecimal](_, _.toDouble)
+      buildCast[Decimal](_, _.toDouble)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
   }
@@ -324,7 +325,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => timestampToDouble(t).toFloat)
     case DecimalType() =>
-      buildCast[BigDecimal](_, _.toFloat)
+      buildCast[Decimal](_, _.toFloat)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }

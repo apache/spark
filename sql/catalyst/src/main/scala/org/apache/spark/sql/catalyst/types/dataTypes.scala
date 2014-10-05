@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.{Date, Timestamp}
 
-import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
+import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.types.decimal._
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -351,15 +352,12 @@ case class PrecisionInfo(precision: Int, scale: Int)
 
 /** A Decimal that might have fixed precision and scale, or unlimited values for these */
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
-  private[sql] type JvmType = BigDecimal
+  private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  private[sql] val numeric = implicitly[Numeric[BigDecimal]]
-  private[sql] val fractional = implicitly[Fractional[BigDecimal]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
-  private[sql] val asIntegral = BigDecimalAsIfIntegral
-
-  private def isUnlimited: Boolean = precisionInfo.isEmpty
-  private def isFixed: Boolean = precisionInfo.isDefined
+  private[sql] val numeric = Decimal.DecimalIsFractional
+  private[sql] val fractional = Decimal.DecimalIsFractional
+  private[sql] val ordering = Decimal.DecimalIsFractional
+  private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
 
   def simpleString: String = precisionInfo match {
     case Some(PrecisionInfo(precision, scale)) => s"decimal($precision, $scale})"

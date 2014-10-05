@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -124,7 +126,8 @@ package object dsl {
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
     implicit def dateToLiteral(d: Date) = Literal(d)
-    implicit def decimalToLiteral(d: BigDecimal) = Literal(d)
+    implicit def bigDecimalToLiteral(d: BigDecimal) = Literal(d)
+    implicit def decimalToLiteral(d: Decimal) = Literal(d)
     implicit def timestampToLiteral(t: Timestamp) = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 

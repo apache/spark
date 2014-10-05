@@ -18,6 +18,7 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
 import org.apache.spark.sql.QueryTest
@@ -45,18 +46,18 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(intNumber.toLong, enforceCorrectType(intNumber, LongType))
     checkTypePromotion(intNumber.toDouble, enforceCorrectType(intNumber, DoubleType))
     checkTypePromotion(
-      BigDecimal(intNumber), enforceCorrectType(intNumber, DecimalType.Unlimited))
+      Decimal(intNumber), enforceCorrectType(intNumber, DecimalType.Unlimited))
 
     val longNumber: Long = 9223372036854775807L
     checkTypePromotion(longNumber, enforceCorrectType(longNumber, LongType))
     checkTypePromotion(longNumber.toDouble, enforceCorrectType(longNumber, DoubleType))
     checkTypePromotion(
-      BigDecimal(longNumber), enforceCorrectType(longNumber, DecimalType.Unlimited))
+      Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.Unlimited))
 
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
     checkTypePromotion(
-      BigDecimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.Unlimited))
+      Decimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.Unlimited))
 
     checkTypePromotion(new Timestamp(intNumber), enforceCorrectType(intNumber, TimestampType))
     checkTypePromotion(new Timestamp(intNumber.toLong),

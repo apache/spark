@@ -28,6 +28,7 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -90,7 +91,7 @@ private[hive] trait HiveInspectors {
     case hvoi: HiveVarcharObjectInspector =>
       if (data == null) null else hvoi.getPrimitiveJavaObject(data).getValue
     case hdoi: HiveDecimalObjectInspector =>
-      if (data == null) null else BigDecimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+      if (data == null) null else Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
     // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
     // if next timestamp is null, so Timestamp object is cloned
     case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
@@ -137,8 +138,9 @@ private[hive] trait HiveInspectors {
         case l: Short => l: java.lang.Short
         case l: Byte => l: java.lang.Byte
         case b: BigDecimal => HiveShim.createDecimal(b.underlying())
+        case d: Decimal => HiveShim.createDecimal(d.toBigDecimal.underlying())
         case b: Array[Byte] => b
-        case d: java.sql.Date => d 
+        case d: java.sql.Date => d
         case t: java.sql.Timestamp => t
       }
       case x: StructObjectInspector =>
@@ -229,8 +231,10 @@ private[hive] trait HiveInspectors {
       HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: java.sql.Timestamp, TimestampType) =>
       HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: BigDecimal, DecimalType) =>
+    case Literal(value: BigDecimal, DecimalType()) =>
       HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Decimal, DecimalType()) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value.toBigDecimal)
     case Literal(_, NullType) =>
       HiveShim.getPrimitiveNullWritableConstantObjectInspector
     case Literal(value: Seq[_], ArrayType(dt, _)) =>

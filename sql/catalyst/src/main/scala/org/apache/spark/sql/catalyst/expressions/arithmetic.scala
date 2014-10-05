@@ -106,6 +106,8 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "/"
 
+  override def nullable = left.nullable || right.nullable || dataType.isInstanceOf[DecimalType]
+
   override def eval(input: Row): Any = dataType match {
     case _: FractionalType => f2(input, left, right, _.div(_, _))
     case _: IntegralType => i2(input, left , right, _.quot(_, _))
@@ -115,6 +117,8 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "%"
+
+  override def nullable = left.nullable || right.nullable || dataType.isInstanceOf[DecimalType]
 
   override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }
