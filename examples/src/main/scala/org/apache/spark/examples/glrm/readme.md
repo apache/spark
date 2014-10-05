@@ -26,7 +26,7 @@ Thus the total computation time required to fit the model is proportional to
 the number of non-zeros divided by the number of cores, 
 with the restriction that the model should fit in memory on a single machine.
 Where possible, hardware acceleration is used for local linear algebraic operations, 
-via breeze and BLAS. 
+via breeze. 
 
 At every iteration, the current model is broadcast to all machines, 
 such that there is only one copy of the model on each machine. 
