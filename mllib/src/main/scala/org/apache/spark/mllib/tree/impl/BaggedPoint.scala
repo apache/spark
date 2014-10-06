@@ -63,7 +63,7 @@ private[tree] object BaggedPoint {
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsample, numSubsamples)
     } else {
-      if (numSubsamples == 1 && subsample == 1) {
+      if (numSubsamples == 1 && subsample == 1.0) {
         convertToBaggedRDDSamplingWithoutReplacement(input, subsample, numSubsamples)
       } else {
         convertToBaggedRDDWithoutSampling(input)
