@@ -590,6 +590,12 @@ case class UDTType(dataType: StructType, ) extends DataType {
   // Used only in regex parser above.
   //private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = { }
 
+  def dataType: StructType
+
+  def serialize(obj: Any): Row
+
+  def deserialize(row: Row): UserType
+
   // TODO
   def simpleString: String = "udt"
 }
