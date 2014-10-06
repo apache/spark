@@ -91,14 +91,10 @@ private[sql] trait CacheManager {
   }
 
   /** Removes the data for the given SchemaRDD from the cache */
-  private[sql] def uncacheQuery(query: SchemaRDD, blocking: Boolean = false): Unit = writeLock {
+  private[sql] def uncacheQuery(query: SchemaRDD, blocking: Boolean = true): Unit = writeLock {
     val planToCache = query.queryExecution.optimizedPlan
     val dataIndex = cachedData.indexWhere(_.plan.sameResult(planToCache))
-
-    if (dataIndex < 0) {
-      throw new IllegalArgumentException(s"Table $query is not cached.")
-    }
-
+    require(dataIndex >= 0, s"Table $query is not cached.")
     cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
     cachedData.remove(dataIndex)
   }
@@ -135,5 +131,4 @@ private[sql] trait CacheManager {
       case _ =>
     }
   }
-
 }

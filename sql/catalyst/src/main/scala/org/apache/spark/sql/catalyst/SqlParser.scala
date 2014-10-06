@@ -67,11 +67,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
+  protected val ABS = Keyword("ABS")
   protected val ALL = Keyword("ALL")
   protected val AND = Keyword("AND")
+  protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AS = Keyword("AS")
   protected val ASC = Keyword("ASC")
-  protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AVG = Keyword("AVG")
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
@@ -80,9 +81,9 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val COUNT = Keyword("COUNT")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
+  protected val EXCEPT = Keyword("EXCEPT")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
-  protected val LAST = Keyword("LAST")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
@@ -91,42 +92,42 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
   protected val INSERT = Keyword("INSERT")
+  protected val INTERSECT = Keyword("INTERSECT")
   protected val INTO = Keyword("INTO")
   protected val IS = Keyword("IS")
   protected val JOIN = Keyword("JOIN")
+  protected val LAST = Keyword("LAST")
+  protected val LAZY = Keyword("LAZY")
   protected val LEFT = Keyword("LEFT")
+  protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
+  protected val LOWER = Keyword("LOWER")
   protected val MAX = Keyword("MAX")
   protected val MIN = Keyword("MIN")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
-  protected val OVERWRITE = Keyword("OVERWRITE")
-  protected val LIKE = Keyword("LIKE")
-  protected val RLIKE = Keyword("RLIKE")
-  protected val UPPER = Keyword("UPPER")
-  protected val LOWER = Keyword("LOWER")
-  protected val REGEXP = Keyword("REGEXP")
   protected val ORDER = Keyword("ORDER")
   protected val OUTER = Keyword("OUTER")
+  protected val OVERWRITE = Keyword("OVERWRITE")
+  protected val REGEXP = Keyword("REGEXP")
   protected val RIGHT = Keyword("RIGHT")
+  protected val RLIKE = Keyword("RLIKE")
   protected val SELECT = Keyword("SELECT")
   protected val SEMI = Keyword("SEMI")
+  protected val SQRT = Keyword("SQRT")
   protected val STRING = Keyword("STRING")
+  protected val SUBSTR = Keyword("SUBSTR")
+  protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SUM = Keyword("SUM")
   protected val TABLE = Keyword("TABLE")
   protected val TIMESTAMP = Keyword("TIMESTAMP")
   protected val TRUE = Keyword("TRUE")
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
+  protected val UPPER = Keyword("UPPER")
   protected val WHERE = Keyword("WHERE")
-  protected val INTERSECT = Keyword("INTERSECT")
-  protected val EXCEPT = Keyword("EXCEPT")
-  protected val SUBSTR = Keyword("SUBSTR")
-  protected val SUBSTRING = Keyword("SUBSTRING")
-  protected val SQRT = Keyword("SQRT")
-  protected val ABS = Keyword("ABS")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -183,17 +184,15 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     }
 
   protected lazy val cache: Parser[LogicalPlan] =
-    CACHE ~ TABLE ~> ident ~ opt(AS ~> select) <~ opt(";") ^^ {
-      case tableName ~ None => 
-        CacheCommand(tableName, true)
-      case tableName ~ Some(plan) =>
-        CacheTableAsSelectCommand(tableName, plan)
+    CACHE ~> opt(LAZY) ~ (TABLE ~> ident) ~ opt(AS ~> select) <~ opt(";") ^^ {
+      case isLazy ~ tableName ~ plan =>
+        CacheTableCommand(tableName, plan, isLazy.isDefined)
     }
-    
+
   protected lazy val unCache: Parser[LogicalPlan] =
     UNCACHE ~ TABLE ~> ident <~ opt(";") ^^ {
-      case tableName => CacheCommand(tableName, false)
-    }    
+      case tableName => UncacheTableCommand(tableName)
+    }
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
 
@@ -283,7 +282,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     termExpression ~ ">=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => GreaterThanOrEqual(e1, e2) } |
     termExpression ~ "!=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(EqualTo(e1, e2)) } |
     termExpression ~ "<>" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(EqualTo(e1, e2)) } |
-    termExpression ~ BETWEEN ~ termExpression ~ AND ~ termExpression ^^ { 
+    termExpression ~ BETWEEN ~ termExpression ~ AND ~ termExpression ^^ {
       case e ~ _ ~ el ~ _  ~ eu => And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
     } |
     termExpression ~ RLIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |

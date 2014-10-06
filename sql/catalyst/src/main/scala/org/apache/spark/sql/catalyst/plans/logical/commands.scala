@@ -56,9 +56,15 @@ case class ExplainCommand(plan: LogicalPlan, extended: Boolean = false) extends 
 }
 
 /**
- * Returned for the "CACHE TABLE tableName" and "UNCACHE TABLE tableName" command.
+ * Returned for the "CACHE TABLE tableName [AS SELECT ...]" command.
  */
-case class CacheCommand(tableName: String, doCache: Boolean) extends Command
+case class CacheTableCommand(tableName: String, plan: Option[LogicalPlan], isLazy: Boolean)
+  extends Command
+
+/**
+ * Returned for the "UNCACHE TABLE tableName" command.
+ */
+case class UncacheTableCommand(tableName: String) extends Command
 
 /**
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
@@ -75,8 +81,3 @@ case class DescribeCommand(
     AttributeReference("data_type", StringType, nullable = false)(),
     AttributeReference("comment", StringType, nullable = false)())
 }
-
-/**
- * Returned for the "CACHE TABLE tableName AS SELECT .." command.
- */
-case class CacheTableAsSelectCommand(tableName: String, plan: LogicalPlan) extends Command
