@@ -84,7 +84,8 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           if (results.size == 0) {
             numPartsToTry = totalParts - 1
           } else {
-            numPartsToTry = ((1.5 * num * partsScanned / results.size).toInt - partsScanned) max 1   // the left side of max is >=1 whenever partsScanned >= 2
+            // the left side of max is >=1 whenever partsScanned >= 2
+            numPartsToTry = ((1.5 * num * partsScanned / results.size).toInt - partsScanned) max 1
           }
         }
 
