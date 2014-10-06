@@ -38,7 +38,7 @@ class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
   lazy val precAtK: RDD[Array[Double]] = predictionAndLabels.map {case (pred, lab)=>
     val labSet : Set[Double] = lab.toSet
     val n = pred.length
-    val topkPrec = Array.fill[Double](n)(.0)
+    val topkPrec = Array.fill[Double](n)(0.0)
     var (i, cnt) = (0, 0)
 
     while (i < n) {
@@ -56,7 +56,7 @@ class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
    */
   lazy val avePrec: RDD[Double] = predictionAndLabels.map {case (pred, lab) =>
     val labSet: Set[Double] = lab.toSet
-    var (i, cnt, precSum) = (0, 0, .0)
+    var (i, cnt, precSum) = (0, 0, 0.0)
     val n = pred.length
 
     while (i < n) {
@@ -72,7 +72,7 @@ class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
   /**
    * Returns the mean average precision (MAP) of all the queries
    */
-  lazy val meanAvePrec: Double = computeMean(avePrec)
+  lazy val meanAvePrec: Double = avePrec.mean
 
   /**
    * Returns the normalized discounted cumulative gain for each query
@@ -80,7 +80,7 @@ class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
   lazy val ndcg: RDD[Double] = predictionAndLabels.map {case (pred, lab) =>
     val labSet = lab.toSet
     val n = math.min(pred.length, labSet.size)
-    var (maxDcg, dcg, i) = (.0, .0, 0)
+    var (maxDcg, dcg, i) = (0.0, 0.0, 0)
     while (i < n) {
       /* Calculate 1/log2(i + 2) */
       val gain = 1.0 / (math.log(i + 2) / math.log(2))
@@ -96,13 +96,5 @@ class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
   /**
    * Returns the mean NDCG of all the queries
    */
-  lazy val meanNdcg: Double = computeMean(ndcg)
-
-  private def computeMean(data: RDD[Double]): Double = {
-    val stat = data.aggregate((.0, 0))(
-      seqOp = (c, v) => (c, v) match {case ((sum, cnt), a) => (sum + a, cnt + 1)},
-      combOp = (c1, c2) => (c1, c2) match {case (x, y) => (x._1 + y._1, x._2 + y._2)}
-    )
-    stat._1 / stat._2
-  }
+  lazy val meanNdcg: Double = ndcg.mean
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
-
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.LocalSparkContext
 
 class RankingMetricsSuite extends FunSuite with LocalSparkContext {
@@ -28,7 +28,7 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
         (Array[Double](1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array[Double](1, 2, 3, 4, 5)),
         (Array[Double](4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array[Double](1, 2, 3))
       ), 2)
-    val eps: Double = 1e-5
+    val eps: Double = 1E-5
 
     val metrics = new RankingMetrics(predictionAndLabels)
     val precAtK = metrics.precAtK.collect()
@@ -37,13 +37,13 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     val ndcg = metrics.ndcg.collect()
     val aveNdcg = metrics.meanNdcg
 
-    assert(math.abs(precAtK(0)(4) - 0.4) < eps)
-    assert(math.abs(precAtK(1)(6) - 3.0/7) < eps)
-    assert(math.abs(avePrec(0) - 0.622222) < eps)
-    assert(math.abs(avePrec(1) - 0.442857) < eps)
-    assert(math.abs(map - 0.532539) < eps)
-    assert(math.abs(ndcg(0) - 0.508740) < eps)
-    assert(math.abs(ndcg(1) - 0.296082) < eps)
-    assert(math.abs(aveNdcg - 0.402411) < eps)
+    assert(precAtK(0)(4) ~== 0.4 absTol eps)
+    assert(precAtK(1)(6) ~== 3.0/7 absTol eps)
+    assert(avePrec(0) ~== 0.622222 absTol eps)
+    assert(avePrec(1) ~== 0.442857 absTol eps)
+    assert(map ~== 0.532539 absTol eps)
+    assert(ndcg(0) ~== 0.508740 absTol eps)
+    assert(ndcg(1) ~== 0.296082 absTol eps)
+    assert(aveNdcg ~== 0.402411 absTol eps)
   }
 }
