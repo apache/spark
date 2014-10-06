@@ -61,7 +61,7 @@ a loss function `lossGrad`, and two regularizers, `moviesProx` and `usersProx`.
 The data is modeled as `XY`, where `X` is a `M`x`rank` matrix and `Y` is a `k`x`rank` matrix.
 `X` and `Y` are found by solving the optimization problem
 
-	minimize sum_{(i,j) in A} loss(i, j, X[i,:] Y[:,j], A[i,j]) + sum_i moviesProx(x[i,:]) + sum_j usersProx(y[:,j])
+	minimize sum_{(i,j) in A} loss(i, j, X[i,:] Y[:,j], A[i,j]) + sum_i moviesProx(X[i,:]) + sum_j usersProx(Y[:,j])
 
 To fit a GLRM in SparkGLRM, the user specifies
 
