@@ -899,8 +899,8 @@ class SQLContext(object):
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
-        @param sparkContext: The SparkContext to wrap.
-        @param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
+        :param sparkContext: The SparkContext to wrap.
+        :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
@@ -1325,8 +1325,8 @@ class HiveContext(SQLContext):
     def __init__(self, sparkContext, hiveContext=None):
         """Create a new HiveContext.
 
-        @param sparkContext: The SparkContext to wrap.
-        @param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
+        :param sparkContext: The SparkContext to wrap.
+        :param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
         HiveContext in the JVM, instead we make all calls to this object.
         """
         SQLContext.__init__(self, sparkContext)
