@@ -1073,7 +1073,8 @@ class RDD(object):
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    numPartsToTry = int(1.5 * num * partsScanned / len(items))
+                    #the first paramter of max is >=1 whenever partsScanned >= 2
+                    numPartsToTry = max(int(1.5 * num * partsScanned / len(items)) - partsScanned, 1)
 
             left = num - len(items)
 
