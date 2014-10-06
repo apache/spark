@@ -43,7 +43,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
   val verbose = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).isDefined
 
-  def startThriftServerWithin(timeout: FiniteDuration = 10.seconds)(f: Statement => Unit) {
+  def startThriftServerWithin(timeout: FiniteDuration = 1.minute)(f: Statement => Unit) {
     Thread.sleep(5000)
 
     val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
@@ -79,7 +79,6 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     var logFilePath: String = null
 
     def captureLogOutput(line: String): Unit = {
-      logInfo(s"server log | $line")
       buffer += line
       if (line.contains("ThriftBinaryCLIService listening on")) {
         serverRunning.success(())
@@ -87,7 +86,6 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     }
 
     def captureThriftServerOutput(source: String)(line: String): Unit = {
-      logInfo(s"server $source | $line")
       if (line.startsWith(LOGGING_MARK)) {
         logFilePath = line.drop(LOGGING_MARK.length).trim
         // Ensure that the log file is created so that the `tail' command won't fail
