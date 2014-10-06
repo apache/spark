@@ -304,10 +304,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Seq(execution.SetCommand(key, value, plan.output)(context))
       case logical.ExplainCommand(logicalPlan, extended) =>
         Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
-      case logical.CacheCommand(tableName, cache) =>
-        Seq(execution.CacheCommand(tableName, cache)(context))
-      case logical.CacheTableAsSelectCommand(tableName, plan) =>
-        Seq(execution.CacheTableAsSelectCommand(tableName, plan))
+      case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
+        Seq(execution.CacheTableCommand(tableName, optPlan, isLazy))
+      case logical.UncacheTableCommand(tableName) =>
+        Seq(execution.UncacheTableCommand(tableName))
       case _ => Nil
     }
   }

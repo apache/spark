@@ -33,7 +33,7 @@ object ScalaReflection {
 
   /** Converts Scala objects to catalyst rows / types */
   def convertToCatalyst(a: Any): Any = a match {
-    case o: Option[_] => o.orNull
+    case o: Option[_] => o.map(convertToCatalyst).orNull
     case s: Seq[_] => s.map(convertToCatalyst)
     case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)

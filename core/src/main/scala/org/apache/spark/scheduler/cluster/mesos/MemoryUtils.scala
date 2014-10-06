@@ -15,30 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.scheduler.cluster.mesos
 
-/**
- * A backend interface for scheduling systems that allows plugging in different ones under
- * TaskSchedulerImpl. We assume a Mesos-like model where the application gets resource offers as
- * machines become available and can launch tasks on them.
- */
-private[spark] trait SchedulerBackend {
-  private val appId = "spark-application-" + System.currentTimeMillis
+import org.apache.spark.SparkContext
 
-  def start(): Unit
-  def stop(): Unit
-  def reviveOffers(): Unit
-  def defaultParallelism(): Int
+private[spark] object MemoryUtils {
+  // These defaults copied from YARN
+  val OVERHEAD_FRACTION = 1.07
+  val OVERHEAD_MINIMUM = 384
 
-  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
-    throw new UnsupportedOperationException
-  def isReady(): Boolean = true
-
-  /**
-   * Get an application ID associated with the job.
-   *
-   * @return An application ID
-   */
-  def applicationId(): String = appId
-
+  def calculateTotalMemory(sc: SparkContext) = {
+    math.max(
+      sc.conf.getOption("spark.mesos.executor.memoryOverhead")
+        .getOrElse(OVERHEAD_MINIMUM.toString)
+        .toInt + sc.executorMemory,
+        OVERHEAD_FRACTION * sc.executorMemory
+    )
+  }
 }
