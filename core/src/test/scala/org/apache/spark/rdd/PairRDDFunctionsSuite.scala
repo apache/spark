@@ -24,13 +24,14 @@ import org.apache.hadoop.util.Progressable
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
 import org.apache.spark.{Partitioner, SharedSparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
+
 import org.scalatest.FunSuite
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
@@ -381,14 +382,13 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("zero-partition RDD") {
-    val emptyDir = Files.createTempDir()
-    emptyDir.deleteOnExit()
+    val emptyDir = Utils.createTempDir()
     val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.partitions.size == 0)
+    assert(file.partitions.isEmpty)
     assert(file.collect().toList === Nil)
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    emptyDir.delete()
+    Utils.deleteRecursively(emptyDir)
   }
 
   test("keys and values") {
