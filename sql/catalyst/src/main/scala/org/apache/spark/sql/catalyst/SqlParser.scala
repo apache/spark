@@ -338,23 +338,14 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
     } |
-    CASE ~> opt(expression) ~ (WHEN ~ expression ~ THEN ~ expression).* ~
-      opt(ELSE ~> expression) <~ END ^^ {
-       case c ~ l ~ el =>
-         var caseWhenExpr = l.map{x =>
-          x match {
-           case w ~ we ~ t ~ te =>
-             c match {
-               case Some(e) => Seq(EqualTo(e, we), te)
-               case None => Seq(we, te)
-             }
-          }
-        }.toSeq.reduce(_ ++ _)
-        caseWhenExpr = el match {
-          case Some(e) => caseWhenExpr ++ Seq(e)
-          case None => caseWhenExpr
+    CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
+      (ELSE ~> expression).? <~ END ^^ {
+       case casePart ~ altPart ~ elsePart =>
+         val altExprs = altPart.flatMap{
+           case we ~ te =>
+             Seq(casePart.fold(we)(EqualTo(_, we)),te)
         }
-        CaseWhen(caseWhenExpr)
+        CaseWhen(altExprs ++ elsePart.toList)
     } |
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p => Substring(s,p,Literal(Integer.MAX_VALUE))
