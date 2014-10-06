@@ -276,7 +276,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.LocalRelation(output, data) =>
         PhysicalRDD(
           output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, numPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, numPartitions),
+            StructType.fromAttributes(output))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
