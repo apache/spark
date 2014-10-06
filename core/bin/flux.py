@@ -140,7 +140,7 @@ def master(args):
                 if task.task_id not in ti_dict:
                     # Brand new task, let's get started
                     ti = TI(task, task.start_date)
-                    executor.queue_command(ti.key, ti.command)
+                    executor.queue_command(ti.key, ti.command(mark_success))
                 else:
                     ti = ti_dict[task.task_id]
                     ti.task = task  # Hacky but worky
@@ -148,7 +148,8 @@ def master(args):
                         # If task instance if up for retry, make sure
                         # the retry delay is met
                         if ti.is_runnable():
-                            executor.queue_command(ti.key, ti.command)
+                            executor.queue_command(
+                                ti.key, ti.command(mark_success))
                     elif ti.state == State.RUNNING:
                         # Only one task at a time
                         continue
@@ -161,7 +162,7 @@ def master(args):
                         )
                         ti.refresh_from_db()
                         if ti.is_runnable():
-                            executor.queue_command(ti.key, ti.command)
+                            executor.queue_command(ti.key, ti.command())
             session.close()
         sleep(5)
     executor.end()

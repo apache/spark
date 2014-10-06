@@ -8,5 +8,6 @@ markdown
 mysql-python
 #pandas
 pygments
+python-dateutil
 sphinx
 sqlalchemy
