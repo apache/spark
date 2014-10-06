@@ -66,5 +66,4 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], algo: Algo) extends
     }.fold("")(_ + _)
   }
 
-
 }
