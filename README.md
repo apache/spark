@@ -6,6 +6,15 @@ Use the Flux library to define workflows as directed acyclic graphs (DAGs) of da
 
 The Flux UI make it easy to visualize pipelines running in production, monitor progress and pinpoint and troubleshoot issues when needed.
 
+### Screenshots
+##### Tree View
+![Tree View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/tree.png)
+##### Gantt View
+![Graph View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/gantt.png)
+##### Gantt Chart
+![Gantt Chart](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/gantt.png)
+
+
 ### Principles
 * **Dynamic:** Flux has intrinsec support for dynamic pipeline generation: you can write pipelines, as well as writing code that defines pipeline.
 * **Interactivity:** the libraries are intuitive so that writting / testing and monitoring pipelines from a shell (or an iPython Notebook) should just flow
