@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -27,8 +28,6 @@ import org.apache.spark.sql.catalyst.types._
 // For implicit conversions
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
-
-import scala.collection.immutable.HashSet
 
 class OptimizedInSuite extends PlanTest {
 
@@ -55,6 +54,21 @@ class OptimizedInSuite extends PlanTest {
       testRelation
         .where(InSet(UnresolvedAttribute("a"), HashSet[Any]()+1+2, 
             UnresolvedAttribute("a") +: Seq(Literal(1),Literal(2))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+  
+  test("OptimizedIn test: In clause not optimized in case filter has attributes") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2), UnresolvedAttribute("b"))))
+        .analyze
+
+    val optimized = Optimize(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1),Literal(2), UnresolvedAttribute("b"))))
         .analyze
 
     comparePlans(optimized, correctAnswer)

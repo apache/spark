@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -26,8 +27,6 @@ import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-
-import scala.collection.immutable.HashSet
 
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
@@ -235,10 +234,8 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object OptimizedIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if list.exists {
-          case Literal(_ , _) => true
-          case _ => false
-        } => {
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) 
+        => {
           val hSet = list.map(e => e.eval(null))
           InSet(v, HashSet() ++ hSet, v +: list)
         }

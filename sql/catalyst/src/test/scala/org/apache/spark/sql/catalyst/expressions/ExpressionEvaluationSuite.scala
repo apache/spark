@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
+import scala.collection.immutable.HashSet
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
 
-import scala.collection.immutable.HashSet
 
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -140,13 +141,19 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
-    val s = Seq(Literal(1), Literal(2))
+    val nS = HashSet[Any]() + 1 + 2 + null
     val one = Literal(1)
     val two = Literal(2)
     val three = Literal(3)
+    val nl = Literal(null)
+    val s = Seq(one, two)
+    val nullS = Seq(one, two, null)
     checkEvaluation(InSet(one, hS, one +: s), true)
     checkEvaluation(InSet(two, hS, two +: s), true)
+    checkEvaluation(InSet(two, nS, two +: nullS), true)
+    checkEvaluation(InSet(nl, nS, nl +: nullS), true)
     checkEvaluation(InSet(three, hS, three +: s), false)
+    checkEvaluation(InSet(three, nS, three +: nullS), false)
     checkEvaluation(InSet(one, hS, one +: s) && InSet(two, hS, two +: s), true)
   }
  
