@@ -185,6 +185,22 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("coarsen") {
+    withSpark { sc =>
+      val vertices =
+        sc.parallelize(Seq[(VertexId, String)]((1, "one"), (2, "two"), (3, "three")), 2)
+      val edges = sc.parallelize((Seq(Edge(1, 2, true), Edge(2, 3, false), Edge(3, 1, false))))
+      val g: Graph[String, Boolean] = Graph(vertices, edges)
+
+      val c = g.coarsen(_.attr, _ + _).cache()
+      val cV = c.vertices.collect.toSet
+      assert(
+        cV == Set((1L, "onetwo"), (3L, "three")) ||
+        cV == Set((1L, "twoone"), (3L, "three")))
+      assert(c.edges.collect.toSet === Set(Edge(1L, 3L, false), Edge(3L, 1L, false)))
+    }
+  }
+
   private def getCycleGraph(sc: SparkContext, numVertices: Int): Graph[Double, Int] = {
     val cycle = (0 until numVertices).map(x => (x, (x + 1) % numVertices))
     getGraphFromSeq(sc, cycle)
