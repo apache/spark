@@ -34,7 +34,7 @@ rm -rf metastore warehouse
 function run_test() {
     echo "Running test: $1"
 
-    SPARK_TESTING=1 "$FWDIR"/bin/pyspark $1 2>&1 | tee -a unit-tests.log
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 2>&1 | tee -a unit-tests.log
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
@@ -46,6 +46,37 @@ function run_test() {
         echo -en "\033[0m"  # No color
         exit -1
     fi
+}
+
+function run_core_tests() {
+    echo "Run core tests ..."
+    run_test "pyspark/rdd.py"
+    run_test "pyspark/context.py"
+    run_test "pyspark/conf.py"
+    PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
+    PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
+    PYSPARK_DOC_TEST=1 run_test "pyspark/serializers.py"
+    run_test "pyspark/shuffle.py"
+    run_test "pyspark/tests.py"
+}
+
+function run_sql_tests() {
+    echo "Run sql tests ..."
+    run_test "pyspark/sql.py"
+}
+
+function run_mllib_tests() {
+    echo "Run mllib tests ..."
+    run_test "pyspark/mllib/classification.py"
+    run_test "pyspark/mllib/clustering.py"
+    run_test "pyspark/mllib/linalg.py"
+    run_test "pyspark/mllib/random.py"
+    run_test "pyspark/mllib/recommendation.py"
+    run_test "pyspark/mllib/regression.py"
+    run_test "pyspark/mllib/stat.py"
+    run_test "pyspark/mllib/tree.py"
+    run_test "pyspark/mllib/util.py"
+    run_test "pyspark/mllib/tests.py"
 }
 
 echo "Running PySpark tests. Output is in python/unit-tests.log."
@@ -60,29 +91,9 @@ fi
 echo "Testing with Python version:"
 $PYSPARK_PYTHON --version
 
-run_test "pyspark/rdd.py"
-run_test "pyspark/context.py"
-run_test "pyspark/conf.py"
-run_test "pyspark/sql.py"
-# These tests are included in the module-level docs, and so must
-# be handled on a higher level rather than within the python file.
-export PYSPARK_DOC_TEST=1
-run_test "pyspark/broadcast.py"
-run_test "pyspark/accumulators.py"
-run_test "pyspark/serializers.py"
-unset PYSPARK_DOC_TEST
-run_test "pyspark/shuffle.py"
-run_test "pyspark/tests.py"
-run_test "pyspark/mllib/classification.py"
-run_test "pyspark/mllib/clustering.py"
-run_test "pyspark/mllib/linalg.py"
-run_test "pyspark/mllib/random.py"
-run_test "pyspark/mllib/recommendation.py"
-run_test "pyspark/mllib/regression.py"
-run_test "pyspark/mllib/stat.py"
-run_test "pyspark/mllib/tests.py"
-run_test "pyspark/mllib/tree.py"
-run_test "pyspark/mllib/util.py"
+run_core_tests
+run_sql_tests
+run_mllib_tests
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then
@@ -90,19 +101,8 @@ if [ $(which pypy) ]; then
     echo "Testing with PyPy version:"
     $PYSPARK_PYTHON --version
 
-    run_test "pyspark/rdd.py"
-    run_test "pyspark/context.py"
-    run_test "pyspark/conf.py"
-    run_test "pyspark/sql.py"
-    # These tests are included in the module-level docs, and so must
-    # be handled on a higher level rather than within the python file.
-    export PYSPARK_DOC_TEST=1
-    run_test "pyspark/broadcast.py"
-    run_test "pyspark/accumulators.py"
-    run_test "pyspark/serializers.py"
-    unset PYSPARK_DOC_TEST
-    run_test "pyspark/shuffle.py"
-    run_test "pyspark/tests.py"
+    run_core_tests
+    run_sql_tests
 fi
 
 if [[ $FAILED == 0 ]]; then
