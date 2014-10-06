@@ -62,7 +62,7 @@ def run(args):
         raise Exception('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
-    
+
     # This is enough to fail the task instance
     def signal_handler(signum, frame):
         logging.error("SIGINT (ctrl-c) received".format(args.task_id))
@@ -175,7 +175,7 @@ if __name__ == '__main__':
     parser_backfill = subparsers.add_parser('backfill', help=ht)
     parser_backfill.add_argument("dag_id", help="The id of the dag to run")
     parser_backfill.add_argument(
-        "-t", "--task_regex", 
+        "-t", "--task_regex",
         help="The regex to filter specific task_ids to backfill (optional)")
     parser_backfill.add_argument(
         "-s", "--start_date", help="Overide start_date YYYY-MM-DD")
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     parser_clear = subparsers.add_parser('clear', help=ht)
     parser_clear.add_argument("dag_id", help="The id of the dag to run")
     parser_clear.add_argument(
-        "-t", "--task_regex", 
+        "-t", "--task_regex",
         help="The regex to filter specific task_ids to clear (optional)")
     parser_clear.add_argument(
         "-s", "--start_date", help="Overide start_date YYYY-MM-DD")

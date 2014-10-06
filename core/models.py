@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 import imp
 import inspect
 import jinja2
-import json
 import logging
 import os
 import re
@@ -262,7 +261,6 @@ class TaskInstance(Base):
         return self.state == State.UP_FOR_RETRY and \
             self.end_date + self.task.retry_delay < datetime.now()
 
-
     def run(
             self, verbose=True,
             ignore_dependencies=False,
@@ -300,7 +298,7 @@ class TaskInstance(Base):
             )
         elif self.state in State.runnable():
             if self.state == State.UP_FOR_RETRY:
-                self.try_number +=1
+                self.try_number += 1
             else:
                 self.try_number = 1
             session.add(Log(State.RUNNING, self))
@@ -792,7 +790,7 @@ class DAG(Base):
         return count
 
     def sub_dag(
-            self, task_regex, 
+            self, task_regex,
             include_downstream=False, include_upstream=True):
 
         dag = copy.deepcopy(self)
@@ -804,7 +802,7 @@ class DAG(Base):
                 also_include += t.get_flat_relatives(upstream=False)
             if include_upstream:
                 also_include += t.get_flat_relatives(upstream=True)
-                
+
         # Compiling the unique list of tasks that made the cut
         tasks = list(set(regex_match + also_include))
         dag.tasks = tasks

@@ -130,7 +130,7 @@ class SequentialExecutor(BaseExecutor):
 
     def queue_command(self, key, command):
         self.commands_to_run.append((key, command,))
-    
+
     def heartbeat(self):
         for key, command in self.commands_to_run:
             try:

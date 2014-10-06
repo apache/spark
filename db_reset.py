@@ -4,13 +4,12 @@ from core.hooks import MySqlHook
 import logging
 
 if __name__ == '__main__':
-    if 
     session = settings.Session()
     session.query(models.DatabaseConnection).delete()
     mysqldb = models.DatabaseConnection(
-            db_id='local_mysql', db_type='mysql', 
-            host='localhost', login='flux', password='flux',
-            schema='flux')
+        db_id='local_mysql', db_type='mysql',
+        host='localhost', login='flux', password='flux',
+        schema='flux')
     session.add(mysqldb)
     session.commit()
 

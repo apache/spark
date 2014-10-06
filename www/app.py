@@ -36,6 +36,7 @@ ck = Blueprint(
 app.register_blueprint(ck, url_prefix='/ck')
 app.jinja_env.add_extension("chartkick.ext.charts")
 
+
 # Date filter form needed for gantt and graph view
 class DateTimeForm(Form):
     execution_date = DateTimeField("Execution date")
@@ -192,7 +193,6 @@ class Flux(BaseView):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
-        TI = models.TaskInstance
 
         nodes = []
         edges = []
@@ -222,10 +222,14 @@ class Flux(BaseView):
 
         form = DateTimeForm(data={'execution_date': dttm})
 
-        task_instances = {ti.task_id: utils.alchemy_to_dict(ti)
-            for ti in dag.get_task_instances(dttm, dttm)}
-        tasks = {t.task_id: utils.alchemy_to_dict(t)
-            for t in dag.tasks}
+        task_instances = {
+            ti.task_id: utils.alchemy_to_dict(ti)
+            for ti in dag.get_task_instances(dttm, dttm)
+        }
+        tasks = {
+            t.task_id: utils.alchemy_to_dict(t)
+            for t in dag.tasks
+        }
         session.commit()
         session.close()
 

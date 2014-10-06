@@ -25,9 +25,10 @@ class State(object):
     def runnable(cls):
         return [None, cls.FAILED, cls.UP_FOR_RETRY]
 
+
 def validate_key(k, max_length=250):
     if type(k) is not str:
-        raise TypeError("The key has to be a string") 
+        raise TypeError("The key has to be a string")
     elif len(k) > max_length:
         raise Exception("The key has to be less than {0} characters".format(
             max_length))
@@ -37,6 +38,7 @@ def validate_key(k, max_length=250):
             "underscores exclusively")
     else:
         return True
+
 
 def date_range(start_date, end_date=datetime.now(), delta=timedelta(1)):
     l = []
