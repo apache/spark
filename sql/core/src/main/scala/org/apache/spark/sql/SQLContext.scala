@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.types.UserDefinedType
+
 import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -101,8 +103,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
     SparkPlan.currentContext.set(self)
-    new SchemaRDD(this,
-      LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+    new SchemaRDD(this, LogicalRDD(ScalaReflection.attributesFor[A](udtRegistry),
+      RDDConversions.productToRowRdd(rdd, ScalaReflection.schemaFor[A](udtRegistry).dataType))(self))
   }
 
   /**
@@ -253,7 +255,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(
       this,
       ParquetRelation.createEmpty(
-        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
+        path, ScalaReflection.attributesFor[A](udtRegistry), allowExisting, conf, this))
   }
 
   /**
@@ -290,16 +292,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * Fails if this type has been registered already.
    */
   def registerUserType[UserType, UDT <: UserDefinedType[UserType]](
-      //userType: Class[UserType],
-      udt: UDT): Unit = {
-    val userType: TypeTag[UserType] = typeTag[UserType]
-    require(!registeredUserTypes.contains(userType),
+      udt: UDT)(implicit userType: TypeTag[UserType]): Unit = {
+    require(!udtRegistry.contains(userType),
       "registerUserType called on type which was already registered.")
-    registeredUserTypes(userType) = udt
+    udtRegistry(userType) = udt
   }
 
   /** Map: UserType --> UserDefinedType */
-  protected[sql] val registeredUserTypes = new mutable.HashMap[TypeTag[_], UserDefinedType[_]]()
+  protected[sql] val udtRegistry = new mutable.HashMap[Any, UserDefinedType[_]]()
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext

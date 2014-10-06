@@ -47,12 +47,17 @@ class UserTypeSuite extends QueryTest {
   case class LabeledPoint(label: Double, features: DenseVector)
 
   test("register user type: LabeledPoint") {
-    TestSQLContext.registerUserType(classOf[DenseVector], classOf[VectorRowSerializer])
+    TestSQLContext.registerUserType(new VectorRowSerializer())
 
     val points = Seq(
       LabeledPoint(1.0, new DenseVector(Array(1.0, 0.0))),
       LabeledPoint(0.0, new DenseVector(Array(1.0, -1.0))))
     val pointsRDD: RDD[LabeledPoint] = sparkContext.parallelize(points)
+
+    println("Converting to SchemaRDD")
+    val tmpSchemaRDD: SchemaRDD = TestSQLContext.createSchemaRDD(pointsRDD)
+    println(s"SchemaRDD count: ${tmpSchemaRDD.count()}")
+    println("Done converting to SchemaRDD")
 
     val features: RDD[DenseVector] =
       pointsRDD.select('features).map { case Row(v: DenseVector) => v }

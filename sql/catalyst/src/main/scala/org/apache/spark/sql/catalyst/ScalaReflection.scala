@@ -36,13 +36,19 @@ object ScalaReflection {
   case class Schema(dataType: DataType, nullable: Boolean)
 
   /** Converts Scala objects to catalyst rows / types */
-  def convertToCatalyst(a: Any): Any = a match {
-    case o: Option[_] => o.map(convertToCatalyst).orNull
-    case s: Seq[_] => s.map(convertToCatalyst)
-    case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
-    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
-    case d: BigDecimal => Decimal(d)
-    case other => other
+  def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
+    case (o: Option[_], oType: _) => convertToCatalyst(o.orNull, oType)
+    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
+    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
+      convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
+    }
+    case (p: Product, structType: StructType) => new GenericRow(
+      p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
+        convertToCatalyst(elem, field.dataType)
+      }.toArray)
+    case (udt: _, udtType: UDTType) => udtType.
+    case (d: BigDecimal, _) => Decimal(d)
+    case (other, _) => other
   }
 
   /** Converts Catalyst types used internally in rows to standard Scala types */
@@ -56,19 +62,29 @@ object ScalaReflection {
   def convertRowToScala(r: Row): Row = new GenericRow(r.toArray.map(convertToScala))
 
   /** Returns a Sequence of attributes for the given case class type. */
-  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
-    case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+  def attributesFor[T: TypeTag](
+      udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Seq[Attribute] = {
+    schemaFor[T](udtRegistry) match {
+      case Schema(s: StructType, _) =>
+        s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+    }
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema = schemaFor(typeOf[T])
+  def schemaFor[T: TypeTag](udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = {
+    schemaFor(typeOf[T], udtRegistry)
+  }
 
-  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`, udtRegistry: Map[TypeTag[_], UserDefinedType[_]]): Schema = tpe match {
+  /**
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   * TODO: ADD DOC
+   */
+  def schemaFor(
+      tpe: `Type`,
+      udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = tpe match {
     case t if t <:< typeOf[Option[_]] =>
       val TypeRef(_, _, Seq(optType)) = t
-      Schema(schemaFor(optType).dataType, nullable = true)
+      Schema(schemaFor(optType, udtRegistry).dataType, nullable = true)
     case t if t <:< typeOf[Product] =>
       val formalTypeArgs = t.typeSymbol.asClass.typeParams
       val TypeRef(_, _, actualTypeArgs) = t
@@ -76,7 +92,7 @@ object ScalaReflection {
       Schema(StructType(
         params.head.map { p =>
           val Schema(dataType, nullable) =
-            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
+            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs), udtRegistry)
           StructField(p.name.toString, dataType, nullable)
         }), nullable = true)
     // Need to decide if we actually need a special type here.
@@ -85,12 +101,12 @@ object ScalaReflection {
       sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
     case t if t <:< typeOf[Seq[_]] =>
       val TypeRef(_, _, Seq(elementType)) = t
-      val Schema(dataType, nullable) = schemaFor(elementType)
+      val Schema(dataType, nullable) = schemaFor(elementType, udtRegistry)
       Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
     case t if t <:< typeOf[Map[_,_]] =>
       val TypeRef(_, _, Seq(keyType, valueType)) = t
-      val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-      Schema(MapType(schemaFor(keyType).dataType,
+      val Schema(valueDataType, valueNullable) = schemaFor(valueType, udtRegistry)
+      Schema(MapType(schemaFor(keyType, udtRegistry).dataType,
         valueDataType, valueContainsNull = valueNullable), nullable = true)
     case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
@@ -111,6 +127,9 @@ object ScalaReflection {
     case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
     case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
     case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+    case t if udtRegistry.contains(tpe) =>
+      val udtStructType: StructType = udtRegistry(tpe).dataType
+      Schema(udtStructType, nullable = true)
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {
@@ -142,7 +161,9 @@ object ScalaReflection {
      * for the the data in the sequence.
      */
     def asRelation: LocalRelation = {
-      val output = attributesFor[A]
+      // Pass empty map to attributesFor since this method is only used for debugging Catalyst,
+      // not used with SparkSQL.
+      val output = attributesFor[A](Map.empty)
       LocalRelation(output, data)
     }
   }

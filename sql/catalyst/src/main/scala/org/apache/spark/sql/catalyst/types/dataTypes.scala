@@ -342,6 +342,7 @@ object FractionalType {
     case _ => false
   }
 }
+
 abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
   private[sql] val asIntegral: Integral[JvmType]
@@ -583,22 +584,12 @@ object UDTType {
 }
 
 /**
- * The data type for Maps. Keys in a map are not allowed to have `null` values.
- * @param keyType The data type of map keys.
- * @param valueType The data type of map values.
- * @param valueContainsNull Indicates if map values have `null` values.
+ * The data type for UserDefinedType.
  */
-case class UDTType(
-                    keyType: DataType,
-                    valueType: DataType,
-                    valueContainsNull: Boolean) extends DataType {
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
-    builder.append(s"${prefix}-- value: ${valueType.simpleString} " +
-      s"(valueContainsNull = ${valueContainsNull})\n")
-    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
-    DataType.buildFormattedString(valueType, s"$prefix    |", builder)
-  }
+case class UDTType(dataType: StructType, ) extends DataType {
+  // Used only in regex parser above.
+  //private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = { }
 
-  def simpleString: String = "map"
+  // TODO
+  def simpleString: String = "udt"
 }
