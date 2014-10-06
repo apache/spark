@@ -82,9 +82,8 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll  with Loggi
       if (line.contains(startString)) {
         val logFile = new File(line.substring(startString.length))
         var tryNum = 0
-        // This is a hack to wait logFile is ready
+        // This is a hack to wait logFile ready
         Thread.sleep(5000)
-
         // logFile may have not finished, try every second
         while (!logFile.exists() || (!fileToString(logFile).contains(
           "ThriftBinaryCLIService listening on") && tryNum < maxTries)) {
