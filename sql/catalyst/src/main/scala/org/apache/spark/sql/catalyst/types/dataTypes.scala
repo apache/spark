@@ -436,7 +436,7 @@ abstract class UserDefinedType[UserType] extends DataType {
 
   def dataType: StructType
 
-  def serialize(obj: _): Row
+  def serialize(obj: Any): Row
 
   def deserialize(row: Row): UserType
 

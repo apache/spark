@@ -26,12 +26,14 @@ class UserTypeSuite extends QueryTest {
 
   class DenseVector(val data: Array[Double])
 
-  class VectorRowSerializer extends UserDefinedType[DenseVector] {
+  case class LabeledPoint(label: Double, features: DenseVector)
+
+  class LabeledPointUDT extends UserDefinedType[LabeledPoint] {
 
     override def dataType: StructType =
       StructType(Seq(StructField("features", ArrayType(DoubleType), nullable = false)))
 
-    override def serialize(obj: DenseVector): Row = Row(obj.data)
+    override def serialize(obj: Any): Row = Row(obj.asInstanceOf[DenseVector].data)
 
     override def deserialize(row: Row): DenseVector = {
       val arr = new Array[Double](row.length)
@@ -44,10 +46,13 @@ class UserTypeSuite extends QueryTest {
     }
   }
 
-  case class LabeledPoint(label: Double, features: DenseVector)
-
   test("register user type: LabeledPoint") {
     TestSQLContext.registerUserType(new VectorRowSerializer())
+    println("udtRegistry:")
+    TestSQLContext.udtRegistry.foreach { case (t,s) => println(s"$t -> $s") }
+
+    println(s"test: ${scala.reflect.runtime.universe.typeTag[DenseVector]}")
+    assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeTag[DenseVector]))
 
     val points = Seq(
       LabeledPoint(1.0, new DenseVector(Array(1.0, 0.0))),

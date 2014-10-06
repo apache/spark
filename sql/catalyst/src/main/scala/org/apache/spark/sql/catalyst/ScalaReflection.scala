@@ -33,7 +33,7 @@ object ScalaReflection {
 
   /** Converts Scala objects to catalyst rows / types */
   def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
-    case (o: Option[_], oType: _) => o.map(convertToCatalyst(_, oType)).orNull
+    case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
@@ -42,7 +42,7 @@ object ScalaReflection {
       p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
         convertToCatalyst(elem, field.dataType)
       }.toArray)
-    case (udt: _, udtType: UserDefinedType[_]) => udtType.serialize(udt)
+    case (udt: Any, udtType: UserDefinedType[_]) => udtType.serialize(udt)
     case other => other
   }
 
@@ -57,7 +57,13 @@ object ScalaReflection {
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor[T: TypeTag](udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = {
-    schemaFor(typeOf[T], udtRegistry)
+    println(s"schemaFor: ${typeTag[T]}")
+    if (udtRegistry.contains(typeTag[T])) {
+      val udtStructType: StructType = udtRegistry(typeTag[T]).dataType
+      Schema(udtStructType, nullable = true)
+    } else {
+      schemaFor(typeOf[T], udtRegistry)
+    }
   }
 
   /**
@@ -110,9 +116,9 @@ object ScalaReflection {
     case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
     case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
     case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
-    case t if udtRegistry.contains(tpe) =>
+/*    case t if udtRegistry.contains(typeTag[t]) =>
       val udtStructType: StructType = udtRegistry(tpe).dataType
-      Schema(udtStructType, nullable = true)
+      Schema(udtStructType, nullable = true)*/
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {
