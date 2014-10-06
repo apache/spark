@@ -10,7 +10,7 @@ The Flux UI make it easy to visualize pipelines running in production, monitor p
 ##### Tree View
 ![Tree View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/tree.png)
 ##### Gantt View
-![Graph View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/gantt.png)
+![Graph View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/graph.png)
 ##### Gantt Chart
 ![Gantt Chart](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/gantt.png)
 
