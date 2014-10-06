@@ -406,6 +406,31 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param initial state value of each key.
+   * @tparam S State type
+   */
+  def updateStateByKey[S: ClassTag](
+      updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
+      partitioner: Partitioner,
+      rememberPartitioner: Boolean,
+      initial : RDD[(K, S)]
+    ): DStream[(K, S)] = {
+     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner,
+       rememberPartitioner, Some(initial))
+  }
+
+  /**
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of each key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated. Note, that
+   *                   this function may generate a different a tuple with a different key
+   *                   than the input key. It is up to the developer to decide whether to
+   *                   remember the partitioner despite the key being changed.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream
+   * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
    * @tparam S State type
    */
   def updateStateByKey[S: ClassTag](
@@ -413,7 +438,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       partitioner: Partitioner,
       rememberPartitioner: Boolean
     ): DStream[(K, S)] = {
-     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner)
+     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner, None)
   }
 
   /**
