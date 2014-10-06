@@ -31,6 +31,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.network._
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.TestSerializer
 
 
@@ -71,7 +72,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
       ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer]))
     localBlocks.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getBlockData(meq(blockId.toString))
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId))
     }
 
     // Make sure remote blocks would return

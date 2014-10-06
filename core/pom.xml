@@ -45,6 +45,11 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>network</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>net.java.dev.jets3t</groupId>
       <artifactId>jets3t</artifactId>
     </dependency>

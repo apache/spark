@@ -19,14 +19,13 @@ package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.Queue
+import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 
-import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.network.{ManagedBuffer, BlockFetchingListener, BlockTransferService}
+import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.{Logging, TaskContext}
 
 
 /**
@@ -228,7 +227,7 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val blockId = iter.next()
       try {
-        val buf = blockManager.getBlockData(blockId.toString)
+        val buf = blockManager.getBlockData(blockId)
         shuffleMetrics.localBlocksFetched += 1
         buf.retain()
         results.put(new FetchResult(blockId, 0, buf))

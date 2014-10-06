@@ -122,7 +122,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
       sender: ActorRef
     ) {
     if (!receiverInputStreamMap.contains(streamId)) {
-      throw new Exception("Register received for unexpected id " + streamId)
+      throw new Exception("Register received for unexpected type " + streamId)
     }
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)

@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.network.{ManagedBuffer, FileSegmentManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.storage._
 
 /**

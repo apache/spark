@@ -18,16 +18,18 @@
 package org.apache.spark.network
 
 import java.io.Closeable
-import java.nio.ByteBuffer
+
+import org.apache.spark.network.buffer.ManagedBuffer
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
 
+import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-
+import org.apache.spark.util.Utils
 
 private[spark]
-abstract class BlockTransferService extends Closeable {
+abstract class BlockTransferService extends Closeable with Logging {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
@@ -92,10 +94,7 @@ abstract class BlockTransferService extends Closeable {
       }
       override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
         lock.synchronized {
-          val ret = ByteBuffer.allocate(data.size.toInt)
-          ret.put(data.nioByteBuffer())
-          ret.flip()
-          result = Left(new NioManagedBuffer(ret))
+          result = Left(data)
           lock.notify()
         }
       }

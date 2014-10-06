@@ -19,6 +19,8 @@ package org.apache.spark.network
 
 import java.util.EventListener
 
+import org.apache.spark.network.buffer.ManagedBuffer
+
 
 /**
  * Listener callback interface for [[BlockTransferService.fetchBlocks]].

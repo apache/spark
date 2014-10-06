@@ -17,15 +17,13 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
+import java.io.{BufferedOutputStream, ByteArrayOutputStream, File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 import scala.util.Random
 
 import akka.actor.{ActorSystem, Props}
@@ -35,10 +33,10 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
-
 
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
@@ -215,17 +213,17 @@ private[spark] class BlockManager(
    * Interface to get local block data. Throws an exception if the block cannot be found or
    * cannot be read successfully.
    */
-  override def getBlockData(blockId: String): ManagedBuffer = {
-    val bid = BlockId(blockId)
-    if (bid.isShuffle) {
-      shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId])
+  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+    if (blockId.isShuffle) {
+      shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
-      val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
+        .asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
         new NioManagedBuffer(buffer)
       } else {
-        throw new BlockNotFoundException(blockId)
+        throw new BlockNotFoundException(blockId.toString)
       }
     }
   }
@@ -233,8 +231,8 @@ private[spark] class BlockManager(
   /**
    * Put the block locally, using the given storage level.
    */
-  override def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(BlockId(blockId), data.nioByteBuffer(), level)
+  override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
+    putBytes(blockId, data.nioByteBuffer(), level)
   }
 
   /**
