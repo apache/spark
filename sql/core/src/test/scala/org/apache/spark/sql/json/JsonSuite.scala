@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
 class JsonSuite extends QueryTest {
@@ -636,7 +638,60 @@ class JsonSuite extends QueryTest {
       ("str_a_1", null, null) ::
       ("str_a_2", null, null) ::
       (null, "str_b_3", null) ::
-      ("str_a_4", "str_b_4", "str_c_4") ::Nil
+      ("str_a_4", "str_b_4", "str_c_4") :: Nil
+    )
+  }
+
+  test("Corrupt records") {
+    // Test if we can query corrupt records.
+    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_JSON_RECORD, "unparsed")
+    val jsonSchemaRDD = jsonRDD(corruptRecords)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    val schema = StructType(
+      StructField("a", StringType, true) ::
+      StructField("b", StringType, true) ::
+      StructField("c", StringType, true) ::
+      StructField("unparsed", StringType, true) :: Nil)
+
+    assert(schema === jsonSchemaRDD.schema)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a, b, c, unparsed
+          |FROM jsonTable
+        """.stripMargin),
+      (null, null, null, "{") ::
+      (null, null, null, "") ::
+      (null, null, null, """{"a":1, b:2}""") ::
+      (null, null, null, """{"a":{, b:3}""") ::
+      ("str_a_4", "str_b_4", "str_c_4", null) ::
+      (null, null, null, "]") :: Nil
+    )
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT a, b, c
+          |FROM jsonTable
+          |WHERE unparsed IS NULL
+        """.stripMargin),
+      ("str_a_4", "str_b_4", "str_c_4") :: Nil
+    )
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT unparsed
+          |FROM jsonTable
+          |WHERE unparsed IS NOT NULL
+        """.stripMargin),
+      Seq("{") ::
+      Seq("") ::
+      Seq("""{"a":1, b:2}""") ::
+      Seq("""{"a":{, b:3}""") ::
+      Seq("]") :: Nil
     )
   }
 }

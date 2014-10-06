@@ -196,8 +196,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
     val appliedSchema =
-      Option(schema).getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0)))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+      Option(schema).getOrElse(
+        JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 
@@ -206,8 +207,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val appliedSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    val appliedSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 

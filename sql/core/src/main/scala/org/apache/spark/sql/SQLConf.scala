@@ -35,6 +35,7 @@ private[spark] object SQLConf {
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
+  val COLUMN_NAME_OF_CORRUPT_JSON_RECORD = "spark.sql.json.columnNameOfCorruptRecord"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -130,6 +131,9 @@ private[sql] trait SQLConf {
    */
   private[spark] def inMemoryPartitionPruning: Boolean =
     getConf(IN_MEMORY_PARTITION_PRUNING, "false").toBoolean
+
+  private[spark] def columnNameOfCorruptJsonRecord: String =
+    getConf(COLUMN_NAME_OF_CORRUPT_JSON_RECORD, "corruptRecord")
 
   /** ********************** SQLConf functionality methods ************ */
 
