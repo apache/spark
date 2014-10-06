@@ -418,13 +418,6 @@ case class MapType(
   def simpleString: String = "map"
 }
 
-// TODO: Where should this go?
-trait UserDefinedType[T] {
-  def dataType: StructType
-  def serialize(obj: T): Row
-  def deserialize(row: Row): T
-}
-
 object UDTType {
   /**
    * Construct a [[UDTType]] object with the given key type and value type.
@@ -437,9 +430,15 @@ object UDTType {
 /**
  * The data type for UserDefinedType.
  */
-case class UDTType(dataType: StructType, ) extends DataType {
+abstract class UserDefinedType[UserType] extends DataType {
   // Used only in regex parser above.
   //private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = { }
+
+  def dataType: StructType
+
+  def serialize(obj: _): Row
+
+  def deserialize(row: Row): UserType
 
   // TODO
   def simpleString: String = "udt"

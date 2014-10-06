@@ -35,8 +35,6 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.log4j.PropertyConfigurator
@@ -710,18 +708,20 @@ private[spark] object Utils extends Logging {
    * Determines if a directory contains any files newer than cutoff seconds.
    * 
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
-   * @param cutoff measured in seconds. Returns true if there are any files in dir newer than this.
+   * @param cutoff measured in seconds. Returns true if there are any files or directories in the
+   *               given directory whose last modified time is later than this many seconds ago
    */
   def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
-    val currentTimeMillis = System.currentTimeMillis
     if (!dir.isDirectory) {
-      throw new IllegalArgumentException (dir + " is not a directory!")
-    } else {
-      val files = FileUtils.listFilesAndDirs(dir, TrueFileFilter.TRUE, TrueFileFilter.TRUE)
-      val cutoffTimeInMillis = (currentTimeMillis - (cutoff * 1000))
-      val newFiles = files.filter { _.lastModified > cutoffTimeInMillis }
-      newFiles.nonEmpty
+      throw new IllegalArgumentException("$dir is not a directory!")
     }
+    val filesAndDirs = dir.listFiles()
+    val cutoffTimeInMillis = System.currentTimeMillis - (cutoff * 1000)
+
+    filesAndDirs.exists(_.lastModified() > cutoffTimeInMillis) ||
+    filesAndDirs.filter(_.isDirectory).exists(
+      subdir => doesDirectoryContainAnyNewFiles(subdir, cutoff)
+    )
   }
 
   /**

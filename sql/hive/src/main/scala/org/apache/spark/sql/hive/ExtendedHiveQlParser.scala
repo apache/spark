@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
 
 /**
- * A parser that recognizes all HiveQL constructs together with several Spark SQL specific 
+ * A parser that recognizes all HiveQL constructs together with several Spark SQL specific
  * extensions like CACHE TABLE and UNCACHE TABLE.
  */
-private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {  
-  
+private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with PackratParsers {
+
   def apply(input: String): LogicalPlan = {
     // Special-case out set commands since the value fields can be
     // complex to handle without RegexParsers. Also this approach
@@ -54,16 +54,17 @@ private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with Packr
 
   protected case class Keyword(str: String)
 
-  protected val CACHE = Keyword("CACHE")
-  protected val SET = Keyword("SET")
   protected val ADD = Keyword("ADD")
-  protected val JAR = Keyword("JAR")
-  protected val TABLE = Keyword("TABLE")
   protected val AS = Keyword("AS")
-  protected val UNCACHE = Keyword("UNCACHE")
-  protected val FILE = Keyword("FILE")
+  protected val CACHE = Keyword("CACHE")
   protected val DFS = Keyword("DFS")
+  protected val FILE = Keyword("FILE")
+  protected val JAR = Keyword("JAR")
+  protected val LAZY = Keyword("LAZY")
+  protected val SET = Keyword("SET")
   protected val SOURCE = Keyword("SOURCE")
+  protected val TABLE = Keyword("TABLE")
+  protected val UNCACHE = Keyword("UNCACHE")
 
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
@@ -79,57 +80,56 @@ private[hive] class ExtendedHiveQlParser extends StandardTokenParsers with Packr
 
   override val lexical = new SqlLexical(reservedWords)
 
-  protected lazy val query: Parser[LogicalPlan] = 
+  protected lazy val query: Parser[LogicalPlan] =
     cache | uncache | addJar | addFile | dfs | source | hiveQl
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
-    remainingQuery ^^ {
-      case r => HiveQl.createPlan(r.trim())
+    restInput ^^ {
+      case statement => HiveQl.createPlan(statement.trim())
     }
 
-  /** It returns all remaining query */
-  protected lazy val remainingQuery: Parser[String] = new Parser[String] {
+  // Returns the whole input string
+  protected lazy val wholeInput: Parser[String] = new Parser[String] {
+    def apply(in: Input) =
+      Success(in.source.toString, in.drop(in.source.length()))
+  }
+
+  // Returns the rest of the input string that are not parsed yet
+  protected lazy val restInput: Parser[String] = new Parser[String] {
     def apply(in: Input) =
       Success(
         in.source.subSequence(in.offset, in.source.length).toString,
         in.drop(in.source.length()))
   }
 
-  /** It returns all query */
-  protected lazy val allQuery: Parser[String] = new Parser[String] {
-    def apply(in: Input) =
-      Success(in.source.toString, in.drop(in.source.length()))
-  }
-
   protected lazy val cache: Parser[LogicalPlan] =
-    CACHE ~ TABLE ~> ident ~ opt(AS ~> hiveQl) ^^ {
-      case tableName ~ None => CacheCommand(tableName, true)
-      case tableName ~ Some(plan) =>
-        CacheTableAsSelectCommand(tableName, plan)
+    CACHE ~> opt(LAZY) ~ (TABLE ~> ident) ~ opt(AS ~> hiveQl) ^^ {
+      case isLazy ~ tableName ~ plan =>
+        CacheTableCommand(tableName, plan, isLazy.isDefined)
     }
 
   protected lazy val uncache: Parser[LogicalPlan] =
     UNCACHE ~ TABLE ~> ident ^^ {
-      case tableName => CacheCommand(tableName, false)
+      case tableName => UncacheTableCommand(tableName)
     }
 
   protected lazy val addJar: Parser[LogicalPlan] =
-    ADD ~ JAR ~> remainingQuery ^^ {
-      case rq => AddJar(rq.trim())
+    ADD ~ JAR ~> restInput ^^ {
+      case jar => AddJar(jar.trim())
     }
 
   protected lazy val addFile: Parser[LogicalPlan] =
-    ADD ~ FILE ~> remainingQuery ^^ {
-      case rq => AddFile(rq.trim())
+    ADD ~ FILE ~> restInput ^^ {
+      case file => AddFile(file.trim())
     }
 
   protected lazy val dfs: Parser[LogicalPlan] =
-    DFS ~> allQuery ^^ {
-      case aq => NativeCommand(aq.trim())
+    DFS ~> wholeInput ^^ {
+      case command => NativeCommand(command.trim())
     }
 
   protected lazy val source: Parser[LogicalPlan] =
-    SOURCE ~> remainingQuery ^^ {
-      case rq => SourceCommand(rq.trim())
+    SOURCE ~> restInput ^^ {
+      case file => SourceCommand(file.trim())
     }
 }

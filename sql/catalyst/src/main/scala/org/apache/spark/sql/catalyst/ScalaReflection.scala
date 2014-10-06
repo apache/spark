@@ -33,7 +33,7 @@ object ScalaReflection {
 
   /** Converts Scala objects to catalyst rows / types */
   def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
-    case (o: Option[_], oType: _) => convertToCatalyst(o.orNull, oType)
+    case (o: Option[_], oType: _) => o.map(convertToCatalyst(_, oType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
@@ -42,7 +42,7 @@ object ScalaReflection {
       p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
         convertToCatalyst(elem, field.dataType)
       }.toArray)
-    case (udt: _, udtType: UDTType) => udtType.
+    case (udt: _, udtType: UserDefinedType[_]) => udtType.serialize(udt)
     case other => other
   }
 
