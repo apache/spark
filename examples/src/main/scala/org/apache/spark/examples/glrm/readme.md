@@ -59,6 +59,9 @@ It is fine if only some of the entries have been observed
 The desired model is specified by choosing a rank `rank` for the model,
 a loss function `lossGrad`, and two regularizers, `moviesProx` and `usersProx`.
 The data is modeled as `XY`, where `X` is a `M`x`rank` matrix and `Y` is a `k`x`rank` matrix.
+`X` and `Y` are found by solving the optimization problem
+
+	minimize sum_{(i,j) in A} loss(i, j, X[i,:] Y[:,j], A[i,j]) + sum_i moviesProx(x[i,:]) + sum_j usersProx(y[:,j])
 
 To fit a GLRM, the user specifies
 
