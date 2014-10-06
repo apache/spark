@@ -355,7 +355,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     // spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    // Leave this config unpublished for now.
+    // Leave this config unpublished for now. SPARK-3779 to investigating changing
+    // this config to be time based.
     val numTries = sparkConf.getInt("spark.yarn.applicationMaster.waitTries", 1000)
 
     while (!driverUp && !finished && count < numTries) {
@@ -411,7 +412,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
    * This allows us to catch that and properly set the YARN application status and
    * cleanup if needed.
    */
-  private def setupSystemSecurityManager() = {
+  private def setupSystemSecurityManager(): Unit = {
     try {
       var stopped = false
       System.setSecurityManager(new java.lang.SecurityManager() {
@@ -429,8 +430,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           }
         }
         // required for the checkExit to work properly
-        override def checkPermission(perm: java.security.Permission): Unit = {
-        }
+        override def checkPermission(perm: java.security.Permission): Unit = {}
       })
     }
     catch {
@@ -468,7 +468,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case e: Throwable =>
+              case e: Exception =>
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
                   "User class threw exception: " + e.getMessage)
