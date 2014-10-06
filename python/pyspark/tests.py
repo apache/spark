@@ -152,7 +152,7 @@ class SorterTests(unittest.TestCase):
         self.assertGreater(shuffle.DiskBytesSpilled, last)
 
     def test_external_sort_in_rdd(self):
-        conf = SparkConf().set("spark.python.worker.memory", "10m")
+        conf = SparkConf().set("spark.python.worker.memory", "1m")
         sc = SparkContext(conf=conf)
         l = range(10240)
         random.shuffle(l)
