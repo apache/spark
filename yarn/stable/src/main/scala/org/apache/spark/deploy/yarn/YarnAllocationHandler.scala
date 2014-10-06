@@ -41,7 +41,7 @@ private[yarn] class YarnAllocationHandler(
     args: ApplicationMasterArguments,
     preferredNodes: collection.Map[String, collection.Set[SplitInfo]], 
     securityMgr: SecurityManager)
-  extends YarnAllocator(conf, sparkConf, args, preferredNodes, securityMgr) {
+  extends YarnAllocator(conf, sparkConf, appAttemptId, args, preferredNodes, securityMgr) {
 
   override protected def releaseContainer(container: Container) = {
     amClient.releaseAssignedContainer(container.getId())

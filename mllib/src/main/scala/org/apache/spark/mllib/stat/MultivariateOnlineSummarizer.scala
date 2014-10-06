@@ -42,6 +42,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var n = 0
   private var currMean: BDV[Double] = _
   private var currM2n: BDV[Double] = _
+  private var currM2: BDV[Double] = _
+  private var currL1: BDV[Double] = _
   private var totalCnt: Long = 0
   private var nnz: BDV[Double] = _
   private var currMax: BDV[Double] = _
@@ -60,6 +62,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
       currMean = BDV.zeros[Double](n)
       currM2n = BDV.zeros[Double](n)
+      currM2 = BDV.zeros[Double](n)
+      currL1 = BDV.zeros[Double](n)
       nnz = BDV.zeros[Double](n)
       currMax = BDV.fill(n)(Double.MinValue)
       currMin = BDV.fill(n)(Double.MaxValue)
@@ -81,6 +85,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         val tmpPrevMean = currMean(i)
         currMean(i) = (currMean(i) * nnz(i) + value) / (nnz(i) + 1.0)
         currM2n(i) += (value - currMean(i)) * (value - tmpPrevMean)
+        currM2(i) += value * value
+        currL1(i) += math.abs(value)
 
         nnz(i) += 1.0
     }
@@ -97,7 +103,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    * @return This MultivariateOnlineSummarizer object.
    */
   def merge(other: MultivariateOnlineSummarizer): this.type = {
-   if (this.totalCnt != 0 && other.totalCnt != 0) {
+    if (this.totalCnt != 0 && other.totalCnt != 0) {
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
         s"Expecting $n but got ${other.n}.")
       totalCnt += other.totalCnt
@@ -114,6 +120,15 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
             (nnz(i) + other.nnz(i))
         }
+        // merge m2 together
+        if (nnz(i) + other.nnz(i) != 0.0) {
+          currM2(i) += other.currM2(i)
+        }
+        // merge l1 together
+        if (nnz(i) + other.nnz(i) != 0.0) {
+          currL1(i) += other.currL1(i)
+        }
+
         if (currMax(i) < other.currMax(i)) {
           currMax(i) = other.currMax(i)
         }
@@ -127,6 +142,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.n = other.n
       this.currMean = other.currMean.copy
       this.currM2n = other.currM2n.copy
+      this.currM2 = other.currM2.copy
+      this.currL1 = other.currL1.copy
       this.totalCnt = other.totalCnt
       this.nnz = other.nnz.copy
       this.currMax = other.currMax.copy
@@ -197,5 +214,24 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       i += 1
     }
     Vectors.fromBreeze(currMin)
+  }
+
+  override def normL2: Vector = {
+    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+
+    val realMagnitude = BDV.zeros[Double](n)
+
+    var i = 0
+    while (i < currM2.size) {
+      realMagnitude(i) = math.sqrt(currM2(i))
+      i += 1
+    }
+
+    Vectors.fromBreeze(realMagnitude)
+  }
+
+  override def normL1: Vector = {
+    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    Vectors.fromBreeze(currL1)
   }
 }

@@ -382,7 +382,6 @@ class ExternalMerger(Merger):
                 for v in self._merged_items(i):
                     yield v
                 self.data.clear()
-                gc.collect()
 
                 # remove the merged partition
                 for j in range(self.spills):
@@ -477,7 +476,7 @@ class ExternalSorter(object):
         goes above the limit.
         """
         global MemoryBytesSpilled, DiskBytesSpilled
-        batch = 10
+        batch = 100
         chunks, current_chunk = [], []
         iterator = iter(iterator)
         while True:

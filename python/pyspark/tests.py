@@ -67,7 +67,7 @@ except:
 SPARK_HOME = os.environ["SPARK_HOME"]
 
 
-class TestMerger(unittest.TestCase):
+class MergerTests(unittest.TestCase):
 
     def setUp(self):
         self.N = 1 << 12
@@ -152,7 +152,7 @@ class TestMerger(unittest.TestCase):
             self.assertEqual(range(k * 10), list(vs))
 
 
-class TestSorter(unittest.TestCase):
+class SorterTests(unittest.TestCase):
     def test_in_memory_sort(self):
         l = range(1024)
         random.shuffle(l)
@@ -273,16 +273,25 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
 
 
-class TestCheckpoint(PySparkTestCase):
+class ReusedPySparkTestCase(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sc = SparkContext('local[4]', cls.__name__, batchSize=2)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.sc.stop()
+
+
+class CheckpointTests(ReusedPySparkTestCase):
 
     def setUp(self):
-        PySparkTestCase.setUp(self)
         self.checkpointDir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.checkpointDir.name)
         self.sc.setCheckpointDir(self.checkpointDir.name)
 
     def tearDown(self):
-        PySparkTestCase.tearDown(self)
         shutil.rmtree(self.checkpointDir.name)
 
     def test_basic_checkpointing(self):
@@ -317,7 +326,7 @@ class TestCheckpoint(PySparkTestCase):
         self.assertEquals([1, 2, 3, 4], recovered.collect())
 
 
-class TestAddFile(PySparkTestCase):
+class AddFileTests(PySparkTestCase):
 
     def test_add_py_file(self):
         # To ensure that we're actually testing addPyFile's effects, check that
@@ -383,7 +392,7 @@ class TestAddFile(PySparkTestCase):
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
-class TestRDDFunctions(PySparkTestCase):
+class RDDTests(ReusedPySparkTestCase):
 
     def test_id(self):
         rdd = self.sc.parallelize(range(10))
@@ -393,12 +402,6 @@ class TestRDDFunctions(PySparkTestCase):
         id2 = rdd2.id()
         self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
-
-    def test_failed_sparkcontext_creation(self):
-        # Regression test for SPARK-1550
-        self.sc.stop()
-        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
-        self.sc = SparkContext("local")
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -496,8 +499,12 @@ class TestRDDFunctions(PySparkTestCase):
     def test_large_closure(self):
         N = 1000000
         data = [float(i) for i in xrange(N)]
-        m = self.sc.parallelize(range(1), 1).map(lambda x: len(data)).sum()
-        self.assertEquals(N, m)
+        rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
+        self.assertEquals(N, rdd.first())
+        self.assertTrue(rdd._broadcast is not None)
+        rdd = self.sc.parallelize(range(1), 1).map(lambda x: 1)
+        self.assertEqual(1, rdd.first())
+        self.assertTrue(rdd._broadcast is None)
 
     def test_zip_with_different_serializers(self):
         a = self.sc.parallelize(range(5))
@@ -674,10 +681,39 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertTrue(isinstance(result.it, shuffle.ChainedIterable))
 
 
-class TestSQL(PySparkTestCase):
+class ProfilerTests(PySparkTestCase):
 
     def setUp(self):
-        PySparkTestCase.setUp(self)
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.python.profile", "true")
+        self.sc = SparkContext('local[4]', class_name, batchSize=2, conf=conf)
+
+    def test_profiler(self):
+
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
+        rdd = self.sc.parallelize(range(100))
+        rdd.foreach(heavy_foo)
+        profiles = self.sc._profile_stats
+        self.assertEqual(1, len(profiles))
+        id, acc, _ = profiles[0]
+        stats = acc.value
+        self.assertTrue(stats is not None)
+        width, stat_list = stats.get_print_list([])
+        func_names = [func_name for fname, n, func_name in stat_list]
+        self.assertTrue("heavy_foo" in func_names)
+
+        self.sc.show_profiles()
+        d = tempfile.gettempdir()
+        self.sc.dump_profiles(d)
+        self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
+
+
+class SQLTests(ReusedPySparkTestCase):
+
+    def setUp(self):
         self.sqlCtx = SQLContext(self.sc)
 
     def test_udf(self):
@@ -740,28 +776,41 @@ class TestSQL(PySparkTestCase):
         srdd3 = self.sqlCtx.applySchema(rdd, srdd.schema())
         self.assertEqual(10, srdd3.count())
 
+    def test_serialize_nested_array_and_map(self):
+        d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        row = srdd.first()
+        self.assertEqual(1, len(row.l))
+        self.assertEqual(1, row.l[0].a)
+        self.assertEqual("2", row.d["key"].d)
 
-class TestIO(PySparkTestCase):
+        l = srdd.map(lambda x: x.l).first()
+        self.assertEqual(1, len(l))
+        self.assertEqual('s', l[0].b)
 
-    def test_stdout_redirection(self):
-        import subprocess
+        d = srdd.map(lambda x: x.d).first()
+        self.assertEqual(1, len(d))
+        self.assertEqual(1.0, d["key"].c)
 
-        def func(x):
-            subprocess.check_call('ls', shell=True)
-        self.sc.parallelize([1]).foreach(func)
+        row = srdd.map(lambda x: x.d["key"]).first()
+        self.assertEqual(1.0, row.c)
+        self.assertEqual("2", row.d)
 
 
-class TestInputFormat(PySparkTestCase):
+class InputFormatTests(ReusedPySparkTestCase):
 
-    def setUp(self):
-        PySparkTestCase.setUp(self)
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        self.sc._jvm.WriteInputFormatTestDataGenerator.generateData(self.tempdir.name, self.sc._jsc)
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        cls.sc._jvm.WriteInputFormatTestDataGenerator.generateData(cls.tempdir.name, cls.sc._jsc)
 
-    def tearDown(self):
-        PySparkTestCase.tearDown(self)
-        shutil.rmtree(self.tempdir.name)
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        shutil.rmtree(cls.tempdir.name)
 
     def test_sequencefiles(self):
         basepath = self.tempdir.name
@@ -941,15 +990,13 @@ class TestInputFormat(PySparkTestCase):
         self.assertEqual(maps, em)
 
 
-class TestOutputFormat(PySparkTestCase):
+class OutputFormatTests(ReusedPySparkTestCase):
 
     def setUp(self):
-        PySparkTestCase.setUp(self)
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
 
     def tearDown(self):
-        PySparkTestCase.tearDown(self)
         shutil.rmtree(self.tempdir.name, ignore_errors=True)
 
     def test_sequencefiles(self):
@@ -1230,8 +1277,7 @@ class TestOutputFormat(PySparkTestCase):
             basepath + "/malformed/sequence"))
 
 
-class TestDaemon(unittest.TestCase):
-
+class DaemonTests(unittest.TestCase):
     def connect(self, port):
         from socket import socket, AF_INET, SOCK_STREAM
         sock = socket(AF_INET, SOCK_STREAM)
@@ -1277,7 +1323,7 @@ class TestDaemon(unittest.TestCase):
         self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
 
 
-class TestWorker(PySparkTestCase):
+class WorkerTests(PySparkTestCase):
 
     def test_cancel_task(self):
         temp = tempfile.NamedTemporaryFile(delete=True)
@@ -1329,11 +1375,6 @@ class TestWorker(PySparkTestCase):
         rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
-    def test_fd_leak(self):
-        N = 1100  # fd limit is 1024 by default
-        rdd = self.sc.parallelize(range(N), N)
-        self.assertEquals(N, rdd.count())
-
     def test_after_exception(self):
         def raise_exception(_):
             raise Exception()
@@ -1366,7 +1407,7 @@ class TestWorker(PySparkTestCase):
         self.assertEqual(sum(range(100)), acc1.value)
 
 
-class TestSparkSubmit(unittest.TestCase):
+class SparkSubmitTests(unittest.TestCase):
 
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
@@ -1479,6 +1520,8 @@ class TestSparkSubmit(unittest.TestCase):
             |sc = SparkContext()
             |print sc.parallelize([1, 2, 3]).map(foo).collect()
             """)
+        # this will fail if you have different spark.executor.memory
+        # in conf/spark-defaults.conf
         proc = subprocess.Popen(
             [self.sparkSubmit, "--master", "local-cluster[1,1,512]", script],
             stdout=subprocess.PIPE)
@@ -1487,7 +1530,11 @@ class TestSparkSubmit(unittest.TestCase):
         self.assertIn("[2, 4, 6]", out)
 
 
-class ContextStopTests(unittest.TestCase):
+class ContextTests(unittest.TestCase):
+
+    def test_failed_sparkcontext_creation(self):
+        # Regression test for SPARK-1550
+        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
 
     def test_stop(self):
         sc = SparkContext()
