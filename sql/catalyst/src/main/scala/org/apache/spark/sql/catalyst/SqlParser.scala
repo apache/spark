@@ -128,6 +128,11 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val UNION = Keyword("UNION")
   protected val UPPER = Keyword("UPPER")
   protected val WHERE = Keyword("WHERE")
+  protected val CASE = Keyword("CASE")
+  protected val WHEN = Keyword("WHEN")
+  protected val THEN = Keyword("THEN")
+  protected val ELSE = Keyword("ELSE")
+  protected val END = Keyword("END")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -332,6 +337,24 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     LOWER ~> "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
+    } |
+    CASE ~> opt(expression) ~ (WHEN ~ expression ~ THEN ~ expression).* ~
+      opt(ELSE ~> expression) <~ END ^^ {
+       case c ~ l ~ el =>
+         var caseWhenExpr = l.map{x =>
+          x match {
+           case w ~ we ~ t ~ te =>
+             c match {
+               case Some(e) => Seq(EqualTo(e, we), te)
+               case None => Seq(we, te)
+             }
+          }
+        }.toSeq.reduce(_ ++ _)
+        caseWhenExpr = el match {
+          case Some(e) => caseWhenExpr ++ Seq(e)
+          case None => caseWhenExpr
+        }
+        CaseWhen(caseWhenExpr)
     } |
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p => Substring(s,p,Literal(Integer.MAX_VALUE))
