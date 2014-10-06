@@ -47,6 +47,7 @@ class ExecutorRunnable(
     hostname: String,
     executorMemory: Int,
     executorCores: Int,
+    appId: String,
     securityMgr: SecurityManager)
   extends Runnable with ExecutorRunnableUtil with Logging {
 
@@ -80,7 +81,7 @@ class ExecutorRunnable(
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
-      localResources)
+      appId, localResources)
 
     logInfo(s"Setting up executor with environment: $env")
     logInfo("Setting up executor with commands: " + commands)

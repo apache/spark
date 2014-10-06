@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,6 +26,7 @@ import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
+import com.google.common.io.Files
 
 class SparkSubmitSuite extends FunSuite with Matchers {
   def beforeAll() {
@@ -306,6 +307,21 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     runSparkSubmit(args)
   }
 
+  test("SPARK_CONF_DIR overrides spark-defaults.conf") {
+    forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local",
+        unusedJar.toString)
+      val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
+      assert(appArgs.propertiesFile != null)
+      assert(appArgs.propertiesFile.startsWith(path))
+      appArgs.executorMemory should  be ("2.3g")
+    }
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   def runSparkSubmit(args: Seq[String]): String = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -313,6 +329,22 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+  }
+
+  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
+    val tmpDir = Files.createTempDir()
+
+    val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
+    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
+    for ((key, value) <- defaults) writer.write(s"$key $value\n")
+
+    writer.close()
+
+    try {
+      f(tmpDir.getAbsolutePath)
+    } finally {
+      Utils.deleteRecursively(tmpDir)
+    }
   }
 }
 

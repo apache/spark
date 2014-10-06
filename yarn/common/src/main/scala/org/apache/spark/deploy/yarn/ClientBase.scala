@@ -64,14 +64,18 @@ private[spark] trait ClientBase extends Logging {
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem = args.executorMemory + executorMemoryOverhead
     if (executorMem > maxMem) {
-      throw new IllegalArgumentException(s"Required executor memory ($executorMem MB) " +
-        s"is above the max threshold ($maxMem MB) of this cluster!")
+      throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" + 
+        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
-      throw new IllegalArgumentException(s"Required AM memory ($amMem MB) " +
-        s"is above the max threshold ($maxMem MB) of this cluster!")
+      throw new IllegalArgumentException(s"Required AM memory (${args.amMemory}" + 
+        s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
+    logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
+      amMem,
+      amMemoryOverhead))
+
     // We could add checks to make sure the entire cluster has enough resources but that involves
     // getting all the node reports and computing ourselves.
   }

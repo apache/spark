@@ -410,6 +410,7 @@ class SparkContext(object):
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
         The mechanism is as follows:
+
             1. A Java RDD is created from the SequenceFile or other InputFormat, and the key
                and value Writable classes
             2. Serialization is attempted via Pyrolite pickling

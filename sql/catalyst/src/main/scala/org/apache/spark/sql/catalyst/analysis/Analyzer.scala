@@ -93,6 +93,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case i @ InsertIntoTable(UnresolvedRelation(databaseName, name, alias), _, _, _) =>
+        i.copy(
+          table = EliminateAnalysisOperators(catalog.lookupRelation(databaseName, name, alias)))
       case UnresolvedRelation(databaseName, name, alias) =>
         catalog.lookupRelation(databaseName, name, alias)
     }

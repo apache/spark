@@ -48,6 +48,7 @@ class DecisionTreeModel(object):
     def predict(self, x):
         """
         Predict the label of one or more examples.
+
         :param x:  Data point (feature vector),
                    or an RDD of data points (feature vectors).
         """
