@@ -1,0 +1,42 @@
+{% extends "admin/dag.html" %}
+
+{% block body %}
+{{ super() }}
+<form method="get">
+    Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
+    {{ form.execution_date | safe }}
+    <input type="submit" value="Go" class="btn btn-default" 
+    action="" method="get">
+</form>
+<div id="container"></div>
+{% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
+    <script src="{{ url_for('static', filename='highcharts-more.js') }}">
+    </script>
+    <script src="{{ admin_static.url(
+      filename='datetimepicker/bootstrap-datetimepicker.js') }}"></script>
+    <script>
+      hc = {{ hc|safe }};
+      hc.tooltip = {
+        formatter: function() {
+          duration = new Date(this.point.high - this.point.low);
+          return "From " + 
+            Highcharts.dateFormat('%H:%M:%S', new Date(this.point.low)) + 
+            " to " +
+            Highcharts.dateFormat('%H:%M:%S', new Date(this.point.high)) + 
+            "<br>Duration: " + 
+            Highcharts.dateFormat('%H:%M:%S', new Date(duration));
+        }
+      } 
+      $('#container').highcharts(hc);
+
+      // Activating the date time picker widget
+      $('#execution_date').addClass("form-control").datetimepicker();
+      $('#execution_date').datetimepicker();
+      console.log($('#execution_date'));
+    </script>
+
+{% endblock %}

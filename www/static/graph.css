@@ -1,0 +1,25 @@
+g.node rect {
+    stroke-width: 4;
+    stroke: #CCC;
+    cursor: pointer;
+}
+g.node text {
+    cursor: pointer;
+}
+g.node.success rect {
+    stroke: green;
+}
+g.node.running rect{
+    stroke: lime;
+}
+g.node.failed rect {
+    stroke: red;
+}
+input#execution_date {
+    margin-bottom: 0px;
+}
+div#svg_container {
+ border: 1px solid black;
+ background-color: #EEE;
+ cursor: move;
+}

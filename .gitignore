@@ -1,0 +1,4 @@
+env
+logs
+build
+*.pyc

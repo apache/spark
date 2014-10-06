@@ -1,0 +1,12 @@
+{% extends "admin/dag.html" %}
+{% block title %}Flux - DAGs{% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
+    <script src="/ck/static/chartkick.js"></script>
+    <div class="container">
+      {% line_chart data with height=height library=chart_options%}
+    </div>
+
+{% endblock %}

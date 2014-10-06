@@ -1,0 +1,32 @@
+span.status_square {
+    width:10px;
+    height:10px;
+    border:1px solid grey;
+    display:inline-block;
+    padding-left: 0px;
+    cursor: pointer;
+}
+div.squares{
+    float:right;
+    font-size: 1;
+}
+div.task_row{
+}
+span.success{
+    background-color:green;
+}
+span.started{
+    background-color:lime;
+}
+span.error{
+    background-color:red;
+}
+.tooltip-inner {
+    text-align:left !important;
+}
+input#execution_date {
+    margin-bottom: 0px;
+}
+.modal{
+    margin-top:5000px;
+}

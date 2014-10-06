@@ -1,0 +1,10 @@
+{% extends "admin/dag.html" %}
+{% block title %}Flux - DAGs{% endblock %}
+
+{% block body %}
+    {{ super() }}
+    <h2>{{ title }}</h2>
+    <div class="panel">
+        {{ html_code|safe }}
+    </div>
+{% endblock %}

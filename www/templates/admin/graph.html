@@ -1,0 +1,78 @@
+{% extends "admin/dag.html" %}
+{% import 'admin/lib.html' as lib with context %}
+{% import 'admin/static.html' as admin_static with context %}
+
+{% block title %}Flux - DAGs{% endblock %}
+
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" type="text/css" 
+    href="{{ url_for('static', filename='dagre.css') }}">
+<link rel="stylesheet" type="text/css" 
+    href="{{ url_for('static', filename='graph.css') }}">
+<link href="{{ admin_static.url(filename='datetimepicker/bootstrap-datetimepicker.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block body %}
+    {{ super() }}
+    <form method="get">
+        Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
+        {{ form.execution_date | safe }}
+        <input type="submit" value="Go" class="btn btn-default" 
+        action="" method="get">
+    </form>
+    <div id="svg_container">
+      <svg height=500 width="100%">
+          <g id='dig' transform="translate(20,20)"/>
+      </svg>
+    </div>
+    <hr>
+{% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    
+    <script src="{{ url_for('static', filename='d3.v3.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='dagre-d3.min.js') }}"></script>
+    <script src="{{ admin_static.url(
+      filename='datetimepicker/bootstrap-datetimepicker.js') }}"></script>
+    <script src="{{ admin_static.url(filename='admin/js/form.js') }}"></script>
+    <script>
+    var nodes = {{ nodes|safe }};
+    var edges = {{ edges|safe }};
+    var tasks = {{ tasks|safe }};
+    var task_instances = {{ task_instances|safe }};
+    var execution_date = "{{ execution_date }}";
+    var g = dagreD3.json.decode(nodes, edges);
+    var renderer = new dagreD3.Renderer();
+    renderer.run(g, d3.select("#dig"));
+
+    // Activating the date time picker widget
+    $('#execution_date').datetimepicker();
+
+    // Assigning css classes based on state to nodes for border coloring
+    $.each(task_instances, function(task_id, ti) {
+      $("tspan:contains(" + task_id + ")")
+        .parent().parent().parent()
+        .attr("class", "node enter " + ti.state)
+        .click(function(){
+          call_modal(task_id, execution_date);
+        })
+        .attr("data-toggle", "tooltip")
+        .attr("title", function(d) {
+          // Tooltip
+          task = tasks[task_id];
+          tt = "Operator: " + task.task_type + "<br>";
+          tt += "State: " + ti.state + "<br>";
+          tt += "Start: " + ti.start_date + "<br>";
+          tt += "End: " + ti.end_date + "<br>";
+          tt += "Duration: " + ti.duration + "<br>";
+          return tt;
+        });
+    });
+    $("g.node").tooltip({
+      html: true,
+      container: "body",
+    });
+    </script>
+{% endblock %}

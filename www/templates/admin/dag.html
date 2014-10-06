@@ -1,0 +1,153 @@
+{% extends "admin/master.html" %}
+
+{% block title %}Flux - DAGs{% endblock %}
+
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" type="text/css" 
+    href="{{ url_for("static", filename="main.css") }}">
+{% endblock %}
+
+{% block body %}
+  <h2>DAG: {{ dag.dag_id }}</h2>
+  <ul class="nav nav-pills">
+    <li><a href="{{ url_for("flux.tree", dag_id=dag.dag_id, num_runs=45) }}">
+      <i class="icon-plus-sign"></i>Tree View
+    </a></li>
+    <li><a href="{{ url_for("flux.graph", dag_id=dag.dag_id) }}">
+      <i class="icon-random"></i> 
+      Graph View</a></li>
+    <li><a href="{{ url_for("flux.duration", dag_id=dag.dag_id) }}">
+      <i class="icon-signal"></i>Task Duration
+    </a></li>
+    <li>
+      <a href="{{ url_for("flux.landing_times", dag_id=dag.dag_id) }}">
+        <i class="icon-signal"></i>
+        Landing Times
+      </a>
+    </li>
+    <li>
+      <a href="{{ url_for("flux.gantt", dag_id=dag.dag_id) }}">
+        <i class="icon-align-left"></i> 
+        Gantt
+      </a>
+    </li>
+    <li>
+      <a href="{{ url_for("flux.code", dag_id=dag.dag_id) }}">
+      <i class="icon-barcode"></i> 
+        Code
+      </a>
+    </li>
+  </ul>
+  <hr>
+  <!-- Modal -->
+  <div class="modal fade" id="myModal" 
+        tabindex="-1" role="dialog" 
+      aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="myModalLabel">
+            Task Instance: 
+            <span id='task_id'></span> on 
+            <span id='execution_date'></span>
+          </h4>
+        </div>
+        <div class="modal-body">
+
+          <button id="btn_log" type="button" class="btn btn-primary">
+            View Log
+          </button>
+          <hr/>
+          <button id="btn_clear" type="button" class="btn btn-primary">
+            Clear
+          </button>
+          <span class="btn-group">
+            <button id="btn_past" 
+              type="button" class="btn" data-toggle="button">Past</button>
+            <button id="btn_future" 
+              type="button" class="btn" data-toggle="button">Future</button>
+            <button id="btn_upstream"
+              type="button" class="btn" data-toggle="button">Upstream</button>
+            <button id="btn_downstream"
+              type="button" class="btn active" data-toggle="button">
+              Downstream
+            </button>
+          </span>
+          <hr/>
+          <span>
+            <button id="btn_graph" type="button" class="btn">
+              Graph View
+            </button>
+            <button id="btn_gantt" type="button" class="btn">
+              Gantt Chart
+            </button>
+          </span>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block tail %}
+  {{ super() }}
+  <script>
+    // Pills highlighting
+    $(document).ready(function () {
+      $('a[href*="' + this.location.pathname + '"]').parent().addClass('active');
+    });
+
+    var dag_id = '{{ dag.dag_id }}';
+    var task_id = '';
+    var exection_date = '';
+    function call_modal(t, d) {
+      task_id = t;
+      execution_date = d;
+      $('#task_id').html(t);
+      $('#execution_date').html(d);
+      $('#myModal').modal({});
+      // TRick to fix a problem with Bootstrap 2.3.1 that ships with flask-admin
+      $("#myModal").css("margin-top","0px")
+    }
+
+    $("#btn_log").click(function(){
+      url = "{{ url_for('flux.log') }}" +
+        "?task_id=" + task_id +
+        "&dag_id=" + dag_id +
+        "&execution_date=" + execution_date;
+      window.location = url;
+    });
+
+    $("#btn_clear").click(function(){
+      url = "{{ url_for('flux.tree') }}" +  
+        "?action=clear" +
+        "&task_id=" + task_id +
+        "&dag_id=" + dag_id +
+        "&future=" + $('#btn_future').hasClass('active') +
+        "&past=" + $('#btn_past').hasClass('active') +
+        "&upstream=" + $('#btn_upstream').hasClass('active') +
+        "&downstream=" + $('#btn_downstream').hasClass('active') +
+        "&execution_date=" + execution_date;
+      window.location = url;
+    });
+
+    $("#btn_gantt").click(function(){
+      url = "{{ url_for('flux.gantt') }}" +  
+        "?dag_id=" + dag_id +
+        "&execution_date=" + execution_date;
+      window.location = url;
+    });
+
+    $("#btn_graph").click(function(){
+      url = "{{ url_for('flux.graph') }}" +  
+        "?dag_id=" + dag_id +
+        "&execution_date=" + execution_date;
+      window.location = url;
+    });
+
+  </script>
+{% endblock %}

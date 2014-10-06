@@ -1,0 +1,12 @@
+chartkick
+flask
+flask-admin
+flask-bootstrap
+ipython[all]
+jinja2
+markdown
+mysql-python
+pandas
+pygments
+sphinx
+sqlalchemy
