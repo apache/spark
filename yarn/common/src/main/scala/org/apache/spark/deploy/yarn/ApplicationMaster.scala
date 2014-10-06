@@ -368,18 +368,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter() = {
-    val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
-    val proxy = client.getProxyHostAndPort(yarnConf)
-    val parts = proxy.split(":")
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-    val uriBase = "http://" + proxy + proxyBase
-    val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-
+    val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     if (isDriver) {
       System.setProperty("spark.ui.filters", amFilter)
-      System.setProperty(s"spark.$amFilter.params", params)
+      params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     } else {
-      actor ! AddWebUIFilter(amFilter, params, proxyBase)
+      actor ! AddWebUIFilter(amFilter, params.toMap, proxyBase)
     }
   }
 
