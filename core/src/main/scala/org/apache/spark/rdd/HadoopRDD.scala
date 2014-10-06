@@ -107,6 +107,8 @@ class HadoopRDD[K, V](
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def createJobConf(): JobConf = {
+    // Each task gets its own deserialized copy of the HadoopRDD, and therefore gets its own copy
+    // of the configuration.
     val conf: Configuration = serializableConf.value
     conf match {
       case jobConf: JobConf =>
