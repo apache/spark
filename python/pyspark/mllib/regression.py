@@ -22,7 +22,7 @@ from pyspark import SparkContext
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
+__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
 
 
@@ -155,11 +155,14 @@ class LinearRegressionWithSGD(object):
         @param regParam:          The regularizer parameter (default: 1.0).
         @param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater,
+                                     - "l2" for using SquaredL2Updater,
+                                     - "none" for no regularizer.
+
+                                     (default: "none")
+
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
