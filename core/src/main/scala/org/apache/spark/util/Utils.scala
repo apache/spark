@@ -265,7 +265,6 @@ private[spark] object Utils extends Logging {
       } catch { case e: IOException => ; }
     }
 
-    dir.deleteOnExit()
     registerShutdownDeleteDir(dir)
     dir
   }
@@ -686,6 +685,9 @@ private[spark] object Utils extends Logging {
           }
           if (savedIOException != null) {
             throw savedIOException
+          }
+          shutdownDeletePaths.synchronized {
+            shutdownDeletePaths.remove(file.getAbsolutePath)
           }
         }
       } finally {

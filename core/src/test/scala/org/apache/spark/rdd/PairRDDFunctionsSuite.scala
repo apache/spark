@@ -383,12 +383,15 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
   test("zero-partition RDD") {
     val emptyDir = Utils.createTempDir()
-    val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.partitions.isEmpty)
-    assert(file.collect().toList === Nil)
-    // Test that a shuffle on the file works, because this used to be a bug
-    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    Utils.deleteRecursively(emptyDir)
+    try {
+      val file = sc.textFile(emptyDir.getAbsolutePath)
+      assert(file.partitions.isEmpty)
+      assert(file.collect().toList === Nil)
+      // Test that a shuffle on the file works, because this used to be a bug
+      assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    } finally {
+      Utils.deleteRecursively(emptyDir)
+    }
   }
 
   test("keys and values") {
