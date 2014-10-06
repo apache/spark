@@ -117,7 +117,7 @@ object GradientBoosting extends Logging {
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
     // TODO: Implement Stochastic gradient boosting using BaggedPoint
-    val subSample = boostingStrategy.subSample
+    val subSample = boostingStrategy.subsample
 
     // Cache input
     input.cache()

@@ -22,6 +22,7 @@ import cern.jet.random.engine.DRand
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Internal representation of a datapoint which belongs to several subsamples of the same dataset,
@@ -47,20 +48,61 @@ private[tree] object BaggedPoint {
    * Convert an input dataset into its BaggedPoint representation,
    * choosing subsample counts for each instance.
    * Each subsample has the same number of instances as the original dataset,
-   * and is created by subsampling with replacement.
+   * and is created by subsampling without replacement.
    * @param input     Input dataset.
+   * @param subsample Fraction of the training data used for learning decision tree.
    * @param numSubsamples  Number of subsamples of this RDD to take.
-   * @param seed   Random seed.
+   * @param withReplacement Sampling with/without replacement.
    * @return  BaggedPoint dataset representation
    */
   def convertToBaggedRDD[Datum](
       input: RDD[Datum],
+      subsample: Double,
       numSubsamples: Int,
-      seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
+      withReplacement: Boolean): RDD[BaggedPoint[Datum]] = {
+    if (withReplacement) {
+      convertToBaggedRDDSamplingWithReplacement(input, subsample, numSubsamples)
+    } else {
+      if (numSubsamples == 1 && subsample == 1) {
+        convertToBaggedRDDSamplingWithoutReplacement(input, subsample, numSubsamples)
+      } else {
+        convertToBaggedRDDWithoutSampling(input)
+      }
+    }
+  }
+
+  private def convertToBaggedRDDSamplingWithoutReplacement[Datum](
+      input: RDD[Datum],
+      subsample: Double,
+      numSubsamples: Int): RDD[BaggedPoint[Datum]] = {
+    val seed = Utils.random.nextLong()
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
-      // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
-      val poisson = new Poisson(1.0, new DRand(seed + partitionIndex + 1))
+      val rng = new XORShiftRandom
+      rng.setSeed(seed + partitionIndex + 1)
+      instances.map { instance =>
+        val subsampleWeights = new Array[Double](numSubsamples)
+        var subsampleIndex = 0
+        while (subsampleIndex < numSubsamples) {
+          val x = rng.nextDouble()
+          subsampleWeights(subsampleIndex) = {
+            if (x < subsample) 1.0 else 0.0
+          }
+          subsampleIndex += 1
+        }
+        new BaggedPoint(instance, subsampleWeights)
+      }
+    }
+  }
+
+  private def convertToBaggedRDDSamplingWithReplacement[Datum](
+      input: RDD[Datum],
+      subsample: Double,
+      numSubsamples: Int): RDD[BaggedPoint[Datum]] = {
+    val seed = Utils.random.nextInt()
+    input.mapPartitionsWithIndex { (partitionIndex, instances) =>
+      // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
+      val poisson = new Poisson(subsample, new DRand(seed + partitionIndex + 1))
       instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)
         var subsampleIndex = 0
@@ -73,7 +115,8 @@ private[tree] object BaggedPoint {
     }
   }
 
-  def convertToBaggedRDDWithoutSampling[Datum](input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
+  private def convertToBaggedRDDWithoutSampling[Datum]
+      (input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
     input.map(datum => new BaggedPoint(datum, Array(1.0)))
   }
 

@@ -111,10 +111,16 @@ private class RandomForest (
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
-    val baggedInput = if (numTrees > 1) {
-      BaggedPoint.convertToBaggedRDD(treeInput, numTrees, seed)
+    // TODO: Have a stricter check in the strategy
+    val isRandomForest = numTrees > 1
+    val baggedInput = if (isRandomForest) {
+      val subsample = 1.0
+      val withReplacement = true
+      BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement)
     } else {
-      BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+      val subsample = strategy.subsample
+      val withReplacement = false
+      BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement)
     }.persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree

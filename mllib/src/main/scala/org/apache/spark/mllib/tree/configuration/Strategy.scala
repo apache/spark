@@ -58,6 +58,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                    this split will not be considered as a valid split.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.
+ * @param subsample Fraction of the training data used for learning decision tree.
  */
 @Experimental
 class Strategy (
@@ -70,7 +71,8 @@ class Strategy (
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
     val minInstancesPerNode: Int = 1,
     val minInfoGain: Double = 0.0,
-    val maxMemoryInMB: Int = 256) extends Serializable {
+    val maxMemoryInMB: Int = 256,
+    val subsample: Double = 1) extends Serializable {
 
   if (algo == Classification) {
     require(numClassesForClassification >= 2)

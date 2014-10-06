@@ -24,7 +24,7 @@ import org.apache.spark.mllib.tree.loss.{LeastSquaresError, Loss}
 case class BoostingStrategy(
     numEstimators: Int = 100,
     learningRate: Double = 0.1,
-    subSample: Double = 1,
+    subsample: Double = 1,
     loss: Loss = LeastSquaresError,
     checkpointPeriod: Int = 20
 )
