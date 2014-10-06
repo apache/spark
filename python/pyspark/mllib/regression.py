@@ -66,6 +66,9 @@ class LinearModel(object):
     def intercept(self):
         return self._intercept
 
+    def __repr__(self):
+        return "(weights=%s, intercept=%s)" % (self._coeff, self._intercept)
+
 
 class LinearRegressionModelBase(LinearModel):
 
