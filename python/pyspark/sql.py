@@ -15,27 +15,36 @@
 # limitations under the License.
 #
 
+"""
+public classes of Spark SQL:
 
-import sys
-import types
+    - L{SQLContext}
+    Main entry point for SQL functionality.
+    - L{SchemaRDD}
+    A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
+    addition to normal RDD operations, SchemaRDDs also support SQL.
+    - L{Row}
+    A Row of data returned by a Spark SQL query.
+    - L{HiveContext}
+    Main entry point for accessing data stored in Apache Hive..
+"""
+
 import itertools
-import warnings
 import decimal
 import datetime
 import keyword
 import warnings
 from array import array
 from operator import itemgetter
+from itertools import imap
+
+from py4j.protocol import Py4JError
+from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-
-from itertools import chain, ifilter, imap
-
-from py4j.protocol import Py4JError
-from py4j.java_collections import ListConverter, MapConverter
 
 
 __all__ = [

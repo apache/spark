@@ -22,7 +22,7 @@ from pyspark import SparkContext
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
+__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
 
 

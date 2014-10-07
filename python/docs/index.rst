@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to PySpark API reference!
+Welcome to Spark Python API Docs!
 ===================================
 
 Contents:
@@ -19,19 +19,17 @@ Contents:
 Core classes:
 ---------------
 
-    :class:`pyspark.SparkContext`
+    :class:`SparkContext`
 
     Main entry point for Spark functionality.
 
-    :class:`pyspark.RDD`
-    
+    :class:`RDD`
+
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
 
 
 Indices and tables
 ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
 
