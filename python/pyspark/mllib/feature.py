@@ -45,7 +45,7 @@ class Word2VecModel(object):
         :param word: a word
         :return: vector representation of word
         Transforms a word to its vector representation
-        
+
         Note: local use only
         """
         # TODO: make transform usable in RDD operations from python side
@@ -58,7 +58,7 @@ class Word2VecModel(object):
         :param num: number of synonyms to find
         :return: array of (word, cosineSimilarity)
         Find synonyms of a word
-        
+
         Note: local use only
         """
         # TODO: make findSynonyms usable in RDD operations from python side
