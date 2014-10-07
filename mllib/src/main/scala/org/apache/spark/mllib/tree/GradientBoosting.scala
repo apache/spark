@@ -146,14 +146,14 @@ object GradientBoosting extends Logging {
       val model = new DecisionTree(strategy).train(data)
       trees(m) = model
       logDebug("error of tree = " + meanSquaredError(model, data))
-      //update data with pseudo-residuals
+      // Update data with pseudo-residuals
       data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
         point.features))
       // Checkpoint
       val checkpointingPeriod = boostingStrategy.checkpointPeriod
       // TODO: Need to find good defaults for checkpointPeriod
       if (m % checkpointingPeriod == 0) {
-        //data.checkpoint()
+        // data.checkpoint()
       }
       m += 1
     }
