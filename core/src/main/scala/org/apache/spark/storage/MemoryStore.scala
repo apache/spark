@@ -478,13 +478,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   def logMemoryUsage(): Unit = {
     val blocksMemory = currentMemory
     val unrollMemory = currentUnrollMemory
-    val actualFreeMemory = maxMemory - blocksMemory - unrollMemory
+    val totalMemory = blocksMemory + unrollMemory
     logInfo(
-      s"Max memory is ${Utils.bytesToString(maxMemory)}, of which " +
-      s"${Utils.bytesToString(blocksMemory)} are occupied by blocks and " +
-      s"${Utils.bytesToString(unrollMemory)} are reserved for unrolling blocks " +
-      s"shared across $numThreadsUnrolling thread(s). " +
-      s"Total free memory left is ${Utils.bytesToString(actualFreeMemory)}."
+      s"Memory use = ${Utils.bytesToString(blocksMemory)} (blocks) + " +
+      s"${Utils.bytesToString(unrollMemory)} (scratch space shared across " +
+      s"$numThreadsUnrolling thread(s)) = ${Utils.bytesToString(totalMemory)}. " +
+      s"Storage limit = ${Utils.bytesToString(maxMemory)}."
     )
   }
 
@@ -496,8 +495,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    */
   def logUnrollFailureMessage(blockId: BlockId, finalVectorSize: Long): Unit = {
     logWarning(
-      s"Not enough space to store partition $blockId in memory " +
-      s"(unrolled ${Utils.bytesToString(finalVectorSize)} so far)!"
+      s"Not enough space to cache $blockId in memory! " +
+      s"(computed ${Utils.bytesToString(finalVectorSize)} so far)"
     )
     logMemoryUsage()
   }
