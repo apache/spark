@@ -33,6 +33,7 @@ object ScalaReflection {
 
   /** Converts Scala objects to catalyst rows / types */
   def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
+    // TODO: Why does this not need to flatMap stuff?  Does it not support nesting?
     case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
@@ -43,21 +44,26 @@ object ScalaReflection {
         convertToCatalyst(elem, field.dataType)
       }.toArray)
     case (udt: Any, udtType: UserDefinedType[_]) => udtType.serialize(udt)
-    case other => other
+    case (other, _) => other
   }
 
+  /*
   /** Converts Catalyst types used internally in rows to standard Scala types */
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
-      // TODO: USE DATATYPE
+    // TODO: Why does this not need to flatMap stuff?  Does it not support nesting?
     // TODO: What about Option and Product?
-    case s: Seq[_] => s.map(convertToScala)
-    case m: Map[_, _] => m.map { case (k, v) => convertToScala(k) -> convertToScala(v)}
-    case other => other
+    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToScala(_, arrayType.elementType))
+    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
+      convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
+    }
+    case (udt: Row, udtType: UserDefinedType[_]) => udtType.deserialize(udt)
+    case (other, _) => other
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
     new GenericRow(r.toArray.map(convertToScala(_, schema)))
   }
+  */
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag](

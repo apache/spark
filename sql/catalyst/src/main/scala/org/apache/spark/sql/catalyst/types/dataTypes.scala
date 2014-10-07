@@ -439,6 +439,5 @@ abstract class UserDefinedType[UserType](val dataType: StructType) extends DataT
 
   def deserialize(row: Row): UserType
 
-  // TODO
   def simpleString: String = "udt"
 }
