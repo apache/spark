@@ -163,7 +163,7 @@ case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
   protected def lowerCaseSchema(dataType: DataType): DataType = dataType match {
     case StructType(fields) =>
       StructType(fields.map(f =>
-        StructField(f.name.toLowerCase(), lowerCaseSchema(f.dataType), f.nullable)))
+        StructField(f.name.toLowerCase(), lowerCaseSchema(f.dataType), f.nullable, f.metadata)))
     case ArrayType(elemType, containsNull) => ArrayType(lowerCaseSchema(elemType), containsNull)
     case otherType => otherType
   }

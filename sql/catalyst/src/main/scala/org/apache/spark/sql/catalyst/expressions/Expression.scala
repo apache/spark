@@ -41,6 +41,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def foldable: Boolean = false
   def nullable: Boolean
+  def metadata: Map[String, Any] = Map.empty
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */

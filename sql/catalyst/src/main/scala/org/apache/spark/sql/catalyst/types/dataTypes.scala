@@ -57,7 +57,8 @@ object DataType extends RegexParsers {
   protected lazy val structField: Parser[StructField] =
     ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
       case name ~ tpe ~ nullable  =>
-          StructField(name, tpe, nullable = nullable)
+        // TODO: parse metadata
+        StructField(name, tpe, nullable = nullable, Map.empty)
     }
 
   protected lazy val boolVal: Parser[Boolean] =

@@ -40,7 +40,6 @@ abstract class NamedExpression extends Expression {
   def name: String
   def exprId: ExprId
   def qualifiers: Seq[String]
-  def metadata: Map[String, Any] = Map.empty
 
   def toAttribute: Attribute
 
@@ -99,6 +98,8 @@ case class Alias(child: Expression, name: String)
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
+
+  override def metadata: Map[String, Any] = child.metadata
 }
 
 /**

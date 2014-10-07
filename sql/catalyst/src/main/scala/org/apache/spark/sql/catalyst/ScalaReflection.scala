@@ -62,7 +62,7 @@ object ScalaReflection {
         params.head.map { p =>
           val Schema(dataType, nullable) =
             schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
-          StructField(p.name.toString, dataType, nullable)
+          StructField(p.name.toString, dataType, nullable, Map.empty)
         }), nullable = true)
     // Need to decide if we actually need a special type here.
     case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
