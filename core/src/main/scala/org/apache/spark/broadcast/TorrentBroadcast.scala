@@ -108,6 +108,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](
 
   /** Fetch torrent blocks from the driver and/or other executors. */
   private def readBlocks(): Array[ByteBuffer] = {
+    assert(numBlocks > 0, "no blocks in local mode")
+
     // Fetch chunks of data. Note that all these chunks are stored in the BlockManager and reported
     // to the driver, so other executors can pull these chunks from this executor as well.
     val blocks = new Array[ByteBuffer](numBlocks)
@@ -178,10 +180,6 @@ private[spark] class TorrentBroadcast[T: ClassTag](
           _value = x.asInstanceOf[T]
 
         case None =>
-          if (numBlocks == 0) {
-            throw new IOException("Broadcast is lost locally")
-          }
-
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime()
           val blocks = readBlocks()
