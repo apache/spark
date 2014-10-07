@@ -357,8 +357,9 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def readBroadcastFromFile(sc: JavaSparkContext,
-                            filename: String): Broadcast[Array[Array[Byte]]] = {
+  def readBroadcastFromFile(
+      sc: JavaSparkContext,
+      filename: String): Broadcast[Array[Array[Byte]]] = {
     val size = new File(filename).length()
     val file = new DataInputStream(new FileInputStream(filename))
     val blockSize = 1 << 20
