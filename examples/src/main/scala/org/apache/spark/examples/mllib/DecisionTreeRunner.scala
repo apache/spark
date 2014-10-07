@@ -50,26 +50,6 @@ object DecisionTreeRunner {
 
   import ImpurityType._
 
-  abstract class TestParams {
-
-    override def toString: String = {
-
-      import scala.reflect.runtime.universe._
-
-      val mirror = runtimeMirror(this.getClass.getClassLoader)
-      val instanceMirror = mirror.reflect(this)
-
-      typeOf[Params].members.collect {
-        case m: MethodSymbol if m.isCaseAccessor => m
-      }.map { f =>
-        val paramName = f.name.toString
-        val fieldMirror = instanceMirror.reflectField(f)
-        val paramValue = fieldMirror.get
-        s"$paramName\t${f.returnType}\t$paramValue\n"
-      }.foldLeft("")(_ + _)
-    }
-  }
-
   case class Params(
       input: String = null,
       testInput: String = "",
@@ -82,7 +62,7 @@ object DecisionTreeRunner {
       minInfoGain: Double = 0.0,
       numTrees: Int = 1,
       featureSubsetStrategy: String = "auto",
-      fracTest: Double = 0.2) extends TestParams
+      fracTest: Double = 0.2) extends TestParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -158,11 +138,10 @@ object DecisionTreeRunner {
 
   def run(params: Params) {
 
-    val conf = new SparkConf().setAppName("DecisionTreeRunner")
+    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with parameters:\n$params")
     val sc = new SparkContext(conf)
 
-    println("DecisionTreeRunner")
-    println("running with params:\n" + s"$params")
+    println(s"DecisionTreeRunner with parameters:\n$params")
 
     // Load training data and cache it.
     val origExamples = params.dataFormat match {

@@ -44,7 +44,7 @@ object DenseKMeans {
       input: String = null,
       k: Int = -1,
       numIterations: Int = 10,
-      initializationMode: InitializationMode = Parallel)
+      initializationMode: InitializationMode = Parallel) extends TestParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -76,7 +76,7 @@ object DenseKMeans {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"DenseKMeans with $params")
+    val conf = new SparkConf().setAppName(s"DenseKMeans with parameters:\n$params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)

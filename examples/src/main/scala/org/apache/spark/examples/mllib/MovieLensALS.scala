@@ -55,7 +55,7 @@ object MovieLensALS {
       rank: Int = 10,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false)
+      implicitPrefs: Boolean = false) extends TestParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -106,7 +106,7 @@ object MovieLensALS {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
+    val conf = new SparkConf().setAppName(s"MovieLensALS with parameters:\n$params")
     if (params.kryo) {
       conf.set("spark.serializer", classOf[KryoSerializer].getName)
         .set("spark.kryo.registrator", classOf[ALSRegistrator].getName)

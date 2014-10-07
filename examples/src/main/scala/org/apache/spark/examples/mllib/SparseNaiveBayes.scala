@@ -37,7 +37,7 @@ object SparseNaiveBayes {
       input: String = null,
       minPartitions: Int = 0,
       numFeatures: Int = -1,
-      lambda: Double = 1.0)
+      lambda: Double = 1.0) extends TestParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -67,7 +67,7 @@ object SparseNaiveBayes {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"SparseNaiveBayes with $params")
+    val conf = new SparkConf().setAppName(s"SparseNaiveBayes with parameters:\n$params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
