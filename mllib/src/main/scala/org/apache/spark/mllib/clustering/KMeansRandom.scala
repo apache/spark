@@ -17,12 +17,13 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.mllib.base.{FP, PointOps}
+import scala.reflect.ClassTag
+
+import org.apache.spark.mllib.base.{ FP, PointOps }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
-import scala.collection.immutable.IndexedSeq
-import scala.reflect.ClassTag
+
 
 /**
  * Generate a random set of cluster centers from the points.
@@ -31,34 +32,36 @@ import scala.reflect.ClassTag
  * This is important for some distance functions that require points with non-zero weights.
  * When all weights are one (as is the case with the Euclidean distance function) this filter
  * has no effect.
-
+ *
  * @param pointOps distance function
  * @param k  number of desired clusters
  * @param runs number of sets of cluster centers to generate
  */
 
-private[mllib] class KMeansRandom[P <: FP : ClassTag, C <: FP : ClassTag](
-  pointOps: PointOps[P,C],
+private[mllib] class KMeansRandom[P <: FP: ClassTag, C <: FP: ClassTag](
+  pointOps: PointOps[P, C],
   k: Int,
-  runs: Int)
-  extends KMeansInitializer[P,C] {
+  runs: Int) extends KMeansInitializer[P, C] {
 
   def init(data: RDD[P], seed: Int): Array[Array[C]] = {
 
     val filtered = data.filter(_.weight > 0)
     val count = filtered.count()
-    if( runs * k <= count ) {
-      val x = filtered.takeSample(withReplacement=false, runs * k, new XORShiftRandom().nextInt())
+    if (runs * k <= count) {
+      val x = filtered.takeSample(withReplacement = false, runs * k, new XORShiftRandom().nextInt())
       val centers = x.map(pointOps.pointToCenter).toSeq
       Array.tabulate(runs)(r => centers.slice(r * k, (r + 1) * k).toArray)
-    } else if( k < count ) {
-      (0 to runs).toArray.map{ _ => {filtered.takeSample(withReplacement=false, k,
-        new XORShiftRandom().nextInt()).map(pointOps.pointToCenter)}}
+    } else if (k < count) {
+      (0 to runs).toArray.map { _ =>
+        {
+          filtered.takeSample(withReplacement = false, k,
+            new XORShiftRandom().nextInt()).map(pointOps.pointToCenter)
+        }
+      }
     } else {
-      (0 to runs).toArray.map { _ =>  filtered.collect().map(pointOps.pointToCenter) }
+      (0 to runs).toArray.map(_ => filtered.collect().map(pointOps.pointToCenter))
     }
   }
-
 
 }
 

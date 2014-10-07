@@ -17,10 +17,10 @@
 
 package org.apache.spark.mllib.clustering.metrics
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-import org.apache.spark.mllib.base.{Centroid, FPoint, PointOps, Infinity, Zero}
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
+import breeze.linalg.{ DenseVector => BDV, SparseVector => BSV, Vector => BV }
 
+import org.apache.spark.mllib.base.{ Centroid, FPoint, PointOps, Infinity, Zero }
+import org.apache.spark.mllib.linalg.{ DenseVector, SparseVector, Vector }
 
 /**
  * Euclidean distance measure
@@ -39,7 +39,7 @@ class EuclideanOps extends PointOps[FPoint, FPoint] with Serializable {
     val d = p.inh.zip(c.inh).foldLeft(Zero) {
       case (d: Double, (a: Double, b: Double)) => d + (a - b) * (a - b)
     }
-    if( d < Zero) Zero else d
+    if (d < Zero) Zero else d
   }
 
   def arrayToPoint(raw: Array[Double]) = new FPoint(BDV(raw), 1)

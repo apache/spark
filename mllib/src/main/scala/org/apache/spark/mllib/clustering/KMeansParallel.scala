@@ -17,15 +17,15 @@
 
 package org.apache.spark.mllib.clustering
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.base.{ PointOps, FP, Zero }
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
 
 private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
   pointOps: PointOps[P, C],
@@ -88,8 +88,11 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
    * @param step  which step of the selection process
    * @return  array of (run, point)
    */
-  def choose(data: RDD[P], seed: Int, step: Int, bcCenters: Broadcast[Array[Array[C]]])
-  : Array[(Int, P)] = {
+  def choose(
+    data: RDD[P],
+    seed: Int,
+    step: Int,
+    bcCenters: Broadcast[Array[Array[C]]]): Array[(Int, P)] = {
     // compute the weighted distortion for each run
     val sumCosts = data.flatMap {
       point =>
@@ -122,8 +125,9 @@ private[mllib] class KMeansParallel[P <: FP: ClassTag, C <: FP: ClassTag](
    * @param seed  random number seed
    * @return  array of sets of cluster centers
    */
-  def finalCenters(data: RDD[P], bcCenters: Broadcast[Array[Array[C]]], seed: Int)
-  : Array[Array[C]] = {
+  def finalCenters(
+    data: RDD[P],
+    bcCenters: Broadcast[Array[Array[C]]], seed: Int): Array[Array[C]] = {
     // for each (run, cluster) compute the sum of the weights of the points in the cluster
     val weightMap = data.flatMap {
       point =>

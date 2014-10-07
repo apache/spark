@@ -17,13 +17,11 @@
 
 package org.apache.spark.mllib.clustering.metrics
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import breeze.linalg.{ DenseVector => BDV, SparseVector => BSV, Vector => BV }
+
 import org.apache.spark.mllib.base._
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector}
-
-import org.apache.spark.mllib.base.{Centroid, FPoint, PointOps, Infinity, Zero}
-
-
+import org.apache.spark.mllib.linalg.{ SparseVector, DenseVector, Vector }
+import org.apache.spark.mllib.base.{ Centroid, FPoint, PointOps, Infinity, Zero }
 
 class FastEUPoint(raw: BV[Double], weight: Double) extends FPoint(raw, weight) {
   val norm = if (weight == Zero) Zero else raw.dot(raw) / (weight * weight)
@@ -77,4 +75,3 @@ class FastEuclideanOps extends PointOps[FastEUPoint, FastEUPoint] with Serializa
   def centerMoved(v: P, w: C): Boolean = distance(v, w, Infinity) > epsilon * epsilon
 
 }
-

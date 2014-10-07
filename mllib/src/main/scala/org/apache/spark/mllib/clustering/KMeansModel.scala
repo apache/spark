@@ -26,27 +26,35 @@ import org.apache.spark.mllib.linalg.Vector
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
 
-
-class KMeansModel(specific: GeneralizedKMeansModel[_,_]) {
+class KMeansModel(specific: GeneralizedKMeansModel[_, _]) {
 
   val k: Int = specific.k
 
   /** Returns the cluster index that a given point belongs to. */
   def predict(point: Vector): Int = specific.predict(point)
 
-
-  /** Maps given points to their cluster indices. */
+  /**
+   * Maps given points to their cluster indices.
+   */
   def predict(points: RDD[Vector]): RDD[Int] = specific.predict(points)
 
-
-  /** Maps given points to their cluster indices. */
+  /**
+   * Maps given points to their cluster indices.
+   * @param points input points
+   * @return the predicted cluster index for each input point
+   */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] = specific.predict(points)
 
   /**
-   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
-   * model on the given data.
+   * Get the K-means cost for this model on the given data.
+   * @param data data for which cost is to be computed
+   * @return  the K-means cost for this model on the given data
    */
   def computeCost(data: RDD[Vector]): Double = specific.computeCost(data)
 
-  def clusterCenters:  Array[Vector] = specific.clusterCenters
+  /**
+   * Get the array of cluster centers
+   * @return  the array of cluster centers
+   */
+  def clusterCenters: Array[Vector] = specific.clusterCenters
 }

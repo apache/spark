@@ -17,15 +17,12 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.Accumulator
 import org.apache.spark.SparkContext._
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.mllib.base.{Centroid, FP, PointOps, Zero}
+import org.apache.spark.mllib.base.{ Centroid, FP, PointOps, Zero }
 import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-
 
 /**
  * A K-Means clustering implementation that performs multiple K-means clusterings simultaneously,
@@ -38,8 +35,9 @@ import scala.reflect.ClassTag
  * The resulting clustering may contain fewer than K clusters.
  */
 
-private[mllib] class MultiKMeans[P <: FP : ClassTag, C <: FP : ClassTag](
-  pointOps: PointOps[P, C], maxIterations: Int) extends MultiKMeansClusterer[P, C] {
+private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP: ClassTag](
+  pointOps: PointOps[P, C],
+  maxIterations: Int) extends MultiKMeansClusterer[P, C] {
 
   def cluster(data: RDD[P], centers: Array[Array[C]]): (Double, GeneralizedKMeansModel[P, C]) = {
     val runs = centers.length
@@ -104,11 +102,9 @@ private[mllib] class MultiKMeans[P <: FP : ClassTag, C <: FP : ClassTag](
     val runDistortion = activeCenters.map(_ => data.sparkContext.accumulator(Zero))
     val bcActiveCenters = data.sparkContext.broadcast(activeCenters)
     val ops = pointOps
-    val result = data.mapPartitions {  points =>
+    val result = data.mapPartitions { points =>
       val bcCenters = bcActiveCenters.value
-      val centers = bcCenters.map {
-        _.map { _ => new Centroid}
-      }
+      val centers = bcCenters.map(x => Array.fill(x.length)(new Centroid()))
       for (
         point <- points;
         (clusters: Array[C], run) <- bcCenters.zipWithIndex
@@ -127,7 +123,7 @@ private[mllib] class MultiKMeans[P <: FP : ClassTag, C <: FP : ClassTag](
         }
 
       contribution.iterator
-    }.reduceByKey { (x, y) => x.add(y)}.collect()
+    }.reduceByKey { (x, y) => x.add(y) }.collect()
     bcActiveCenters.unpersist()
     (result, runDistortion.map(x => x.localValue))
   }

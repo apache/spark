@@ -17,8 +17,9 @@
 
 package org.apache.spark.mllib
 
+import breeze.linalg.{ Vector => BV }
+
 import org.apache.spark.mllib.linalg.Vector
-import breeze.linalg.{Vector => BV}
 import org.apache.spark.rdd.RDD
 
 package object base {
@@ -35,7 +36,7 @@ package object base {
 
   private[mllib] class FPoint(val raw: BV[Double], val weight: Double) extends FP {
     override def toString: String = weight + "," + (raw.toArray mkString ",")
-    lazy val inh = (raw :*  (1.0 / weight)).toArray
+    lazy val inh = (raw :* (1.0 / weight)).toArray
   }
 
   /**
@@ -43,7 +44,7 @@ package object base {
    */
   private[mllib] class Centroid extends Serializable {
     override def toString: String = weight +
-      (if(raw != null) ("," + raw.toArray mkString ",") else "")
+      (if (raw != null) ("," + raw.toArray mkString ",") else "")
 
     def isEmpty = weight == Zero
 
@@ -72,7 +73,7 @@ package object base {
       this
     }
 
-    def add(r: BV[Double], w: Double) : this.type = {
+    def add(r: BV[Double], w: Double): this.type = {
       if (r != null) {
         if (raw == null) {
           raw = r.toVector
@@ -104,7 +105,7 @@ package object base {
 
     def centerMoved(v: P, w: C): Boolean
 
-    def centerToVector(c: C) : Vector
+    def centerToVector(c: C): Vector
 
     /**
      * Return the index of the closest point in `centers` to `point`, as well as its distance.
@@ -126,10 +127,12 @@ package object base {
     }
 
     def distortion(data: RDD[P], centers: Array[C]) = {
-      data.mapPartitions{
-        points => Array(points.foldLeft(Zero){
-          case (total, p) => total + findClosest(centers, p)._2}).iterator
-      }.reduce( _ + _ )
+      data.mapPartitions {
+        points =>
+          Array(points.foldLeft(Zero) {
+            case (total, p) => total + findClosest(centers, p)._2
+          }).iterator
+      }.reduce(_ + _)
     }
 
     /**

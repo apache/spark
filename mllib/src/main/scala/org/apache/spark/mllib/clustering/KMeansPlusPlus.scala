@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.mllib.base.{PointOps, FP, Infinity, One, Zero}
-import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{Logging, SparkContext}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+
+import org.apache.spark.mllib.base.{ PointOps, FP, Infinity, One, Zero }
+import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.{ Logging, SparkContext }
 
 /**
  *
@@ -32,14 +32,14 @@ import scala.reflect.ClassTag
  * @tparam P point type
  * @tparam C center type
  */
-private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
+private[mllib] class KMeansPlusPlus[P <: FP: ClassTag, C <: FP: ClassTag](
   pointOps: PointOps[P, C]) extends Serializable with Logging {
 
   /**
    * We will maintain for each point the distance to its closest cluster center.
    * Since only one center is added on each iteration, recomputing the closest cluster center
    * only requires computing the distance to the new cluster center if
-   * that distance is less than the closest cluster center.  
+   * that distance is less than the closest cluster center.
    */
   case class FatPoint(location: P, index: Int, weight: Double, distance: Double)
 
@@ -49,15 +49,15 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
    */
 
   def cluster(
-               sc: SparkContext,
-               seed: Int,
-               points: Array[C],
-               weights: Array[Double],
-               k: Int,
-               maxIterations: Int,
-               numPartitions: Int): Array[C] = {
+    sc: SparkContext,
+    seed: Int,
+    points: Array[C],
+    weights: Array[Double],
+    k: Int,
+    maxIterations: Int,
+    numPartitions: Int): Array[C] = {
     val centers: Array[C] = getCenters(sc, seed, points, weights, k, numPartitions, 1)
-    val pts =  sc.parallelize(points.map(pointOps.centerToPoint))
+    val pts = sc.parallelize(points.map(pointOps.centerToPoint))
     new MultiKMeans(pointOps, maxIterations).cluster(pts, Array(centers))._2.centers
   }
 
@@ -75,8 +75,13 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
    * @param perRound the number of centers to add per round
    * @return   an array of at most k cluster centers
    */
-  def getCenters(sc: SparkContext, seed: Int, points: Array[C], weights: Array[Double], k: Int,
-                 numPartitions: Int, perRound: Int): Array[C] = {
+  def getCenters(
+    sc: SparkContext,
+    seed: Int, points: Array[C],
+    weights: Array[Double],
+    k: Int,
+    numPartitions: Int,
+    perRound: Int): Array[C] = {
     assert(points.length > 0)
     assert(k > 0)
     assert(numPartitions > 0)
@@ -120,7 +125,7 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
    * @return indices of chosen points
    */
   def choose(fatPoints: Array[FatPoint], seed: Int, rand: XORShiftRandom, count: Int) =
-    (0 until count).flatMap { x => pickCenter(rand, fatPoints.iterator)}.map { _.index}
+    (0 until count).flatMap { x => pickCenter(rand, fatPoints.iterator) }.map { _.index }
 
   /**
    * Create initial fat points with weights given and infinite distance to closest cluster center.
@@ -129,8 +134,10 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
    * @return fat points with given weighs and infinite distance to closest cluster center
    */
   def initialFatPoints(points: Array[C], weights: Array[Double]): Array[FatPoint] =
-    (0 until points.length).map{ i => FatPoint( pointOps.centerToPoint(points(i)), i, weights(i),
-      Infinity)}.toArray
+    (0 until points.length).map { i =>
+      FatPoint(pointOps.centerToPoint(points(i)), i, weights(i),
+        Infinity)
+    }.toArray
 
   /**
    * Update the distance of each point to its closest cluster center, given only the given cluster
@@ -151,7 +158,7 @@ private[mllib] class KMeansPlusPlus[P <: FP : ClassTag, C <: FP : ClassTag](
         dist = pointOps.distance(point, center(i), dist)
         i = i + 1
       }
-      p.copy(distance=dist)
+      p.copy(distance = dist)
     }
 
   /**
