@@ -21,10 +21,10 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.env.EnvironmentTab
-import org.apache.spark.ui.exec.ExecutorsTab
-import org.apache.spark.ui.jobs.JobProgressTab
-import org.apache.spark.ui.storage.StorageTab
+import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
+import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
+import org.apache.spark.ui.jobs.{JobProgressListener, JobProgressTab}
+import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 
 /**
  * Top level user interface for a Spark application.
@@ -33,35 +33,23 @@ private[spark] class SparkUI(
     val sc: SparkContext,
     val conf: SparkConf,
     val securityManager: SecurityManager,
-    val listenerBus: SparkListenerBus,
+    val environmentListener: EnvironmentListener,
+    val storageStatusListener: StorageStatusListener,
+    val executorsListener: ExecutorsListener,
+    val jobProgressListener: JobProgressListener,
+    val storageListener: StorageListener,
     var appName: String,
     val basePath: String = "")
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
   with Logging {
 
-  def this(sc: SparkContext) = this(sc, sc.conf, sc.env.securityManager, sc.listenerBus, sc.appName)
-  def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
-    this(null, conf, new SecurityManager(conf), listenerBus, appName, basePath)
-
-  def this(
-      conf: SparkConf,
-      securityManager: SecurityManager,
-      listenerBus: SparkListenerBus,
-      appName: String,
-      basePath: String) =
-    this(null, conf, securityManager, listenerBus, appName, basePath)
-
   // If SparkContext is not provided, assume the associated application is not live
   val live = sc != null
-
-  // Maintain executor storage status through Spark events
-  val storageStatusListener = new StorageStatusListener
 
   initialize()
 
   /** Initialize all components of the server. */
   def initialize() {
-    listenerBus.addListener(storageStatusListener)
     val jobProgressTab = new JobProgressTab(this)
     attachTab(jobProgressTab)
     attachTab(new StorageTab(this))
@@ -81,11 +69,6 @@ private[spark] class SparkUI(
   /** Set the app name for this UI. */
   def setAppName(name: String) {
     appName = name
-  }
-
-  /** Register the given listener with the listener bus. */
-  def registerListener(listener: SparkListener) {
-    listenerBus.addListener(listener)
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
@@ -115,5 +98,24 @@ private[spark] object SparkUI {
 
   def getUIPort(conf: SparkConf): Int = {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
+  }
+
+  // Called by HistoryServer and Master when reconstituting a SparkUI from event logs:
+  def create(conf: SparkConf, listenerBus: SparkListenerBus, securityManager: SecurityManager,
+             appName: String, basePath: String): SparkUI = {
+    val environmentListener = new EnvironmentListener
+    val storageStatusListener = new StorageStatusListener
+    val executorsListener = new ExecutorsListener(storageStatusListener)
+    val jobProgressListener = new JobProgressListener(conf)
+    val storageListener = new StorageListener(storageStatusListener)
+
+    listenerBus.addListener(environmentListener)
+    listenerBus.addListener(storageStatusListener)
+    listenerBus.addListener(executorsListener)
+    listenerBus.addListener(jobProgressListener)
+    listenerBus.addListener(storageListener)
+
+    new SparkUI(null, conf, securityManager, environmentListener, storageStatusListener,
+      executorsListener, jobProgressListener, storageListener, appName)
   }
 }

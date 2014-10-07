@@ -29,12 +29,11 @@ private[ui] class JobProgressTab(parent: SparkUI) extends SparkUITab(parent, "st
   val sc = parent.sc
   val conf = if (live) sc.conf else new SparkConf
   val killEnabled = conf.getBoolean("spark.ui.killEnabled", true)
-  val listener = new JobProgressListener(conf)
+  val listener = parent.jobProgressListener
 
   attachPage(new JobProgressPage(this))
   attachPage(new StagePage(this))
   attachPage(new PoolPage(this))
-  parent.registerListener(listener)
 
   def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 

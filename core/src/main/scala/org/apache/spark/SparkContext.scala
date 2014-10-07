@@ -50,6 +50,10 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.env.EnvironmentListener
+import org.apache.spark.ui.exec.ExecutorsListener
+import org.apache.spark.ui.jobs.JobProgressListener
+import org.apache.spark.ui.storage.StorageListener
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
 /**
@@ -229,10 +233,24 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
-  // Initialize the Spark UI, registering all associated listeners
+
+  private[spark] val environmentListener = new EnvironmentListener
+  private[spark] val storageStatusListener = new StorageStatusListener
+  private[spark] val executorsListener = new ExecutorsListener(storageStatusListener)
+  private[spark] val jobProgressListener = new JobProgressListener(conf)
+  private[spark] val storageListener = new StorageListener(storageStatusListener)
+
+  listenerBus.addListener(environmentListener)
+  listenerBus.addListener(storageStatusListener)
+  listenerBus.addListener(executorsListener)
+  listenerBus.addListener(jobProgressListener)
+  listenerBus.addListener(storageListener)
+
+  // Initialize the Spark UI:
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
-      Some(new SparkUI(this))
+      Some(new SparkUI(this, conf, env.securityManager, environmentListener, storageStatusListener,
+        executorsListener, jobProgressListener, storageListener, appName))
     } else {
       // For tests, do not enable the UI
       None
