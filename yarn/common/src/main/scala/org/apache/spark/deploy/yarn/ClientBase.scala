@@ -130,7 +130,7 @@ trait ClientBase extends Logging {
     var srcHost = srcUri.getHost()
     var dstHost = dstUri.getHost()
 
-    // In HA or federated HDFS, the host part of the URI may not actually be a host, but the
+    // In HA or when using viewfs, the host part of the URI may not actually be a host, but the
     // name of the HDFS namespace. Those names won't resolve, so avoid even trying if they
     // match.
     if (srcHost != null && dstHost != null && srcHost != dstHost) {
