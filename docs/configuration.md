@@ -601,6 +601,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.cleaner.referenceTracking</code></td>
+  <td>true</td>
+  <td>
+    Switch of the periodical metadata cleaner. 
+  </td>
+</tr>
+<tr>
   <td><code>spark.cleaner.ttl</code></td>
   <td>(infinite)</td>
   <td>
