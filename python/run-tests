@@ -83,6 +83,7 @@ run_test "pyspark/mllib/stat.py"
 run_test "pyspark/mllib/tests.py"
 run_test "pyspark/mllib/tree.py"
 run_test "pyspark/mllib/util.py"
+run-test "pyspark/mllib/feature.py"
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then

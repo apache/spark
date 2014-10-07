@@ -44,6 +44,7 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
@@ -304,14 +305,15 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       numIterations: Int,
       seed: Long): Word2VecModelWrapper = {
-    val data = dataJRDD.rdd.cache()
+    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
     val word2vec = new Word2Vec()
-        .setVectorSize(vectorSize)
-        .setLearningRate(learningRate)
-        .setNumPartitions(numPartitions)
-        .setNumIterations(numIterations)
-        .setSeed(seed)
+      .setVectorSize(vectorSize)
+      .setLearningRate(learningRate)
+      .setNumPartitions(numPartitions)
+      .setNumIterations(numIterations)
+      .setSeed(seed)
     val model = word2vec.fit(data)
+    data.unpersist()
     new Word2VecModelWrapper(model)
   }
 
