@@ -23,6 +23,7 @@ import java.sql.{DriverManager, Statement}
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
@@ -42,7 +43,12 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   Class.forName(classOf[HiveDriver].getCanonicalName)
 
   val verbose = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).isDefined
-
+  // Since we use info to assert server process started successfully,
+  // make sure that log4j level is INFO
+  org.apache.log4j.LogManager.getCurrentLoggers.foreach { log =>
+    log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.INFO)
+  }
+  
   def startThriftServerWithin(timeout: FiniteDuration = 1.minute)(f: Statement => Unit) {
     Thread.sleep(5000)
 
