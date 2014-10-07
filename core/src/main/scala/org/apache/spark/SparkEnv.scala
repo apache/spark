@@ -43,9 +43,8 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  * :: DeveloperApi ::
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
  * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
- * Spark code finds the SparkEnv through a thread-local variable, so each thread that accesses these
- * objects needs to have the right SparkEnv set. You can get the current environment with
- * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
+ * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
+ * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
  *
  * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
  *       in a future release.
@@ -119,30 +118,28 @@ class SparkEnv (
 }
 
 object SparkEnv extends Logging {
-  private val env = new ThreadLocal[SparkEnv]
-  @volatile private var lastSetSparkEnv : SparkEnv = _
+  @volatile private var env: SparkEnv = _
 
   private[spark] val driverActorSystemName = "sparkDriver"
   private[spark] val executorActorSystemName = "sparkExecutor"
 
   def set(e: SparkEnv) {
-    lastSetSparkEnv = e
-    env.set(e)
+    env = e
   }
 
   /**
-   * Returns the ThreadLocal SparkEnv, if non-null. Else returns the SparkEnv
-   * previously set in any thread.
+   * Returns the SparkEnv.
    */
   def get: SparkEnv = {
-    Option(env.get()).getOrElse(lastSetSparkEnv)
+    env
   }
 
   /**
    * Returns the ThreadLocal SparkEnv.
    */
+  @deprecated("Use SparkEnv.get instead", "1.2")
   def getThreadLocal: SparkEnv = {
-    env.get()
+    env
   }
 
   private[spark] def create(

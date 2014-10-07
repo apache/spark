@@ -202,7 +202,6 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
     @transient val thread  = new Thread() {
       override def run() {
         try {
-          SparkEnv.set(env)
           startReceivers()
         } catch {
           case ie: InterruptedException => logInfo("ReceiverLauncher interrupted")
