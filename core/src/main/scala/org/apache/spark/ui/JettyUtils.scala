@@ -199,14 +199,14 @@ private[spark] object JettyUtils extends Logging {
       if (conf.get("spark.ui.https.enabled", "false").toBoolean) {
         // / If the new port wraps around, do not try a privilege port
         val securePort = (currentPort + 1 - 1024) % (65536 - 1024) + 1024
-        val schema = "https"
+        val scheme = "https"
         // Create a connector on port securePort to listen for HTTPS requests
         val connector = buildSslSelectChannelConnector(securePort, conf)
         connector.setHost(hostName)
         server.setConnectors(Seq(httpConnector,connector).toArray)
 
         // redirect the HTTP requests to HTTPS port
-        val newHandlers = Seq(createRedirectHttpsHandler(securePort, schema)) ++ handlers
+        val newHandlers = Seq(createRedirectHttpsHandler(securePort, scheme)) ++ handlers
         collection.setHandlers(newHandlers.toArray)
       } else {
         server.addConnector(httpConnector)
@@ -231,7 +231,8 @@ private[spark] object JettyUtils extends Logging {
     ServerInfo(server, boundPort, collection)
   }
 
-  private def newURI(scheme: String, server: String, port: Int, path: String, query: String) = {
+  // to generate a new url string scheme://server:port+path
+  private def newURL(scheme: String, server: String, port: Int, path: String, query: String) = {
     val builder = new StringBuilder
 
     if (server.indexOf(':') >= 0 && server.charAt(0) != '[') {
@@ -245,22 +246,23 @@ private[spark] object JettyUtils extends Logging {
     builder.toString
   }
 
-  private def createRedirectHttpsHandler(securePort: Int, schema: String): ContextHandler = {
+  private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
     redirectHandler.setHandler(new AbstractHandler {
-      @Override def handle(
-                    target: String,
-                    baseRequest: Request,
-                    request: HttpServletRequest,
-                    response: HttpServletResponse): Unit = {
+      override def handle(
+          target: String,
+          baseRequest: Request,
+          request: HttpServletRequest,
+          response: HttpServletResponse): Unit = {
         if (baseRequest.isSecure) {
           return
         }
-        val url = newURI(schema, baseRequest.getServerName, securePort,
+        val httpsURL = newURL(scheme, baseRequest.getServerName, securePort,
           baseRequest.getRequestURI, baseRequest.getQueryString)
         response.setContentLength(0)
-        response.sendRedirect(url)
+        response.encodeRedirectURL(httpsURL)
+        response.sendRedirect(httpsURL)
         baseRequest.setHandled(true)
       }
     })
@@ -295,8 +297,6 @@ private[spark] object JettyUtils extends Logging {
       case "spark.ui.ssl.server.truststore.password" => ctxFactory.setTrustStorePassword(value)
       case "spark.ui.ssl.server.truststore.type" => ctxFactory.setTrustStoreType(value)
     }
-
-    ctxFactory
   }
 
 }
