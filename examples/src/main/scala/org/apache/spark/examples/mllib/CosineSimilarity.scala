@@ -102,7 +102,7 @@ object CosineSimilarity {
         math.abs(u)
     }.mean()
 
-    println(s"Average error in estimate is: $MAE")
+    println(s"Average absolute error in estimate is: $MAE")
 
     sc.stop()
   }
