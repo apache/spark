@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import scala.reflect.ClassTag
 import org.apache.spark.rdd.RDD
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 
 /** 
  * Execution strategy which allows customizations around execution environment of Spark job.
@@ -36,7 +36,7 @@ import org.apache.spark.annotation.DeveloperApi
  * 
  * Implementation must provide default no-arg constructor
  */
-@DeveloperApi
+@Experimental
 trait JobExecutionContext {
 
 
@@ -47,7 +47,7 @@ trait JobExecutionContext {
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
     */
-  @DeveloperApi
+  @Experimental
   def hadoopFile[K, V](
     sc:SparkContext,
     path: String,
@@ -65,7 +65,7 @@ trait JobExecutionContext {
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
    */
-  @DeveloperApi
+  @Experimental
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
     sc:SparkContext,
     path: String,
@@ -79,7 +79,7 @@ trait JobExecutionContext {
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  @DeveloperApi
+  @Experimental
   def broadcast[T: ClassTag](sc:SparkContext, value: T): Broadcast[T]
 
   /**
@@ -88,7 +88,7 @@ trait JobExecutionContext {
    * flag allows you to manage scheduler's computation. Keep in mind that it is implementation 
    * specific and may simply be ignored by some implementations. 
    */
-  @DeveloperApi
+  @Experimental
   def runJob[T, U: ClassTag](
     sc:SparkContext,
     rdd: RDD[T],
