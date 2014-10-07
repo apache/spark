@@ -122,12 +122,9 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
         case Some(k ~ v) => SetCommand(Some(k.trim -> v.map(_.trim)))
       }
 
-    def apply(input: String): LogicalPlan = {
-      parseAll(pair, input).get
-      parseAll(pair, input) match {
-        case Success(plan, _) => plan
-        case x => sys.error(x.toString)
-      }
+    def apply(input: String): LogicalPlan = parseAll(pair, input) match {
+      case Success(plan, _) => plan
+      case x => sys.error(x.toString)
     }
   }
 
