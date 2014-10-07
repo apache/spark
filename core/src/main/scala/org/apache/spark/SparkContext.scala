@@ -246,6 +246,8 @@ class SparkContext(config: SparkConf) extends Logging {
   listenerBus.addListener(jobProgressListener)
   listenerBus.addListener(storageListener)
 
+  private val statusApi = new StatusAPIImpl(this)
+
   // Initialize the Spark UI:
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
@@ -870,6 +872,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
+
+  def getJobInfo(jobId: Int): Option[SparkJobInfo] = statusApi.newJobInfo(jobId)
+
+  def getStageInfo(stageId: Int): Option[SparkStageInfo] = statusApi.newStageInfo(stageId)
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
