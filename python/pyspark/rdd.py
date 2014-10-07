@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
 from itertools import chain, ifilter, imap
@@ -32,11 +31,12 @@ import bisect
 from random import Random
 from math import sqrt, log, isinf, isnan
 
+from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
-    python_right_outer_join, python_cogroup
+    python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
@@ -1208,6 +1208,7 @@ class RDD(object):
         Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
         system, using the L{org.apache.hadoop.io.Writable} types that we convert from the
         RDD's key and value types. The mechanism is as follows:
+
             1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
@@ -1375,7 +1376,7 @@ class RDD(object):
 
         For each element (k, v) in C{self}, the resulting RDD will either
         contain all pairs (k, (v, w)) for w in C{other}, or the pair
-        (k, (v, None)) if no elements in other have key k.
+        (k, (v, None)) if no elements in C{other} have key k.
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
@@ -1402,6 +1403,27 @@ class RDD(object):
         [('a', (2, 1)), ('b', (None, 4))]
         """
         return python_right_outer_join(self, other, numPartitions)
+
+    def fullOuterJoin(self, other, numPartitions=None):
+        """
+        Perform a right outer join of C{self} and C{other}.
+
+        For each element (k, v) in C{self}, the resulting RDD will either
+        contain all pairs (k, (v, w)) for w in C{other}, or the pair
+        (k, (v, None)) if no elements in C{other} have key k.
+
+        Similarly, for each element (k, w) in C{other}, the resulting RDD will
+        either contain all pairs (k, (v, w)) for v in C{self}, or the pair
+        (k, (None, w)) if no elements in C{self} have key k.
+
+        Hash-partitions the resulting RDD into the given number of partitions.
+
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2), ("c", 8)])
+        >>> sorted(x.fullOuterJoin(y).collect())
+        [('a', (1, 2)), ('b', (4, None)), ('c', (None, 8))]
+        """
+        return python_full_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
     # portable_hash is used as default, because builtin hash of None is different
@@ -2052,6 +2074,12 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
+        self._broadcast = None
+
+    def __del__(self):
+        if self._broadcast:
+            self._broadcast.unpersist()
+            self._broadcast = None
 
     @property
     def _jrdd(self):
@@ -2059,14 +2087,16 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-        command = (self.func, self._prev_jrdd_deserializer,
+        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        command = (self.func, profileStats, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
-            broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
+        if len(pickled_command) > (1 << 20):  # 1M
+            self._broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(self._broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
@@ -2081,6 +2111,10 @@ class PipelinedRDD(RDD):
                                              self.ctx.pythonExec,
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
+
+        if enable_profile:
+            self._id = self._jrdd_val.id()
+            self.ctx._add_profile(self._id, profileStats)
         return self._jrdd_val
 
     def id(self):

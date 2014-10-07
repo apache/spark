@@ -630,16 +630,17 @@ class DAGScheduler(
   protected def runLocallyWithinThread(job: ActiveJob) {
     var jobResult: JobResult = JobSucceeded
     try {
-      SparkEnv.set(env)
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
       val taskContext =
-        new TaskContext(job.finalStage.id, job.partitions(0), 0, runningLocally = true)
+        new TaskContext(job.finalStage.id, job.partitions(0), 0, true)
+      TaskContext.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
         job.listener.taskSucceeded(0, result)
       } finally {
         taskContext.markTaskCompleted()
+        TaskContext.unset()
       }
     } catch {
       case e: Exception =>
@@ -1207,7 +1208,7 @@ class DAGScheduler(
             .format(job.jobId, stageId))
       } else if (jobsForStage.get.size == 1) {
         if (!stageIdToStage.contains(stageId)) {
-          logError("Missing Stage for stage with id $stageId")
+          logError(s"Missing Stage for stage with id $stageId")
         } else {
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
@@ -1301,7 +1302,7 @@ class DAGScheduler(
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
     val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
     if (!rddPrefs.isEmpty) {
-      return rddPrefs.map(host => TaskLocation(host))
+      return rddPrefs.map(TaskLocation(_))
     }
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
     // that has any placement preferences. Ideally we would choose based on transfer sizes,
