@@ -51,10 +51,12 @@ private[python] trait PythonTransformFunctionSerializer {
 }
 
 /**
- * Wrapper for PythonTransformFunction
+ * Wraps a PythonTransformFunction (which is a Python object accessed through Py4J)
+ * so that it looks like a Scala function and can be transparently serialized and
+ * deserialized by Java.
  */
 private[python] class TransformFunction(@transient var pfunc: PythonTransformFunction)
-  extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] with Serializable {
+  extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] {
 
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
     Option(pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava))
@@ -87,6 +89,9 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
 
 /**
  * Helpers for PythonTransformFunctionSerializer
+ *
+ * PythonTransformFunctionSerializer is logically a singleton that's happens to be
+ * implemented as a Python object.
  */
 private[python] object PythonTransformFunctionSerializer {
 
@@ -119,7 +124,7 @@ private[python] object PythonTransformFunctionSerializer {
 }
 
 /**
- * Helper functions
+ * Helper functions, which are called from Python via Py4J.
  */
 private[python] object PythonDStream {
 

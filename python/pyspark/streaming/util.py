@@ -24,7 +24,12 @@ from pyspark import SparkContext, RDD
 
 class TransformFunction(object):
     """
-    This class is for py4j callback.
+    This class wraps a function RDD[X] -> RDD[Y] that was passed to
+    DStream.transform(), allowing it to be called from Java via Py4J's
+    callback server.
+
+    Java calls this function with a sequence of JavaRDDs and this function
+    returns a single JavaRDD pointer back to Java.
     """
     _emptyRDD = None
 
@@ -63,6 +68,16 @@ class TransformFunction(object):
 
 
 class TransformFunctionSerializer(object):
+    """
+    This class implements a serializer for PythonTransformFunction Java
+    objects.
+
+    This is necessary because the Java PythonTransformFunction objects are
+    actually Py4J references to Python objects and thus are not directly
+    serializable. When Java needs to serialize a PythonTransformFunction,
+    it uses this class to invoke Python, which returns the serialized function
+    as a byte array.
+    """
     def __init__(self, ctx, serializer, gateway=None):
         self.ctx = ctx
         self.serializer = serializer
