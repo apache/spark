@@ -52,6 +52,7 @@ object DecisionTreeRunner {
 
   case class Params(
       input: String = null,
+      testInput: String = "",
       dataFormat: String = "libsvm",
       algo: Algo = Classification,
       maxDepth: Int = 5,
@@ -98,13 +99,18 @@ object DecisionTreeRunner {
           s"default: ${defaultParams.featureSubsetStrategy}")
         .action((x, c) => c.copy(featureSubsetStrategy = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing, default: ${defaultParams.fracTest}")
+        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+          s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
+      opt[String]("testInput")
+        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+          s" default: ${defaultParams.testInput}")
+        .action((x, c) => c.copy(testInput = x))
       opt[String]("<dataFormat>")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
-        .text("input paths to labeled examples in dense format (label,f0 f1 f2 ...)")
+        .text("input path to labeled examples")
         .required()
         .action((x, c) => c.copy(input = x))
       checkConfig { params =>
@@ -141,7 +147,7 @@ object DecisionTreeRunner {
       case "libsvm" => MLUtils.loadLibSVMFile(sc, params.input).cache()
     }
     // For classification, re-index classes if needed.
-    val (examples, numClasses) = params.algo match {
+    val (examples, classIndexMap, numClasses) = params.algo match {
       case Classification => {
         // classCounts: class --> # examples in class
         val classCounts = origExamples.map(_.label).countByValue()
@@ -170,16 +176,40 @@ object DecisionTreeRunner {
           val frac = classCounts(c) / numExamples.toDouble
           println(s"$c\t$frac\t${classCounts(c)}")
         }
-        (examples, numClasses)
+        (examples, classIndexMap, numClasses)
       }
       case Regression =>
-        (origExamples, 0)
+        (origExamples, null, 0)
       case _ =>
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Split into training, test.
-    val splits = examples.randomSplit(Array(1.0 - params.fracTest, params.fracTest))
+    // Create training, test sets.
+    val splits = if (params.testInput != "") {
+      // Load testInput.
+      val origTestExamples = params.dataFormat match {
+        case "dense" => MLUtils.loadLabeledPoints(sc, params.testInput)
+        case "libsvm" => MLUtils.loadLibSVMFile(sc, params.testInput)
+      }
+      params.algo match {
+        case Classification => {
+          // classCounts: class --> # examples in class
+          val testExamples = {
+            if (classIndexMap.isEmpty) {
+              origTestExamples
+            } else {
+              origTestExamples.map(lp => LabeledPoint(classIndexMap(lp.label), lp.features))
+            }
+          }
+          Array(examples, testExamples)
+        }
+        case Regression =>
+          Array(examples, origTestExamples)
+      }
+    } else {
+      // Split input into training, test.
+      examples.randomSplit(Array(1.0 - params.fracTest, params.fracTest))
+    }
     val training = splits(0).cache()
     val test = splits(1).cache()
     val numTraining = training.count()
@@ -206,45 +236,60 @@ object DecisionTreeRunner {
           minInfoGain = params.minInfoGain)
     if (params.numTrees == 1) {
       val model = DecisionTree.train(training, strategy)
-      println(model)
+      if (model.numNodes < 20) {
+        println(model.toDebugString) // Print full model.
+      } else {
+        println(model) // Print model summary.
+      }
       if (params.algo == Classification) {
-        val accuracy =
+        val trainAccuracy =
+          new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label)))
+            .precision
+        println(s"Train accuracy = $trainAccuracy")
+        val testAccuracy =
           new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
-        println(s"Test accuracy = $accuracy")
+        println(s"Test accuracy = $testAccuracy")
       }
       if (params.algo == Regression) {
-        val mse = meanSquaredError(model, test)
-        println(s"Test mean squared error = $mse")
+        val trainMSE = meanSquaredError(model, training)
+        println(s"Train mean squared error = $trainMSE")
+        val testMSE = meanSquaredError(model, test)
+        println(s"Test mean squared error = $testMSE")
       }
     } else {
       val randomSeed = Utils.random.nextInt()
       if (params.algo == Classification) {
         val model = RandomForest.trainClassifier(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
-        println(model)
-        val accuracy =
+        if (model.totalNumNodes < 30) {
+          println(model.toDebugString) // Print full model.
+        } else {
+          println(model) // Print model summary.
+        }
+        val trainAccuracy =
+          new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label)))
+            .precision
+        println(s"Train accuracy = $trainAccuracy")
+        val testAccuracy =
           new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
-        println(s"Test accuracy = $accuracy")
+        println(s"Test accuracy = $testAccuracy")
       }
       if (params.algo == Regression) {
         val model = RandomForest.trainRegressor(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
-        println(model)
-        val mse = meanSquaredError(model, test)
-        println(s"Test mean squared error = $mse")
+        if (model.totalNumNodes < 30) {
+          println(model.toDebugString) // Print full model.
+        } else {
+          println(model) // Print model summary.
+        }
+        val trainMSE = meanSquaredError(model, training)
+        println(s"Train mean squared error = $trainMSE")
+        val testMSE = meanSquaredError(model, test)
+        println(s"Test mean squared error = $testMSE")
       }
     }
 
     sc.stop()
-  }
-
-  /**
-   * Calculates the classifier accuracy.
-   */
-  private def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
-    val correctCount = data.filter(y => model.predict(y.features) == y.label).count()
-    val count = data.count()
-    correctCount.toDouble / count
   }
 
   /**

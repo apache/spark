@@ -57,3 +57,5 @@ if __name__ == "__main__":
     output = parquet_rdd.map(lambda x: x[1]).collect()
     for k in output:
         print k
+
+    sc.stop()

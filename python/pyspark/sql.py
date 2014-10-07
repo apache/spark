@@ -201,7 +201,7 @@ class ArrayType(DataType):
         self.elementType = elementType
         self.containsNull = containsNull
 
-    def __str__(self):
+    def __repr__(self):
         return "ArrayType(%s,%s)" % (self.elementType,
                                      str(self.containsNull).lower())
 
@@ -960,12 +960,12 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func,
+        command = (func, None,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
+        if len(pickled_command) > (1 << 20):  # 1M
             broadcast = self._sc.broadcast(pickled_command)
             pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(

@@ -157,8 +157,18 @@ case object StringType extends NativeType with PrimitiveType {
   def simpleString: String = "string"
 }
 
-case object BinaryType extends DataType with PrimitiveType {
+case object BinaryType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Array[Byte]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+  private[sql] val ordering = new Ordering[JvmType] {
+    def compare(x: Array[Byte], y: Array[Byte]): Int = {
+      for (i <- 0 until x.length; if i < y.length) {
+        val res = x(i).compareTo(y(i))
+        if (res != 0) return res
+      }
+      return x.length - y.length
+    }
+  }
   def simpleString: String = "binary"
 }
 
