@@ -126,15 +126,18 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             s"${HistoryServer.UI_PATH_PREFIX}/$appId")
           // Do not call ui.bind() to avoid creating a new server for each application
         }
-        val appListener = replay(fs.getFileStatus(new Path(logDir, info.logPath)), replayBus)
 
-        ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")
+        val appListener = new ApplicationEventListener()
+        replayBus.addListener(appListener)
+        val appInfo = replay(fs.getFileStatus(new Path(logDir, info.logPath)), replayBus)
+
+        ui.setAppName(s"${appInfo.name} ($appId)")
 
         val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
         ui.getSecurityManager.setAcls(uiAclsEnabled)
         // make sure to set admin acls before view acls so they are properly picked up
         ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
-        ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
+        ui.getSecurityManager.setViewAcls(appInfo.sparkUser,
           appListener.viewAcls.getOrElse(""))
         ui
       }
@@ -155,26 +158,18 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     lastLogCheckTimeMs = getMonotonicTimeMs()
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
 
-    def getModificationTime(fsEntry: FileStatus) = {
-      if (fsEntry.isDir) {
-        fs.listStatus(fsEntry.getPath).map(_.getModificationTime()).max
-      } else {
-        fsEntry.getModificationTime()
-      }
-    }
-
     try {
       var newLastModifiedTime = lastModifiedTime
       val logInfos = fs.listStatus(new Path(logDir))
         .filter { entry =>
-          val isLogEntry =
-            if (entry.isDir()) {
+          val isFinishedApplication =
+            if (isLegacyLogDirectory(entry)) {
               fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
             } else {
               !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
             }
 
-          if (isLogEntry) {
+          if (isFinishedApplication) {
             val modTime = getModificationTime(entry)
             newLastModifiedTime = math.max(newLastModifiedTime, modTime)
             modTime >= lastModifiedTime
@@ -184,15 +179,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         }
         .flatMap { entry =>
           try {
-            val appListener = replay(entry, new ReplayListenerBus())
-            Some(new FsApplicationHistoryInfo(
-              entry.getPath().getName(),
-              appListener.appId.getOrElse(entry.getPath().getName()),
-              appListener.appName.getOrElse(NOT_STARTED),
-              appListener.startTime.getOrElse(-1L),
-              appListener.endTime.getOrElse(-1L),
-              getModificationTime(entry),
-              appListener.sparkUser.getOrElse(NOT_STARTED)))
+            Some(replay(entry, new ReplayListenerBus()))
           } catch {
             case e: Exception =>
               logInfo(s"Failed to load application log data from $entry.", e)
@@ -200,6 +187,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
           }
         }
         .sortBy { info => -info.endTime }
+
+      lastModifiedTime = newLastModifiedTime
 
       // When there are new logs, merge the new list with the existing one, maintaining
       // the expected ordering (descending end time). Maintaining the order is important
@@ -231,9 +220,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  private def replay(logPath: FileStatus, bus: ReplayListenerBus): ApplicationEventListener = {
+  /**
+   * Replays the event data in the given log, and returns the application information.
+   */
+  private def replay(logPath: FileStatus, bus: ReplayListenerBus): FsApplicationHistoryInfo = {
     val (logInput, sparkVersion) =
-      if (logPath.isDir()) {
+      if (isLegacyLogDirectory(logPath)) {
         openOldLog(logPath.getPath())
       } else {
         EventLoggingListener.openEventLog(logPath.getPath(), fs)
@@ -242,16 +234,22 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val appListener = new ApplicationEventListener
       bus.addListener(appListener)
       bus.replay(logInput, sparkVersion)
-      appListener
+      new FsApplicationHistoryInfo(
+        logPath.getPath().getName(),
+        appListener.appId.getOrElse(logPath.getPath().getName()),
+        appListener.appName.getOrElse(NOT_STARTED),
+        appListener.startTime.getOrElse(-1L),
+        appListener.endTime.getOrElse(-1L),
+        getModificationTime(logPath),
+        appListener.sparkUser.getOrElse(NOT_STARTED))
     } finally {
       logInput.close()
     }
   }
 
   /**
-   * Load the app log information from a Spark 1.0.0 log directory, for backwards compatibility.
-   * This assumes that the log directory contains a single event log file, which is the case for
-   * directories generated by the code in that release.
+   * Load the a legacy log directory. This assumes that the log directory contains a single event
+   * log file, which is the case for directories generated by the code in previous releases.
    */
   private[history] def openOldLog(dir: Path): (InputStream, String) = {
     val children = fs.listStatus(dir)
@@ -289,6 +287,16 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
     val in = new BufferedInputStream(fs.open(eventLogPath))
     (codec.map(_.compressedInputStream(in)).getOrElse(in), sparkVersion)
+  }
+
+  private def isLegacyLogDirectory(entry: FileStatus) = entry.isDir()
+
+  private def getModificationTime(fsEntry: FileStatus) = {
+    if (fsEntry.isDir) {
+      fs.listStatus(fsEntry.getPath).map(_.getModificationTime()).max
+    } else {
+      fsEntry.getModificationTime()
+    }
   }
 
   /** Returns the system's mononotically increasing time. */

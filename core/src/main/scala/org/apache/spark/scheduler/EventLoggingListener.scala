@@ -134,6 +134,7 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted) =
     logEvent(event)
   override def onTaskStart(event: SparkListenerTaskStart) =
@@ -144,6 +145,8 @@ private[spark] class EventLoggingListener(
     logEvent(event)
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) =
     logEvent(event)
+
+  // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted) =
     logEvent(event, flushLogger = true)
   override def onJobStart(event: SparkListenerJobStart) =
@@ -160,11 +163,13 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   override def onApplicationEnd(event: SparkListenerApplicationEnd) =
     logEvent(event, flushLogger = true)
+
   // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) { }
 
   /**
-   * Stop logging events.
+   * Stop logging events. The event log file will be renamed so that it loses the
+   * ".inprogress" suffix.
    */
   def stop() = {
     writer.foreach(_.close())
@@ -186,9 +191,9 @@ private[spark] object EventLoggingListener extends Logging {
   private val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8)
     .toShort)
 
-  // Marker for the end of header data in a log file. After this marker (and the following
-  // new line), log data, potentially compressed, will be found.
-  private val HEADER_END_MARKER = "HEADER_END_MARKER"
+  // Marker for the end of header data in a log file. After this marker, log data, potentially
+  // compressed, will be found.
+  private val HEADER_END_MARKER = "=== LOG_HEADER_END ===\n"
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
@@ -214,8 +219,9 @@ private[spark] object EventLoggingListener extends Logging {
    * @return A stream where to write event log data. This may be a wrapper around the original
    *         stream (for example, when compression is enabled).
    */
-  def initEventLog(logStream: OutputStream, compressionCodec: Option[CompressionCodec]):
-    OutputStream = {
+  def initEventLog(
+      logStream: OutputStream,
+      compressionCodec: Option[CompressionCodec]): OutputStream = {
     val meta = mutable.HashMap(("version" -> SPARK_VERSION))
     compressionCodec.foreach { codec =>
       meta += ("compressionCodec" -> codec.getClass().getName())
@@ -289,9 +295,9 @@ private[spark] object EventLoggingListener extends Logging {
         throw new IllegalArgumentException("Missing Spark version in log metadata."))
 
       val codec = meta.get("compressionCodec").map { codecName =>
-          val conf = new SparkConf()
-          codecMap.getOrElseUpdate(codecName, CompressionCodec.createCodec(conf, codecName))
-        }
+        val conf = new SparkConf()
+        codecMap.getOrElseUpdate(codecName, CompressionCodec.createCodec(conf, codecName))
+      }
 
       (codec.map(_.compressedInputStream(in)).getOrElse(in), sparkVersion)
     } catch {

@@ -691,7 +691,11 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogFile = app.desc.eventLogFile.getOrElse { return false }
+    val eventLogFile = app.desc.eventLogFile.getOrElse {
+      // Event logging is not enabled for this application
+      app.desc.appUiUrl = notFoundBasePath
+      return false
+    }
 
     try {
       val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
