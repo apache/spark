@@ -134,6 +134,14 @@ object SparkEnv extends Logging {
     env
   }
 
+  /**
+   * Returns the ThreadLocal SparkEnv.
+   */
+  @deprecated("Use SparkEnv.get instead", "1.2")
+  def getThreadLocal: SparkEnv = {
+    env
+  }
+
   private[spark] def create(
       conf: SparkConf,
       executorId: String,
