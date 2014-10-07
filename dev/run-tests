@@ -130,11 +130,16 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
 
 ./dev/lint-python
+
 echo ""
 echo "========================================================================="
-echo "Running Windows batch file style checks"
+echo "Running Windows batch style checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_WINDOWS_BATCH_STYLE
+
 ./dev/lint-windows-cmd
+
 echo ""
 echo "========================================================================="
 echo "Building Spark"
