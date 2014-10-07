@@ -274,9 +274,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil
       case logical.LocalRelation(output, data) =>
+        val nPartitions = if (data.isEmpty) 1 else numPartitions
         PhysicalRDD(
           output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, numPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
