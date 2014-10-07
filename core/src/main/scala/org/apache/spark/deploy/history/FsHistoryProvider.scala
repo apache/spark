@@ -289,9 +289,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     (codec.map(_.compressedInputStream(in)).getOrElse(in), sparkVersion)
   }
 
-  private def isLegacyLogDirectory(entry: FileStatus) = entry.isDir()
+  private def isLegacyLogDirectory(entry: FileStatus): Boolean = entry.isDir()
 
-  private def getModificationTime(fsEntry: FileStatus) = {
+  private def getModificationTime(fsEntry: FileStatus): Long = {
     if (fsEntry.isDir) {
       fs.listStatus(fsEntry.getPath).map(_.getModificationTime()).max
     } else {
@@ -300,7 +300,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   }
 
   /** Returns the system's mononotically increasing time. */
-  private def getMonotonicTimeMs() = System.nanoTime() / (1000 * 1000)
+  private def getMonotonicTimeMs(): Long = System.nanoTime() / (1000 * 1000)
 
 }
 
