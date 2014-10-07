@@ -65,7 +65,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
   override lazy val token: Parser[Token] =
     ( identChar ~ (identChar | digit).* ^^
       { case first ~ rest => processIdent((first :: rest).mkString) }
-    | digit.+ ~ ('.' ~> digit.*).? ^^ {
+    | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
         case i ~ None    => NumericLit(i.mkString)
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
       }
