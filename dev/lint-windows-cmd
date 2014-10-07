@@ -24,17 +24,17 @@ HAS_ERROR=0
 
 # check whether all of lines ends with CRLF.
 for file in "$TARGET_DIR"/*.cmd ; do
-  grep "^.*"$'\r'"$" $file &> /dev/null
-  if [ $? -ne 0 ]; then
+  grep "^.*"$'\r'"$" "$file" &> /dev/null
+  if [ "$?" -ne "0" ]; then
     HAS_ERROR=1
-    echo $file "has line(s) not ends with CRLF."
+    echo "$file has line(s) not ends with CRLF."
   fi
 done
 
-if [ $HAS_ERROR -eq 0 ];then
+if [ "$HAS_ERROR" -eq "0" ];then
   echo -e "Windows batch file style checks passed."
 else
-  echo -e "Windows batch file style  checks failed."
+  echo -e "Windows batch file style checks failed."
 fi
 
-exit $HAS_ERROR
+exit "$HAS_ERROR"
