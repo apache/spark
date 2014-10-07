@@ -24,6 +24,7 @@ import java.util.concurrent._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -73,6 +74,7 @@ private[spark] class Executor(
   val executorSource = new ExecutorSource(this, executorId)
 
   // Initialize Spark environment (using system properties read above)
+  conf.set("spark.executor.id", "executor." + executorId)
   private val env = {
     if (!isLocal) {
       val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
@@ -375,12 +377,17 @@ private[spark] class Executor(
           }
 
           val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
-          val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
-            retryAttempts, retryIntervalMs, timeout)
-          if (response.reregisterBlockManager) {
-            logWarning("Told to re-register on heartbeat")
-            env.blockManager.reregister()
+          try {
+            val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
+              retryAttempts, retryIntervalMs, timeout)
+            if (response.reregisterBlockManager) {
+              logWarning("Told to re-register on heartbeat")
+              env.blockManager.reregister()
+            }
+          } catch {
+            case NonFatal(t) => logWarning("Issue communicating with driver in heartbeater", t)
           }
+
           Thread.sleep(interval)
         }
       }
