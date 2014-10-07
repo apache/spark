@@ -16,31 +16,33 @@
 #
 
 """
-Python bindings for GraphX.
+Correlations using MLlib.
 """
 
-__all__ = ["VertexRDD"]
+import sys
 
-from pyspark import RDD
+from pyspark import SparkContext
+from pyspark.graphx import GraphLoader
+from pyspark.graphx import Vertex
+from pyspark.graphx import Edge
 
+if __name__ == "__main__":
 
-class EdgeRDD(RDD):
     """
-    EdgeRDD class is used to enter the vertex class for GraphX
+    Usage: simpleGraph filename [partitions]"
     """
 
-    def __init__(self):
-        self.setName("EdgeRDD")
+    sc = SparkContext(appName="PythonSimpleGraphExample")
+    graphFile = int(sys.argv[1]) if len(sys.argv) > 1 else "simplegraph.edges"
+    partitions = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 
-    def filter(self, (vertexId, VertexProperty)):
-        self._jrdd
-        return
+    print "Running SimpleGraph example with filename=%s partitions=%d\n" % (graphFile, partitions)
 
-    def mapValues(self, func):
-        return
+    graph = GraphLoader.edgeListFile(sc, graphFile, partitions)
+    vertices = graph.vertices()
+    edges = graph.edges
 
-    def reverse(self):
-        return
 
-    def innerJoin(self, other):
-        return
+
+
+

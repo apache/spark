@@ -19,6 +19,8 @@
 Python bindings for GraphX.
 """
 
+__all__ = ["VertexRDD"]
+
 from pyspark import RDD
 
 
@@ -39,19 +41,20 @@ class VertexRDD(RDD):
         return
 
     def mapValues(self, func):
+        self._jrdd._jvm.org.apache.spark.PythonVertexRDD.mapValues()
         return
 
     def diff(self, other):
-        return
+        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.diff()
 
     def leftJoin(self, other):
-        return
+        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.leftJoin()
 
     def innerJoin(self, other, func):
-        return
+        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.innerJoin()
 
     def aggregateUsingIndex(self, other, reduceFunc):
-        return
+        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.aggregateUsingIndex()
 
 
 class VertexProperty(object):

@@ -19,7 +19,7 @@
 Python bindings for GraphX.
 """
 
-__all__ = ["_vertexRDD", "_edgeRDD"]
+__all__ = ["Graph", "vertexRDD", "edgeRDD"]
 
 class Graph(object):
     def __init__(self, vertexRDD, edgeRDD):
