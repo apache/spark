@@ -65,4 +65,9 @@ private[jobs] object UIData {
       var taskInfo: TaskInfo,
       var taskMetrics: Option[TaskMetrics] = None,
       var errorMessage: Option[String] = None)
+
+  case class JobUIData(
+    jobId: Int,
+    stageIds: Seq[Int],
+    var status: String /* one of "running", "completed", or "failed" */)
 }

@@ -40,17 +40,25 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   import JobProgressListener._
 
+  type JobId = Int
+  type StageId = Int
+  type StageAttemptId = Int
+
   // How many stages to remember
   val retainedStages = conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
+  // How many jobs to remember
+  val retailedJobs = conf.getInt("spark.ui.retainedJobs", DEFAULT_RETAINED_JOBS)
 
-  // Map from stageId to StageInfo
-  val activeStages = new HashMap[Int, StageInfo]
+  val activeJobs = new HashMap[JobId, JobUIData]
+  val completedJobs = ListBuffer[JobUIData]()
+  val failedJobs = ListBuffer[JobUIData]()
+  val jobIdToData = new HashMap[JobId, JobUIData]
 
-  // Map from (stageId, attemptId) to StageUIData
-  val stageIdToData = new HashMap[(Int, Int), StageUIData]
-
+  val activeStages = new HashMap[StageId, StageInfo]
   val completedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
+  val stageIdToData = new HashMap[(StageId, StageAttemptId), StageUIData]
+  val stageIdToInfo = new HashMap[StageId, StageInfo]
 
   // Map from pool name to a hash map (map from stage id to StageInfo).
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
@@ -61,8 +69,28 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   def blockManagerIds = executorIdToBlockManagerId.values.toSeq
 
+  override def onJobStart(jobStart: SparkListenerJobStart) = synchronized {
+    val jobData: JobUIData = JobUIData(jobStart.jobId, jobStart.stageIds, "running")
+    jobIdToData(jobStart.jobId) = jobData
+    activeJobs(jobStart.jobId) = jobData
+  }
+
+  override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
+    val jobData: JobUIData = activeJobs(jobEnd.jobId)
+    activeJobs.remove(jobEnd.jobId)
+    jobEnd.jobResult match {
+      case JobSucceeded =>
+        completedJobs += jobData
+        jobData.status = "completed"
+      case JobFailed(exception) =>
+        failedJobs += jobData
+        jobData.status = "failed"
+    }
+  }
+
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
+    stageIdToInfo(stage.stageId) = stage
     val stageData = stageIdToData.getOrElseUpdate((stage.stageId, stage.attemptId), {
       logWarning("Stage completed for unknown stage " + stage.stageId)
       new StageUIData
@@ -89,7 +117,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   private def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
       val toRemove = math.max(retainedStages / 10, 1)
-      stages.take(toRemove).foreach { s => stageIdToData.remove((s.stageId, s.attemptId)) }
+      stages.take(toRemove).foreach { s =>
+        stageIdToData.remove((s.stageId, s.attemptId))
+        stageIdToInfo.remove(s.stageId)
+      }
       stages.trimStart(toRemove)
     }
   }
@@ -103,6 +134,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
 
+    stageIdToInfo(stage.stageId) = stage
     val stageData = stageIdToData.getOrElseUpdate((stage.stageId, stage.attemptId), new StageUIData)
     stageData.schedulingPool = poolName
 
@@ -277,4 +309,5 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 private object JobProgressListener {
   val DEFAULT_POOL_NAME = "default"
   val DEFAULT_RETAINED_STAGES = 1000
+  val DEFAULT_RETAINED_JOBS = 1000
 }
