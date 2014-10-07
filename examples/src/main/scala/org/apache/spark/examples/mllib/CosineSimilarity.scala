@@ -82,7 +82,7 @@ object CosineSimilarity {
     val rows = sc.textFile(params.inputFile).map { line =>
       val values = line.split(' ').map(_.toDouble)
       Vectors.dense(values)
-    }
+    }.cache()
     val mat = new RowMatrix(rows)
 
     // Compute similar columns perfectly, with brute force.
