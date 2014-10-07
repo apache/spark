@@ -234,7 +234,7 @@ private[spark] object EventLoggingListener extends Logging {
       header.write(bytes, 0, bytes.length)
     }
 
-    meta.foreach { case (k, v) => write(s"$k=$v") }
+    meta.foreach { case (k, v) => write(s"$k=$v\n") }
     write(EventLoggingListener.HEADER_END_MARKER)
     header.flush()
 
@@ -283,7 +283,7 @@ private[spark] object EventLoggingListener extends Logging {
           case HEADER_END_MARKER =>
             foundEndMarker = true
           case entry =>
-            val prop = entry.split("=", 2)
+            val prop = entry.stripSuffix("\n").split("=", 2)
             if (prop.length != 2) {
               throw new IllegalArgumentException("Invalid metadata in log file.")
             }
