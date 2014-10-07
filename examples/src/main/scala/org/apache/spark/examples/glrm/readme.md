@@ -83,8 +83,8 @@ There are currently several features implemented, including:
 Users may also implement their own losses and regularizers; 
 see `SparkGLRM.scala` for more details.
 
-For example, the following code fits a model using squared error loss and quadratic
-regularization with `rank=5` on the matrix `A`:
+For example, the following code builds parameters and observed entries, in preparation to
+fit a model:
 
 	    // Number of movies
         val M = 1000
@@ -100,28 +100,28 @@ regularization with `rank=5` on the matrix `A`:
         val regPen = 0.1
     
     
-        // Number of partitions for data
+        // Number of partitions for data, set to number of cores in cluster
         val numChunks = 4
         // Build non-zeros
-        val R = sc.parallelize(0 until M, numChunks).flatMap{i =>
+        val A = sc.parallelize(0 until M, numChunks).flatMap{i =>
           val inds = new scala.collection.mutable.TreeSet[Int]()
           while (inds.size < NNZ) {
             inds += scala.util.Random.nextInt(U)
           }
           inds.toArray.map(j => (i, j, scala.math.random))
         }
-    
-       
-To fit the model, call:
 
-        val (ms, us) = fitGLRM(R, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
+To fit the model with squared error loss and quadratic
+regularization with `rank=5` on the matrix `A`, call:
+
+        val (ms, us) = fitGLRM(A, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
 
 which runs an alternating directions proximal gradient method on to find the 
 `ms` and `us` minimizing the objective function.
 To see how well the model performs using RMSE:
 
     // Output RMSE using learned model
-    val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
+    val finalRMSE = math.sqrt(A.map { case (i, j, rij) =>
       val err = ms(i).dot(us(j)) - rij
       err * err
     }.mean())
