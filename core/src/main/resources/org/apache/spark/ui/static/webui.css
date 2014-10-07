@@ -51,6 +51,11 @@ table.sortable thead {
   cursor: pointer;
 }
 
+table.sortable td {
+  word-wrap: break-word;
+  max-width: 600px;
+}
+
 .progress {
   margin-bottom: 0px; position: relative
 }
