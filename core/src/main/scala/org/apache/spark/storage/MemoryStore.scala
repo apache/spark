@@ -481,8 +481,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val actualFreeMemory = maxMemory - blocksMemory - unrollMemory
     logInfo(
       s"Max memory is ${Utils.bytesToString(maxMemory)}, of which " +
-      s"${Utils.bytesToString(blocksMemory)} is occupied by blocks and " +
-      s"${Utils.bytesToString(unrollMemory)} is reserved for unrolling blocks " +
+      s"${Utils.bytesToString(blocksMemory)} are occupied by blocks and " +
+      s"${Utils.bytesToString(unrollMemory)} are reserved for unrolling blocks " +
       s"shared across $numThreadsUnrolling thread(s). " +
       s"Total free memory left is ${Utils.bytesToString(actualFreeMemory)}."
     )
