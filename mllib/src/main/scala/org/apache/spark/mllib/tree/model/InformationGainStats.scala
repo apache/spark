@@ -38,6 +38,17 @@ class InformationGainStats(
     "gain = %f, impurity = %f, left impurity = %f, right impurity = %f"
       .format(gain, impurity, leftImpurity, rightImpurity)
   }
+
+  override def equals(o: Any) =
+    o match {
+      case other: InformationGainStats => {
+        gain == other.gain &&
+        impurity == other.impurity &&
+        leftImpurity == other.leftImpurity &&
+        rightImpurity == other.rightImpurity
+      }
+      case _ => false
+    }
 }
 
 

@@ -133,18 +133,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
-
-      case p @ logical.InsertIntoTable(
-                   InMemoryRelation(_, _, _,
-                     HiveTableScan(_, table, _)), _, child, _) =>
-        castChildOutput(p, table, child)
     }
 
     def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan) = {
       val childOutputDataTypes = child.output.map(_.dataType)
       // Only check attributes, not partitionKeys since they are always strings.
       // TODO: Fully support inserting into partitioned tables.
-      val tableOutputDataTypes = table.attributes.map(_.dataType)
+      val tableOutputDataTypes =
+        table.attributes.map(_.dataType) ++ table.partitionKeys.map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
@@ -305,7 +301,7 @@ private[hive] case class MetastoreRelation
       HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = tableName +: alias.toSeq)
+    )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
   // Must be a stable value since new attributes are born here.

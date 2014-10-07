@@ -66,6 +66,9 @@ class LinearModel(object):
     def intercept(self):
         return self._intercept
 
+    def __repr__(self):
+        return "(weights=%s, intercept=%s)" % (self._coeff, self._intercept)
+
 
 class LinearRegressionModelBase(LinearModel):
 
@@ -152,12 +155,15 @@ class LinearRegressionWithSGD(object):
         :param regParam:          The regularizer parameter (default: 1.0).
         :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
-        :param intercept:         Boolean parameter which indicates the use
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater,
+                                     - "l2" for using SquaredL2Updater,
+                                     - "none" for no regularizer.
+
+                                     (default: "none")
+
+        @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).

@@ -89,12 +89,15 @@ class LogisticRegressionWithSGD(object):
         :param regParam:          The regularizer parameter (default: 1.0).
         :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
-        :param intercept:         Boolean parameter which indicates the use
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater
+                                     - "l2" for using SquaredL2Updater
+                                     - "none" for no regularizer
+
+                                     (default: "none")
+
+        @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
@@ -158,12 +161,15 @@ class SVMWithSGD(object):
         :param initialWeights:    The initial weights (default: None).
         :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
-        :param intercept:         Boolean parameter which indicates the use
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater
+                                     - "l2" for using SquaredL2Updater,
+                                     - "none" for no regularizer.
+
+                                     (default: "none")
+
+        @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).

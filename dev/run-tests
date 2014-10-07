@@ -24,6 +24,16 @@ cd "$FWDIR"
 # Remove work directory
 rm -rf ./work
 
+source "$FWDIR/dev/run-tests-codes.sh"
+
+CURRENT_BLOCK=$BLOCK_GENERAL
+
+function handle_error () {
+  echo "[error] Got a return code of $? on line $1 of the run-tests script."
+  exit $CURRENT_BLOCK
+}
+
+
 # Build against the right verison of Hadoop.
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
@@ -91,32 +101,42 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   fi
 fi
 
-# Fail fast
-set -e
 set -o pipefail
+trap 'handle_error $LINENO' ERR
 
 echo ""
 echo "========================================================================="
 echo "Running Apache RAT checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_RAT
+
 ./dev/check-license
 
 echo ""
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_SCALA_STYLE
+
 ./dev/lint-scala
 
 echo ""
 echo "========================================================================="
 echo "Running Python style checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
+
 ./dev/lint-python
 
 echo ""
 echo "========================================================================="
 echo "Building Spark"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_BUILD
 
 {
   # We always build with Hive because the PySpark Spark SQL tests need it.
@@ -140,6 +160,8 @@ echo ""
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
 
 {
   # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
@@ -175,10 +197,16 @@ echo ""
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
+
 ./python/run-tests
 
 echo ""
 echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_MIMA
+
 ./dev/mima

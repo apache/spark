@@ -268,7 +268,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected[sql] def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
-    val results = runHive(sql, 100000)
+    val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...
     if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
     results
@@ -281,12 +281,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     try {
+      // Session state must be initilized before the CommandProcessor is created .
+      SessionState.start(sessionState)
+
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hiveconf)
-
-      SessionState.start(sessionState)
 
       proc match {
         case driver: Driver =>

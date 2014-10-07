@@ -705,18 +705,23 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Finds all the files in a directory whose last modified time is older than cutoff seconds.
-   * @param dir  must be the path to a directory, or IllegalArgumentException is thrown
-   * @param cutoff measured in seconds. Files older than this are returned.
+   * Determines if a directory contains any files newer than cutoff seconds.
+   * 
+   * @param dir must be the path to a directory, or IllegalArgumentException is thrown
+   * @param cutoff measured in seconds. Returns true if there are any files or directories in the
+   *               given directory whose last modified time is later than this many seconds ago
    */
-  def findOldFiles(dir: File, cutoff: Long): Seq[File] = {
-    val currentTimeMillis = System.currentTimeMillis
-    if (dir.isDirectory) {
-      val files = listFilesSafely(dir)
-      files.filter { file => file.lastModified < (currentTimeMillis - cutoff * 1000) }
-    } else {
-      throw new IllegalArgumentException(dir + " is not a directory!")
+  def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
+    if (!dir.isDirectory) {
+      throw new IllegalArgumentException("$dir is not a directory!")
     }
+    val filesAndDirs = dir.listFiles()
+    val cutoffTimeInMillis = System.currentTimeMillis - (cutoff * 1000)
+
+    filesAndDirs.exists(_.lastModified() > cutoffTimeInMillis) ||
+    filesAndDirs.filter(_.isDirectory).exists(
+      subdir => doesDirectoryContainAnyNewFiles(subdir, cutoff)
+    )
   }
 
   /**
@@ -1439,7 +1444,12 @@ private[spark] object Utils extends Logging {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
-      val tryPort = if (startPort == 0) startPort else (startPort + offset) % 65536
+      val tryPort = if (startPort == 0) {
+        startPort
+      } else {
+        // If the new port wraps around, do not try a privilege port
+        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+      }
       try {
         val (service, port) = startService(tryPort)
         logInfo(s"Successfully started service$serviceString on port $port.")
