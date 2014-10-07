@@ -298,7 +298,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
  * @param metadata The metadata of this field, which is a map from string to simple type that can be
- *                 serialized to JSON automatically.
+ *                 serialized to JSON automatically. The metadata should be preserved during
+ *                 transformation if the content of the column is not modified, e.g, in selection.
  */
 case class StructField(
     name: String,
@@ -330,8 +331,8 @@ case class StructType(fields: Seq[StructField]) extends DataType {
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.get(name).getOrElse(
-      throw new IllegalArgumentException(s"Field ${name} does not exist."))
+    nameToField.getOrElse(name,
+      throw new IllegalArgumentException(s"Field $name does not exist."))
   }
 
   /**

@@ -85,11 +85,11 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
-
+  override def metadata: Map[String, Any] = child.metadata
 
   override def toAttribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable)(exprId, qualifiers)
+      AttributeReference(name, child.dataType, child.nullable, child.metadata)(exprId, qualifiers)
     } else {
       UnresolvedAttribute(name)
     }
@@ -98,8 +98,6 @@ case class Alias(child: Expression, name: String)
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
-
-  override def metadata: Map[String, Any] = child.metadata
 }
 
 /**
@@ -108,6 +106,7 @@ case class Alias(child: Expression, name: String)
  * @param name The name of this attribute, should only be used during analysis or for debugging.
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
+ * @param metadata The metadata of this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the
  *               same attribute.
  * @param qualifiers a list of strings that can be used to referred to this attribute in a fully

@@ -43,7 +43,7 @@ object ScalaReflection {
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -62,7 +62,7 @@ object ScalaReflection {
         params.head.map { p =>
           val Schema(dataType, nullable) =
             schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
-          StructField(p.name.toString, dataType, nullable, Map.empty)
+          StructField(p.name.toString, dataType, nullable)
         }), nullable = true)
     // Need to decide if we actually need a special type here.
     case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)

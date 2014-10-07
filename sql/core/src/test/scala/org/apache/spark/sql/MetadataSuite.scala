@@ -13,15 +13,22 @@ class MetadataSuite extends FunSuite {
     val members = sqlContext.sparkContext.makeRDD(Seq(
       Person("mike", 10),
       Person("jim", 20)))
-    val table: SchemaRDD = sqlContext.createSchemaRDD(members)
-    val schema: StructType = table.schema
+    val person: SchemaRDD = sqlContext.createSchemaRDD(members)
+    val schema: StructType = person.schema
     println("schema: " + schema)
-    val ageField = schema("age").copy(metadata = Map("desc" -> "age (must be nonnegative)"))
+    val ageField = schema("age").copy(metadata = Map("doc" -> "age (must be nonnegative)"))
     val newSchema = schema.copy(Seq(schema("name"), ageField))
-    val newTable = sqlContext.applySchema(table, newSchema)
+    val newTable = sqlContext.applySchema(person, newSchema)
+    newTable.registerTempTable("person")
     val selectByExprAgeField = newTable.select('age).schema("age")
-    assert(selectByExprAgeField.metadata.nonEmpty)
+    assert(selectByExprAgeField.metadata.contains("doc"))
     val selectByNameAttrAgeField = newTable.select("age".attr).schema("age")
-    assert(selectByNameAttrAgeField.metadata.nonEmpty)
+    assert(selectByNameAttrAgeField.metadata.contains("doc"))
+    val selectAgeBySQL = sql("SELECT age FROM person").schema("age")
+    println(selectAgeBySQL)
+    assert(selectAgeBySQL.metadata.contains("doc"))
+    val selectStarBySQL = sql("SELECT * FROM person").schema("age")
+    println(selectStarBySQL)
+    assert(selectStarBySQL.metadata.contains("doc"))
   }
 }
