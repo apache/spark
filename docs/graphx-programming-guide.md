@@ -620,7 +620,7 @@ more senior followers of each user.
 import org.apache.spark.graphx.util.GraphGenerators
 // Create a graph with "age" as the vertex property.  Here we use a random graph for simplicity.
 val graph: Graph[Double, Int] =
-  GraphGenerators.logNormalGraph(sc, numVertices = 100).mapVertices( (id, _) => id.toDouble )
+  GraphGenerators.logNormalGraph(sc, numVertices = 100, numEParts = sc.defaultParallelism).mapVertices( (id, _) => id.toDouble )
 // Compute the number of older followers and their total age
 val olderFollowers: VertexRDD[(Int, Double)] = graph.mapReduceTriplets[(Int, Double)](
   triplet => { // Map Function
