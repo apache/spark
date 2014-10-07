@@ -17,11 +17,12 @@
 
 package org.apache.spark.examples.mllib
 
+import scopt.OptionParser
+
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, RowMatrix}
 import org.apache.spark.{SparkConf, SparkContext}
-import scopt.OptionParser
 
 /**
  * Compute the similar columns of a matrix, using cosine similarity.
@@ -37,8 +38,8 @@ import scopt.OptionParser
  *
  * Example invocation:
  *
- * bin/run-example org.apache.spark.examples.mllib.CosineSimilarity \
- * --inputFile data/mllib/sample_svm_data.txt --threshold 0.1
+ * bin/run-example mllib.CosineSimilarity \
+ * --threshold 0.1 data/mllib/sample_svm_data.txt
  */
 object CosineSimilarity {
   case class Params(inputFile: String = null, threshold: Double = 0.1)
@@ -48,14 +49,14 @@ object CosineSimilarity {
 
     val parser = new OptionParser[Params]("CosineSimilarity") {
       head("CosineSimilarity: an example app.")
-      opt[String]("inputFile")
-        .required()
-        .text(s"input file, one row per line, space-separated")
-        .action((x, c) => c.copy(inputFile = x))
       opt[Double]("threshold")
         .required()
         .text(s"threshold similarity: to tradeoff computation vs quality estimate")
         .action((x, c) => c.copy(threshold = x))
+      arg[String]("<inputFile>")
+        .required()
+        .text(s"input file, one row per line, space-separated")
+        .action((x, c) => c.copy(inputFile = x))
       note(
         """
           |For example, the following command runs this app on a dataset:
@@ -90,12 +91,9 @@ object CosineSimilarity {
     // Compute similar columns with estimation using DIMSUM
     val approx = mat.columnSimilarities(params.threshold)
 
-    val MAE = exact.entries.map { case MatrixEntry(i, j, u) =>
-      ((i, j), u)
-    }.leftOuterJoin(
-        approx.entries.map { case MatrixEntry(i, j, v) =>
-          ((i, j), v)
-        }).values.map {
+    val exactEntries = exact.entries.map { case MatrixEntry(i, j, u) => ((i, j), u) }
+    val approxEntries = approx.entries.map { case MatrixEntry(i, j, v) => ((i, j), v) }
+    val MAE = exactEntries.leftOuterJoin(approxEntries).values.map {
       case (u, Some(v)) =>
         math.abs(u - v)
       case (u, None) =>
