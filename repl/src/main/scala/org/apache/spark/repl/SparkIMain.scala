@@ -84,7 +84,7 @@ import org.apache.spark.util.Utils
    *  @author Moez A. Abdel-Gawad
    *  @author Lex Spoon
    */
-  class SparkIMain(initialSettings: Settings, val out: JPrintWriter, propogateExceptions: Boolean = false)
+  class SparkIMain(initialSettings: Settings, val out: JPrintWriter, propagateExceptions: Boolean = false)
       extends SparkImports with Logging {
     imain =>
 
@@ -816,8 +816,9 @@ import org.apache.spark.util.Utils
     val resultName  = FixedSessionNames.resultName
 
     def bindError(t: Throwable) = {
-      if (propogateExceptions) {
-       throw unwrap(t)
+      // Immediately throw the exception if we are asked to propogate them
+      if (propagateExceptions) {
+        throw unwrap(t)
       }
       if (!bindExceptions) // avoid looping if already binding
         throw t
