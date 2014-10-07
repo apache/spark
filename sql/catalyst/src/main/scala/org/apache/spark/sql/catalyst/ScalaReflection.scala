@@ -47,14 +47,17 @@ object ScalaReflection {
   }
 
   /** Converts Catalyst types used internally in rows to standard Scala types */
-  def convertToScala(a: Any): Any = a match {
+  def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
+      // TODO: USE DATATYPE
     // TODO: What about Option and Product?
     case s: Seq[_] => s.map(convertToScala)
     case m: Map[_, _] => m.map { case (k, v) => convertToScala(k) -> convertToScala(v)}
     case other => other
   }
 
-  def convertRowToScala(r: Row): Row = new GenericRow(r.toArray.map(convertToScala))
+  def convertRowToScala(r: Row, schema: StructType): Row = {
+    new GenericRow(r.toArray.map(convertToScala(_, schema)))
+  }
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag](
