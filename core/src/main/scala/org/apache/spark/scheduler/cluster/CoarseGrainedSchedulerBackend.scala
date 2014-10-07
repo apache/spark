@@ -289,6 +289,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }
+
+  /**
+   * Request the given number of executors from the cluster manager.
+   * In Yarn, this will be implemented in SPARK-3822.
+   */
+  def requestExecutors(numExecutors: Int): Unit = { }
+
+  /**
+   * Kill the given list of executors through the cluster manager.
+   * In Yarn, this will be implemented in SPARK-3822.
+   */
+  def killExecutors(executorIds: Seq[String]): Unit = { }
+
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
