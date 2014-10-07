@@ -196,7 +196,6 @@ private[spark] class PythonRDD(
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
-        SparkEnv.set(env)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         // Partition index
@@ -248,6 +247,11 @@ private[spark] class PythonRDD(
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
           worker.shutdownOutput()
+      } finally {
+        // Release memory used by this thread for shuffles
+        env.shuffleMemoryManager.releaseMemoryForThisThread()
+        // Release memory used by this thread for unrolling blocks
+        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
       }
     }
   }
