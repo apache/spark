@@ -17,9 +17,11 @@
 
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, RowMatrix}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, CoordinateMatrix, RowMatrix}
+import scopt.OptionParser
 
 /**
  * Compute the similar columns of a matrix, using cosine similarity.
@@ -36,47 +38,71 @@ import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, CoordinateMatrix,
  * Example invocation:
  *
  * bin/run-example org.apache.spark.examples.mllib.CosineSimilarity \
- * data/mllib/sample_svm_data.txt 0.1
+ * --inputFile data/mllib/sample_svm_data.txt --threshold 0.1
  */
 object CosineSimilarity {
+  case class Params(inputFile: String = null, threshold: Double = 0.1)
+
   def main(args: Array[String]) {
-    if (args.length != 2) {
-      System.err.println("Usage: CosineSimilarity <input> <threshold>")
-      System.exit(1)
+    val defaultParams = Params()
+
+    val parser = new OptionParser[Params]("CosineSimilarity") {
+      head("CosineSimilarity: an example app.")
+      opt[String]("inputFile")
+        .required()
+        .text(s"input file, one row per line, space-separated")
+        .action((x, c) => c.copy(inputFile = x))
+      opt[Double]("threshold")
+        .required()
+        .text(s"threshold similarity: to tradeoff computation vs quality estimate")
+        .action((x, c) => c.copy(threshold = x))
+      note(
+        """
+          |For example, the following command runs this app on a dataset:
+          |
+          | ./bin/spark-submit  --class org.apache.spark.examples.mllib.CosineSimilarity \
+          | examplesjar.jar \
+          | --inputFile data/mllib/sample_svm_data.txt --threshold 0.1
+        """.stripMargin)
     }
 
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
+    } getOrElse {
+      System.exit(1)
+    }
+  }
+
+  def run(params: Params) {
     val conf = new SparkConf().setAppName("CosineSimilarity")
     val sc = new SparkContext(conf)
 
     // Load and parse the data file.
-    val rows = sc.textFile(args(0)).map { line =>
+    val rows = sc.textFile(params.inputFile).map { line =>
       val values = line.split(' ').map(_.toDouble)
       Vectors.dense(values)
     }
     val mat = new RowMatrix(rows)
 
-    val threshold = args(1).toDouble
-
     // Compute similar columns perfectly, with brute force.
-    val simsPerfect = mat.columnSimilarities().entries.collect
+    val exact = mat.columnSimilarities()
 
     // Compute similar columns with estimation using DIMSUM
-    val simsEstimate = mat.columnSimilarities(threshold).entries.collect
+    val approx = mat.columnSimilarities(params.threshold)
 
-    val n = mat.numCols().toInt
-    val real = Array.ofDim[Double](n, n)
-    val est = Array.ofDim[Double](n, n)
-    for (entry <- simsPerfect) {
-      real(entry.i.toInt)(entry.j.toInt) = entry.value
-    }
-    for (entry <- simsEstimate) {
-      est(entry.i.toInt)(entry.j.toInt) = entry.value
-    }
+    val MAE = exact.entries.map { case MatrixEntry(i, j, u) =>
+      ((i, j), u)
+    }.leftOuterJoin(
+        approx.entries.map { case MatrixEntry(i, j, v) =>
+          ((i, j), v)
+        }).values.map {
+      case (u, Some(v)) =>
+        math.abs(u - v)
+      case (u, None) =>
+        math.abs(u)
+    }.mean()
 
-    val errors = Array.tabulate[Double](n, n)((i, j) => math.abs(real(i)(j) - est(i)(j)))
-    val avgErr = errors.flatten.sum / (n * (n - 1) / 2)
-
-    println(s"Average error in estimate is: $avgErr")
+    println(s"Average error in estimate is: $MAE")
 
     sc.stop()
   }
