@@ -513,43 +513,48 @@ class ExternalSorter(object):
         return heapq.merge(chunks, key=key, reverse=reverse)
 
 
-class SameKey(object):
+class ExternalList(object):
     """
-    take the first few items which has the same expected key
+    ExternalList can have many items which cannot be hold in memory in
+    the same time.
 
-    This is used by GroupByKey.
-
-    >>> l = zip(range(2), range(2))
-    >>> list(SameKey(0, 1, iter(l), GroupByKey(iter([]))))
-    [1, 0]
-    >>> s = SameKey(0, 1, iter(l), GroupByKey(iter([])))
-    >>> for i in range(2000):
-    ...     s.append(i)
-    >>> len(list(s))
-    2002
+    >>> l = ExternalList(range(100))
+    >>> len(l)
+    100
+    >>> l.append(10)
+    >>> len(l)
+    101
+    >>> for i in range(10240):
+    ...     l.append(i)
+    >>> len(l)
+    10341
+    >>> import pickle
+    >>> l2 = pickle.loads(pickle.dumps(l))
+    >>> len(l2)
+    10341
+    >>> list(l2)[100]
+    10
     """
-    def __init__(self, key, value, iterator, groupBy):
-        self.key = key
-        self.values = [value]
-        self.iterator = iterator
-        self.groupBy = groupBy
+    LIMIT = 10240
+
+    def __init__(self, values):
+        self.values = values
+        self.disk_count = 0
         self._file = None
         self._ser = None
 
     def __getstate__(self):
-        sum(1 for _ in self)  # try to read all the values
         if self._file is not None:
+            self._file.flush()
             f = os.fdopen(os.dup(self._file.fileno()))
             f.seek(0)
             bytes = f.read()
         else:
             bytes = ''
-        return (self.key, bytes, self.values)
+        return self.values, self.disk_count, bytes
 
     def __setstate__(self, item):
-        self.key, bytes, self.values = item
-        self.iterator = iter([])
-        self.groupBy = None
+        self.values, self.disk_count, bytes = item
         if bytes:
             self._open_file()
             self._file.write(bytes)
@@ -570,27 +575,13 @@ class SameKey(object):
         for v in self.values:
             yield v
 
-        if not self.groupBy or self.groupBy.next_item:
-            # different key was already found by previous accessing
-            return
-
-        # consume items from iterator
-        for key, value in self.iterator:
-            if key == self.key:
-                self.append(value)  # save it for next access
-                yield value
-            else:
-                # save it
-                self.groupBy.next_item = (key, value)
-                break
-
     def __len__(self):
-        return sum(1 for _ in self)
+        return self.disk_count + len(self.values)
 
     def append(self, value):
         self.values.append(value)
         # dump them into disk if the key is huge
-        if len(self.values) >= 10240:
+        if len(self.values) >= self.LIMIT:
             self._spill()
 
     def _open_file(self):
@@ -612,23 +603,11 @@ class SameKey(object):
         used_memory = get_used_memory()
         pos = self._file.tell()
         self._ser.dump_stream([self.values], self._file)
-        DiskBytesSpilled += self._file.tell() - pos
+        self.disk_count += len(self.values)
         self.values = []
         gc.collect()
+        DiskBytesSpilled += self._file.tell() - pos
         MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
-
-
-class ChainedIterable(object):
-    """
-    Pickable chained iterator, similar to itertools.chain.fromiterable()
-    """
-    def __init__(self, iterators):
-        self.iterators = iterators
-
-    def __iter__(self):
-        for vs in self.iterators:
-            for v in vs:
-                yield v
 
 
 class GroupByKey(object):
@@ -644,26 +623,37 @@ class GroupByKey(object):
     def __init__(self, iterator):
         self.iterator = iterator
         self.next_item = None
-        self.current = None
 
     def __iter__(self):
         return self
 
     def next(self):
-        if self.next_item is None:
+        key, value = self.next_item if self.next_item else next(self.iterator)
+        values = ExternalList([value])
+        try:
             while True:
-                key, value = next(self.iterator)
-                if self.current is None or key != self.current.key:
+                k, v = next(self.iterator)
+                if k != key:
+                    self.next_item = (k, v)
                     break
-                # the current key has not been visited.
-                self.current.append(value)
-        else:
-            # next key was popped while visiting current key
-            key, value = self.next_item
+                values.append(v)
+        except StopIteration:
             self.next_item = None
+        return key, values
 
-        self.current = SameKey(key, value, self.iterator, self)
-        return key, self.current
+
+class ChainedIterable(object):
+    """
+    Picklable chained iterator, similar to itertools.chain.fromiterable()
+    """
+    def __init__(self, iterators):
+        self.iterators = iterators
+
+    def __len__(self):
+        return sum(len(vs) for vs in self.iterators)
+
+    def __iter__(self):
+        return itertools.chain.fromiterable(self.iterators)
 
 
 class ExternalGroupBy(ExternalMerger):
