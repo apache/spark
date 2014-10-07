@@ -65,7 +65,7 @@ The data is modeled as `XY`, where `X` is a `M`x`rank` matrix and `Y` is a `k`x`
 
 To fit a GLRM in SparkGLRM, the user specifies
 
-* the data `R` via observed entries
+* the data `A` via observed entries
 * the dimensions `M` and `U`
 * the loss function (sub)gradient `lossGrad`, indexed by `i` and `j`
 * the regularizers `moviesProx` and `usersProx`
