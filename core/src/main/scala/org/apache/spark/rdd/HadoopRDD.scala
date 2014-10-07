@@ -122,8 +122,6 @@ class HadoopRDD[K, V](
       minPartitions)
   }
 
-  protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
-
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
   // used to build JobTracker ID
