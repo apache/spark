@@ -127,7 +127,8 @@ object KMeans extends Logging {
   def train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int): KMeansModel =
     new KMeansModel(doTrain(new FastEuclideanOps)(data, k, maxIterations, runs)._2)
 
-  private def doTrain[P <: FP, C <: FP](pointOps: PointOps[P, C])(
+  private def doTrain[P <: FP, C <: FP](
+    pointOps: PointOps[P, C])(
     raw: RDD[Vector],
     k: Int = 2,
     maxIterations: Int = 20,
