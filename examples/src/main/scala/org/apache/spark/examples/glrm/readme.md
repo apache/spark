@@ -133,7 +133,7 @@ The input is a sparse matrix, and so missing data are simply left out of the spa
 ## Optimization
 
 ### Algorithm
-The algorith implemented is proximal gradient, described as follows, with more details in 
+The algorithm implemented is proximal gradient, described as follows, with more details in 
 [our paper](http://arxiv.org/abs/1410.0342).
 
 <img src="glrm1.png" width="500">
