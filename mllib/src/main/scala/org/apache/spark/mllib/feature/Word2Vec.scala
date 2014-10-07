@@ -67,7 +67,7 @@ private case class VocabWord(
 class Word2Vec extends Serializable with Logging {
 
   private var vectorSize = 100
-  private var startingAlpha = 0.025
+  private var learningRate = 0.025
   private var numPartitions = 1
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
@@ -84,7 +84,7 @@ class Word2Vec extends Serializable with Logging {
    * Sets initial learning rate (default: 0.025).
    */
   def setLearningRate(learningRate: Double): this.type = {
-    this.startingAlpha = learningRate
+    this.learningRate = learningRate
     this
   }
 
@@ -286,7 +286,7 @@ class Word2Vec extends Serializable with Logging {
     val syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)
-    var alpha = startingAlpha
+    var alpha = learningRate
     for (k <- 1 to numIterations) {
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
@@ -300,8 +300,8 @@ class Word2Vec extends Serializable with Logging {
               lwc = wordCount
               // TODO: discount by iteration?
               alpha =
-                startingAlpha * (1 - numPartitions * wordCount.toDouble / (trainWordsCount + 1))
-              if (alpha < startingAlpha * 0.0001) alpha = startingAlpha * 0.0001
+                learningRate * (1 - numPartitions * wordCount.toDouble / (trainWordsCount + 1))
+              if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
             }
             wc += sentence.size
@@ -437,7 +437,7 @@ class Word2VecModel private[mllib] (
    * Find synonyms of a word
    * @param word a word
    * @param num number of synonyms to find  
-   * @return array of (word, similarity)
+   * @return array of (word, cosineSimilarity)
    */
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
