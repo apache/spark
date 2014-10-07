@@ -78,7 +78,7 @@ object ScalaReflection {
       val udtStructType: StructType = udtRegistry(typeTag[T]).dataType
       Schema(udtStructType, nullable = true)
     } else {
-      schemaFor(typeOf[T], udtRegistry)
+      schemaFor(typeOf[T])
     }
   }
 
@@ -86,12 +86,10 @@ object ScalaReflection {
    * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
    * TODO: ADD DOC
    */
-  def schemaFor(
-      tpe: `Type`,
-      udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = tpe match {
+  def schemaFor(tpe: `Type`): Schema = tpe match {
     case t if t <:< typeOf[Option[_]] =>
       val TypeRef(_, _, Seq(optType)) = t
-      Schema(schemaFor(optType, udtRegistry).dataType, nullable = true)
+      Schema(schemaFor(optType).dataType, nullable = true)
     case t if t <:< typeOf[Product] =>
       val formalTypeArgs = t.typeSymbol.asClass.typeParams
       val TypeRef(_, _, actualTypeArgs) = t
@@ -99,7 +97,7 @@ object ScalaReflection {
       Schema(StructType(
         params.head.map { p =>
           val Schema(dataType, nullable) =
-            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs), udtRegistry)
+            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
           StructField(p.name.toString, dataType, nullable)
         }), nullable = true)
     // Need to decide if we actually need a special type here.
@@ -108,12 +106,12 @@ object ScalaReflection {
       sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
     case t if t <:< typeOf[Seq[_]] =>
       val TypeRef(_, _, Seq(elementType)) = t
-      val Schema(dataType, nullable) = schemaFor(elementType, udtRegistry)
+      val Schema(dataType, nullable) = schemaFor(elementType)
       Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
     case t if t <:< typeOf[Map[_,_]] =>
       val TypeRef(_, _, Seq(keyType, valueType)) = t
-      val Schema(valueDataType, valueNullable) = schemaFor(valueType, udtRegistry)
-      Schema(MapType(schemaFor(keyType, udtRegistry).dataType,
+      val Schema(valueDataType, valueNullable) = schemaFor(valueType)
+      Schema(MapType(schemaFor(keyType).dataType,
         valueDataType, valueContainsNull = valueNullable), nullable = true)
     case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
@@ -134,9 +132,6 @@ object ScalaReflection {
     case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
     case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
     case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
-/*    case t if udtRegistry.contains(typeTag[t]) =>
-      val udtStructType: StructType = udtRegistry(tpe).dataType
-      Schema(udtStructType, nullable = true)*/
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {

@@ -23,18 +23,16 @@ import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
-class UserTypeSuite extends QueryTest {
+class UserDefinedTypeSuite extends QueryTest {
 
-  class DenseVector(val data: Array[Double]) extends Serializable
-
-  case class LabeledPoint(label: Double, features: DenseVector) extends Serializable
+  case class LabeledPoint(label: Double, feature: Double) extends Serializable
 
   object LabeledPointUDT {
 
     def dataType: StructType =
       StructType(Seq(
         StructField("label", DoubleType, nullable = false),
-        StructField("features", ArrayType(DoubleType), nullable = false)))
+        StructField("feature", DoubleType, nullable = false)))
 
   }
 
@@ -42,27 +40,17 @@ class UserTypeSuite extends QueryTest {
 
     override def serialize(obj: Any): Row = obj match {
       case lp: LabeledPoint =>
-        val row: GenericMutableRow = new GenericMutableRow(1 + lp.features.data.size)
+        val row: GenericMutableRow = new GenericMutableRow(2)
         row.setDouble(0, lp.label)
-        var i = 0
-        while (i < lp.features.data.size) {
-          row.setDouble(1 + i, lp.features.data(i))
-          i += 1
-        }
+        row.setDouble(1, lp.feature)
         row
-        // Array.concat(Array(lp.label), lp.features.data))
     }
 
     override def deserialize(row: Row): LabeledPoint = {
-      assert(row.length >= 1)
+      assert(row.length == 2)
       val label = row.getDouble(0)
-      val arr = new Array[Double](row.length - 1)
-      var i = 0
-      while (i < row.length - 1) {
-        arr(i) = row.getDouble(i + 1)
-        i += 1
-      }
-      LabeledPoint(label, new DenseVector(arr))
+      val feature = row.getDouble(1)
+      LabeledPoint(label, feature)
     }
   }
 
@@ -76,8 +64,8 @@ class UserTypeSuite extends QueryTest {
       assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeTag[LabeledPoint]))
 
       val points = Seq(
-        LabeledPoint(1.0, new DenseVector(Array(1.0, 0.0))),
-        LabeledPoint(0.0, new DenseVector(Array(1.0, -1.0))))
+        LabeledPoint(1.0, 2.0),
+        LabeledPoint(0.0, 3.0))
       val pointsRDD: RDD[LabeledPoint] = sparkContext.parallelize(points)
 
       println("Converting to SchemaRDD")
