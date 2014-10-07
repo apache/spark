@@ -354,7 +354,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
 
-    override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
+    override lazy val toRdd: RDD[Row] = {
+      //val dataType = StructType.fromAttributes(logical.output)
+      executedPlan.execute().map(ScalaReflection.convertRowToScala(_))
+    }
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,

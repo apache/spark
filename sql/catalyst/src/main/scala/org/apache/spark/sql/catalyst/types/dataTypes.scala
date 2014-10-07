@@ -418,23 +418,22 @@ case class MapType(
   def simpleString: String = "map"
 }
 
-object UDTType {
+object UserDefinedType {
   /**
-   * Construct a [[UDTType]] object with the given key type and value type.
+   * Construct a [[UserDefinedType]] object with the given key type and value type.
    * The `valueContainsNull` is true.
    */
-  def apply(keyType: DataType, valueType: DataType): MapType =
-    MapType(keyType: DataType, valueType: DataType, true)
+  //def apply(keyType: DataType, valueType: DataType): MapType =
+  //  MapType(keyType: DataType, valueType: DataType, true)
 }
 
 /**
- * The data type for UserDefinedType.
+ * The data type for User Defined Types.
  */
-abstract class UserDefinedType[UserType] extends DataType {
+abstract class UserDefinedType[UserType](val dataType: StructType) extends DataType with Serializable {
+
   // Used only in regex parser above.
   //private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = { }
-
-  def dataType: StructType
 
   def serialize(obj: Any): Row
 
