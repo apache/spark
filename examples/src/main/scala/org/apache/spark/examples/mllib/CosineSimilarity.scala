@@ -63,7 +63,7 @@ object CosineSimilarity {
           |
           | ./bin/spark-submit  --class org.apache.spark.examples.mllib.CosineSimilarity \
           | examplesjar.jar \
-          | --inputFile data/mllib/sample_svm_data.txt --threshold 0.1
+          | --threshold 0.1 data/mllib/sample_svm_data.txt
         """.stripMargin)
     }
 
