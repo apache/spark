@@ -293,7 +293,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
       proc match {
         case driver: Driver =>
-          val results = new JArrayList[String]
+          val results = HiveShim.createDriverResultsArray
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
@@ -303,7 +303,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           driver.setMaxRows(maxRows)
           driver.getResults(results)
           driver.close()
-          results
+          results.map { r =>
+            r match {
+              case s: String => s
+              case o => o.toString
+            }
+          }
         case _ =>
           sessionState.out.println(tokens(0) + " " + cmd_1)
           Seq(proc.run(cmd_1).getResponseCode.toString)

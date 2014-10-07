@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.net.URI
+import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -49,14 +50,16 @@ private[hive] object HiveShim {
     new TableDesc(serdeClass, inputFormatClass, outputFormatClass, properties)
   }
 
+  def createDriverResultsArray = new JArrayList[String]
+
   def getStatsSetupConstTotalSize = StatsSetupConst.TOTAL_SIZE
 
-  def createDefaultDBIfNeeded(context: HiveContext) ={  }
+  def createDefaultDBIfNeeded(context: HiveContext) = {  }
 
   /** The string used to denote an empty comments field in the schema. */
   def getEmptyCommentsFieldValue = "None"
 
-  def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
+  def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd(0), conf)
   }
 
