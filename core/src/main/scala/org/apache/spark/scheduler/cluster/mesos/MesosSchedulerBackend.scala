@@ -210,12 +210,8 @@ private[spark] class MesosSchedulerBackend(
           mem >= sc.executorMemory || slaveIdsWithExecutors.contains(slaveId)
         }
 
-        def dataNode(o: Offer) = {
-          o.getHostname.startsWith("dn")
-        }
-
-        for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer) if dataNode(offer)) {
-          offerableIndices.put(offer.getSlaveId.getValue, index)
+        for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
+          offerableIndices += index
           offerableWorkers += new WorkerOffer(
             offer.getSlaveId.getValue,
             offer.getHostname,
