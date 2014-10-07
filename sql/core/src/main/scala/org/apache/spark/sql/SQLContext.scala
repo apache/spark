@@ -295,6 +295,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       udt: UserDefinedType[UserType])(implicit userType: TypeTag[UserType]): Unit = {
     require(!udtRegistry.contains(userType),
       "registerUserType called on type which was already registered.")
+    // TODO: Check to see if type is built-in.  Throw exception?
     udtRegistry(userType) = udt
   }
 
