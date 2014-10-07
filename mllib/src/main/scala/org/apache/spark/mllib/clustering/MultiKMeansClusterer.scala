@@ -23,5 +23,11 @@ import org.apache.spark.rdd.RDD
 
 
 private[mllib] trait MultiKMeansClusterer[P <: FP, C <: FP] extends Serializable with Logging {
+  /**
+   * Cluster the data
+   * @param data a data set to be clustered
+   * @param centers a set of sets of initial centers to use for clustering
+   * @return the best clustering of the data from the initial sets of cluster centers
+   */
   def cluster(data: RDD[P], centers: Array[Array[C]]): (Double, GeneralizedKMeansModel[P, C])
 }
