@@ -22,16 +22,13 @@ import java.net.URI
 import java.util.UUID.randomUUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
-<<<<<<< HEAD
 
 import akka.actor.Props
-=======
 import java.util.UUID.randomUUID
 import scala.collection.{mutable, Map, Set}
 import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.reflect.{ClassTag, classTag}
->>>>>>> code format
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
@@ -120,12 +117,7 @@ class SparkContext(config: SparkConf) extends Logging {
     sparkHome: String = null,
     jars: Seq[String] = Nil,
     environment: Map[String, String] = Map(),
-<<<<<<< HEAD
     preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) = {
-=======
-    preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
-  {
->>>>>>> code format
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
     this.preferredNodeLocationData = preferredNodeLocationData
   }
@@ -600,15 +592,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
-<<<<<<< HEAD
   (path: String, minPartitions: Int)
   (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     hadoopFile(path,
-=======
-    (path: String, minPartitions: Int)
-    (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
-      hadoopFile(path,
->>>>>>> code format
       fm.runtimeClass.asInstanceOf[Class[F]],
       km.runtimeClass.asInstanceOf[Class[K]],
       vm.runtimeClass.asInstanceOf[Class[V]],
@@ -629,22 +615,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
-<<<<<<< HEAD
-   (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
-=======
-    (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
->>>>>>> code format
+  (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
     hadoopFile[K, V, F](path, defaultMinPartitions)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
-<<<<<<< HEAD
   (path: String)
   (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
-=======
-    (path: String)
-    (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
->>>>>>> code format
     newAPIHadoopFile(
       path,
       fm.runtimeClass.asInstanceOf[Class[F]],
@@ -713,12 +690,7 @@ class SparkContext(config: SparkConf) extends Logging {
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
     * */
-<<<<<<< HEAD
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] =
-=======
-  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]
-    ): RDD[(K, V)] =
->>>>>>> code format
     sequenceFile(path, keyClass, valueClass, defaultMinPartitions)
 
   /**
@@ -743,17 +715,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * a `map` function.
    */
   def sequenceFile[K, V]
-<<<<<<< HEAD
   (path: String, minPartitions: Int = defaultMinPartitions)
   (implicit km: ClassTag[K], vm: ClassTag[V],
    kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
   : RDD[(K, V)] = {
-=======
-    (path: String, minPartitions: Int = defaultMinPartitions)
-    (implicit km: ClassTag[K], vm: ClassTag[V],
-    kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
-    : RDD[(K, V)] = {
->>>>>>> code format
     val kc = kcf()
     val vc = vcf()
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
@@ -779,14 +744,7 @@ class SparkContext(config: SparkConf) extends Logging {
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
   }
 
-  protected[spark] def checkpointFile[T: ClassTag](
-<<<<<<< HEAD
-    path: String
-    ): RDD[T] = {
-=======
-                                                    path: String
-                                                    ): RDD[T] = {
->>>>>>> code format
+  protected[spark] def checkpointFile[T: ClassTag](path: String): RDD[T] = {
     new CheckpointRDD[T](this, path)
   }
 
@@ -844,11 +802,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
-<<<<<<< HEAD
   (initialValue: R): Accumulable[R, T] = {
-=======
-    (initialValue: R): Accumulable[R, T] = {
->>>>>>> code format
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
@@ -1229,11 +1183,7 @@ class SparkContext(config: SparkConf) extends Logging {
     func: (TaskContext, Iterator[T]) => U,
     evaluator: ApproximateEvaluator[U, R],
     timeout: Long): PartialResult[R] = {
-<<<<<<< HEAD
     val callSite = getCallSite
-=======
-    val callSite = getCallSite()
->>>>>>> code format
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
@@ -1254,7 +1204,7 @@ class SparkContext(config: SparkConf) extends Logging {
     resultHandler: (Int, U) => Unit,
     resultFunc: => R): SimpleFutureAction[R] = {
     val cleanF = clean(processPartition)
-    val callSite = getCallSite()
+    val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
@@ -1407,27 +1357,15 @@ object SparkContext extends Logging {
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
-
-<<<<<<< HEAD
   implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)
-=======
-  implicit def rddToPairRDDFunctions[K, V]
-    (rdd: RDD[(K, V)])
-    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
-    = {new PairRDDFunctions(rdd)
->>>>>>> code format
   }
 
   implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-<<<<<<< HEAD
-    rdd: RDD[(K, V)]) =  new SequenceFileRDDFunctions(rdd)
-=======
     rdd: RDD[(K, V)]) = new SequenceFileRDDFunctions(rdd)
->>>>>>> code format
 
   implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
     rdd: RDD[(K, V)]) = new OrderedRDDFunctions[K, V, (K, V)](rdd)
@@ -1527,22 +1465,13 @@ object SparkContext extends Logging {
    * like SparkConf would.
    */
   private[spark] def updatedConf(
-<<<<<<< HEAD
-                                  conf: SparkConf,
-                                  master: String,
-                                  appName: String,
-                                  sparkHome: String = null,
-                                  jars: Seq[String] = Nil,
-                                  environment: Map[String, String] = Map()): SparkConf =
-=======
     conf: SparkConf,
     master: String,
     appName: String,
     sparkHome: String = null,
     jars: Seq[String] = Nil,
-    environment: Map[String, String] = Map()): SparkConf =
->>>>>>> code format
-  {
+    environment: Map[String, String] = Map())
+  : SparkConf = {
     val res = conf.clone()
     res.setMaster(master)
     res.setAppName(appName)
