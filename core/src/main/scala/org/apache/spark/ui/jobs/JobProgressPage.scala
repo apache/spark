@@ -72,11 +72,11 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
             </li>
             <li>
               <a href="#completed"><strong>Completed Stages:</strong></a>
-              {totalCompletedStages}
+              {if (totalCompletedStages != completedStages.size) totalCompletedStages else completedStages.size}
             </li>
              <li>
              <a href="#failed"><strong>Failed Stages:</strong></a>
-              {totalFailedStages}
+              {if (totalFailedStages != failedStages.size) totalFailedStages else failedStages.size}
             </li>
           </ul>
         </div>
@@ -89,9 +89,9 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
-        <h4 id="completed">Completed Stages ({totalCompletedStages})</h4> ++
+        <h4 id="completed">Completed Stages ({if (totalCompletedStages != completedStages.size) totalCompletedStages else completedStages.size})</h4> ++
         completedStagesTable.toNodeSeq ++
-        <h4 id ="failed">Failed Stages ({totalFailedStages})</h4> ++
+        <h4 id ="failed">Failed Stages ({if (totalFailedStages != failedStages.size) totalFailedStages else failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
       UIUtils.headerSparkPage("Spark Stages", content, parent)
