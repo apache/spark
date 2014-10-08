@@ -57,9 +57,8 @@ object DataType extends RegexParsers {
 
   protected lazy val structField: Parser[StructField] =
     ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
-      case name ~ tpe ~ nullable  =>
-        // TODO: parse metadata
-        StructField(name, tpe, nullable = nullable, Map.empty)
+      // metadata is not included in StructField.toString
+      case name ~ tpe ~ nullable => StructField(name, tpe, nullable = nullable, Map.empty)
     }
 
   protected lazy val boolVal: Parser[Boolean] =
@@ -336,6 +335,11 @@ case class StructField(
     builder.append(s"${prefix}-- ${name}: ${dataType.simpleString} (nullable = ${nullable})\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
+
+  override def toString: String = {
+    // TODO: Remove this function after SPARK-3713.
+    s"StructField($name,$dataType,$nullable)"
+  }
 }
 
 object StructType {
@@ -356,8 +360,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    nameToField.getOrElse(name,
-      throw new IllegalArgumentException(s"Field $name does not exist."))
+    nameToField.getOrElse(name, throw new IllegalArgumentException(s"Field $name does not exist."))
   }
 
   /**
