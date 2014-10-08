@@ -318,7 +318,7 @@ private[spark] object Utils extends Logging {
    *
    * If `useCache` is true, first attempts to fetch the file to a local cache that's shared 
    * across executors running the same application. `useCache` is used mainly for 
-   * the the executors, not in local mode.
+   * the executors, and not in local mode.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
@@ -341,7 +341,7 @@ private[spark] object Utils extends Logging {
       val raf = new RandomAccessFile(lockFile, "rw")
       // Only one executor entry.
       // The FileLock is only used to control synchronization for executors download file,
-      // it's always safe regardless of lock type(mandatory or advisory).
+      // it's always safe regardless of lock type (mandatory or advisory).
       val lock = raf.getChannel().lock()
       val cachedFile = new File(localDir, cachedFileName)
       try {
@@ -354,8 +354,8 @@ private[spark] object Utils extends Logging {
       if (targetFile.exists && !Files.equal(cachedFile, targetFile)) {
         if (conf.getBoolean("spark.files.overwrite", false)) {
           targetFile.delete()
-          logInfo(("File %s exists and does not match contents of %s, " +
-            "replacing it with %s").format(targetFile, url, url))
+          logInfo((s"File $targetFile exists and does not match contents of $url, " +
+            s"replacing it with $url"))
         } else {
           throw new SparkException(s"File $targetFile exists and does not match contents of $url")
         }
