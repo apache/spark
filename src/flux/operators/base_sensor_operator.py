@@ -1,9 +1,10 @@
 from datetime import datetime
+import logging
 from time import sleep
 
-from flux.models import BaseOperator
+from flux import settings
+from flux.models import BaseOperator, TaskInstance, State
 from flux.hooks import MySqlHook
-
 
 class BaseSensorOperator(BaseOperator):
 
@@ -39,7 +40,7 @@ class MySqlSensorOperator(BaseSensorOperator):
         self.hook = MySqlHook(mysql_dbid=mysql_dbid)
 
     def poke(self):
-        print('Poking: ' + self.sql)
+        logging.info('Poking: ' + self.sql)
         records = self.hook.get_records(self.sql)
         if not records:
             return False
@@ -49,3 +50,36 @@ class MySqlSensorOperator(BaseSensorOperator):
             else:
                 return True
             print(records[0][0])
+
+class ExternalTaskSensor(BaseSensorOperator):
+    """
+    Waits for a task to complete in a different DAG
+    """
+    template_fields = ('execution_date',)
+    __mapper_args__ = {
+        'polymorphic_identity': 'MySqlSensorOperator'
+    }
+
+    def __init__(self, external_dag_id, external_task_id, *args, **kwargs):
+        super(ExternalTaskSensor, self).__init__(*args, **kwargs)
+        self.external_dag_id = external_dag_id
+        self.external_task_id = external_task_id
+        self.execution_date = "{{ execution_date }}"
+
+    def poke(self):
+        logging.info(
+            'Poking for '
+            '{self.external_dag_id}.'
+            '{self.external_task_id} on '
+            '{self.execution_date} ... '.format(**locals()))
+        TI = TaskInstance
+        session = settings.Session()
+        count = session.query(TI).filter(
+            TI.dag_id == self.external_dag_id,
+            TI.task_id == self.external_task_id,
+            TI.state == State.SUCCESS,
+            TI.execution_date == self.execution_date
+        ).count()
+        session.commit()
+        session.close()
+        return count

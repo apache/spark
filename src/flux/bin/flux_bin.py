@@ -42,18 +42,20 @@ def backfill(args):
 
 
 def run(args):
+
+    # Setting up logging
+    directory = settings.BASE_LOG_FOLDER + \
+        "/{args.dag_id}/{args.task_id}".format(args=args)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
     args.execution_date = dateutil.parser.parse(args.execution_date)
     iso = args.execution_date.isoformat()
-    if not args.pickle:
-        directory = settings.BASE_LOG_FOLDER + \
-            "/{args.dag_id}/{args.task_id}".format(args=args)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        filename = "{directory}/{iso}".format(**locals())
-        logging.basicConfig(
-            filename=filename, level=logging.INFO, format=settings.LOG_FORMAT)
+    filename = "{directory}/{iso}".format(**locals())
+    logging.basicConfig(
+        filename=filename, level=logging.INFO, format=settings.LOG_FORMAT)
+    print("Logging into: " + filename)
 
-        print("Logging into: " + filename)
+    if not args.pickle:
         dagbag = DagBag(args.subdir)
         if args.dag_id not in dagbag.dags:
             raise Exception('dag_id could not be found')
@@ -62,19 +64,20 @@ def run(args):
     else:
         session = settings.Session()
         dag_pickle, = session.query(
-            DagPickle.pickle).filter(DagPickle.id==args.pickle).all()[0]
-        dag = pickle.get_object()
+            DagPickle).filter(DagPickle.id==args.pickle).all()
+        dag = dag_pickle.get_object()
         task = dag.get_task(task_id=args.task_id)
+        
+    ti = TaskInstance(task, args.execution_date)
 
     # This is enough to fail the task instance
     def signal_handler(signum, frame):
         logging.error("SIGINT (ctrl-c) received".format(args.task_id))
-
+        ti.error(args.execution_date)
+        sys.exit()
     signal.signal(signal.SIGINT, signal_handler)
 
-    task.run(
-        start_date=args.execution_date,
-        end_date=args.execution_date,
+    ti.run(
         mark_success=args.mark_success,
         force=args.force,
         ignore_dependencies=args.ignore_dependencies)

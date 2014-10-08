@@ -1,5 +1,10 @@
 {% extends "admin/dag.html" %}
 
+{% block head_css %}
+{{ super() }}
+<link href="{{ admin_static.url(filename='datetimepicker/bootstrap-datetimepicker.css') }}" rel="stylesheet">
+{% endblock %}
+
 {% block body %}
 {{ super() }}
 <form method="get">
@@ -34,9 +39,7 @@
       $('#container').highcharts(hc);
 
       // Activating the date time picker widget
-      $('#execution_date').addClass("form-control").datetimepicker();
       $('#execution_date').datetimepicker();
-      console.log($('#execution_date'));
     </script>
 
 {% endblock %}

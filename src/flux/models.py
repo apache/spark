@@ -186,7 +186,7 @@ class TaskInstance(Base):
             "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
             "{pickle} "
-            "{sub_dir} "
+            "{subdir} "
         ).format(**locals())
 
     @property
@@ -216,6 +216,17 @@ class TaskInstance(Base):
             session.commit()
             session.close()
         return state
+
+    def error(self, main_session=None):
+        """
+        Fails the task
+        """
+        session = settings.Session()
+        logging.error("Recording the task instance as FAILED")
+        self.state = State.FAILED
+        session.merge(self)
+        session.commit()
+        session.close()
 
     def refresh_from_db(self, main_session=None):
         session = main_session or settings.Session()
@@ -499,6 +510,7 @@ class BackfillJob(BaseJob):
                             mark_success=mark_success,
                             pickle=pickle)
                     )
+                    ti.state = State.RUNNING
             if task_instances:
                 self.heartbeat()
             executor.heartbeat()
