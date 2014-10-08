@@ -313,7 +313,7 @@ private[hive] case class MetastoreRelation
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = table.getSd.getCols.map(_.toAttribute)
+  val attributes = hiveQlTable.getCols.map(_.toAttribute) 
 
   val output = attributes ++ partitionKeys
 }
