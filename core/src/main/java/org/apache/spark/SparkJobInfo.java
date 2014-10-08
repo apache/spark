@@ -18,8 +18,7 @@
 package org.apache.spark;
 
 public interface SparkJobInfo {
-  int getJobId();
-  int[] getStageIds();
-  SparkStageInfo[] getStages();
-  String getStatus();
+  int jobId();
+  int[] stageIds();
+  String status();
 }

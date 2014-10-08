@@ -21,8 +21,7 @@ private[spark] class StatusAPIImpl(sc: SparkContext) {
   def newJobInfo(jobId: Int): Option[SparkJobInfo] = {
     sc.jobProgressListener.synchronized {
       sc.jobProgressListener.jobIdToData.get(jobId).map { data =>
-        val stageInfos = data.stageIds.flatMap(newStageInfo)
-        new SparkJobInfoImpl(jobId, data.stageIds.toArray, stageInfos.toArray, data.status)
+        new SparkJobInfoImpl(jobId, data.stageIds.toArray, data.status)
       }
     }
   }
@@ -37,24 +36,12 @@ private[spark] class StatusAPIImpl(sc: SparkContext) {
 }
 
 private class SparkJobInfoImpl (
-  jobId: Int,
-  stageIds: Array[Int],
-  stageInfos: Array[SparkStageInfo],
-  status: String)
- extends SparkJobInfo {
-
-  def getJobId: Int = jobId
-  def getStageIds: Array[Int] = stageIds
-  def getStages: Array[SparkStageInfo] = stageInfos
-  def getStatus: String = status
-}
+  val jobId: Int,
+  val stageIds: Array[Int],
+  val status: String)
+ extends SparkJobInfo
 
 private class SparkStageInfoImpl(
-  stageId: Int,
-  name: String)
- extends SparkStageInfo {
-
-  def getStageId: Int = stageId
-  def getName: String = name
-}
-
+  val stageId: Int,
+  val name: String)
+ extends SparkStageInfo

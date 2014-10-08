@@ -18,6 +18,6 @@
 package org.apache.spark;
 
 public interface SparkStageInfo {
-  int getStageId();
-  String getName();
+  int stageId();
+  String name();
 }
