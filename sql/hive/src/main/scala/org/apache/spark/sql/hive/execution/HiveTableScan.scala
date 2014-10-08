@@ -65,7 +65,10 @@ case class HiveTableScan(
   }
 
   @transient
-  private[this] val hadoopReader = new HadoopTableReader(attributes, relation, context)
+  private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
+
+  @transient
+  private[this] val hadoopReader = new HadoopTableReader(attributes, relation, context, hiveExtraConf)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
@@ -97,7 +100,7 @@ case class HiveTableScan(
     hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
   }
 
-  addColumnMetadataToConf(context.hiveconf)
+  addColumnMetadataToConf(hiveExtraConf)
 
   /**
    * Prunes partitions not involve the query plan.
