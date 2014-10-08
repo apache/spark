@@ -89,7 +89,7 @@ private[spark] class MesosSchedulerBackend(
 
   def createExecutorInfo(execId: String): ExecutorInfo = {
     val executorSparkHome = sc.conf.getOption("spark.mesos.executor.home")
-      .orElse(sc.getSparkHome()) // Fall back to driver Spark home for backward compatibility
+      .orElse(sc.getSparkHome) // Fall back to driver Spark home for backward compatibility
       .getOrElse {
         throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
       }

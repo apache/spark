@@ -1100,7 +1100,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dagScheduler == null) {
       throw new SparkException("SparkContext has been shutdown")
     }
-    val callSite = getCallSite()
+    val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
@@ -1182,7 +1182,7 @@ class SparkContext(config: SparkConf) extends Logging {
     func: (TaskContext, Iterator[T]) => U,
     evaluator: ApproximateEvaluator[U, R],
     timeout: Long): PartialResult[R] = {
-    val callSite = getCallSite()
+    val callSite = getCallSite
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
@@ -1203,7 +1203,7 @@ class SparkContext(config: SparkConf) extends Logging {
     resultHandler: (Int, U) => Unit,
     resultFunc: => R): SimpleFutureAction[R] = {
     val cleanF = clean(processPartition)
-    val callSite = getCallSite()
+    val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),

@@ -291,7 +291,7 @@ abstract class DStream[T: ClassTag] (
         // Note that this `getOrCompute` may get called from another DStream which may have
         // set its own call site. So we store its call site in a temporary variable,
         // set this DStream's creation site, generate RDDs and then restore the previous call site.
-        val prevCallSite = ssc.sparkContext.getCallSite()
+        val prevCallSite = ssc.sparkContext.getCallSite
         ssc.sparkContext.setCallSite(creationSite)
         val rddOption = compute(time)
         ssc.sparkContext.setCallSite(prevCallSite)

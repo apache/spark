@@ -480,7 +480,7 @@ private[spark] class TaskSchedulerImpl(
   def getRackForHost(value: String): Option[String] = None
 
   private def waitBackendReady(): Unit = {
-    if (backend.isReady()) {
+    if (backend.isReady) {
       return
     }
     while (!backend.isReady) {

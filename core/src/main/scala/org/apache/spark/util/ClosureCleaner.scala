@@ -181,8 +181,8 @@ private[spark] object ClosureCleaner extends Logging {
       cons.newInstance(params: _*).asInstanceOf[AnyRef]
     } else {
       // Use reflection to instantiate object without calling constructor
-      val rf = sun.reflect.ReflectionFactory.getReflectionFactory
-      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor
+      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
       val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
       val obj = newCtor.newInstance().asInstanceOf[AnyRef]
       if (outer != null) {
