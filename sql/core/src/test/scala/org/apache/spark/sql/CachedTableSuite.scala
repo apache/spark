@@ -69,7 +69,7 @@ class CachedTableSuite extends QueryTest {
   test("calling .unpersist() should drop in-memory columnar cache") {
     table("testData").cache()
     table("testData").count()
-    table("testData").unpersist(true)
+    table("testData").unpersist(blocking = true)
     assertCached(table("testData"), 0)
   }
 

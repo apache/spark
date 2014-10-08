@@ -29,13 +29,14 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
-  private val ADD  = Keyword("ADD")
-  private val DFS  = Keyword("DFS")
-  private val FILE = Keyword("FILE")
-  private val JAR  = Keyword("JAR")
+  protected val ADD  = Keyword("ADD")
+  protected val DFS  = Keyword("DFS")
+  protected val FILE = Keyword("FILE")
+  protected val JAR  = Keyword("JAR")
 
   private val reservedWords =
-    this.getClass
+    this
+      .getClass
       .getMethods
       .filter(_.getReturnType == classOf[Keyword])
       .map(_.invoke(this).asInstanceOf[Keyword].str)
@@ -46,21 +47,21 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
 
   protected lazy val hiveQl: Parser[LogicalPlan] =
     restInput ^^ {
-      case statement => HiveQl.createPlan(statement.trim())
+      case statement => HiveQl.createPlan(statement.trim)
     }
 
   protected lazy val dfs: Parser[LogicalPlan] =
     DFS ~> wholeInput ^^ {
-      case command => NativeCommand(command.trim())
+      case command => NativeCommand(command.trim)
     }
 
   private lazy val addFile: Parser[LogicalPlan] =
     ADD ~ FILE ~> restInput ^^ {
-      case input => AddFile(input)
+      case input => AddFile(input.trim)
     }
 
   private lazy val addJar: Parser[LogicalPlan] =
     ADD ~ JAR ~> restInput ^^ {
-      case input => AddJar(input)
+      case input => AddJar(input.trim)
     }
 }

@@ -46,7 +46,9 @@ private[sql] abstract class AbstractSparkSQLParser
   // Returns the rest of the input string that are not parsed yet
   protected lazy val restInput: Parser[String] = new Parser[String] {
     def apply(in: Input): ParseResult[String] =
-      Success(in.source.toString, in.drop(in.source.length()))
+      Success(
+        in.source.subSequence(in.offset, in.source.length()).toString,
+        in.drop(in.source.length()))
   }
 }
 
@@ -128,19 +130,20 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
   }
 
-  private val AS      = Keyword("AS")
-  private val CACHE   = Keyword("CACHE")
-  private val LAZY    = Keyword("LAZY")
-  private val SET     = Keyword("SET")
-  private val TABLE   = Keyword("TABLE")
-  private val SOURCE  = Keyword("SOURCE")
-  private val UNCACHE = Keyword("UNCACHE")
+  protected val AS      = Keyword("AS")
+  protected val CACHE   = Keyword("CACHE")
+  protected val LAZY    = Keyword("LAZY")
+  protected val SET     = Keyword("SET")
+  protected val TABLE   = Keyword("TABLE")
+  protected val SOURCE  = Keyword("SOURCE")
+  protected val UNCACHE = Keyword("UNCACHE")
 
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
-  private val reservedWords =
-    this.getClass
+  private val reservedWords: Seq[String] =
+    this
+      .getClass
       .getMethods
       .filter(_.getReturnType == classOf[Keyword])
       .map(_.invoke(this).asInstanceOf[Keyword].str)
@@ -168,12 +171,12 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
   private lazy val shell: Parser[LogicalPlan] =
     "!" ~> restInput ^^ {
-      case input => ShellCommand(input)
+      case input => ShellCommand(input.trim)
     }
 
   private lazy val source: Parser[LogicalPlan] =
     SOURCE ~> restInput ^^ {
-      case input => SourceCommand(input)
+      case input => SourceCommand(input.trim)
     }
 
   private lazy val others: Parser[LogicalPlan] =
