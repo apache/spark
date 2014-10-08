@@ -157,7 +157,7 @@ class Node (
     }
     val prefix: String = " " * indentFactor
     if (isLeaf) {
-      prefix + s"Predict: $predict\n"
+      prefix + s"Predict: ${predict.predict}\n"
     } else {
       prefix + s"If ${splitToString(split.get, left=true)}\n" +
         leftNode.get.subtreeToString(indentFactor + 1) +
