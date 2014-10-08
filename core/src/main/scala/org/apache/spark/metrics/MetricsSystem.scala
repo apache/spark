@@ -83,10 +83,10 @@ private[spark] class MetricsSystem private (
   def getServletHandlers = metricsServlet.map(_.getHandlers).getOrElse(Array())
 
   metricsConfig.initialize()
-  registerSources()
-  registerSinks()
 
   def start() {
+    registerSources()
+    registerSinks()
     sinks.foreach(_.start)
   }
 
@@ -98,10 +98,39 @@ private[spark] class MetricsSystem private (
     sinks.foreach(_.report())
   }
 
+  /**
+   * Build a name that uniquely identifies each metric source.
+   * The name is structured as follows: <app ID>.<executor ID (or "driver")>.<source name>.
+   * If either ID is not available, this defaults to just using <source name>.
+   *
+   * @param source Metric source to be named by this method.
+   * @return An unique metric name for each combination of
+   *         application, executor/driver and metric source.
+   */
+  def buildRegistryName(source: Source): String = {
+    val appId = conf.getOption("spark.app.id")
+    val executorId = conf.getOption("spark.executor.id")
+    val defaultName = MetricRegistry.name(source.sourceName)
+
+    if (instance == "driver" || instance == "executor") {
+      if (appId.isDefined && executorId.isDefined) {
+        MetricRegistry.name(appId.get, executorId.get, source.sourceName)
+      } else {
+        // Only Driver and Executor are set spark.app.id and spark.executor.id.
+        // For instance, Master and Worker are not related to a specific application.
+        val warningMsg = s"Using default name $defaultName for source because %s is not set."
+        if (appId.isEmpty) { logWarning(warningMsg.format("spark.app.id")) }
+        if (executorId.isEmpty) { logWarning(warningMsg.format("spark.executor.id")) }
+        defaultName
+      }
+    } else { defaultName }
+  }
+
   def registerSource(source: Source) {
     sources += source
     try {
-      registry.register(source.sourceName, source.metricRegistry)
+      val regName = buildRegistryName(source)
+      registry.register(regName, source.metricRegistry)
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
@@ -109,8 +138,9 @@ private[spark] class MetricsSystem private (
 
   def removeSource(source: Source) {
     sources -= source
+    val regName = buildRegistryName(source)
     registry.removeMatching(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name.startsWith(source.sourceName)
+      def matches(name: String, metric: Metric): Boolean = name.startsWith(regName)
     })
   }
 
@@ -125,7 +155,7 @@ private[spark] class MetricsSystem private (
         val source = Class.forName(classPath).newInstance()
         registerSource(source.asInstanceOf[Source])
       } catch {
-        case e: Exception => logError("Source class " + classPath + " cannot be instantialized", e)
+        case e: Exception => logError("Source class " + classPath + " cannot be instantiated", e)
       }
     }
   }
