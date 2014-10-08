@@ -32,7 +32,7 @@ else:
 from pyspark.serializers import PickleSerializer
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.tests import PySparkTestCase
+from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
 _have_scipy = False
