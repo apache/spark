@@ -84,6 +84,17 @@ class PrimitiveTypeSingleton(type):
         return cls._instances[cls]
 
 
+class NullType(DataType):
+
+    """Spark SQL NullType"""
+
+    __metaclass__ = PrimitiveTypeSingleton
+
+    def __eq__(self, other):
+        # because they should be the same object
+        return self is other
+
+
 class PrimitiveType(DataType):
 
     """Spark SQL PrimitiveType"""
@@ -443,6 +454,7 @@ def _parse_datatype_string(datatype_string):
 
 # Mapping Python types to Spark SQL DateType
 _type_mappings = {
+    type(None): NullType,
     bool: BooleanType,
     int: IntegerType,
     long: LongType,
@@ -459,22 +471,22 @@ _type_mappings = {
 
 def _infer_type(obj):
     """Infer the DataType from obj"""
-    if obj is None:
-        raise ValueError("Can not infer type for None")
-
     dataType = _type_mappings.get(type(obj))
     if dataType is not None:
         return dataType()
 
     if isinstance(obj, dict):
-        if not obj:
-            raise ValueError("Can not infer type for empty dict")
-        key, value = obj.iteritems().next()
-        return MapType(_infer_type(key), _infer_type(value), True)
+        for key, value in obj.iteritems():
+            if key is not None and value is not None:
+                return MapType(_infer_type(key), _infer_type(value), True)
+        else:
+            return MapType(NullType(), NullType(), True)
     elif isinstance(obj, (list, array)):
-        if not obj:
-            raise ValueError("Can not infer type for empty list/array")
-        return ArrayType(_infer_type(obj[0]), True)
+        for v in obj:
+            if v is not None:
+                return ArrayType(_infer_type(obj[0]), True)
+        else:
+            return ArrayType(NullType(), True)
     else:
         try:
             return _infer_schema(obj)
@@ -507,60 +519,85 @@ def _infer_schema(row):
     return StructType(fields)
 
 
-def _create_converter(obj, dataType):
+def _has_nulltype(dt):
+    """ Return whether there is NullType in `dt` or not """
+    if isinstance(dt, StructType):
+        return any(_has_nulltype(f.dataType) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_nulltype((dt.elementType))
+    elif isinstance(dt, MapType):
+        return _has_nulltype(dt.keyType) or _has_nulltype(dt.valueType)
+    else:
+        return isinstance(dt, NullType)
+
+
+def _merge_type(a, b):
+    if isinstance(a, NullType):
+        return b
+    elif isinstance(b, NullType):
+        return a
+    elif type(a) is not type(b):
+        raise TypeError("Can not merge type %s and %s" % (a, b))
+
+    # same type
+    if isinstance(a, StructType):
+        # TODO: merge different fields
+        if [f.name for f in a.fields] != [f.name for f in b.fields]:
+            raise TypeError("Can not merge two StructType with different fields")
+        fields = [StructField(fa.name, _merge_type(fa.dataType, fb.dataType), True)
+                  for fa, fb in zip(a.fields, b.fields)]
+        return StructType(fields)
+
+    elif isinstance(a, ArrayType):
+        return ArrayType(_merge_type(a.elementType, b.elementType), True)
+    elif isinstance(a, MapType):
+        return MapType(_merge_type(a.keyType, b.keyType),
+                       _merge_type(a.valueType, b.valueType),
+                       True)
+    else:
+        return a
+
+
+def _create_converter(dataType):
     """Create an converter to drop the names of fields in obj """
     if isinstance(dataType, ArrayType):
-        conv = _create_converter(obj[0], dataType.elementType)
+        conv = _create_converter(dataType.elementType)
         return lambda row: map(conv, row)
 
     elif isinstance(dataType, MapType):
-        value = obj.values()[0]
-        conv = _create_converter(value, dataType.valueType)
+        conv = _create_converter(dataType.valueType)
         return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+
+    elif isinstance(dataType, NullType):
+        return lambda x: None
 
     elif not isinstance(dataType, StructType):
         return lambda x: x
 
     # dataType must be StructType
     names = [f.name for f in dataType.fields]
+    converters = [_create_converter(f.dataType) for f in dataType.fields]
 
-    if isinstance(obj, dict):
-        conv = lambda o: tuple(o.get(n) for n in names)
+    def convert_struct(obj):
+        if obj is None:
+            return
 
-    elif isinstance(obj, tuple):
-        if hasattr(obj, "_fields"):  # namedtuple
-            conv = tuple
-        elif hasattr(obj, "__FIELDS__"):
-            conv = tuple
-        elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
-            conv = lambda o: tuple(v for k, v in o)
+        if isinstance(obj, dict):
+            vs = [obj.get(n) for n in names]
+
+        elif isinstance(obj, tuple):
+            if all(isinstance(x, tuple) and len(x) == 2 for x in obj):
+                vs = [v for k, v in obj]
+            else:
+                vs = obj
+
+        elif hasattr(obj, "__dict__"):  # object
+            vs = [obj.__dict__.get(n) for n in names]
         else:
-            raise ValueError("unexpected tuple")
+            raise ValueError("Unexpected obj: %s" % obj)
+        return tuple([conv(v) for conv, v in zip(converters, vs)])
 
-    elif hasattr(obj, "__dict__"):  # object
-        conv = lambda o: [o.__dict__.get(n, None) for n in names]
-
-    if all(isinstance(f.dataType, PrimitiveType) for f in dataType.fields):
-        return conv
-
-    row = conv(obj)
-    convs = [_create_converter(v, f.dataType)
-             for v, f in zip(row, dataType.fields)]
-
-    def nested_conv(row):
-        return tuple(f(v) for f, v in zip(convs, conv(row)))
-
-    return nested_conv
-
-
-def _drop_schema(rows, schema):
-    """ all the names of fields, becoming tuples"""
-    iterator = iter(rows)
-    row = iterator.next()
-    converter = _create_converter(row, schema)
-    yield converter(row)
-    for i in iterator:
-        yield converter(i)
+    return convert_struct
 
 
 _BRACKETS = {'(': ')', '[': ']', '{': '}'}
@@ -672,7 +709,7 @@ def _infer_schema_type(obj, dataType):
         return _infer_type(obj)
 
     if not obj:
-        raise ValueError("Can not infer type from empty value")
+        return NullType()
 
     if isinstance(dataType, ArrayType):
         eType = _infer_schema_type(obj[0], dataType.elementType)
@@ -994,18 +1031,21 @@ class SQLContext(object):
                                       self._sc._javaAccumulator,
                                       str(returnType))
 
-    def inferSchema(self, rdd):
+    def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
 
-        We peek at the first row of the RDD to determine the fields' names
-        and types. Nested collections are supported, which include array,
-        dict, list, Row, tuple, namedtuple, or object.
+        If `samplingRatio` is presented, it infer schema by all of the sampled
+        dataset.
 
-        All the rows in `rdd` should have the same type with the first one,
-        or it will cause runtime exceptions.
+        Otherwise, it peeks first few rows of the RDD to determine the fields'
+        names and types. Nested collections are supported, which include array,
+        dict, list, Row, tuple, namedtuple, or object.
 
         Each row could be L{pyspark.sql.Row} object or namedtuple or objects,
         using dict is deprecated.
+
+        If some of rows has different types with inferred types, it may cause
+        runtime exceptions.
 
         >>> rdd = sc.parallelize(
         ...     [Row(field1=1, field2="row1"),
@@ -1042,8 +1082,23 @@ class SQLContext(object):
             warnings.warn("Using RDD of dict to inferSchema is deprecated,"
                           "please use pyspark.sql.Row instead")
 
-        schema = _infer_schema(first)
-        rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
+        if samplingRatio is None:
+            schema = _infer_schema(first)
+            if _has_nulltype(schema):
+                for row in rdd.take(100)[1:]:
+                    schema = _merge_type(schema, _infer_schema(row))
+                    if not _has_nulltype(schema):
+                        break
+                else:
+                    warnings.warn("Some of types cannot be determined by the "
+                                  "first 100 rows, please try again with sampling")
+        else:
+            if samplingRatio > 0.99:
+                rdd = rdd.sample(False, float(samplingRatio))
+            schema = rdd.map(_infer_schema).reduce(_merge_type)
+
+        converter = _create_converter(schema)
+        rdd = rdd.map(converter)
         return self.applySchema(rdd, schema)
 
     def applySchema(self, rdd, schema):
@@ -1161,7 +1216,7 @@ class SQLContext(object):
         jschema_rdd = self._ssql_ctx.parquetFile(path).toJavaSchemaRDD()
         return SchemaRDD(jschema_rdd, self)
 
-    def jsonFile(self, path, schema=None):
+    def jsonFile(self, path, schema=None, samplingRatio=1.0):
         """
         Loads a text file storing one JSON object per line as a
         L{SchemaRDD}.
@@ -1169,8 +1224,8 @@ class SQLContext(object):
         If the schema is provided, applies the given schema to this
         JSON dataset.
 
-        Otherwise, it goes through the entire dataset once to determine
-        the schema.
+        Otherwise, it samples the dataset with ratio `samplingRatio` to
+        determine the schema.
 
         >>> import tempfile, shutil
         >>> jsonFile = tempfile.mkdtemp()
@@ -1216,20 +1271,20 @@ class SQLContext(object):
         [Row(f1=u'row1', f2=None, f3=None)...Row(f1=u'row3', f2=[], f3=None)]
         """
         if schema is None:
-            srdd = self._ssql_ctx.jsonFile(path)
+            srdd = self._ssql_ctx.jsonFile(path, samplingRatio)
         else:
             scala_datatype = self._ssql_ctx.parseDataType(str(schema))
             srdd = self._ssql_ctx.jsonFile(path, scala_datatype)
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
-    def jsonRDD(self, rdd, schema=None):
+    def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
         """Loads an RDD storing one JSON object per string as a L{SchemaRDD}.
 
         If the schema is provided, applies the given schema to this
         JSON dataset.
 
-        Otherwise, it goes through the entire dataset once to determine
-        the schema.
+        Otherwise, it samples the dataset with ratio `samplingRatio` to
+        determine the schema.
 
         >>> srdd1 = sqlCtx.jsonRDD(json)
         >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
@@ -1286,7 +1341,7 @@ class SQLContext(object):
         keyed._bypass_serializer = True
         jrdd = keyed._jrdd.map(self._jvm.BytesToString())
         if schema is None:
-            srdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
+            srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), samplingRatio)
         else:
             scala_datatype = self._ssql_ctx.parseDataType(str(schema))
             srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
