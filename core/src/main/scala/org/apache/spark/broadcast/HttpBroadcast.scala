@@ -153,7 +153,8 @@ private[broadcast] object HttpBroadcast extends Logging {
   private def createServer(conf: SparkConf) {
     broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf))
     val broadcastPort = conf.getInt("spark.broadcast.port", 0)
-    server = new HttpServer(broadcastDir, securityManager, broadcastPort, "HTTP broadcast server")
+    server = new HttpServer(broadcastDir, securityManager,
+      broadcastPort, "HTTP broadcast server", conf)
     server.start()
     serverUri = server.uri
     logInfo("Broadcast server started at " + serverUri)
@@ -196,6 +197,7 @@ private[broadcast] object HttpBroadcast extends Logging {
       logDebug("broadcast not using security")
       uc = new URL(url).openConnection()
     }
+    Utils.setupSecureURLConnection(uc, securityManager)
 
     val in = {
       uc.setReadTimeout(httpReadTimeout)

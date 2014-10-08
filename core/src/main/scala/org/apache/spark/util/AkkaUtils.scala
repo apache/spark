@@ -27,7 +27,7 @@ import akka.pattern.ask
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException, SSLOptions}
 
 /**
  * Various utility classes for working with Akka.
@@ -91,8 +91,10 @@ private[spark] object AkkaUtils extends Logging {
     val secureCookie = if (isAuthOn) secretKey else ""
     logDebug("In createActorSystem, requireCookie is: " + requireCookie)
 
-    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
-      ConfigFactory.parseString(
+    val akkaSslConfig = securityManager.sslOptions.createAkkaConfig.getOrElse(ConfigFactory.empty())
+
+    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String])
+      .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
       s"""
       |akka.daemonic = on
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
@@ -196,9 +198,22 @@ private[spark] object AkkaUtils extends Logging {
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
-    val url = s"akka.tcp://$driverActorSystemName@$driverHost:$driverPort/user/$name"
+    val url = address(driverActorSystemName, driverHost, driverPort, name, conf)
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+  }
+
+  def protocol(conf: SparkConf): String = {
+    if (conf.getBoolean("ssl.enabled", defaultValue = false)) {
+      "akka.ssl.tcp"
+    } else {
+      "akka.tcp"
+    }
+  }
+
+  def address(systemName: String, host: String, port: Any, actorName: String,
+              conf: SparkConf): String = {
+    s"${protocol(conf)}://$systemName@$host:$port/user/$actorName"
   }
 }

@@ -22,6 +22,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import javax.net.ssl.HttpsURLConnection
 
 import org.apache.log4j.PropertyConfigurator
 
@@ -376,6 +377,7 @@ private[spark] object Utils extends Logging {
           logDebug("fetchFile not using security")
           uc = new URL(url).openConnection()
         }
+        Utils.setupSecureURLConnection(uc, securityMgr)
 
         val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
         uc.setConnectTimeout(timeout)
@@ -1514,6 +1516,20 @@ private[spark] object Utils extends Logging {
     pro.put("log4j.appender.console.layout.ConversionPattern",
       "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
     PropertyConfigurator.configure(pro)
+  }
+
+  /**
+   * If the given URL connection is HttpsURLConnection, it sets the SSL socket factory and
+   * the host verifier from the given security manager.
+   */
+  def setupSecureURLConnection(urlConnection: URLConnection, sm: SecurityManager): URLConnection = {
+    urlConnection match {
+      case https: HttpsURLConnection =>
+        sm.sslSocketFactory.foreach(https.setSSLSocketFactory)
+        sm.hostnameVerifier.foreach(https.setHostnameVerifier)
+        https
+      case connection => connection
+    }
   }
 
 }

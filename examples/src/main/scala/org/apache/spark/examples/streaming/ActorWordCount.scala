@@ -162,8 +162,8 @@ object ActorWordCount {
      */
 
     val lines = ssc.actorStream[String](
-      Props(new SampleActorReceiver[String]("akka.tcp://test@%s:%s/user/FeederActor".format(
-        host, port.toInt))), "SampleReceiver")
+      Props(new SampleActorReceiver[String](
+        AkkaUtils.address("test", host, port, "FeederActor", sparkConf))), "SampleReceiver")
 
     // compute wordcount
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()

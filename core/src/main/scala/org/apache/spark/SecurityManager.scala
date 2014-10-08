@@ -18,7 +18,11 @@
 package org.apache.spark
 
 import java.net.{Authenticator, PasswordAuthentication}
+import java.security.KeyStore
+import java.security.cert.X509Certificate
+import javax.net.ssl._
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -190,6 +194,44 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
         }
       }
     )
+  }
+
+  private[spark] val sslOptions = SSLOptions.parse(ns = "ssl", conf = sparkConf)
+
+  private[spark] val (sslSocketFactory, hostnameVerifier) = if (sslOptions.enabled) {
+    val trustStoreManagers =
+      for (trustStore <- sslOptions.trustStore) yield {
+        val ks = KeyStore.getInstance(KeyStore.getDefaultType)
+        ks.load(FileUtils.openInputStream(sslOptions.trustStore.get),
+          sslOptions.trustStorePassword.get.toCharArray)
+
+        val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+        tmf.init(ks)
+        tmf.getTrustManagers
+      }
+
+    lazy val credulousTrustStoreManagers = Array({
+      logWarning("Using 'accept-all' trust manager for SSL connections.")
+      new X509TrustManager {
+        override def getAcceptedIssuers: Array[X509Certificate] = null
+
+        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+
+        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+      }: TrustManager
+    })
+
+    val sslContext = SSLContext.getInstance(sslOptions.protocol.getOrElse("Default"))
+    sslContext.init(null, trustStoreManagers getOrElse credulousTrustStoreManagers, null)
+
+    val hostVerifier = new HostnameVerifier {
+      override def verify(s: String, sslSession: SSLSession): Boolean = true
+    }
+
+    (Some(sslContext.getSocketFactory), Some(hostVerifier))
+  } else {
+    val sslContext = SSLContext.getDefault
+    (None, None)
   }
 
   /**

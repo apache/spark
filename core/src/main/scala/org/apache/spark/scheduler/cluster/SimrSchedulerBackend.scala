@@ -38,7 +38,7 @@ private[spark] class SimrSchedulerBackend(
   override def start() {
     super.start()
 
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    val driverUrl = "%s://%s@%s:%s/user/%s".format(
       SparkEnv.driverActorSystemName,
       sc.conf.get("spark.driver.host"),
       sc.conf.get("spark.driver.port"),

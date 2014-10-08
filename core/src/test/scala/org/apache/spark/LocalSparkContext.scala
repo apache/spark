@@ -38,6 +38,7 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
   }
 
   def resetSparkContext() = {
+    System.clearProperty("spark.ssl.configFile")
     LocalSparkContext.stop(sc)
     sc = null
   }
