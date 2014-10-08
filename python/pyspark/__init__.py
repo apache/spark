@@ -20,33 +20,21 @@ PySpark is the Python API for Spark.
 
 Public classes:
 
-  - L{SparkContext<pyspark.context.SparkContext>}
+  - :class:`SparkContext`:
       Main entry point for Spark functionality.
-  - L{RDD<pyspark.rdd.RDD>}
+  - L{RDD}
       A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-  - L{Broadcast<pyspark.broadcast.Broadcast>}
+  - L{Broadcast}
       A broadcast variable that gets reused across tasks.
-  - L{Accumulator<pyspark.accumulators.Accumulator>}
+  - L{Accumulator}
       An "add-only" shared variable that tasks can only add values to.
-  - L{SparkConf<pyspark.conf.SparkConf>}
+  - L{SparkConf}
       For configuring Spark.
-  - L{SparkFiles<pyspark.files.SparkFiles>}
+  - L{SparkFiles}
       Access files shipped with jobs.
-  - L{StorageLevel<pyspark.storagelevel.StorageLevel>}
+  - L{StorageLevel}
       Finer-grained cache persistence levels.
 
-Spark SQL:
-  - L{SQLContext<pyspark.sql.SQLContext>}
-      Main entry point for SQL functionality.
-  - L{SchemaRDD<pyspark.sql.SchemaRDD>}
-      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-      addition to normal RDD operations, SchemaRDDs also support SQL.
-  - L{Row<pyspark.sql.Row>}
-      A Row of data returned by a Spark SQL query.
-
-Hive:
-  - L{HiveContext<pyspark.context.HiveContext>}
-      Main entry point for accessing data stored in Apache Hive..
 """
 
 # The following block allows us to import python's random instead of mllib.random for scripts in
