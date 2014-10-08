@@ -35,7 +35,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
-        val semiJoin = joins.LeftSemiJoinHash(leftKeys, rightKeys, planLater(left), planLater(right))
+        val semiJoin = joins.LeftSemiJoinHash(
+          leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // no predicate can be evaluated by matching hash keys
       case logical.Join(left, right, LeftSemi, condition) =>
