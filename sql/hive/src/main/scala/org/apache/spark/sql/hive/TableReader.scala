@@ -55,7 +55,7 @@ class HadoopTableReader(
     @transient relation: MetastoreRelation,
     @transient sc: HiveContext,
     @transient hiveExtraConf: HiveConf)
-  extends TableReader {	
+  extends TableReader {
 
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
   // it is smaller than what Spark suggests.
