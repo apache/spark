@@ -44,7 +44,7 @@ private[spark] class HashShuffleWriter[K, V](
   metrics.shuffleWriteMetrics = Some(writeMetrics)
 
   private val blockManager = SparkEnv.get.blockManager
-  private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
+  private val ser = Serializer.getSerializer(dep.serializer.orNull)
   private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser,
     writeMetrics)
 
