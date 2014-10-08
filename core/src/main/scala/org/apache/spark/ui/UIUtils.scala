@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui
 
-import scala.xml.Node
-
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
+
+import scala.xml.Node
 
 import org.apache.spark.Logging
 
