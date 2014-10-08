@@ -673,4 +673,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       ("true", "false") :: Nil)
   }
+
+  test("metadata is propagated correctly") {
+    val person = sql("SELECT * FROM person")
+    val schema = person.schema
+    val docKey = "doc"
+    val docValue = "first name"
+    val schemaWithMeta = new StructType(Seq(
+      schema("id"), schema("name").copy(metadata = Map(docKey -> docValue)), schema("age")))
+    val personWithMeta = applySchema(person, schemaWithMeta)
+    def validateMetadata(rdd: SchemaRDD): Unit = {
+      assert(rdd.schema("name").metadata(docKey) === docValue)
+    }
+    personWithMeta.registerTempTable("personWithMeta")
+    validateMetadata(personWithMeta.select('name))
+    validateMetadata(personWithMeta.select("name".attr))
+    validateMetadata(personWithMeta.select('id, 'name))
+    validateMetadata(sql("SELECT * FROM personWithMeta"))
+    validateMetadata(sql("SELECT id, name FROM personWithMeta"))
+    validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
+    validateMetadata(sql("SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
+  }
 }
