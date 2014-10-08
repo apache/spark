@@ -752,7 +752,7 @@ class RDD(object):
         """
         Find the maximum item in this RDD.
 
-        @param key: A function used to generate key for comparing
+        :param key: A function used to generate key for comparing
 
         >>> rdd = sc.parallelize([1.0, 5.0, 43.0, 10.0])
         >>> rdd.max()
@@ -768,7 +768,7 @@ class RDD(object):
         """
         Find the minimum item in this RDD.
 
-        @param key: A function used to generate key for comparing
+        :param key: A function used to generate key for comparing
 
         >>> rdd = sc.parallelize([2.0, 5.0, 43.0, 10.0])
         >>> rdd.min()
@@ -1115,9 +1115,9 @@ class RDD(object):
         converted for output using either user specified converters or, by default,
         L{org.apache.spark.api.python.JavaToWritableConverter}.
 
-        @param conf: Hadoop job configuration, passed in as a dict
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1135,16 +1135,16 @@ class RDD(object):
         C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
-        @param path: path to Hadoop file
-        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+        :param path: path to Hadoop file
+        :param outputFormatClass: fully qualified classname of Hadoop OutputFormat
                (e.g. "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.IntWritable", None by default)
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.Text", None by default)
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop job configuration, passed in as a dict (None by default)
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1161,9 +1161,9 @@ class RDD(object):
         converted for output using either user specified converters or, by default,
         L{org.apache.spark.api.python.JavaToWritableConverter}.
 
-        @param conf: Hadoop job configuration, passed in as a dict
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1182,17 +1182,17 @@ class RDD(object):
         C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
-        @param path: path to Hadoop file
-        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+        :param path: path to Hadoop file
+        :param outputFormatClass: fully qualified classname of Hadoop OutputFormat
                (e.g. "org.apache.hadoop.mapred.SequenceFileOutputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.IntWritable", None by default)
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.Text", None by default)
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: (None by default)
-        @param compressionCodecClass: (None by default)
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: (None by default)
+        :param compressionCodecClass: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1212,8 +1212,8 @@ class RDD(object):
             1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
-        @param path: path to sequence file
-        @param compressionCodecClass: (None by default)
+        :param path: path to sequence file
+        :param compressionCodecClass: (None by default)
         """
         pickledRDD = self._toPickleSerialization()
         batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
@@ -2009,7 +2009,7 @@ class RDD(object):
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
 
-        @param relativeSD Relative accuracy. Smaller values create
+        :param relativeSD Relative accuracy. Smaller values create
                            counters that require more space.
                            It must be greater than 0.000017.
 
