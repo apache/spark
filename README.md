@@ -8,11 +8,11 @@ The Flux UI make it easy to visualize pipelines running in production, monitor p
 
 ### Screenshots
 ##### Tree View
-![Tree View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/tree.png)
+![Tree View](https://raw.githubusercontent.com/mistercrunch/Flux/master/src/www/static/screenshots/tree.png)
 ##### Graph View
-![Graph View](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/graph.png)
+![Graph View](https://raw.githubusercontent.com/mistercrunch/Flux/master/src/www/static/screenshots/graph.png)
 ##### Gantt Chart
-![Gantt Chart](https://raw.githubusercontent.com/mistercrunch/Flux/master/www/static/screenshots/gantt.png)
+![Gantt Chart](https://raw.githubusercontent.com/mistercrunch/Flux/master/src/www/static/screenshots/gantt.png)
 
 
 ### Principles
@@ -60,5 +60,6 @@ Here are steps to get started using MySQL as a backend for the metadata database
     ./flux webserver
     # Now browse to http://localhost:8080
 
-##### Tutorial
-[iPython Notebook](http://www.disney.com)
+Tutorial
+--------
+[iPython Notebook](http://nbviewer.ipython.org/github/mistercrunch/Flux/blob/master/docs/Flux%20Tutorial.ipynb)
