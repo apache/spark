@@ -281,7 +281,7 @@ class StructField(DataType):
 
     """
 
-    def __init__(self, name, dataType, nullable):
+    def __init__(self, name, dataType, nullable=True):
         """Creates a StructField
         :param name: the name of this field.
         :param dataType: the data type of this field.
@@ -537,19 +537,23 @@ def _merge_type(a, b):
     elif isinstance(b, NullType):
         return a
     elif type(a) is not type(b):
+        # TODO: type cast (such as int -> long)
         raise TypeError("Can not merge type %s and %s" % (a, b))
 
     # same type
     if isinstance(a, StructType):
-        # TODO: merge different fields
-        if [f.name for f in a.fields] != [f.name for f in b.fields]:
-            raise TypeError("Can not merge two StructType with different fields")
-        fields = [StructField(fa.name, _merge_type(fa.dataType, fb.dataType), True)
-                  for fa, fb in zip(a.fields, b.fields)]
+        nfs = dict((f.name, f.dataType) for f in b.fields)
+        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType())))
+                  for f in a.fields]
+        names = set([f.name for f in fields])
+        for n in nfs:
+            if n not in names:
+                fields.append(StructField(n, nfs[n]))
         return StructType(fields)
 
     elif isinstance(a, ArrayType):
         return ArrayType(_merge_type(a.elementType, b.elementType), True)
+
     elif isinstance(a, MapType):
         return MapType(_merge_type(a.keyType, b.keyType),
                        _merge_type(a.valueType, b.valueType),
@@ -582,20 +586,24 @@ def _create_converter(dataType):
         if obj is None:
             return
 
-        if isinstance(obj, dict):
-            vs = [obj.get(n) for n in names]
-
-        elif isinstance(obj, tuple):
-            if all(isinstance(x, tuple) and len(x) == 2 for x in obj):
-                vs = [v for k, v in obj]
+        if isinstance(obj, tuple):
+            if hasattr(obj, "fields"):
+                d = dict(zip(obj.fields, obj))
+            if hasattr(obj, "__FIELDS__"):
+                d = dict(zip(obj.__FIELDS__, obj))
+            elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
+                d = dict(obj)
             else:
-                vs = obj
+                raise ValueError("unexpected tuple: %s" % obj)
 
+        elif isinstance(obj, dict):
+            d = obj
         elif hasattr(obj, "__dict__"):  # object
-            vs = [obj.__dict__.get(n) for n in names]
+            d = obj.__dict__
         else:
             raise ValueError("Unexpected obj: %s" % obj)
-        return tuple([conv(v) for conv, v in zip(converters, vs)])
+
+        return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
 
     return convert_struct
 
