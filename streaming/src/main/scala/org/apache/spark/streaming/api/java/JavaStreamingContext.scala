@@ -250,18 +250,18 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
-   * @tparam K Key type for reading HDFS file
-   * @tparam V Value type for reading HDFS file
-   * @tparam F Input format for reading HDFS file
+   * @param inputFormatClass Input format for reading HDFS file
+   * @param keyClass Key type for reading HDFS file
+   * @param valueClass Value type for reading HDFS file
    */
   def fileStream[K, V, F <: NewInputFormat[K, V]](
-      directory: String): JavaPairInputDStream[K, V] = {
-    implicit val cmk: ClassTag[K] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
-    implicit val cmv: ClassTag[V] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
-    implicit val cmf: ClassTag[F] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[F]]
+    directory: String,
+    inputFormatClass: Class[F],
+    keyClass: Class[K],
+    valueClass: Class[V]): JavaPairInputDStream[K, V] = {
+    implicit val cmk: ClassTag[K] = ClassTag(keyClass)
+    implicit val cmv: ClassTag[V] = ClassTag(valueClass)
+    implicit val cmf: ClassTag[F] = ClassTag(inputFormatClass)
     ssc.fileStream[K, V, F](directory)
   }
 

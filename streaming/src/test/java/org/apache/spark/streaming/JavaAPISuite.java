@@ -30,6 +30,13 @@ import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
+import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+
+import org.apache.spark.Accumulator;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -1701,6 +1708,53 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @Test
   public void testTextFileStream() {
     JavaDStream<String> test = ssc.textFileStream("/tmp/foo");
+  }
+
+
+  @Test
+  public void testFileStream() throws Exception {
+    Tuple2<Long, Integer> data = new Tuple2(1L, 123456);
+    List<Tuple2<Long, Integer>> test_input = new ArrayList<Tuple2<Long, Integer> >();
+    test_input.add(data);
+    JavaPairRDD<Long, Integer> rdd = ssc.sc().parallelizePairs(test_input);
+    File tempDir = Files.createTempDir();
+    JavaPairDStream<LongWritable, IntWritable> testRaw = ssc.fileStream(
+      tempDir.getAbsolutePath(), SequenceFileInputFormat.class, LongWritable.class, IntWritable.class);
+    JavaPairDStream<Long, Integer> test = testRaw.mapToPair(
+      new PairFunction<Tuple2<LongWritable, IntWritable>, Long, Integer>() {
+        public Tuple2<Long, Integer> call(Tuple2<LongWritable, IntWritable> input) {
+          return new Tuple2(input._1().get(), input._2().get());
+        }
+      });
+    JavaPairRDD<LongWritable, IntWritable> saveable = rdd.mapToPair(
+      new PairFunction<Tuple2<Long, Integer>, LongWritable, IntWritable>() {
+        public Tuple2<LongWritable, IntWritable> call(Tuple2<Long, Integer> record) {
+          return new Tuple2(new LongWritable(record._1), new IntWritable(record._2));
+        }});
+    final Accumulator<Integer> elem = ssc.sc().intAccumulator(0);
+    final Accumulator<Integer> total = ssc.sc().intAccumulator(0);
+    test.foreachRDD(new Function<JavaPairRDD<Long, Integer>, Void>() {
+        public Void call(JavaPairRDD<Long, Integer> rdd) {
+          rdd.foreach(new VoidFunction<Tuple2<Long, Integer>>() {
+              public void call(Tuple2<Long, Integer> e) {
+                if (e._1() == 1l) {
+                  elem.add(1);
+                }
+                total.add(1);
+              }
+            });
+          return null;
+        }
+      });
+    Thread.sleep(1000);
+    System.out.println("Saving old data to " + tempDir.getAbsolutePath());
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/1412725941839/",
+                                    LongWritable.class, IntWritable.class,
+                                    SequenceFileOutputFormat.class);
+    test.print();
+    Thread.sleep(5000);
+    Assert.assertEquals(new Long(1L), new Long(total.value()));
+    Assert.assertEquals(new Long(1L), new Long(elem.value()));
   }
 
   @Test
