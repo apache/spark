@@ -30,10 +30,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 
 class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
+  val verbose = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).isDefined
+
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty)(
@@ -61,6 +63,9 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val buffer = new ArrayBuffer[String]()
 
     def captureOutput(source: String)(line: String) {
+      if (verbose) {
+        logInfo(s"$source> $line")
+      }
       buffer += s"$source> $line"
       if (line.contains(expectedAnswers(next.get()))) {
         if (next.incrementAndGet() == expectedAnswers.size) {
@@ -75,7 +80,8 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
     Future {
       val exitValue = process.exitValue()
-      logInfo(s"Spark SQL CLI process exit value: $exitValue")
+      foundAllExpectedAnswers.tryFailure(
+        new SparkException(s"Spark SQL CLI process exit value: $exitValue"))
     }
 
     try {
@@ -118,7 +124,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
         -> "Time taken: ",
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
-      "DROP TABLE hive_test"
+      "DROP TABLE hive_test;"
         -> "Time taken: "
     )
   }
