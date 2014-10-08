@@ -47,7 +47,8 @@ trait HashJoin {
   @transient protected lazy val streamSideKeyGenerator =
     newMutableProjection(streamedKeys, streamedPlan.output)
 
-  protected def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] = {
+  protected def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] =
+  {
     // TODO: Use Spark's HashMap implementation.
 
     val hashTable = new java.util.HashMap[Row, CompactBuffer[Row]]()
