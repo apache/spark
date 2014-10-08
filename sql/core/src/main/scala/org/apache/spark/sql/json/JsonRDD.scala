@@ -20,6 +20,7 @@ package org.apache.spark.sql.json
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 import scala.math.BigDecimal
+import java.sql.Timestamp
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
@@ -361,6 +362,14 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
+  private def toTimestamp(value: Any): Timestamp = {
+    value match {
+        case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
+        case value: java.lang.Long => new Timestamp(value)
+        case value: java.lang.String => Timestamp.valueOf(value)
+      }
+    }  
+
   private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
     if (value == null) {
       null
@@ -377,6 +386,7 @@ private[sql] object JsonRDD extends Logging {
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
+        case TimestampType => toTimestamp(value)
       }
     }
   }
