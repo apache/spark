@@ -471,7 +471,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(stats1.impurity === stats2.impurity)
       assert(stats1.leftImpurity === stats2.leftImpurity)
       assert(stats1.rightImpurity === stats2.rightImpurity)
-      assert(children1(i).predict === children2(i).predict)
+      assert(children1(i).predict.predict === children2(i).predict.predict)
     }
   }
 
