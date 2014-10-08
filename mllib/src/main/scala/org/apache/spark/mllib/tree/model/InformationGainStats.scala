@@ -26,6 +26,8 @@ import org.apache.spark.annotation.DeveloperApi
  * @param impurity current node impurity
  * @param leftImpurity left node impurity
  * @param rightImpurity right node impurity
+ * @param leftPredict left node predict
+ * @param rightPredict right node predict
  */
 @DeveloperApi
 class InformationGainStats(

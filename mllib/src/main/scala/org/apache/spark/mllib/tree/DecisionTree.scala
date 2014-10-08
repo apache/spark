@@ -532,10 +532,9 @@ object DecisionTree extends Serializable with Logging {
       Some(mutableNodeToFeatures.toMap)
     }
 
+    // array of nodes to train indexed by node index in group
     val nodes = {
-      val nodes = Array.tabulate[Node](numNodes) { nodeIndex =>
-        null
-      }
+      val nodes = Array.fill[Node](numNodes)(null)
       nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
         nodesForTree.foreach { node =>
           nodes(treeToNodeToIndexInfo(treeIndex)(node.id).nodeIndexInGroup) = node

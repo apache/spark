@@ -32,6 +32,7 @@ import org.apache.spark.mllib.linalg.Vector
  *
  * @param id integer node id, from 1
  * @param predict predicted value at the node
+ * @param impurity current node impurity
  * @param isLeaf whether the leaf is a node
  * @param split split to calculate left and right nodes
  * @param leftNode  left child
@@ -172,9 +173,20 @@ private[tree] object Node {
   /**
    * Return a node with the given node id (but nothing else set).
    */
-  def emptyNode(nodeIndex: Int): Node = new Node(nodeIndex, new Predict(0), 0.0,
+  def emptyNode(nodeIndex: Int): Node = new Node(nodeIndex, new Predict(Double.MinValue), -1.0,
     false, None, None, None, None)
 
+  /**
+   * Construct a node with nodeIndex, predict, impurity and isLeaf parameters.
+   * This is used in `DecisionTree.findBestSplits` to construct child nodes
+   * after find best splits for each node.
+   * Other fields are set at next level.
+   * @param nodeIndex integer node id, from 1
+   * @param predict predicted value at the node
+   * @param impurity current node impurity
+   * @param isLeaf whether the leaf is a node
+   * @return newed node instance
+   */
   def apply(
       nodeIndex: Int,
       predict: Predict,
