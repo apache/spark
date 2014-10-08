@@ -762,9 +762,16 @@ class SQLTests(ReusedPySparkTestCase):
         srdd = self.sqlCtx.inferSchema(rdd)
         self.assertEqual([], srdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], srdd.map(lambda r: r.s).collect())
+        srdd.registerTempTable("test")
+        result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
+        self.assertEqual(1, result.first()[0])
+
         srdd2 = self.sqlCtx.inferSchema(rdd, 1.0)
         self.assertEqual({}, srdd.map(lambda r: r.d).first())
         self.assertEqual(srdd.schema(), srdd2.schema())
+        srdd.registerTempTable("test2")
+        result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+        self.assertEqual(1, result.first()[0])
 
 
 class InputFormatTests(ReusedPySparkTestCase):
