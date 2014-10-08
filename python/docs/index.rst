@@ -19,11 +19,11 @@ Contents:
 Core classes:
 ---------------
 
-    :class:`SparkContext`
+    :class:`pyspark.SparkContext`
 
     Main entry point for Spark functionality.
 
-    :class:`RDD`
+    :class:`pyspark.RDD`
 
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
 
