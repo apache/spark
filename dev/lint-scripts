@@ -170,15 +170,6 @@ function check_valid_character() {
   fi
 }
 
-        HAS_ERROR=1
-      fi
-      echo "========================== $f ==========================" >> "$LOG_FILE"
-      echo "$line" >> "$LOG_FILE"
-      echo "" >> "$LOG_FILE"
-    fi
-  done
-}
-
 # if path represents a directory, we can check files in the directory.
 # else, path is checked as a regular file.
 for path in "${TARGET_PATHS[@]}"; do
