@@ -136,7 +136,7 @@ echo "========================================================================="
 echo "Running Script style checks"
 echo "========================================================================="
 
-CURRENT_BLOCK=$BLOCK_SCEIPT_STYLE
+CURRENT_BLOCK=$BLOCK_SCRIPT_STYLE
 
 ./dev/lint-scripts
 
