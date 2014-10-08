@@ -1713,26 +1713,41 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testFileStream() throws Exception {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
+    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    ssc.checkpoint("checkpoint");
+    // Set up some sequence files for streaming to read in
     Tuple2<Long, Integer> data = new Tuple2(1L, 123456);
     List<Tuple2<Long, Integer>> test_input = new ArrayList<Tuple2<Long, Integer> >();
     test_input.add(data);
     JavaPairRDD<Long, Integer> rdd = ssc.sc().parallelizePairs(test_input);
     File tempDir = Files.createTempDir();
+    JavaPairRDD<LongWritable, IntWritable> saveable = rdd.mapToPair(
+      new PairFunction<Tuple2<Long, Integer>, LongWritable, IntWritable>() {
+        public Tuple2<LongWritable, IntWritable> call(Tuple2<Long, Integer> record) {
+          return new Tuple2(new LongWritable(record._1), new IntWritable(record._2));
+        }});
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/1/",
+                                    LongWritable.class, IntWritable.class,
+                                    SequenceFileOutputFormat.class);
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/2/",
+                                    LongWritable.class, IntWritable.class,
+                                    SequenceFileOutputFormat.class);
+
+    // Construct a file stream from the above saved data
     JavaPairDStream<LongWritable, IntWritable> testRaw = ssc.fileStream(
-      tempDir.getAbsolutePath(), SequenceFileInputFormat.class, LongWritable.class, IntWritable.class);
+      tempDir.getAbsolutePath() + "/" , SequenceFileInputFormat.class, LongWritable.class,
+      IntWritable.class, false);
     JavaPairDStream<Long, Integer> test = testRaw.mapToPair(
       new PairFunction<Tuple2<LongWritable, IntWritable>, Long, Integer>() {
         public Tuple2<Long, Integer> call(Tuple2<LongWritable, IntWritable> input) {
           return new Tuple2(input._1().get(), input._2().get());
         }
       });
-    JavaPairRDD<LongWritable, IntWritable> saveable = rdd.mapToPair(
-      new PairFunction<Tuple2<Long, Integer>, LongWritable, IntWritable>() {
-        public Tuple2<LongWritable, IntWritable> call(Tuple2<Long, Integer> record) {
-          return new Tuple2(new LongWritable(record._1), new IntWritable(record._2));
-        }});
     final Accumulator<Integer> elem = ssc.sc().intAccumulator(0);
     final Accumulator<Integer> total = ssc.sc().intAccumulator(0);
+    final Accumulator<Integer> calls = ssc.sc().intAccumulator(0);
     test.foreachRDD(new Function<JavaPairRDD<Long, Integer>, Void>() {
         public Void call(JavaPairRDD<Long, Integer> rdd) {
           rdd.foreach(new VoidFunction<Tuple2<Long, Integer>>() {
@@ -1743,23 +1758,15 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
                 total.add(1);
               }
             });
+          calls.add(1);
           return null;
         }
       });
-    test.print();
-    Thread.sleep(1000);
-    System.out.println("Saving old data to " + tempDir.getAbsolutePath() +"/1/");
-    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/2/",
-                                    LongWritable.class, IntWritable.class,
-                                    SequenceFileOutputFormat.class);
-    Thread.sleep(1000);
-    System.out.println("Saving old data to " + tempDir.getAbsolutePath() +"/2/");
-    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/2/",
-                                    LongWritable.class, IntWritable.class,
-                                    SequenceFileOutputFormat.class);
-
-    Assert.assertEquals(new Long(2L), new Long(total.value()));
-    Assert.assertEquals(new Long(2L), new Long(elem.value()));
+    ssc.start();
+    Thread.sleep(5000);
+    Assert.assertTrue(calls.value() > 0);
+    Assert.assertEquals(new Long(4L), new Long(total.value()));
+    Assert.assertEquals(new Long(4L), new Long(elem.value()));
   }
 
   @Test

@@ -258,11 +258,11 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     directory: String,
     inputFormatClass: Class[F],
     keyClass: Class[K],
-    valueClass: Class[V]): JavaPairInputDStream[K, V] = {
+    valueClass: Class[V], newFilesOnly: Boolean = true): JavaPairInputDStream[K, V] = {
     implicit val cmk: ClassTag[K] = ClassTag(keyClass)
     implicit val cmv: ClassTag[V] = ClassTag(valueClass)
     implicit val cmf: ClassTag[F] = ClassTag(inputFormatClass)
-    ssc.fileStream[K, V, F](directory)
+    ssc.fileStream[K, V, F](directory, newFilesOnly)
   }
 
   /**
