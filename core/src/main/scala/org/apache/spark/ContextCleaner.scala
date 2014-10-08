@@ -75,7 +75,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * longer in scope.
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", true)
+    "spark.cleaner.referenceTracking.blocking", defaultValue = true)
 
   /**
    * Whether the cleaning thread will block on shuffle cleanup tasks.
@@ -88,7 +88,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * resolved.
    */
   private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking.shuffle", false)
+    "spark.cleaner.referenceTracking.blocking.shuffle", defaultValue = false)
 
   @volatile private var stopped = false
 
@@ -182,7 +182,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
     try {
       logDebug("Cleaning broadcast " + broadcastId)
-      broadcastManager.unbroadcast(broadcastId, true, blocking)
+      broadcastManager.unbroadcast(broadcastId, removeFromDriver = true, blocking = blocking)
       listeners.foreach(_.broadcastCleaned(broadcastId))
       logInfo("Cleaned broadcast " + broadcastId)
     } catch {

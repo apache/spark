@@ -34,16 +34,15 @@ case class Aggregator[K, V, C] (
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
 
-  private val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", true)
+  private val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", defaultValue = true)
 
   @deprecated("use combineValuesByKey with TaskContext argument", "0.9.0")
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]): Iterator[(K, C)] =
     combineValuesByKey(iter, null)
 
-  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]],
-                         context: TaskContext): Iterator[(K, C)] = {
+  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]], context: TaskContext): Iterator[(K, C)] = {
     if (!externalSorting) {
-      val combiners = new AppendOnlyMap[K,C]
+      val combiners = new AppendOnlyMap[K, C]
       var kv: Product2[K, V] = null
       val update = (hadValue: Boolean, oldValue: C) => {
         if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
@@ -67,14 +66,11 @@ case class Aggregator[K, V, C] (
   }
 
   @deprecated("use combineCombinersByKey with TaskContext argument", "0.9.0")
-  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]]) : Iterator[(K, C)] =
-    combineCombinersByKey(iter, null)
+  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]]): Iterator[(K, C)] = combineCombinersByKey(iter, null)
 
-  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]], context: TaskContext)
-      : Iterator[(K, C)] =
-  {
+  def combineCombinersByKey(iter: Iterator[_ <: Product2[K, C]], context: TaskContext): Iterator[(K, C)] = {
     if (!externalSorting) {
-      val combiners = new AppendOnlyMap[K,C]
+      val combiners = new AppendOnlyMap[K, C]
       var kc: Product2[K, C] = null
       val update = (hadValue: Boolean, oldValue: C) => {
         if (hadValue) mergeCombiners(oldValue, kc._2) else kc._2
