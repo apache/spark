@@ -95,6 +95,21 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   }
 
   /**
+   * Start a timer to remove executors (if there is not already one).
+   * This is called when a new executor is marked as idle, meaning it has not been scheduled
+   * a task for a certain duration. Each removal is triggered when there have been idle
+   * executors for more than `removeExecutorIntervalMs`.
+   */
+  def startRemoveExecutorTimer(): Unit = {
+    if (removeExecutorTimer.isEmpty) {
+      logInfo(s"Starting remove executor timer (to expire in $removeExecutorIntervalMs ms)")
+      removeExecutorTimer = Some(new Timer)
+      removeExecutorTimer.get.schedule(
+        new RemoveExecutorTimerTask, removeExecutorIntervalMs, removeExecutorIntervalMs)
+    }
+  }
+
+  /**
    * Cancel any existing timer that adds executors.
    * This is called when the pending task queue is drained.
    */
@@ -104,6 +119,18 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       timer.cancel()
     }
     addExecutorTimer = None
+  }
+
+  /**
+   * Cancel any existing timer that removes executors.
+   * This is called when there are no more idle executors.
+   */
+  def cancelRemoveExecutorTimer(): Unit = {
+    removeExecutorTimer.foreach { timer =>
+      logInfo("Canceling remove executor timer because there are no more idle executors!")
+      timer.cancel()
+    }
+    removeExecutorTimer = None
   }
 
   /**
@@ -135,33 +162,6 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
         s"which is the limit.")
     }
     0
-  }
-
-  /**
-   * Start a timer to remove executors (if there is not already one).
-   * This is called when a new executor is marked as idle, meaning it has not been scheduled
-   * a task for a certain duration. Each removal is triggered when there have been idle
-   * executors for more than `removeExecutorIntervalMs`.
-   */
-  def startRemoveExecutorTimer(): Unit = {
-    if (removeExecutorTimer.isEmpty) {
-      logInfo(s"Starting remove executor timer (to expire in $removeExecutorIntervalMs ms)")
-      removeExecutorTimer = Some(new Timer)
-      removeExecutorTimer.get.schedule(
-        new RemoveExecutorTimerTask, removeExecutorIntervalMs, removeExecutorIntervalMs)
-    }
-  }
-
-  /**
-   * Cancel any existing timer that removes executors.
-   * This is called when there are no more idle executors.
-   */
-  def cancelRemoveExecutorTimer(): Unit = {
-    removeExecutorTimer.foreach { timer =>
-      logInfo("Canceling remove executor timer because there are no more idle executors!")
-      timer.cancel()
-    }
-    removeExecutorTimer = None
   }
 
   /**
