@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.JdbcRDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
@@ -35,8 +36,10 @@ import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 import org.apache.spark.sql.json._
+import org.apache.spark.sql.jdbc._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.{Logging, SparkContext}
+import java.sql.{DriverManager, ResultSet}
 
 /**
  * :: AlphaComponent ::
@@ -208,6 +211,54 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
     val appliedSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    applySchema(rowRDD, appliedSchema)
+  }
+
+  /**
+   * Loads from JDBC, returning the ResultSet as a [[SchemaRDD]].
+   * It gets MetaData from ResultSet of PreparedStatement to determine the schema.
+   *
+   * @group userf
+   */
+  def jdbcResultSet(
+      connectString: String,
+      sql: String): SchemaRDD = {
+    jdbcResultSet(connectString, "", "", sql, 0, 0, 1)
+  }
+
+  def jdbcResultSet(
+      connectString: String,
+      username: String,
+      password: String,
+      sql: String): SchemaRDD = {
+    jdbcResultSet(connectString, username, password, sql, 0, 0, 1)
+  }
+
+  def jdbcResultSet(
+      connectString: String,
+      sql: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): SchemaRDD = {
+    jdbcResultSet(connectString, "", "", sql, lowerBound, upperBound, numPartitions)
+  }
+
+  def jdbcResultSet(
+      connectString: String,
+      username: String,
+      password: String,
+      sql: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): SchemaRDD = {
+    val resultSetRDD = new JdbcRDD(
+        sparkContext,
+        () => { DriverManager.getConnection(connectString, username, password) },
+        sql, lowerBound, upperBound, numPartitions,
+        (r: ResultSet) => r
+    )
+    val appliedSchema = JdbcResultSetRDD.inferSchema(resultSetRDD)
+    val rowRDD = JdbcResultSetRDD.jdbcResultSetToRow(resultSetRDD, appliedSchema)
     applySchema(rowRDD, appliedSchema)
   }
 

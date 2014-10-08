@@ -35,14 +35,18 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  * @param getConnection a function that returns an open Connection.
  *   The RDD takes care of closing the connection.
  * @param sql the text of the query.
- *   The query must contain two ? placeholders for parameters used to partition the results.
+ *   The query must contain two ? placeholders for parameters used to partition the results,
+ *   when you wan to use more than one partitions.
  *   E.g. "select title, author from books where ? <= id and id <= ?"
+ *   If numPartitions is set to exactly 1, the query do not need to contain any ? placeholder.
  * @param lowerBound the minimum value of the first placeholder
  * @param upperBound the maximum value of the second placeholder
  *   The lower and upper bounds are inclusive.
+ *   If query do not contain any ? placeholder, lowerBound and upperBound can be set to any value.
  * @param numPartitions the number of partitions.
  *   Given a lowerBound of 1, an upperBound of 20, and a numPartitions of 2,
  *   the query would be executed twice, once with (1, 10) and once with (11, 20)
+ *   If query do not contain any ? placeholder, numPartitions must be set to exactly 1.
  * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
  *   The default maps a ResultSet to an array of Object.
@@ -57,6 +61,8 @@ class JdbcRDD[T: ClassTag](
     mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _)
   extends RDD[T](sc, Nil) with Logging {
 
+  private var schema: Seq[(String, Int, Boolean)] = null
+
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
     val length = 1 + upperBound - lowerBound
@@ -65,6 +71,32 @@ class JdbcRDD[T: ClassTag](
       val end = lowerBound + (((i + 1) * length) / numPartitions).toLong - 1
       new JdbcPartition(i, start, end)
     }).toArray
+  }
+
+  def getSchema: Seq[(String, Int, Boolean)] = {
+    if (null != schema) {
+      return schema
+    }
+
+    val conn = getConnection()
+    val stmt = conn.prepareStatement(sql)
+    val metadata = stmt.getMetaData
+    try {
+      if (null != stmt && ! stmt.isClosed()) {
+        stmt.close()
+      }
+    } catch {
+      case e: Exception => logWarning("Exception closing statement", e)
+    }
+    schema = Seq[(String, Int, Boolean)]()
+    for(i <- 1 to metadata.getColumnCount) {
+      schema :+= (
+        metadata.getColumnName(i),
+        metadata.getColumnType(i),
+        metadata.isNullable(i) == java.sql.ResultSetMetaData.columnNullable
+      )
+    }
+    schema
   }
 
   override def compute(thePart: Partition, context: TaskContext) = new NextIterator[T] {
@@ -81,8 +113,14 @@ class JdbcRDD[T: ClassTag](
       logInfo("statement fetch size set to: " + stmt.getFetchSize + " to force MySQL streaming ")
     }
 
-    stmt.setLong(1, part.lower)
-    stmt.setLong(2, part.upper)
+    val parameterCount = stmt.getParameterMetaData.getParameterCount
+    if (parameterCount > 0) {
+      stmt.setLong(1, part.lower)
+    }
+    if (parameterCount > 1) {
+      stmt.setLong(2, part.upper)
+    }
+
     val rs = stmt.executeQuery()
 
     override def getNext: T = {
