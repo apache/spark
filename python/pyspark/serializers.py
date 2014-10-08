@@ -68,6 +68,7 @@ import sys
 import types
 import collections
 import zlib
+import itertools
 
 from pyspark import cloudpickle
 
@@ -210,6 +211,41 @@ class BatchedSerializer(Serializer):
         return (isinstance(other, BatchedSerializer) and
                 other.serializer == self.serializer)
 
+    def __repr__(self):
+        return "BatchedSerializer<%s>" % str(self.serializer)
+
+
+class AutoBatchedSerializer(BatchedSerializer):
+    """
+    Choose the size of batch automatically based on the size of object
+    """
+
+    def __init__(self, serializer, bestSize=1 << 20):
+        BatchedSerializer.__init__(self, serializer, -1)
+        self.bestSize = bestSize
+
+    def dump_stream(self, iterator, stream):
+        batch, best = 1, self.bestSize
+        iterator = iter(iterator)
+        while True:
+            vs = list(itertools.islice(iterator, batch))
+            if not vs:
+                break
+
+            bytes = self.serializer.dumps(vs)
+            write_int(len(bytes), stream)
+            stream.write(bytes)
+
+            size = len(bytes)
+            if size < best:
+                batch *= 2
+            elif size > best * 10 and batch > 1:
+                batch /= 2
+
+    def __eq__(self, other):
+        return (isinstance(other, AutoBatchedSerializer) and
+                other.serializer == self.serializer)
+
     def __str__(self):
         return "BatchedSerializer<%s>" % str(self.serializer)
 
@@ -243,7 +279,7 @@ class CartesianDeserializer(FramedSerializer):
         return (isinstance(other, CartesianDeserializer) and
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
-    def __str__(self):
+    def __repr__(self):
         return "CartesianDeserializer<%s, %s>" % \
                (str(self.key_ser), str(self.val_ser))
 
@@ -270,7 +306,7 @@ class PairDeserializer(CartesianDeserializer):
         return (isinstance(other, PairDeserializer) and
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
-    def __str__(self):
+    def __repr__(self):
         return "PairDeserializer<%s, %s>" % (str(self.key_ser), str(self.val_ser))
 
 

@@ -54,6 +54,16 @@ object TestData {
       TestData2(3, 2) :: Nil)
   testData2.registerTempTable("testData2")
 
+  case class BinaryData(a: Array[Byte], b: Int)
+  val binaryData: SchemaRDD =
+    TestSQLContext.sparkContext.parallelize(
+      BinaryData("12".getBytes(), 1) ::
+      BinaryData("22".getBytes(), 5) ::
+      BinaryData("122".getBytes(), 3) ::
+      BinaryData("121".getBytes(), 2) ::
+      BinaryData("123".getBytes(), 4) :: Nil)
+  binaryData.registerTempTable("binaryData")
+
   // TODO: There is no way to express null primitives as case classes currently...
   val testData3 =
     logical.LocalRelation('a.int, 'b.int).loadData(

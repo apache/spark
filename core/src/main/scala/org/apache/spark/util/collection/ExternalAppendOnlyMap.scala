@@ -66,23 +66,19 @@ class ExternalAppendOnlyMap[K, V, C](
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager)
-  extends Iterable[(K, C)] with Serializable with Logging {
+  extends Iterable[(K, C)]
+  with Serializable
+  with Logging
+  with Spillable[SizeTracker] {
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
-  private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
   // Number of pairs inserted since last spill; note that we count them even if a value is merged
   // with a previous key in case we're doing something like groupBy where the result grows
-  private var elementsRead = 0L
-
-  // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
-  private val trackMemoryThreshold = 1000
-
-  // How much of the shared memory pool this collection has claimed
-  private var myMemoryThreshold = 0L
+  protected[this] var elementsRead = 0L
 
   /**
    * Size of object batches when reading/writing from serializers.
@@ -95,11 +91,7 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
 
-  // How many times we have spilled so far
-  private var spillCount = 0
-
   // Number of bytes spilled in total
-  private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
@@ -136,19 +128,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     while (entries.hasNext) {
       curEntry = entries.next()
-      if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
-          currentMap.estimateSize() >= myMemoryThreshold)
-      {
-        // Claim up to double our current memory from the shuffle memory pool
-        val currentMemory = currentMap.estimateSize()
-        val amountToRequest = 2 * currentMemory - myMemoryThreshold
-        val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
-        myMemoryThreshold += granted
-        if (myMemoryThreshold <= currentMemory) {
-          // We were granted too little memory to grow further (either tryToAcquire returned 0,
-          // or we already had more memory than myMemoryThreshold); spill the current collection
-          spill(currentMemory)  // Will also release memory back to ShuffleMemoryManager
-        }
+      if (maybeSpill(currentMap, currentMap.estimateSize())) {
+        currentMap = new SizeTrackingAppendOnlyMap[K, C]
       }
       currentMap.changeValue(curEntry._1, update)
       elementsRead += 1
@@ -171,11 +152,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  private def spill(mapSize: Long): Unit = {
-    spillCount += 1
-    val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
-      .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+  override protected[this] def spill(collection: SizeTracker): Unit = {
     val (blockId, file) = diskBlockManager.createTempBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
@@ -231,18 +208,11 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    currentMap = new SizeTrackingAppendOnlyMap[K, C]
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
 
-    // Release our memory back to the shuffle pool so that other threads can grab it
-    shuffleMemoryManager.release(myMemoryThreshold)
-    myMemoryThreshold = 0L
-
     elementsRead = 0
-    _memoryBytesSpilled += mapSize
   }
 
-  def memoryBytesSpilled: Long = _memoryBytesSpilled
   def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**

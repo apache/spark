@@ -59,9 +59,10 @@ abstract class Attribute extends NamedExpression {
 
   def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
+  def withName(newName: String): Attribute
 
   def toAttribute = this
-  def newInstance: Attribute
+  def newInstance(): Attribute
 
 }
 
@@ -136,7 +137,7 @@ case class AttributeReference(
     h
   }
 
-  override def newInstance =
+  override def newInstance() =
     AttributeReference(name, dataType, nullable, metadata)(qualifiers = qualifiers)
 
   /**
@@ -147,6 +148,14 @@ case class AttributeReference(
       this
     } else {
       AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifiers)
+    }
+  }
+
+  override def withName(newName: String): AttributeReference = {
+    if (name == newName) {
+      this
+    } else {
+      AttributeReference(newName, dataType, nullable)(exprId, qualifiers)
     }
   }
 

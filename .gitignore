@@ -1,9 +1,12 @@
 *~
+*.#*
+*#*#
 *.swp
 *.ipr
 *.iml
 *.iws
 .idea/
+.idea_modules/
 sbt/*.jar
 .settings
 .cache
@@ -16,9 +19,11 @@ third_party/libmesos.so
 third_party/libmesos.dylib
 conf/java-opts
 conf/*.sh
+conf/*.cmd
 conf/*.properties
 conf/*.conf
 conf/*.xml
+conf/slaves
 docs/_site
 docs/api
 target/

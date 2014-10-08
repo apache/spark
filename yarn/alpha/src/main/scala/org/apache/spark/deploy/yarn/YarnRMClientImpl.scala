@@ -40,6 +40,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
   private var rpc: YarnRPC = null
   private var resourceManager: AMRMProtocol = _
   private var uiHistoryAddress: String = _
+  private var registered: Boolean = false
 
   override def register(
       conf: YarnConfiguration,
@@ -51,8 +52,11 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     this.rpc = YarnRPC.create(conf)
     this.uiHistoryAddress = uiHistoryAddress
 
-    resourceManager = registerWithResourceManager(conf)
-    registerApplicationMaster(uiAddress)
+    synchronized {
+      resourceManager = registerWithResourceManager(conf)
+      registerApplicationMaster(uiAddress)
+      registered = true
+    }
 
     new YarnAllocationHandler(conf, sparkConf, resourceManager, getAttemptId(), args,
       preferredNodeLocations, securityMgr)
@@ -66,18 +70,24 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     appAttemptId
   }
 
-  override def shutdown(status: FinalApplicationStatus, diagnostics: String = "") = {
-    val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
-      .asInstanceOf[FinishApplicationMasterRequest]
-    finishReq.setAppAttemptId(getAttemptId())
-    finishReq.setFinishApplicationStatus(status)
-    finishReq.setDiagnostics(diagnostics)
-    finishReq.setTrackingUrl(uiHistoryAddress)
-    resourceManager.finishApplicationMaster(finishReq)
+  override def unregister(status: FinalApplicationStatus, diagnostics: String = "") = synchronized {
+    if (registered) {
+      val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
+        .asInstanceOf[FinishApplicationMasterRequest]
+      finishReq.setAppAttemptId(getAttemptId())
+      finishReq.setFinishApplicationStatus(status)
+      finishReq.setDiagnostics(diagnostics)
+      finishReq.setTrackingUrl(uiHistoryAddress)
+      resourceManager.finishApplicationMaster(finishReq)
+    }
   }
 
-  override def getProxyHostAndPort(conf: YarnConfiguration) =
-    YarnConfiguration.getProxyHostAndPort(conf)
+  override def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String) = {
+    val proxy = YarnConfiguration.getProxyHostAndPort(conf)
+    val parts = proxy.split(":")
+    val uriBase = "http://" + proxy + proxyBase
+    Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
+  }
 
   override def getMaxRegAttempts(conf: YarnConfiguration) =
     conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES, YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)

@@ -155,7 +155,8 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * This child listener inherits only the event buffering functionality, but does not actually
    * log the events.
    */
-  private class EventMonster(conf: SparkConf) extends EventLoggingListener("test", conf) {
+  private class EventMonster(conf: SparkConf)
+    extends EventLoggingListener("test", "testdir", conf) {
     logger.close()
   }
 
