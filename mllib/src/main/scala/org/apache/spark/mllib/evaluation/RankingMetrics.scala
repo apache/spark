@@ -17,10 +17,12 @@
 
 package org.apache.spark.mllib.evaluation
 
+import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
+
 
 
 /**
@@ -30,13 +32,13 @@ import org.apache.spark.rdd.RDD
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Experimental
-class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
+class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]) {
 
   /**
    * Returns the precsion@k for each query
    */
   lazy val precAtK: RDD[Array[Double]] = predictionAndLabels.map {case (pred, lab)=>
-    val labSet : Set[Double] = lab.toSet
+    val labSet = lab.toSet
     val n = pred.length
     val topkPrec = Array.fill[Double](n)(0.0)
     var (i, cnt) = (0, 0)
@@ -55,7 +57,7 @@ class RankingMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
    * Returns the average precision for each query
    */
   lazy val avePrec: RDD[Double] = predictionAndLabels.map {case (pred, lab) =>
-    val labSet: Set[Double] = lab.toSet
+    val labSet = lab.toSet
     var (i, cnt, precSum) = (0, 0, 0.0)
     val n = pred.length
 

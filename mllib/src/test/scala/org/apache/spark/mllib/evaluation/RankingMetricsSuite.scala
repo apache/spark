@@ -25,8 +25,8 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
   test("Ranking metrics: map, ndcg") {
     val predictionAndLabels = sc.parallelize(
       Seq(
-        (Array[Double](1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array[Double](1, 2, 3, 4, 5)),
-        (Array[Double](4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array[Double](1, 2, 3))
+        (Array[Int](1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array[Int](1, 2, 3, 4, 5)),
+        (Array[Int](4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array[Int](1, 2, 3))
       ), 2)
     val eps: Double = 1E-5
 
