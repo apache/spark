@@ -988,6 +988,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
       </plugin>
+      <!--
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
@@ -1012,6 +1013,7 @@
           </execution>
         </executions>
       </plugin>
+      -->
     </plugins>
   </build>
 

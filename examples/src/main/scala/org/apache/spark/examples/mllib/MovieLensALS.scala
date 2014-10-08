@@ -22,13 +22,14 @@ import scala.collection.mutable
 import com.esotericsoftware.kryo.Kryo
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.optimization.Constraint._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 import org.apache.spark.Logging
+import org.apache.spark.mllib.optimization.Constraint
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -47,22 +48,26 @@ object MovieLensALS {
       kryo.register(classOf[mutable.BitSet])
     }
   }
-
+  
   case class Params(
       input: String = null,
       kryo: Boolean = false,
       numIterations: Int = 20,
-      lambda: Double = 1.0,
-      lambdaL1: Double = 1.0,
+      userConstraint: String = "SMOOTH",
+      productConstraint: String = "SMOOTH",
+      userLambda: Double = 0.01,
+      productLambda: Double = 0.01,
       rank: Int = 10,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false,
-      qpProblem: Int = 1)
+      implicitPrefs: Boolean = false)
       
   def main(args: Array[String]) {
     val defaultParams = Params()
-
+    
+    val userConstraints = Constraint.values.toList.mkString(",")
+    val productConstraints = Constraint.values.toList.mkString(",")
+    
     val parser = new OptionParser[Params]("MovieLensALS") {
       head("MovieLensALS: an example app for ALS on MovieLens data.")
       opt[Int]("rank")
@@ -71,12 +76,18 @@ object MovieLensALS {
       opt[Int]("numIterations")
         .text(s"number of iterations, default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
-      opt[Double]("lambda")
-        .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
-        .action((x, c) => c.copy(lambda = x))
-      opt[Double]("lambdaL1")
-        .text(s"lambdaL1 (sparsity constant), default: ${defaultParams.lambdaL1}")
-        .action((x, c) => c.copy(lambdaL1 = x))
+      opt[String]("userConstraint")
+      	.text(s"user constraint for quadratic minimization, options ${userConstraints} default: SMOOTH")
+      	.action((x,c) => c.copy(userConstraint = x))
+      opt[String]("productConstraint")
+      	.text(s"product constraint for quadratic minimization, options ${productConstraints} default: SMOOTH")
+      	.action((x,c) => c.copy(productConstraint = x))
+      opt[Double]("lambdaUser")
+        .text(s"lambda for user regularization, default: ${defaultParams.userLambda}")
+        .action((x, c) => c.copy(userLambda = x))
+      opt[Double]("lambdaProduct")
+        .text(s"lambda for product regularization, default: ${defaultParams.productLambda}")
+        .action((x, c) => c.copy(productLambda = x))
       opt[Unit]("kryo")
         .text("use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
@@ -93,16 +104,13 @@ object MovieLensALS {
         .required()
         .text("input paths to a MovieLens dataset of ratings")
         .action((x, c) => c.copy(input = x))
-      opt[Int]("qpProblem")
-      	.text(s"qp problem, default : 1")
-      	.action((x,c) => c.copy(qpProblem = x))
       note(
         """
           |For example, the following command runs this app on a synthetic dataset:
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --lambda 1.0 --lambdaL1 1.0 --kryo --qpProblem 2\
+          |  --rank 5 --numIterations 20 --userConstraint SMOOTH --productConstraint SPARSE --userLambda 0.01 --productLambda 1.0 --kryo\
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)
     }
@@ -175,29 +183,22 @@ object MovieLensALS {
 
     ratings.unpersist(blocking = false)
     
+    val userConstraint = Constraint.withName(params.userConstraint)
+    val productConstraint = Constraint.withName(params.productConstraint)
+    
     val als = new ALS()
       .setRank(params.rank)
       .setIterations(params.numIterations)
-      .setLambda(params.lambda)
-      .setLambdaL1(params.lambdaL1)
+      .setUserConstraint(userConstraint)
+      .setProductConstraint(productConstraint)
+      .setUserLambda(params.userLambda)
+      .setProductLambda(params.productLambda)
       .setImplicitPrefs(params.implicitPrefs)
       .setUserBlocks(params.numUserBlocks)
       .setProductBlocks(params.numProductBlocks)
-      
-      println(s"Qp option ${params.qpProblem}")
     
-    params.qpProblem match {
-      case 1 => println("Unbounded Qp")
-      case 2 => {
-        println("Qp with positivity")
-        als.setNonnegative(true)
-      }
-      case 3 => println("Qp with bounds")
-      case 4 => println("Qp with equality")
-      case 5 => println("Qp with L1 regularization " + params.lambdaL1)
-    }
-    als.setQpProblem(params.qpProblem)
-    
+    println(s"Quadratic minimization userConstraint ${userConstraint} productConstraint ${productConstraint}")
+        
     val model = als.run(training)
    
     val rmse = computeRmse(model, test, params.implicitPrefs)

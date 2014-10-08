@@ -19,14 +19,12 @@ package org.apache.spark.mllib.recommendation
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.math.{abs, sqrt}
+import scala.math.{ abs, sqrt }
 import scala.util.Random
 import scala.util.Sorting
 import scala.util.hashing.byteswap32
-
 import org.jblas.{ DoubleMatrix, SimpleBlas, Solve }
-
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{ DeveloperApi, Experimental }
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.{ Logging, HashPartitioner, Partitioner }
 import org.apache.spark.storage.StorageLevel
@@ -35,17 +33,16 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.mllib.optimization.QuadraticMinimizer
-import breeze.linalg.CSCMatrix
-import breeze.linalg.norm
+import org.apache.spark.mllib.optimization.Constraint._
 import breeze.linalg.DenseVector
+import scala.util.Random
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
  * of the elements within this block, and the list of destination blocks that each user or
  * product will need to send its feature vector to.
  */
-private[recommendation]
-case class OutLinkBlock(elementIds: Array[Int], shouldSend: Array[mutable.BitSet])
+private[recommendation] case class OutLinkBlock(elementIds: Array[Int], shouldSend: Array[mutable.BitSet])
 
 /**
  * In-link information for a user (or product) block. This includes the original user/product IDs
@@ -97,23 +94,23 @@ case class Rating(user: Int, product: Int, rating: Double)
  * preferences rather than explicit ratings given to items.
  */
 class ALS private (
-    private var numUserBlocks: Int,
-    private var numProductBlocks: Int,
-    private var rank: Int,
-    private var iterations: Int,
-    private var lambda: Double,
-      private var lambdaL1: Double,
-
-    private var implicitPrefs: Boolean,
-    private var alpha: Double,
-    private var seed: Long = System.nanoTime()
-  ) extends Serializable with Logging {
+  private var numUserBlocks: Int,
+  private var numProductBlocks: Int,
+  private var rank: Int,
+  private var iterations: Int,
+  private var userConstraint: Constraint,
+  private var productConstraint: Constraint,
+  private var userLambda: Double,
+  private var productLambda: Double,
+  private var implicitPrefs: Boolean,
+  private var alpha: Double,
+  private var seed: Long = System.nanoTime()) extends Serializable with Logging {
   /**
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
    * lambda: 0.01, lambdaL1: 0.0, implicitPrefs: false, alpha: 1.0}.
    */
 
-  def this() = this(-1, -1, 10, 10, 0.01, 0.0, false, 1.0)
+  def this() = this(-1, -1, 10, 10, SMOOTH, SMOOTH, 0.01, 0.01, false, 1.0)
 
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
@@ -153,15 +150,29 @@ class ALS private (
     this
   }
 
-  /** Set the regularization parameter, lambda. Default: 0.01. */
-  def setLambda(lambda: Double): ALS = {
-    this.lambda = lambda
+  /** Set the user regularization parameter, lambda. Default: 0.01. */
+  def setUserLambda(userLambda: Double): ALS = {
+    this.userLambda = userLambda
     this
   }
 
-  /* Set the L1 regularization parameter, lambda. Default : 0.0 */
-  def setLambdaL1(lambdaL1: Double): ALS = {
-    this.lambdaL1 = lambdaL1
+  /* Set the product regularization parameter, lambda. Default : 0.01 */
+  def setProductLambda(productLambda: Double): ALS = {
+    this.productLambda = productLambda
+    this
+  }
+
+  /* Set user constraint, Default: SMOOTH */
+  def setUserConstraint(userConstraint: Constraint): ALS = {
+    this.userConstraint = userConstraint
+    if (this.userConstraint == SPARSE) userBeta = 0.0
+    this
+  }
+
+  /* Set product constraint, Default: SMOOTH */
+  def setProductConstraint(productConstraint: Constraint): ALS = {
+    this.productConstraint = productConstraint
+    if (this.productConstraint == SPARSE) productBeta = 0.0
     this
   }
 
@@ -187,25 +198,10 @@ class ALS private (
     this
   }
 
-  /** If true, do alternating nonnegative least squares. */
-  private var nonnegative = false
-
-  /**
-   * Set whether the least-squares problems solved at each iteration should have
-   * nonnegativity constraints.
-   */
-
-  def setNonnegative(b: Boolean): ALS = {
-    this.nonnegative = b
-    this
-  }
-
-  private var qpProblem = 1
-
-  def setQpProblem(p: Int): ALS = {
-    this.qpProblem = p
-    this
-  }
+  //beta for elastic net, 1.0 SMOOTH 0.0 SPARSE
+  //User driven elastic net beta tuning not supported yet
+  private var userBeta = 1.0
+  private var productBeta = 1.0
 
   /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
@@ -224,7 +220,7 @@ class ALS private (
     } else {
       this.numProductBlocks
     }
-    
+
     val userPartitioner = new ALSPartitioner(numUserBlocks)
     val productPartitioner = new ALSPartitioner(numProductBlocks)
 
@@ -273,9 +269,10 @@ class ALS private (
         users.setName(s"users-$iter").persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
-        
+
+        //product update
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          rank, lambda, lambdaL1, alpha, YtY)
+          rank, productConstraint, productBeta * productLambda, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
@@ -284,23 +281,26 @@ class ALS private (
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
+        //user update
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          rank, lambda, lambdaL1, alpha, XtX)
+          rank, userConstraint, userBeta * userLambda, alpha, XtX)
         previousUsers.unpersist()
       }
     } else {
       for (iter <- 1 to iterations) {
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
+        //product update
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          rank, lambda, lambdaL1, alpha, YtY = None)
+          rank, productConstraint, productBeta * productLambda, alpha, YtY = None)
         if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
           products.checkpoint()
         }
         products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
+        //user update
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          rank, lambda, lambdaL1, alpha, YtY = None)
+          rank, userConstraint, userBeta * userLambda, alpha, YtY = None)
         users.setName(s"users-$iter")
       }
     }
@@ -389,10 +389,11 @@ class ALS private (
    * Flatten out blocked user or product factors into an RDD of (id, factor vector) pairs
    */
   private def unblockFactors(
-      blockedFactors: RDD[(Int, Array[Array[Double]])],
-      outLinks: RDD[(Int, OutLinkBlock)]): RDD[(Int, Array[Double])] = {
-    blockedFactors.join(outLinks).flatMap { case (b, (factors, outLinkBlock)) =>
-      for (i <- 0 until factors.length) yield (outLinkBlock.elementIds(i), factors(i))
+    blockedFactors: RDD[(Int, Array[Array[Double]])],
+    outLinks: RDD[(Int, OutLinkBlock)]): RDD[(Int, Array[Double])] = {
+    blockedFactors.join(outLinks).flatMap {
+      case (b, (factors, outLinkBlock)) =>
+        for (i <- 0 until factors.length) yield (outLinkBlock.elementIds(i), factors(i))
     }
   }
 
@@ -401,7 +402,7 @@ class ALS private (
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
   private def makeOutLinkBlock(numProductBlocks: Int, ratings: Array[Rating],
-      productPartitioner: Partitioner): OutLinkBlock = {
+    productPartitioner: Partitioner): OutLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
@@ -417,7 +418,7 @@ class ALS private (
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
   private def makeInLinkBlock(numProductBlocks: Int, ratings: Array[Rating],
-      productPartitioner: Partitioner): InLinkBlock = {
+    productPartitioner: Partitioner): InLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val userIdToPos = userIds.zipWithIndex.toMap
     // Split out our ratings by product block
@@ -450,10 +451,10 @@ class ALS private (
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
   private def makeLinkRDDs(
-      numUserBlocks: Int,
-      numProductBlocks: Int,
-      ratingsByUserBlock: RDD[(Int, Rating)],
-      productPartitioner: Partitioner): (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) = {
+    numUserBlocks: Int,
+    numProductBlocks: Int,
+    ratingsByUserBlock: RDD[(Int, Rating)],
+    productPartitioner: Partitioner): (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) = {
     val grouped = ratingsByUserBlock.partitionBy(new HashPartitioner(numUserBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
       val ratings = elements.map(_._2).toArray
@@ -488,118 +489,109 @@ class ALS private (
    * by destination and joins them with the in-link info to figure out how to update each user.
    * It returns an RDD of new feature vectors for each user block.
    */
-   private def updateFeatures(
-      numUserBlocks: Int,
-      products: RDD[(Int, Array[Array[Double]])],
-      productOutLinks: RDD[(Int, OutLinkBlock)],
-      userInLinks: RDD[(Int, InLinkBlock)],
-      rank: Int,
-      lambda: Double,
-      lambdaL1: Double,
-      alpha: Double,
-      YtY: Option[Broadcast[DoubleMatrix]]): RDD[(Int, Array[Array[Double]])] = {
-    productOutLinks.join(products).flatMap { case (bid, (outLinkBlock, factors)) =>
+  private def updateFeatures(
+    numUserBlocks: Int,
+    products: RDD[(Int, Array[Array[Double]])],
+    productOutLinks: RDD[(Int, OutLinkBlock)],
+    userInLinks: RDD[(Int, InLinkBlock)],
+    rank: Int,
+    constraint: Constraint,
+    lambda: Double,
+    alpha: Double,
+    YtY: Option[Broadcast[DoubleMatrix]]): RDD[(Int, Array[Array[Double]])] = {
+    productOutLinks.join(products).flatMap {
+      case (bid, (outLinkBlock, factors)) =>
         val toSend = Array.fill(numUserBlocks)(new ArrayBuffer[Array[Double]])
         for (p <- 0 until outLinkBlock.elementIds.length; userBlock <- 0 until numUserBlocks) {
           if (outLinkBlock.shouldSend(p)(userBlock)) {
             toSend(userBlock) += factors(p)
           }
         }
-        toSend.zipWithIndex.map{ case (buf, idx) => (idx, (bid, buf.toArray)) }
+        toSend.zipWithIndex.map { case (buf, idx) => (idx, (bid, buf.toArray)) }
     }.groupByKey(new HashPartitioner(numUserBlocks))
-     .join(userInLinks)
-     .mapValues{ case (messages, inLinkBlock) =>
-        updateBlock(messages, inLinkBlock, rank, lambda, lambdaL1, alpha, YtY)
+      .join(userInLinks)
+      .mapValues {
+        case (messages, inLinkBlock) =>
+          updateBlock(messages, inLinkBlock, rank, constraint, lambda, alpha, YtY)
       }
-   }
-   
-  private def diagnose(H: DoubleMatrix, f: DoubleMatrix,
-    qpResult: DenseVector[Double], lsResult: DenseVector[Double]) {
-    println("H")
-    println(H)
-    println("f")
-    println(f)
-    println("qpResult")
-    println(qpResult)
-    println("lsResult")
-    println(lsResult)
   }
-  
+
+  private def diagnose(H: DoubleMatrix, f: DoubleMatrix) {
+    logInfo("H")
+    logInfo(H.toString())
+    logInfo("f")
+    logInfo(f.toString())
+  }
+
   /**
    * Compute the new feature vectors for a block of the users matrix given the list of factors
    * it received from each product and its InLinkBlock.
    */
   private def updateBlock(messages: Iterable[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
-      rank: Int, lambda: Double, lambdaL1: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]])
-    : Array[Array[Double]] =
-  {
-    // Sort the incoming block factor messages by block ID and make them an array
-    val blockFactors = messages.toSeq.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
-    val numProductBlocks = blockFactors.length
-    val numUsers = inLinkBlock.elementIds.length
+    rank: Int, constraint: Constraint, lambda: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]]): Array[Array[Double]] =
+    {
+      // Sort the incoming block factor messages by block ID and make them an array
+      val blockFactors = messages.toSeq.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
+      val numProductBlocks = blockFactors.length
+      val numUsers = inLinkBlock.elementIds.length
 
-    // We'll sum up the XtXes using vectors that represent only the lower-triangular part, since
-    // the matrices are symmetric
-    val triangleSize = rank * (rank + 1) / 2
-    val userXtX = Array.fill(numUsers)(DoubleMatrix.zeros(triangleSize))
-    val userXy = Array.fill(numUsers)(DoubleMatrix.zeros(rank))
+      // We'll sum up the XtXes using vectors that represent only the lower-triangular part, since
+      // the matrices are symmetric
+      val triangleSize = rank * (rank + 1) / 2
+      val userXtX = Array.fill(numUsers)(DoubleMatrix.zeros(triangleSize))
+      val userXy = Array.fill(numUsers)(DoubleMatrix.zeros(rank))
 
-    // Some temp variables to avoid memory allocation
-    val tempXtX = DoubleMatrix.zeros(triangleSize)
-    val fullXtX = DoubleMatrix.zeros(rank, rank)
+      // Some temp variables to avoid memory allocation
+      val tempXtX = DoubleMatrix.zeros(triangleSize)
+      val fullXtX = DoubleMatrix.zeros(rank, rank)
 
-    // Count the number of ratings each user gives to provide user-specific regularization
-    val numRatings = Array.fill(numUsers)(0)
+      // Count the number of ratings each user gives to provide user-specific regularization
+      val numRatings = Array.fill(numUsers)(0)
 
-    // Compute the XtX and Xy values for each user by adding products it rated in each product
-    // block
-    for (productBlock <- 0 until numProductBlocks) {
-      var p = 0
-      while (p < blockFactors(productBlock).length) {
-        val x = wrapDoubleArray(blockFactors(productBlock)(p))
-        tempXtX.fill(0.0)
-        dspr(1.0, x, tempXtX)
-        val (us, rs) = inLinkBlock.ratingsForBlock(productBlock)(p)
-        if (implicitPrefs) {
-          var i = 0
-          while (i < us.length) {
-            numRatings(us(i)) += 1
-            // Extension to the original paper to handle rs(i) < 0. confidence is a function
-            // of |rs(i)| instead so that it is never negative:
-            val confidence = 1 + alpha * abs(rs(i))
-            SimpleBlas.axpy(confidence - 1.0, tempXtX, userXtX(us(i)))
-            // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
-            // means we try to reconstruct 0. We add terms only where P = 1, so, term below
-            // is now only added for rs(i) > 0:
-            if (rs(i) > 0) {
-              SimpleBlas.axpy(confidence, x, userXy(us(i)))
+      // Compute the XtX and Xy values for each user by adding products it rated in each product
+      // block
+      for (productBlock <- 0 until numProductBlocks) {
+        var p = 0
+        while (p < blockFactors(productBlock).length) {
+          val x = wrapDoubleArray(blockFactors(productBlock)(p))
+          tempXtX.fill(0.0)
+          dspr(1.0, x, tempXtX)
+          val (us, rs) = inLinkBlock.ratingsForBlock(productBlock)(p)
+          if (implicitPrefs) {
+            var i = 0
+            while (i < us.length) {
+              numRatings(us(i)) += 1
+              // Extension to the original paper to handle rs(i) < 0. confidence is a function
+              // of |rs(i)| instead so that it is never negative:
+              val confidence = 1 + alpha * abs(rs(i))
+              SimpleBlas.axpy(confidence - 1.0, tempXtX, userXtX(us(i)))
+              // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
+              // means we try to reconstruct 0. We add terms only where P = 1, so, term below
+              // is now only added for rs(i) > 0:
+              if (rs(i) > 0) {
+                SimpleBlas.axpy(confidence, x, userXy(us(i)))
+              }
+              i += 1
             }
-            i += 1
+          } else {
+            var i = 0
+            while (i < us.length) {
+              numRatings(us(i)) += 1
+              userXtX(us(i)).addi(tempXtX)
+              SimpleBlas.axpy(rs(i), x, userXy(us(i)))
+              i += 1
+            }
           }
-        } else {
-          var i = 0
-          while (i < us.length) {
-            numRatings(us(i)) += 1
-            userXtX(us(i)).addi(tempXtX)
-            SimpleBlas.axpy(rs(i), x, userXy(us(i)))
-            i += 1
-          }
+          p += 1
         }
-        p += 1
       }
-    }
-    
-      var lsTime: Long = 0
-      var directQpTime: Long = 0
-      var failed: Long = 0
       
-      val ws = if (nonnegative) NNLS.createWorkspace(rank)
-      else null
+      //TO DO : Merge NNLS with QuadraticMinimizer for iterative version
+      val ws = if (constraint == POSITIVE) NNLS.createWorkspace(rank) else null
 
-      if (nonnegative) qpProblem = 2
+      val quadraticMinimizer = QuadraticMinimizer(rank, constraint, lambda)
+      var slowConvergence = 0
 
-      val quadraticMinimizer = QuadraticMinimizer(rank, qpProblem, lambdaL1)
-      
       // Solve the least-squares problem for each user and return the new feature vectors
       val factors = Array.range(0, numUsers).map { index =>
         // Compute the full XtX matrix from the lower-triangular part we got above
@@ -608,79 +600,44 @@ class ALS private (
         val regParam = numRatings(index) * lambda
         var i = 0
         while (i < rank) {
-        	fullXtX.data(i * rank + i) += regParam
-        	i += 1
+          fullXtX.data(i * rank + i) += regParam
+          i += 1
         }
-      
+
         // Solve the resulting matrix, which is symmetric and positive-definite
         val result = if (implicitPrefs) {
           val H = fullXtX.add(YtY.get.value)
           val f = userXy(index).mul(-1)
-          
-          val (qmResult, converged) = quadraticMinimizer.solve(H,f)
-          val qpResult = DenseVector(qmResult.data)
-          
-          val lsStart = System.nanoTime()
-          val result = DenseVector(solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws))
-          lsTime += System.nanoTime - lsStart
-          
-          if(qpProblem == 1 || qpProblem == 2) {
-        	  if(norm(qpResult - result, 2) > 1E-2) {
-        		  println("ADMM QP failed converged " + converged)
-        		  diagnose(H, f, qpResult, result)
-        		  failed += 1
-        	  }
-          } else {
-        	  if(!converged) {
-        		  println("ADMM QP did not converge")
-        		  diagnose(H, f, qpResult, result)
-        		  failed += 1
-        	  }
-          }
-          qpResult.data
+          val (qmResult, converged) = quadraticMinimizer.solve(H, f)
+          if (!converged) slowConvergence += 1
+          if (!converged && Random.nextDouble() < 0.2) diagnose(H, f)
+          if (ws != null) solveLeastSquares(constraint, fullXtX.addi(YtY.get.value), userXy(index), ws)
+          qmResult.data
         } else {
           val H = fullXtX
           val f = userXy(index).mul(-1)
-
-          val (qmResult, converged) = quadraticMinimizer.solve(H,f)
-          val qpResult = DenseVector(qmResult.data)
-          
-          val lsStart = System.nanoTime()
-          val result = DenseVector(solveLeastSquares(fullXtX, userXy(index), ws))
-          lsTime += System.nanoTime() - lsStart
-
-          if (qpProblem == 1 || qpProblem == 2) {
-        	  if (norm(qpResult - result, 2) > 1E-2) {
-        	    println("ADMM QP failed converged " + converged)
-        	    diagnose(H, f, qpResult, result)
-        	    failed += 1
-        	  }
-          } else {
-            if(!converged) {
-              println("ADMM QP did not converge")
-              diagnose(H, f, qpResult, result)
-              failed += 1
-            }
-          }
-          qpResult.data
+          val (qmResult, converged) = quadraticMinimizer.solve(H, f)
+          if (!converged) slowConvergence += 1
+          if (!converged && Random.nextDouble() < 0.2) diagnose(H, f)
+          if (ws != null) solveLeastSquares(constraint, fullXtX, userXy(index), ws)
+          qmResult.data
         }
         result
       }
-      println(s"lsTime ${lsTime/1e6} qpTime ${quadraticMinimizer.solveTime/1e6} failed ${failed}")
-      if(ws!=null) println(s"lsIters ${ws.iterations} admmIters ${quadraticMinimizer.iterations}")
+      
+      if (ws != null) logInfo(s"NNLS solveTime ${ws.solveTime / 1e6} iters ${ws.iterations}")
+      logInfo(s"usersOrProducts ${numUsers} slowConvergence ${slowConvergence} QuadraticMinimizer solveTime ${quadraticMinimizer.solveTime / 1e6} Iters ${quadraticMinimizer.iterations}")
       factors
     }
-    
   /**
    * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
    * to nonnegativity constraints if `nonnegative` is true.
    */
-  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
-    ws: NNLS.Workspace): Array[Double] = {
-    if (!nonnegative) {
-      Solve.solvePositive(ata, atb).data
-    } else {
+  def solveLeastSquares(constraint: Constraint, ata: DoubleMatrix, atb: DoubleMatrix, ws: NNLS.Workspace): Array[Double] = {
+    if (constraint == POSITIVE) {
       NNLS.solve(ata, atb, ws)
+    } else {
+      Solve.solvePositive(ata, atb).data
     }
   }
 
@@ -743,15 +700,17 @@ object ALS {
    * @param seed       random seed
    */
   def train(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      lambdaL1: Double,
-      blocks: Int,
-      seed: Long
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, lambdaL1, false, 1.0, seed).run(ratings)
+    ratings: RDD[Rating],
+    rank: Int,
+    iterations: Int,
+    userConstraint: Constraint,
+    productConstraint: Constraint,
+    userLambda: Double,
+    productLambda: Double,
+    blocks: Int,
+    seed: Long): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations, userConstraint, productConstraint,
+      userLambda, productLambda, false, 1.0, seed).run(ratings)
   }
 
   /**
@@ -769,14 +728,13 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    */
   def train(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      lambdaL1: Double,
-      blocks: Int
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, lambdaL1, false, 1.0).run(ratings)
+    ratings: RDD[Rating],
+    rank: Int,
+    iterations: Int,
+    constraint: Constraint,
+    lambda: Double,
+    blocks: Int): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations, constraint, constraint, lambda, lambda, false, 1.0).run(ratings)
   }
 
   /**
@@ -791,8 +749,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, lambdaL1: Double): MatrixFactorizationModel = {
-    train(ratings, rank, iterations, lambda, lambdaL1, -1)
+  def train(ratings: RDD[Rating], rank: Int, iterations: Int, constraint: Constraint, lambda: Double): MatrixFactorizationModel = {
+    train(ratings, rank, iterations, constraint, lambda, -1)
   }
 
   /**
@@ -807,7 +765,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
   def train(ratings: RDD[Rating], rank: Int, iterations: Int): MatrixFactorizationModel = {
-    train(ratings, rank, iterations, 0.01, -1)
+    train(ratings, rank, iterations, SMOOTH, 0.01, -1)
   }
 
   /**
@@ -826,16 +784,17 @@ object ALS {
    * @param seed       random seed
    */
   def trainImplicit(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      lambdaL1: Double,
-      blocks: Int,
-      alpha: Double,
-      seed: Long
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, lambdaL1, true, alpha, seed).run(ratings)
+    ratings: RDD[Rating],
+    rank: Int,
+    iterations: Int,
+    userConstraint: Constraint,
+    productConstraint: Constraint,
+    userLambda: Double,
+    productLambda: Double,
+    blocks: Int,
+    alpha: Double,
+    seed: Long): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations, userConstraint, productConstraint, userLambda, productLambda, true, alpha, seed).run(ratings)
   }
 
   /**
@@ -853,15 +812,14 @@ object ALS {
    * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
    */
   def trainImplicit(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      lambdaL1: Double,
-      blocks: Int,
-      alpha: Double
-    ): MatrixFactorizationModel = {
-    new ALS(blocks, blocks, rank, iterations, lambda, lambdaL1, true, alpha).run(ratings)
+    ratings: RDD[Rating],
+    rank: Int,
+    iterations: Int,
+    constraint: Constraint,
+    lambda: Double,
+    blocks: Int,
+    alpha: Double): MatrixFactorizationModel = {
+    new ALS(blocks, blocks, rank, iterations, constraint, constraint, lambda, lambda, true, alpha).run(ratings)
   }
 
   /**
@@ -876,8 +834,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, lambdaL1: Double, alpha: Double): MatrixFactorizationModel = {
-    trainImplicit(ratings, rank, iterations, lambda, lambdaL1, -1, alpha)
+  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, constraint: Constraint, lambda: Double, alpha: Double): MatrixFactorizationModel = {
+    trainImplicit(ratings, rank, iterations, constraint, lambda, -1, alpha)
   }
 
   /**
@@ -893,7 +851,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int): MatrixFactorizationModel = {
-    trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
+    trainImplicit(ratings, rank, iterations, SMOOTH, 0.01, -1, 1.0)
   }
 
   /**
@@ -913,12 +871,12 @@ object ALS {
    */
   @DeveloperApi
   case class BlockStats(
-      category: String,
-      index: Int,
-      count: Long,
-      numRatings: Long,
-      numInLinks: Long,
-      numOutLinks: Long)
+    category: String,
+    index: Int,
+    count: Long,
+    numRatings: Long,
+    numInLinks: Long,
+    numOutLinks: Long)
 
   /**
    * :: DeveloperApi ::
@@ -933,9 +891,9 @@ object ALS {
    */
   @DeveloperApi
   def analyzeBlocks(
-      ratings: RDD[Rating],
-      numUserBlocks: Int,
-      numProductBlocks: Int): Array[BlockStats] = {
+    ratings: RDD[Rating],
+    numUserBlocks: Int,
+    numProductBlocks: Int): Array[BlockStats] = {
 
     val userPartitioner = new ALSPartitioner(numUserBlocks)
     val productPartitioner = new ALSPartitioner(numProductBlocks)

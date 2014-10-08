@@ -18,9 +18,7 @@
 package org.apache.spark.mllib.api.python
 
 import java.nio.{ByteBuffer, ByteOrder}
-
 import scala.collection.JavaConverters._
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
@@ -39,6 +37,7 @@ import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
+import org.apache.spark.mllib.optimization.Constraint._
 
 /**
  * :: DeveloperApi ::
@@ -479,10 +478,11 @@ class PythonMLLibAPI extends Serializable {
       ratingsBytesJRDD: JavaRDD[Array[Byte]],
       rank: Int,
       iterations: Int,
+      constraint: Constraint,
       lambda: Double,
       blocks: Int): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
-    ALS.train(ratings, rank, iterations, lambda, blocks)
+    ALS.train(ratings, rank, iterations, constraint, lambda, blocks)
   }
 
   /**
@@ -495,11 +495,12 @@ class PythonMLLibAPI extends Serializable {
       ratingsBytesJRDD: JavaRDD[Array[Byte]],
       rank: Int,
       iterations: Int,
+      constraint: Constraint,
       lambda: Double,
       blocks: Int,
       alpha: Double): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
-    ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+    ALS.trainImplicit(ratings, rank, iterations, constraint, lambda, blocks, alpha)
   }
 
   /**

@@ -35,6 +35,7 @@ private[mllib] object NNLS {
     val res = new DoubleMatrix(n, 1)
     
     var iterations = 0
+    var solveTime = 0L
     
     def wipe() {
       scratch.fill(0.0)
@@ -66,7 +67,8 @@ private[mllib] object NNLS {
    */
   def solve(ata: DoubleMatrix, atb: DoubleMatrix, ws: Workspace): Array[Double] = {
     ws.wipe()
-
+    
+    val solveStart = System.nanoTime()
     val n = atb.rows
     val scratch = ws.scratch
     
@@ -139,6 +141,7 @@ private[mllib] object NNLS {
       // terminate?
       if (stop(step, ndir, nx)) {
         ws.iterations += iterno
+        ws.solveTime += System.nanoTime() - solveStart
         return x.data.clone
       }
       
@@ -168,6 +171,7 @@ private[mllib] object NNLS {
       lastNorm = ngrad
     }
     ws.iterations += iterno
+    ws.solveTime += System.nanoTime() - solveStart
     x.data.clone
   }
 }

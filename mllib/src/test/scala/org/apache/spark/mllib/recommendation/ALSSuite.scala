@@ -27,6 +27,7 @@ import org.jblas.DoubleMatrix
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.recommendation.ALS.BlockStats
+import org.apache.spark.mllib.optimization.Constraint._
 
 object ALSSuite {
 
@@ -129,16 +130,16 @@ class ALSSuite extends FunSuite with LocalSparkContext {
 
   test("pseudorandomness") {
     val ratings = sc.parallelize(ALSSuite.generateRatings(10, 20, 5, 0.5, false, false)._1, 2)
-    val model11 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
-    val model12 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
+    val model11 = ALS.train(ratings, 5, 1, SMOOTH, SMOOTH, 1.0, 1.0, 2, 1)
+    val model12 = ALS.train(ratings, 5, 1, SMOOTH, SMOOTH, 1.0, 1.0, 2, 1)
     val u11 = model11.userFeatures.values.flatMap(_.toList).collect().toList
     val u12 = model12.userFeatures.values.flatMap(_.toList).collect().toList
-    val model2 = ALS.train(ratings, 5, 1, 1.0, 2, 2)
+    val model2 = ALS.train(ratings, 5, 1, SMOOTH, SMOOTH, 1.0, 1.0, 2, 2)
     val u2 = model2.userFeatures.values.flatMap(_.toList).collect().toList
     assert(u11 == u12)
     assert(u11 != u2)
   }
-
+  
   test("negative ids") {
     val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
     val ratings = sc.parallelize(data._1.map { case Rating(u, p, r) =>
@@ -210,17 +211,23 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
 
-    val model = new ALS()
+    val als = new ALS()
       .setUserBlocks(numUserBlocks)
       .setProductBlocks(numProductBlocks)
       .setRank(features)
       .setIterations(iterations)
       .setAlpha(1.0)
       .setImplicitPrefs(implicitPrefs)
-      .setLambda(0.01)
+      .setUserLambda(0.01)
+      .setProductLambda(0.01)
       .setSeed(0L)
-      .setNonnegative(!negativeFactors)
-      .run(sc.parallelize(sampledRatings))
+    
+    if(!negativeFactors) {
+      als.setUserConstraint(POSITIVE)
+      als.setProductConstraint(POSITIVE)
+    }
+    
+    val model = als.run(sc.parallelize(sampledRatings))
 
     val predictedU = new DoubleMatrix(users, features)
     for ((u, vec) <- model.userFeatures.collect(); i <- 0 until features) {

@@ -35,7 +35,7 @@ import org.jblas.SimpleBlas
 import org.netlib.util.intW
 import org.jblas.exceptions.LapackArgumentException
 import org.jblas.NativeBlas
-
+import org.apache.spark.mllib.optimization.Constraint._
 /*
  * Proximal operators and ADMM based Primal-Dual QP Solver 
  * 
@@ -99,7 +99,7 @@ class QuadraticMinimizer(nGram: Int,
     DoubleMatrix.zeros(n, n)
   }
 
-  val MAX_ITER = Math.max(1000, 40 * n)
+  val MAX_ITER = Math.max(400, 20 * n)
   val ABSTOL = 1e-8
   val RELTOL = 1e-4
 
@@ -108,7 +108,7 @@ class QuadraticMinimizer(nGram: Int,
 
   var zOld = DoubleMatrix.zeros(nGram, 1)
   var xHat = DoubleMatrix.zeros(nGram, 1)
-
+  
   //scale will hold q + linearEqualities
   var scale = DoubleMatrix.zeros(n, 1)
 
@@ -116,8 +116,8 @@ class QuadraticMinimizer(nGram: Int,
   var s = DoubleMatrix.zeros(nGram, 1)
 
   var lambda: Double = 1.0
-  var proximal: Int = 0
-
+  var constraint: Constraint = SMOOTH
+  
   var R: DoubleMatrix = null
   var pivot: Array[Int] = null
 
@@ -133,14 +133,14 @@ class QuadraticMinimizer(nGram: Int,
 
   //TO DO : This can take a proximal function as input
   //TO DO : alpha needs to be scaled based on Nesterov's acceleration
-  def setProximal(prox: Int): QuadraticMinimizer = {
-    this.proximal = prox
+  def setProximal(constraint: Constraint): QuadraticMinimizer = {
+    this.constraint = constraint
     //Splitting method for optimal control Boyd et al
-    //For all instances below we chose �� = 50 and relaxation parameter �� = 1.8
+    //For all instances below we chose alpha = 50 and relaxation parameter as 2.0
     if (addEqualityToGram) {
-      rho = 50
+      rho = 50.0
     } else {
-      rho = 1
+      rho = 1.0
     }
     alpha = 1.0
     this
@@ -248,7 +248,7 @@ class QuadraticMinimizer(nGram: Int,
       for (i <- 0 until x.length) x.put(i, 0, xlambda.get(i, 0))
 
       //Unconstrained Quadratic Minimization does need any proximal step
-      if (proximal == 0) return (x, true)
+      if (constraint == SMOOTH) return (x, true)
 
       //z-update with relaxation
 
@@ -274,20 +274,20 @@ class QuadraticMinimizer(nGram: Int,
       //4. proxL1
       //Other options not tried yet
       //5. proxHuber
-      proximal match {
-        case 1 => Proximal.projectPos(z.data)
-        case 2 => {
+      constraint match {
+        case POSITIVE => Proximal.projectPos(z.data)
+        case BOUNDS => {
           if (lb == None && ub == None)
             throw new IllegalArgumentException("QuadraticMinimizer proximal operator on box needs lower and upper bounds")
           Proximal.projectBox(z.data, lb.get.data, ub.get.data)
         }
-        case 3 => {
+        case EQUALITY => {
           if (Aeq == None) throw new IllegalArgumentException("QuadraticMinimizer proximal operator on equality needs Aeq")
           if (beq == None) throw new IllegalArgumentException("QuadraticMinimizer proximal operator on equality needs beq")
           if (Aeq.get.rows > 1) Proximal.projectEquality(z, Aeq.get, invAeq.get, beq.get)
           else Proximal.projectHyperPlane(z, Aeq.get, beq.get.data(0))
         }
-        case 4 => Proximal.shrinkage(z.data, lambda / rho)
+        case SPARSE => Proximal.shrinkage(z.data, lambda / rho)
       }
 
       //z has proximal(x_hat)
@@ -326,7 +326,7 @@ class QuadraticMinimizer(nGram: Int,
       k += 1
     }
     iterations += MAX_ITER
-    (x, false)
+    (z, false)
   }
 
   def solve(H: DoubleMatrix, q: DoubleMatrix): (DoubleMatrix, Boolean) = {
@@ -414,25 +414,25 @@ object QpGenerator {
 }
 
 object QuadraticMinimizer {
-  def apply(rank: Int, qpProblem: Int, lambda: Double): QuadraticMinimizer = {
-    qpProblem match {
-      case 1 => new QuadraticMinimizer(rank)
-      case 2 => new QuadraticMinimizer(rank).setProximal(1)
-      case 3 => {
+  def apply(rank: Int, constraint: Constraint, lambda: Double): QuadraticMinimizer = {
+    constraint match {
+      case SMOOTH => new QuadraticMinimizer(rank)
+      case POSITIVE => new QuadraticMinimizer(rank).setProximal(POSITIVE)
+      case BOUNDS => {
         //Direct QP with bounds
         val lb = DoubleMatrix.zeros(rank, 1)
         val ub = DoubleMatrix.zeros(rank, 1).addi(1.0)
-        new QuadraticMinimizer(rank, Some(lb), Some(ub)).setProximal(2)
+        new QuadraticMinimizer(rank, Some(lb), Some(ub)).setProximal(BOUNDS)
       }
-      case 4 => {
+      case EQUALITY => {
         //Direct QP with equality and positivity constraint
         val Aeq = DoubleMatrix.ones(1, rank)
         val beq = DoubleMatrix.ones(1, 1)
-        val qm = new QuadraticMinimizer(rank, None, None, Some(Aeq), Some(beq), true).setProximal(1)
+        val qm = new QuadraticMinimizer(rank, None, None, Some(Aeq), Some(beq), true).setProximal(POSITIVE)
         qm
       }
-      case 5 => {
-        val qm = new QuadraticMinimizer(rank).setProximal(4)
+      case SPARSE => {
+        val qm = new QuadraticMinimizer(rank).setProximal(SPARSE)
         qm.setLambda(lambda)
         qm
       }
@@ -507,7 +507,7 @@ object QuadraticMinimizer {
 
     val goodx = Array(0.13025, 0.54506, 0.2874, 0.0, 0.028628)
 
-    val qpSolverPos = new QuadraticMinimizer(n, None, None, None).setProximal(1)
+    val qpSolverPos = new QuadraticMinimizer(n, None, None, None).setProximal(POSITIVE)
     val posResult = qpSolverPos.solve(ata, atb.muli(-1))
 
     for (i <- 0 until n) {
@@ -524,11 +524,11 @@ object QuadraticMinimizer {
 
     val lb = DoubleMatrix.zeros(problemSize, 1)
     val ub = DoubleMatrix.zeros(problemSize, 1).addi(0.25)
-    val qpSolverBounds = new QuadraticMinimizer(n, Some(lb), Some(ub), None).setProximal(2)
+    val qpSolverBounds = new QuadraticMinimizer(n, Some(lb), Some(ub), None).setProximal(BOUNDS)
     val boundsResult = qpSolverBounds.solve(ata, atb)
     println("Bounds result check " + (boundsResult._1.subi(goodBounds).norm2() < 1e-4))
 
-    val qpSolverL1 = new QuadraticMinimizer(problemSize, None, None, None).setProximal(4)
+    val qpSolverL1 = new QuadraticMinimizer(problemSize, None, None, None).setProximal(SPARSE)
     val l1Results = qpSolverL1.solve(H, f)
     println("L1 result check " + (l1Results._1.subi(2.5).norm2() < 1e-3))
 
@@ -545,7 +545,7 @@ object QuadraticMinimizer {
     val lbeq = DoubleMatrix.zeros(ml, 1)
     val ubeq = DoubleMatrix.ones(ml, 1)
     val directQpMl = new QuadraticMinimizer(ml, Some(lbeq), Some(ubeq), Some(Aeq), Some(beq), true)
-    directQpMl.setProximal(2)
+    directQpMl.setProximal(BOUNDS)
 
     val directQpStart = System.nanoTime()
     val directQpResult = directQpMl.solve(Hml, fml)
@@ -579,7 +579,7 @@ object QuadraticMinimizer {
     val Hl1 = new DoubleMatrix(25, 25, 253.535098, 236.477785, 234.421906, 223.374867, 241.007512, 204.695511, 226.465507, 223.351032, 249.179386, 221.411909, 238.679352, 203.579010, 217.564498, 243.852681, 266.607649, 213.994496, 241.620759, 223.602907, 220.038678, 264.704959, 240.341716, 223.672378, 244.323303, 223.216217, 226.074990, 236.477785, 278.862035, 245.756639, 237.489890, 252.783139, 214.077652, 241.816953, 238.790633, 260.536460, 228.121417, 255.103936, 216.608405, 237.150426, 258.933231, 281.958112, 228.971242, 252.508513, 234.242638, 240.308477, 285.416390, 254.792243, 240.176223, 259.048267, 235.566855, 236.277617, 234.421906, 245.756639, 269.162882, 231.416867, 251.321527, 208.134322, 236.567647, 236.558029, 255.805108, 226.535825, 251.514713, 212.770208, 228.565362, 261.748652, 273.946966, 227.411615, 252.767900, 232.823977, 233.084574, 278.315614, 250.872786, 235.227909, 255.104263, 238.931093, 235.402356, 223.374867, 237.489890, 231.416867, 254.771963, 241.703229, 209.028084, 231.517998, 228.768510, 250.805315, 216.548935, 245.473869, 207.687875, 222.036114, 250.906955, 263.018181, 216.128966, 244.445283, 227.436840, 231.369510, 270.721492, 242.475130, 226.471530, 248.130112, 225.826557, 228.266719, 241.007512, 252.783139, 251.321527, 241.703229, 285.702320, 219.051868, 249.442308, 240.400187, 264.970407, 232.503138, 258.819837, 220.160683, 235.621356, 267.743972, 285.795029, 229.667231, 260.870105, 240.751687, 247.183922, 289.044453, 260.715749, 244.210258, 267.159502, 242.992822, 244.070245, 204.695511, 214.077652, 208.134322, 209.028084, 219.051868, 210.164224, 208.151908, 201.539036, 226.373834, 192.056565, 219.950686, 191.459568, 195.982460, 226.739575, 240.677519, 196.116652, 217.352348, 203.533069, 204.581690, 243.603643, 217.785986, 204.205559, 223.747953, 203.586842, 200.165867, 226.465507, 241.816953, 236.567647, 231.517998, 249.442308, 208.151908, 264.007925, 227.080718, 253.174653, 220.322823, 248.619983, 210.100242, 223.279198, 254.807401, 269.896959, 222.927882, 247.017507, 230.484479, 233.358639, 274.935489, 249.237737, 235.229584, 253.029955, 228.601700, 230.512885, 223.351032, 238.790633, 236.558029, 228.768510, 240.400187, 201.539036, 227.080718, 258.773479, 249.471480, 215.664539, 243.078577, 202.337063, 221.020998, 249.979759, 263.356244, 213.470569, 246.182278, 225.727773, 229.873732, 266.295057, 242.954024, 225.510760, 249.370268, 227.813265, 232.141964, 249.179386, 260.536460, 255.805108, 250.805315, 264.970407, 226.373834, 253.174653, 249.471480, 302.360150, 237.902729, 265.769812, 224.947876, 243.088105, 273.690377, 291.076027, 241.089661, 267.772651, 248.459822, 249.662698, 295.935799, 267.460908, 255.668926, 275.902272, 248.495606, 246.827505, 221.411909, 228.121417, 226.535825, 216.548935, 232.503138, 192.056565, 220.322823, 215.664539, 237.902729, 245.154567, 234.956316, 199.557862, 214.774631, 240.339217, 255.161923, 209.328714, 232.277540, 216.298768, 220.296241, 253.817633, 237.638235, 220.785141, 239.098500, 220.583355, 218.962732, 238.679352, 255.103936, 251.514713, 245.473869, 258.819837, 219.950686, 248.619983, 243.078577, 265.769812, 234.956316, 288.133073, 225.087852, 239.810430, 268.406605, 283.289840, 233.858455, 258.306589, 240.263617, 246.844456, 290.492875, 267.212598, 243.218596, 265.681905, 244.615890, 242.543363, 203.579010, 216.608405, 212.770208, 207.687875, 220.160683, 191.459568, 210.100242, 202.337063, 224.947876, 199.557862, 225.087852, 217.501685, 197.897572, 229.825316, 242.175607, 201.123644, 219.820165, 202.894307, 211.468055, 246.048907, 225.135194, 210.076305, 226.806762, 212.014431, 205.123267, 217.564498, 237.150426, 228.565362, 222.036114, 235.621356, 195.982460, 223.279198, 221.020998, 243.088105, 214.774631, 239.810430, 197.897572, 244.439113, 241.621129, 260.400953, 216.482178, 236.805076, 216.680343, 223.816297, 263.188711, 236.311810, 222.950152, 244.636356, 219.121372, 219.911078, 243.852681, 258.933231, 261.748652, 250.906955, 267.743972, 226.739575, 254.807401, 249.979759, 273.690377, 240.339217, 268.406605, 229.825316, 241.621129, 302.928261, 288.344398, 238.549018, 267.239982, 248.073140, 254.230916, 296.789984, 267.158551, 252.226496, 271.170860, 248.325354, 253.694013, 266.607649, 281.958112, 273.946966, 263.018181, 285.795029, 240.677519, 269.896959, 263.356244, 291.076027, 255.161923, 283.289840, 242.175607, 260.400953, 288.344398, 343.457361, 257.368309, 284.795470, 263.122266, 271.239770, 320.209823, 283.933299, 264.416752, 292.035194, 268.764031, 265.345807, 213.994496, 228.971242, 227.411615, 216.128966, 229.667231, 196.116652, 222.927882, 213.470569, 241.089661, 209.328714, 233.858455, 201.123644, 216.482178, 238.549018, 257.368309, 239.295031, 234.913508, 218.066855, 219.648997, 257.969951, 231.243624, 224.657569, 238.158714, 217.174368, 215.933866, 241.620759, 252.508513, 252.767900, 244.445283, 260.870105, 217.352348, 247.017507, 246.182278, 267.772651, 232.277540, 258.306589, 219.820165, 236.805076, 267.239982, 284.795470, 234.913508, 289.709239, 241.312315, 247.249491, 286.702147, 264.252852, 245.151647, 264.582984, 240.842689, 245.837476, 223.602907, 234.242638, 232.823977, 227.436840, 240.751687, 203.533069, 230.484479, 225.727773, 248.459822, 216.298768, 240.263617, 202.894307, 216.680343, 248.073140, 263.122266, 218.066855, 241.312315, 255.363057, 230.209787, 271.091482, 239.220241, 225.387834, 247.486715, 226.052431, 224.119935, 220.038678, 240.308477, 233.084574, 231.369510, 247.183922, 204.581690, 233.358639, 229.873732, 249.662698, 220.296241, 246.844456, 211.468055, 223.816297, 254.230916, 271.239770, 219.648997, 247.249491, 230.209787, 264.014907, 271.938970, 246.664305, 227.889045, 249.908085, 232.035369, 229.010298, 264.704959, 285.416390, 278.315614, 270.721492, 289.044453, 243.603643, 274.935489, 266.295057, 295.935799, 253.817633, 290.492875, 246.048907, 263.188711, 296.789984, 320.209823, 257.969951, 286.702147, 271.091482, 271.938970, 352.825726, 286.200221, 267.716897, 297.182554, 269.776351, 266.721561, 240.341716, 254.792243, 250.872786, 242.475130, 260.715749, 217.785986, 249.237737, 242.954024, 267.460908, 237.638235, 267.212598, 225.135194, 236.311810, 267.158551, 283.933299, 231.243624, 264.252852, 239.220241, 246.664305, 286.200221, 294.042749, 246.504021, 269.570596, 243.980697, 242.690997, 223.672378, 240.176223, 235.227909, 226.471530, 244.210258, 204.205559, 235.229584, 225.510760, 255.668926, 220.785141, 243.218596, 210.076305, 222.950152, 252.226496, 264.416752, 224.657569, 245.151647, 225.387834, 227.889045, 267.716897, 246.504021, 259.897656, 251.730847, 229.335712, 229.759185, 244.323303, 259.048267, 255.104263, 248.130112, 267.159502, 223.747953, 253.029955, 249.370268, 275.902272, 239.098500, 265.681905, 226.806762, 244.636356, 271.170860, 292.035194, 238.158714, 264.582984, 247.486715, 249.908085, 297.182554, 269.570596, 251.730847, 303.872223, 251.585636, 247.878402, 223.216217, 235.566855, 238.931093, 225.826557, 242.992822, 203.586842, 228.601700, 227.813265, 248.495606, 220.583355, 244.615890, 212.014431, 219.121372, 248.325354, 268.764031, 217.174368, 240.842689, 226.052431, 232.035369, 269.776351, 243.980697, 229.335712, 251.585636, 257.544914, 228.810942, 226.074990, 236.277617, 235.402356, 228.266719, 244.070245, 200.165867, 230.512885, 232.141964, 246.827505, 218.962732, 242.543363, 205.123267, 219.911078, 253.694013, 265.345807, 215.933866, 245.837476, 224.119935, 229.010298, 266.721561, 242.690997, 229.759185, 247.878402, 228.810942, 253.353769)
     val fl1 = new DoubleMatrix(25, 1, -892.842851, -934.071560, -932.936015, -888.124343, -961.050207, -791.191087, -923.711397, -904.289301, -988.384984, -883.909133, -959.465030, -798.551172, -871.622303, -997.463289, -1043.912620, -863.013719, -976.975712, -897.033693, -898.694786, -1069.245497, -963.491924, -901.263474, -983.768031, -899.865392, -902.283567)
 
-    val qpSolverMlL1 = new QuadraticMinimizer(25, None, None, None).setProximal(4)
+    val qpSolverMlL1 = new QuadraticMinimizer(25, None, None, None).setProximal(SPARSE)
     qpSolverMlL1.setLambda(2.0)
 
     val qpL1Result = DenseVector(0.18611399665838277, 7.616544482575045E-7, 0.06316840028986725, -0.10416598791666153, 0.11261509172555788, -0.20495026976219588, 0.5266828053262747, 0.32790232894458576, 0.19421456042798912, 0.721805263420604, 0.06308767698159996, -0.41324884565800457, -6.674589161988433E-7, 0.5207826198398771, -5.7526636592184316E-6, 0.18039857485532956, 0.6291589535140261, 0.16327989074951899, -0.06423068666024713, 0.37538997084005027, 0.01655831175814407, -1.1303748315315749E-7, 0.11215692158788952, 0.24778419107179467, 0.04080340730788238)
@@ -609,17 +609,9 @@ object QuadraticMinimizer {
 
     //val directQpTest = new QuadraticMinimizer(h.rows, Some(bl), Some(bu), Some(aeq), true)
     val directQpTest = new QuadraticMinimizer(h.rows, Some(bl), Some(bu))
-    directQpTest.setProximal(2)
+    directQpTest.setProximal(BOUNDS)
     //directQpTest.solve(h, q, Some(b))
     directQpTest.solve(h, q)
     println(s"Qp Test ${directQpTest.solveTime}ns ${directQpTest.solveTime / 1e6} ms iterations ${directQpTest.iterations}")
-    println("H")
-    println(h)
-    println("q")
-    println(q)
-    println("lb")
-    println(bl)
-    println("ub")
-    println(bu)
   }
 }
