@@ -67,8 +67,8 @@ private[streaming] class ReceiverSupervisorImpl(
   private val trackerActor = {
     val ip = env.conf.get("spark.driver.host", "localhost")
     val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://%s@%s:%s/user/ReceiverTracker".format(
-      SparkEnv.driverActorSystemName, ip, port)
+    val url = AkkaUtils.address(
+      SparkEnv.driverActorSystemName, ip, port, "ReceiverTracker", env.conf)
     env.actorSystem.actorSelection(url)
   }
 

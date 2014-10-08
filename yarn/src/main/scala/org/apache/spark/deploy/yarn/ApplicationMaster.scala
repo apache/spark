@@ -244,11 +244,13 @@ private[spark] class ApplicationMaster(
       host: String,
       port: String,
       isDriver: Boolean): Unit = {
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    
+    val driverUrl = AkkaUtils.address(
       SparkEnv.driverActorSystemName,
       host,
       port,
-      YarnSchedulerBackend.ACTOR_NAME)
+      YarnSchedulerBackend.ACTOR_NAME,
+      sparkConf)
     actor = actorSystem.actorOf(Props(new AMActor(driverUrl, isDriver)), name = "YarnAM")
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.ArrayBuffer
+import java.io.File
 
 import org.scalatest.FunSuite
 
@@ -125,6 +125,40 @@ class SecurityManagerSuite extends FunSuite {
 
   }
 
+  test("ssl on setup") {
+    val conf = SSLSampleConfigs.sparkSSLConfig()
+
+    val securityManager = new SecurityManager(conf)
+
+    assert(securityManager.sslOptions.enabled === true)
+    assert(securityManager.sslSocketFactory.isDefined === true)
+    assert(securityManager.hostnameVerifier.isDefined === true)
+
+    assert(securityManager.sslOptions.trustStore.isDefined === true)
+    assert(securityManager.sslOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.sslOptions.keyStore.isDefined === true)
+    assert(securityManager.sslOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.sslOptions.trustStorePassword === Some("password"))
+    assert(securityManager.sslOptions.keyStorePassword === Some("password"))
+    assert(securityManager.sslOptions.keyPassword === Some("password"))
+    assert(securityManager.sslOptions.protocol === Some("TLSv1"))
+    assert(securityManager.sslOptions.enabledAlgorithms ===
+        Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+  }
+
+  test("ssl off setup") {
+    val file = File.createTempFile("SSLOptionsSuite", "conf")
+    file.deleteOnExit()
+
+    System.setProperty("spark.ssl.configFile", file.getAbsolutePath)
+    val conf = new SparkConf()
+
+    val securityManager = new SecurityManager(conf)
+
+    assert(securityManager.sslOptions.enabled === false)
+    assert(securityManager.sslSocketFactory.isDefined === false)
+    assert(securityManager.hostnameVerifier.isDefined === false)
+  }
 
 }
 

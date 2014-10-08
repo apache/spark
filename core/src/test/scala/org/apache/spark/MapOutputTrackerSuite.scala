@@ -120,7 +120,7 @@ class MapOutputTrackerSuite extends FunSuite {
       securityManager = new SecurityManager(conf))
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
+      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 

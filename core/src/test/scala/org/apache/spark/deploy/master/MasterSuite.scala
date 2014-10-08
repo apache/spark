@@ -20,30 +20,48 @@ package org.apache.spark.deploy.master
 import akka.actor.Address
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 
 class MasterSuite extends FunSuite {
 
   test("toAkkaUrl") {
-    val akkaUrl = Master.toAkkaUrl("spark://1.2.3.4:1234")
+    val conf = new SparkConf(loadDefaults = false)
+    val akkaUrl = Master.toAkkaUrl("spark://1.2.3.4:1234", conf)
     assert("akka.tcp://sparkMaster@1.2.3.4:1234/user/Master" === akkaUrl)
   }
 
+  test("toAkkaUrl with SSL") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set("spark.ssl.enabled", "true")
+    val akkaUrl = Master.toAkkaUrl("spark://1.2.3.4:1234", conf)
+    assert("akka.ssl.tcp://sparkMaster@1.2.3.4:1234/user/Master" === akkaUrl)
+  }
+
   test("toAkkaUrl: a typo url") {
+    val conf = new SparkConf(loadDefaults = false)
     val e = intercept[SparkException] {
-      Master.toAkkaUrl("spark://1.2. 3.4:1234")
+      Master.toAkkaUrl("spark://1.2. 3.4:1234", conf)
     }
     assert("Invalid master URL: spark://1.2. 3.4:1234" === e.getMessage)
   }
 
   test("toAkkaAddress") {
-    val address = Master.toAkkaAddress("spark://1.2.3.4:1234")
+    val conf = new SparkConf(loadDefaults = false)
+    val address = Master.toAkkaAddress("spark://1.2.3.4:1234", conf)
     assert(Address("akka.tcp", "sparkMaster", "1.2.3.4", 1234) === address)
   }
 
+  test("toAkkaAddress with SSL") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set("spark.ssl.enabled", "true")
+    val address = Master.toAkkaAddress("spark://1.2.3.4:1234", conf)
+    assert(Address("akka.ssl.tcp", "sparkMaster", "1.2.3.4", 1234) === address)
+  }
+
   test("toAkkaAddress: a typo url") {
+    val conf = new SparkConf(loadDefaults = false)
     val e = intercept[SparkException] {
-      Master.toAkkaAddress("spark://1.2. 3.4:1234")
+      Master.toAkkaAddress("spark://1.2. 3.4:1234", conf)
     }
     assert("Invalid master URL: spark://1.2. 3.4:1234" === e.getMessage)
   }
