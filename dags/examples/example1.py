@@ -1,5 +1,5 @@
-from core.operators import BashOperator, MySqlOperator, DummyOperator
-from core.models import DAG
+from flux.operators import BashOperator, MySqlOperator, DummyOperator
+from flux.models import DAG
 from datetime import datetime
 
 default_args = {

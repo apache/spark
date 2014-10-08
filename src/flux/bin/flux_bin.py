@@ -1,6 +1,10 @@
 #!python
 
+from flux import settings
+from flux.models import DagBag, TaskInstance, DagPickle, State
+
 import dateutil.parser
+from datetime import datetime
 import logging
 import os
 import pickle
@@ -8,17 +12,7 @@ import signal
 import sys
 from time import sleep
 
-
-BASE_FOLDER = os.path.abspath(__file__ + "/../../../")
-if BASE_FOLDER not in sys.path:
-    sys.path.append(BASE_FOLDER)
 import argparse
-from core import settings
-from core.models import DagBag
-from core.models import DagPickle
-from core.models import TaskInstance
-from core.models import State
-from datetime import datetime
 from sqlalchemy import func
 
 # Common help text across subcommands
@@ -149,7 +143,7 @@ def master(args):
                 if task.task_id not in ti_dict:
                     # Brand new task, let's get started
                     ti = TI(task, task.start_date)
-                    executor.queue_command(ti.key, ti.command(mark_success))
+                    executor.queue_command(ti.key, ti.command())
                 else:
                     ti = ti_dict[task.task_id]
                     ti.task = task  # Hacky but worky
@@ -158,7 +152,7 @@ def master(args):
                         # the retry delay is met
                         if ti.is_runnable():
                             executor.queue_command(
-                                ti.key, ti.command(mark_success))
+                                ti.key, ti.command())
                     elif ti.state == State.RUNNING:
                         # Only one task at a time
                         continue

@@ -1,3 +1,3 @@
 #!/bin/bash
-source env/bin/activate
-export PYTHONPATH=~/Flux
+source $FLUX_HOME/env/bin/activate
+export PYTHONPATH=$FLUX_HOME/src

@@ -1,6 +1,6 @@
-from core import models
-from core import settings
-from core.hooks import MySqlHook
+from flux import models
+from flux import settings
+from flux.hooks import MySqlHook
 import logging
 
 if __name__ == '__main__':

@@ -17,11 +17,11 @@ from pygments.formatters import HtmlFormatter
 import markdown
 import chartkick
 
-from core.settings import Session
-from core import models
-from core.models import State
-from core import settings
-from core import utils
+from flux.settings import Session
+from flux import models
+from flux.models import State
+from flux import settings
+from flux import utils
 
 dagbag = models.DagBag(settings.DAGS_FOLDER)
 session = Session()
@@ -54,7 +54,7 @@ class HomeView(AdminIndexView):
     @expose("/")
     def index(self):
         md = "".join(
-            open(settings.BASE_FOLDER + '/README.md', 'r').readlines())
+            open(settings.FLUX_HOME + '/README.md', 'r').readlines())
         content = Markup(markdown.markdown(md))
         return self.render('admin/index.html', content=content)
 admin = Admin(app, name="Flux", index_view=HomeView(name='Home'))

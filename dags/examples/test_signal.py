@@ -1,4 +1,4 @@
-import core as flux
+import flux as flux
 from datetime import datetime
 
 default_args = {

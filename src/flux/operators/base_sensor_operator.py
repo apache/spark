@@ -1,8 +1,8 @@
 from datetime import datetime
 from time import sleep
 
-from core.models import BaseOperator
-from core.hooks import MySqlHook
+from flux.models import BaseOperator
+from flux.hooks import MySqlHook
 
 
 class BaseSensorOperator(BaseOperator):

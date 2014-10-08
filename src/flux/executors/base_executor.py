@@ -1,8 +1,8 @@
 import logging
 import time
 
-from core import settings
-from core.utils import State
+from flux import settings
+from flux.utils import State
 
 
 class BaseExecutor(object):
@@ -73,7 +73,7 @@ class LocalWorker(multiprocessing.Process):
             BASE_FOLDER = settings.BASE_FOLDER
             command = (
                 "exec bash -c '"
-                "cd {BASE_FOLDER};\n" +
+                "cd $FLUX_HOME;\n" +
                 "source init.sh;\n" +
                 command +
                 "'"

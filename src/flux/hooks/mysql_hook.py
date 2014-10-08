@@ -1,6 +1,6 @@
 import MySQLdb
-from core import settings
-from core.models import DatabaseConnection
+from flux import settings
+from flux.models import DatabaseConnection
 
 
 class MySqlHook(object):

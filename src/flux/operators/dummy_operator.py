@@ -1,4 +1,4 @@
-from core.models import BaseOperator
+from flux.models import BaseOperator
 
 
 class DummyOperator(BaseOperator):

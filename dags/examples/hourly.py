@@ -1,6 +1,6 @@
-from core import DAG
+from flux import DAG
 from datetime import datetime, timedelta
-from core.operators import BashOperator
+from flux.operators import BashOperator
 
 default_args = {
     'owner': 'max',

@@ -1,5 +1,5 @@
 import logging
-from core.models import BaseOperator
+from flux.models import BaseOperator
 from subprocess import Popen, PIPE
 
 

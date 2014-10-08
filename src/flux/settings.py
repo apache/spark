@@ -3,12 +3,16 @@ import sys
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
-BASE_FOLDER = os.path.abspath(os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), os.pardir))
+if 'FLUX_HOME' not in os.environ:
+    raise Exception(
+        "Looks like someone forgot to set their FLUX_HOME env variable.")
+FLUX_HOME = os.environ['FLUX_HOME']
+
+BASE_FOLDER = FLUX_HOME + '/src/flux'
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
-DAGS_FOLDER = BASE_FOLDER + '/dags'
-BASE_LOG_FOLDER = BASE_FOLDER + "/logs"
+DAGS_FOLDER = FLUX_HOME + '/dags'
+BASE_LOG_FOLDER = FLUX_HOME + "/logs"
 RUN_AS_MASTER = True
 JOB_HEARTBEAT_SEC = 5
 ID_LEN = 250  # Used for dag_id and task_id VARCHAR length

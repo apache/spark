@@ -15,10 +15,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from core import macros
-from core.executors import DEFAULT_EXECUTOR
-from . import settings
-from . import utils
+from flux import macros
+from flux.executors import DEFAULT_EXECUTOR
+from flux import settings
+from flux import utils
 from settings import ID_LEN
 import socket
 from utils import State
@@ -178,11 +178,15 @@ class TaskInstance(Base):
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
         pickle = "--pickle {0}".format(pickle.id)  if pickle else ""
+        subdir = ""
+        if not pickle and self.dag and self.dag.filepath:
+            subdir = "-sd {self.task.dag.filepath}" 
         return (
             "./flux run "
             "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
             "{pickle} "
+            "{sub_dir} "
         ).format(**locals())
 
     @property

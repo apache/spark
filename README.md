@@ -38,14 +38,16 @@ A task instance represents a task run, for a specific point in time. While the t
 Installation
 ------------
 ##### Debian packages
-	sudo apt-get install virtualenv python-dev
-	sudo apt-get install libmysqlclient-dev mysql-server
-	sudo apt-get g++
+    sudo apt-get install virtualenv python-dev
+    sudo apt-get install libmysqlclient-dev mysql-server
+    sudo apt-get g++
+##### Required environment variable, add this to your .bashrc
+    export FLUX_HOME=~/Flux
 ##### Create a python virtualenv
-	virtualenv env # creates the environment
-	source init.sh # activates the environment
+    virtualenv env # creates the environment
+    source init.sh # activates the environment
 ##### Use pip to install the python packages required by Flux
-	pip install -r requirements.txt
+    pip install -r requirements.txt
 ##### Setup the metdata database
 Here are steps to get started using MySQL as a backend for the metadata database, though any backend supported by SqlAlquemy should work just fine.
 

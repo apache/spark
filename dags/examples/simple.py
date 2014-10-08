@@ -1,6 +1,6 @@
-from core.operators import MySqlOperator
-from core.executors import SequentialExecutor
-from core import DAG
+from flux.operators import MySqlOperator
+from flux.executors import SequentialExecutor
+from flux import DAG
 from datetime import datetime
 
 # Setting some default operator parameters
