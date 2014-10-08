@@ -116,7 +116,7 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   private object SetCommandParser extends RegexParsers {
     private val key: Parser[String] = "(?m)[^=]+".r
 
-    private val value: Parser[String] = "(?m).+$".r
+    private val value: Parser[String] = "(?m).*$".r
 
     private val pair: Parser[LogicalPlan] =
       (key ~ ("=".r ~> value).?).? ^^ {
