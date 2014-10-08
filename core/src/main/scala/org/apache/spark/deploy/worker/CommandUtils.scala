@@ -34,8 +34,17 @@ object CommandUtils extends Logging {
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
-    Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++ Seq(command.mainClass) ++
-      command.arguments
+    buildPrefixEnv(command) ++ Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++
+      Seq(command.mainClass) ++ command.arguments
+  }
+
+  private def buildPrefixEnv(command: Command): Seq[String] = {
+    if (command.libraryPathEntries.size > 0) {
+      val libraryPaths = command.libraryPathEntries
+      Seq(s"${Utils.libraryPath}=${libraryPaths.mkString(File.pathSeparator)}")
+    } else {
+      Seq()
+    }
   }
 
   /**
@@ -53,14 +62,6 @@ object CommandUtils extends Logging {
       logWarning("Set SPARK_LOCAL_DIRS for node-specific storage locations.")
     }
 
-    val libraryOpts =
-      if (command.libraryPathEntries.size > 0) {
-        val joined = command.libraryPathEntries.mkString(File.pathSeparator)
-        Seq(s"-Djava.library.path=$joined")
-      } else {
-        Seq()
-      }
-
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
@@ -71,7 +72,7 @@ object CommandUtils extends Logging {
     val javaVersion = System.getProperty("java.version")
     val permGenOpt = if (!javaVersion.startsWith("1.8")) Some("-XX:MaxPermSize=128m") else None
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-      permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
+      permGenOpt ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
