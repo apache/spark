@@ -315,6 +315,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     case r: MutableDouble  => r.value.asInstanceOf[T]
     case r: MutableBoolean => r.value.asInstanceOf[T]
     case r: MutableLong    => r.value.asInstanceOf[T]
-    case r                 => r.asInstanceOf[MutableAny].value.asInstanceOf[T]
+    case r: MutableAny     => r.value.asInstanceOf[T]
   }
 }
