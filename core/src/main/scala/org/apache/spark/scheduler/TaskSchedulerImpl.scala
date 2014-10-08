@@ -92,7 +92,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
-  protected val executorIdToHost = new HashMap[String, String]
+  val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -102,15 +102,27 @@ private[spark] class TaskSchedulerImpl(
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   var schedulableBuilder: SchedulableBuilder = null
+
   var rootPool: Pool = null
+
   // default scheduler is FIFO
   private val schedulingModeConf = conf.get("spark.scheduler.mode", "FIFO")
+
   val schedulingMode: SchedulingMode = try {
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
   } catch {
     case e: java.util.NoSuchElementException =>
       throw new SparkException(s"Unrecognized spark.scheduler.mode: $schedulingModeConf")
   }
+
+  // Manager for dynamically scaling number of executors based on workload
+  private val executorScalingEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+  private val executorScalingManager: Option[ExecutorScalingManager] =
+    if (executorScalingEnabled) Some(new ExecutorScalingManager(this)) else None
+
+  // Keep track of which TaskSets have pending tasks
+  // This is used to decide when to dynamically add executors
+  private val taskSetsWithPendingTasks = new HashSet[String]
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -230,6 +242,7 @@ private[spark] class TaskSchedulerImpl(
       for (rack <- getRackForHost(o.host)) {
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
+      executorScalingManager.foreach(_.executorAdded(o.executorId))
     }
 
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
@@ -455,6 +468,7 @@ private[spark] class TaskSchedulerImpl(
     }
     executorIdToHost -= executorId
     rootPool.executorLost(executorId, host)
+    executorScalingManager.foreach(_.executorRemoved(executorId))
   }
 
   def executorAdded(execId: String, host: String) {
@@ -492,6 +506,27 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def applicationId(): String = backend.applicationId()
+
+  /**
+   * Callback for TaskSetManagers to signal that a new pending task is added.
+   * If dynamically scaling executors is enabled, this starts a timer to add executors.
+   */
+  def newPendingTask(taskSetId: String): Unit = {
+    taskSetsWithPendingTasks.add(taskSetId)
+    executorScalingManager.foreach(_.startAddExecutorTimer())
+  }
+
+  /**
+   * Callback for TaskSetMangers to signal that it no longer has any pending tasks.
+   * If dynamically scaling executors is enabled and there are no more task sets with
+   * pending tasks, this cancels any timer that add executors.
+   */
+  def noMorePendingTasks(taskSetId: String): Unit = {
+    taskSetsWithPendingTasks.remove(taskSetId)
+    if (taskSetsWithPendingTasks.isEmpty) {
+      executorScalingManager.foreach(_.cancelAddExecutorTimer())
+    }
+  }
 
 }
 

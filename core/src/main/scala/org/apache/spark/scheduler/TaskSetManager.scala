@@ -101,7 +101,7 @@ private[spark] class TaskSetManager(
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   var isZombie = false
 
-  // Set of pending tasks for each executor. These collections are actually
+  // List of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
   // ArrayBuffer and removed from the end. This makes it faster to detect
   // tasks that repeatedly fail because whenever a task failed, it is put
@@ -110,18 +110,21 @@ private[spark] class TaskSetManager(
   // the one that it was launched from, but gets removed from them later.
   private val pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
 
-  // Set of pending tasks for each host. Similar to pendingTasksForExecutor,
+  // List of pending tasks for each host. Similar to pendingTasksForExecutor,
   // but at host level.
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
-  // Set of pending tasks for each rack -- similar to the above.
+  // List of pending tasks for each rack -- similar to the above.
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
-  // Set containing pending tasks with no locality preferences.
+  // List of pending tasks with no locality preferences.
   var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
 
-  // Set containing all pending tasks (also used as a stack, as above).
+  // List of all pending tasks (also used as a stack, as above).
   val allPendingTasks = new ArrayBuffer[Int]
+
+  // Set of pending tasks used to keep track of whether more executors are needed
+  private val pendingTasks = new HashSet[Int]
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet.
@@ -212,6 +215,10 @@ private[spark] class TaskSetManager(
 
     if (!readding) {
       allPendingTasks += index  // No point scanning this whole list to find the old task there
+      pendingTasks += index
+
+      // Notify the scheduler that this task set has a new pending task
+      sched.newPendingTask(taskSet.id)
     }
   }
 
@@ -464,6 +471,12 @@ private[spark] class TaskSetManager(
               s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
           }
           addRunningTask(taskId)
+
+          // If this task set has no more pending tasks, notify the scheduler
+          pendingTasks.remove(index)
+          if (pendingTasks.isEmpty) {
+            sched.noMorePendingTasks(taskSet.id)
+          }
 
           // We used to log the time it takes to serialize the task, but task size is already
           // a good proxy to task serialization time.
