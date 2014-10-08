@@ -55,7 +55,7 @@ object BinaryClassification {
       stepSize: Double = 1.0,
       algorithm: Algorithm = LR,
       regType: RegType = L2,
-      regParam: Double = 0.1) extends TestParams[Params]
+      regParam: Double = 0.1) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -102,7 +102,7 @@ object BinaryClassification {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"BinaryClassification with parameters:\n$params")
+    val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)

@@ -47,7 +47,7 @@ object LinearRegression extends App {
       numIterations: Int = 100,
       stepSize: Double = 1.0,
       regType: RegType = L2,
-      regParam: Double = 0.1) extends TestParams[Params]
+      regParam: Double = 0.1) extends AbstractParams[Params]
 
   val defaultParams = Params()
 
@@ -86,7 +86,7 @@ object LinearRegression extends App {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"LinearRegression with parameters:\n$params")
+    val conf = new SparkConf().setAppName(s"LinearRegression with $params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)

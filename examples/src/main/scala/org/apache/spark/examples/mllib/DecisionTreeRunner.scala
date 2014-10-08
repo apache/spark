@@ -62,7 +62,7 @@ object DecisionTreeRunner {
       minInfoGain: Double = 0.0,
       numTrees: Int = 1,
       featureSubsetStrategy: String = "auto",
-      fracTest: Double = 0.2) extends TestParams[Params]
+      fracTest: Double = 0.2) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -138,7 +138,7 @@ object DecisionTreeRunner {
 
   def run(params: Params) {
 
-    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with parameters:\n$params")
+    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
     val sc = new SparkContext(conf)
 
     println(s"DecisionTreeRunner with parameters:\n$params")

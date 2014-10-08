@@ -35,7 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 object Correlations {
 
   case class Params(input: String = "data/mllib/sample_linear_regression_data.txt")
-    extends TestParams[Params]
+    extends AbstractParams[Params]
 
   def main(args: Array[String]) {
 
@@ -64,7 +64,7 @@ object Correlations {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"Correlations with parameters:\n$params")
+    val conf = new SparkConf().setAppName(s"Correlations with $params")
     val sc = new SparkContext(conf)
 
     val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()

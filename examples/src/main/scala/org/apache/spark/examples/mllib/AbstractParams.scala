@@ -17,20 +17,24 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.reflect.runtime.universe._
+
 /**
  * Abstract class for parameter case classes.
  * This overrides the [[toString]] method to print all case class fields by name and value.
  * @tparam T  Concrete parameter class.
  */
-abstract class TestParams[T: scala.reflect.runtime.universe.TypeTag] {
-
-  import scala.reflect.runtime.universe._
+abstract class AbstractParams[T: TypeTag] {
 
   private def tag: TypeTag[T] = typeTag[T]
 
   /**
-   * Finds all case class fields in concrete class instance, and outputs them one per line:
-   * "[field name]:\t[field value]\n"
+   * Finds all case class fields in concrete class instance, and outputs them in JSON-style format:
+   * {
+   *   [field name]:\t[field value]\n
+   *   [field name]:\t[field value]\n
+   *   ...
+   * }
    */
   override def toString: String = {
     val tpe = tag.tpe
@@ -43,7 +47,7 @@ abstract class TestParams[T: scala.reflect.runtime.universe.TypeTag] {
       val paramName = f.name.toString
       val fieldMirror = instanceMirror.reflectField(f)
       val paramValue = fieldMirror.get
-      s"$paramName:\t$paramValue\n"
-    }.foldLeft("")(_ + _)
+      s"  $paramName:\t$paramValue"
+    }.mkString("{\n", ",\n", "\n}")
   }
 }
