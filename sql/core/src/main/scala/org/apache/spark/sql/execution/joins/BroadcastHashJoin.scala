@@ -15,20 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.join
+package org.apache.spark.sql.execution.joins
+
+import scala.concurrent._
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
  * :: DeveloperApi ::
- * Performs an inner hash join of two child relations by first shuffling the data using the join
- * keys.
+ * Performs an inner hash join of two child relations.  When the output RDD of this operator is
+ * being constructed, a Spark job is asynchronously started to calculate the values for the
+ * broadcasted relation.  This data is then placed in a Spark broadcast variable.  The streamed
+ * relation is not shuffled.
  */
 @DeveloperApi
-case class ShuffledHashJoin(
+case class BroadcastHashJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     buildSide: BuildSide,
@@ -36,14 +42,21 @@ case class ShuffledHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+
+  @transient
+  private val broadcastFuture = future {
+    sparkContext.broadcast(buildPlan.executeCollect())
+  }
 
   override def execute() = {
-    buildPlan.execute().zipPartitions(streamedPlan.execute()) {
-      (buildIter, streamIter) => joinIterators(buildIter, streamIter)
+    val broadcastRelation = Await.result(broadcastFuture, 5.minute)
+
+    streamedPlan.execute().mapPartitions { streamedIter =>
+      joinIterators(broadcastRelation.value.iterator, streamedIter)
     }
   }
 }

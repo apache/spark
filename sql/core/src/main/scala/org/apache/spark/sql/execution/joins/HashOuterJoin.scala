@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.join
+package org.apache.spark.sql.execution.joins
 
 import java.util.{HashMap => JavaHashMap}
 

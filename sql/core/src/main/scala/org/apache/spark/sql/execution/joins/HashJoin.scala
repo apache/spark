@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.join
+package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow2, Row}
 import org.apache.spark.sql.execution.SparkPlan

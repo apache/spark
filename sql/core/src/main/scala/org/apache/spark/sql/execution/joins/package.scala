@@ -15,26 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.join
+package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
  * :: DeveloperApi ::
+ * Physical execution operators for join operations.
  */
-@DeveloperApi
-case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
-  override def output = left.output ++ right.output
+package object joins {
 
-  override def execute() = {
-    val leftResults = left.execute().map(_.copy())
-    val rightResults = right.execute().map(_.copy())
+  @DeveloperApi
+  sealed abstract class BuildSide
 
-    leftResults.cartesian(rightResults).mapPartitions { iter =>
-      val joinedRow = new JoinedRow
-      iter.map(r => joinedRow(r._1, r._2))
-    }
-  }
+  @DeveloperApi
+  case object BuildRight extends BuildSide
+
+  @DeveloperApi
+  case object BuildLeft extends BuildSide
+
 }
