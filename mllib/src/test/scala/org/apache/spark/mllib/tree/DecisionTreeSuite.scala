@@ -722,7 +722,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
     val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
 
-    val topNode = Node.emptyNode(nodeIndex = 0)
+    val topNode = Node.emptyNode(nodeIndex = 1)
     assert(topNode.predict.predict === Double.MinValue)
     assert(topNode.impurity === -1.0)
     assert(topNode.isLeaf === false)
@@ -745,6 +745,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     // set impurity and predict for child nodes
     assert(topNode.leftNode.get.predict.predict === 0.0)
     assert(topNode.rightNode.get.predict.predict === 1.0)
+    assert(topNode.leftNode.get.impurity === 0.0)
+    assert(topNode.rightNode.get.impurity === 0.0)
   }
 }
 
