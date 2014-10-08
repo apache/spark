@@ -26,7 +26,6 @@ HAS_ERROR=0
 
 # Check whether all of lines ends properly.
 function check_eol_style() {
-  has_eol_style_error=0
   files="$1"
 
   # Assume the file which have the suffix ".bat" or ".cmd" is Windows batch file.
@@ -103,11 +102,16 @@ function check_tabs() {
       echo "" >> "$LOG_FILE"
     fi
   done
+
+  if [ "$has_tabs_error" -eq 1 ]; then
+    echo "Please remove tabs." >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
+  fi
 }
 
 # Check white spaces before EOL
 function check_white_spaces_before_eol() {
-  has_tabs_error=0
+  has_extra_space_error=0
   files="$1"
 
   for f in $files; do
@@ -117,9 +121,9 @@ function check_white_spaces_before_eol() {
     line=`grep -nU "[ ]\+$" "$f"`
 
     if [ "$?" -eq 0 ]; then
-      if [ "$has_tabs_error" -eq 0 ]; then
-        echo "Spaces were found before EOL at following location(s):" >> "$LOG_FILE"
-        has_tabs_error=1
+      if [ "$has_extra_space_error" -eq 0 ]; then
+        echo "Extra spaces were found before EOL at following location(s):" >> "$LOG_FILE"
+        has_extra_space_error=1
         HAS_ERROR=1
       fi
       echo "========================== $f ==========================" >> "$LOG_FILE"
@@ -127,11 +131,16 @@ function check_white_spaces_before_eol() {
       echo "" >> "$LOG_FILE"
     fi
   done
+
+  if [ "$has_extra_space_error" -eq 1 ]; then
+    echo "Please remove extra white spaces from the end of lines." >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
+  fi
 }
 
-# Check Non-ASCII characters
-function check_multibyte_character() {
-  has_mbyte_char_error=0
+# Check valid characters
+function check_valid_character() {
+  has_invalid_char_error=0
   files="$1"
 
   for f in $files; do
@@ -143,9 +152,24 @@ function check_multibyte_character() {
     line=`grep -nU "[^ a-zA-Z0-9[:space:][:punct:]]" "$f"`
 
     if [ "$?" -eq 0 ]; then
-      if [ "$has_mbyte_char_error" -eq 0 ]; then
-        echo "Spaces were found before EOL at following location(s):" >> "$LOG_FILE"
-        has_mbyte_char_error=1
+      if [ "$has_invalid_char_error" -eq 0 ]; then
+        echo "Invalid characters were found at following location(s):" >> "$LOG_FILE"
+        has_invalid_char_error=1
+        HAS_ERROR=1
+      fi
+      echo "========================== $f ==========================" >> "$LOG_FILE"
+      echo "$line" >> "$LOG_FILE"
+      echo "" >> "$LOG_FILE"
+    fi
+  done
+  
+  if [ "$has_invalid_char_error" -eq 1 ]; then
+    echo "Please remove invalid characters."
+    echo "Alphabet, Number, White-Spaces and Punctual-Characters are allowed." >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
+  fi
+}
+
         HAS_ERROR=1
       fi
       echo "========================== $f ==========================" >> "$LOG_FILE"
@@ -169,7 +193,7 @@ for path in "${TARGET_PATHS[@]}"; do
     check_eol_style "$files"
     check_tabs  "$files"
     check_white_spaces_before_eol "$files"
-    check_multibyte_character "$files"
+    check_valid_character "$files"
   fi
 done
 
