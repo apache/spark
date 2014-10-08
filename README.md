@@ -59,3 +59,6 @@ Here are steps to get started using MySQL as a backend for the metadata database
 ##### Start the web server
     ./flux webserver
     # Now browse to http://localhost:8080
+
+##### Tutorial
+[iPython Notebook](http://www.disney.com)
