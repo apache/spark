@@ -23,75 +23,93 @@ import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
+class DenseVector(val data: Array[Double]) extends Serializable {
+  override def equals(other: Any): Boolean = other match {
+    case v: DenseVector =>
+      java.util.Arrays.equals(this.data, v.data)
+    case _ => false
+  }
+}
+
+case class LabeledPoint(label: Double, features: DenseVector)
+
 class UserDefinedTypeSuite extends QueryTest {
 
-  case class LabeledPoint(label: Double, feature: Double) extends Serializable
-
   object LabeledPointUDT {
-
     def dataType: StructType =
       StructType(Seq(
         StructField("label", DoubleType, nullable = false),
-        StructField("feature", DoubleType, nullable = false)))
-
+        StructField("features", ArrayType(DoubleType, containsNull = false), nullable = false)))
   }
 
-  case class LabeledPointUDT() extends UserDefinedType[LabeledPoint](LabeledPointUDT.dataType) with Serializable {
+  case class LabeledPointUDT() extends UserDefinedType[LabeledPoint](LabeledPointUDT.dataType) {
 
     override def serialize(obj: Any): Row = obj match {
       case lp: LabeledPoint =>
-        val row: GenericMutableRow = new GenericMutableRow(2)
+        val row: GenericMutableRow = new GenericMutableRow(1 + lp.features.data.length)
         row.setDouble(0, lp.label)
-        row.setDouble(1, lp.feature)
+        var i = 0
+        while (i < lp.features.data.length) {
+          row.setDouble(1 + i, lp.features.data(i))
+          i += 1
+        }
         row
     }
 
     override def deserialize(row: Row): LabeledPoint = {
-      assert(row.length == 2)
+      assert(row.length >= 1)
       val label = row.getDouble(0)
-      val feature = row.getDouble(1)
-      LabeledPoint(label, feature)
+      val numFeatures = row.length - 1
+      val features = new DenseVector(new Array[Double](numFeatures))
+      var i = 0
+      while (i < numFeatures) {
+        features.data(i) = row.getDouble(1 + i)
+        i += 1
+      }
+      LabeledPoint(label, features)
     }
   }
 
   test("register user type: LabeledPoint") {
-    try {
-      TestSQLContext.registerUserType(new LabeledPointUDT())
-      println("udtRegistry:")
-      TestSQLContext.udtRegistry.foreach { case (t, s) => println(s"$t -> $s")}
+    TestSQLContext.registerUserType(new LabeledPointUDT())
+    println("udtRegistry:")
+    TestSQLContext.udtRegistry.foreach { case (t, s) => println(s"$t -> $s")}
 
-      println(s"test: ${scala.reflect.runtime.universe.typeTag[LabeledPoint]}")
-      assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeTag[LabeledPoint]))
+    println(s"test: ${scala.reflect.runtime.universe.typeTag[LabeledPoint]}")
+    assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeTag[LabeledPoint]))
 
-      val points = Seq(
-        LabeledPoint(1.0, 2.0),
-        LabeledPoint(0.0, 3.0))
-      val pointsRDD: RDD[LabeledPoint] = sparkContext.parallelize(points)
+    val points = Seq(
+      LabeledPoint(1.0, new DenseVector(Array(0.1, 1.0))),
+      LabeledPoint(0.0, new DenseVector(Array(0.2, 2.0))))
+    val pointsRDD: RDD[LabeledPoint] = sparkContext.parallelize(points)
 
-      println("Converting to SchemaRDD")
-      val tmpSchemaRDD: SchemaRDD = TestSQLContext.createSchemaRDD(pointsRDD)
-      println("blah")
-      println(s"SchemaRDD count: ${tmpSchemaRDD.count()}")
-      println("Done converting to SchemaRDD")
+    println("Converting to SchemaRDD")
+    val tmpSchemaRDD: SchemaRDD = TestSQLContext.createSchemaRDD(pointsRDD)
+    println("blah")
+    println(s"SchemaRDD count: ${tmpSchemaRDD.count()}")
+    println("Done converting to SchemaRDD")
 
-      /*
-      val features: RDD[DenseVector] =
-        pointsRDD.select('features).map { case Row(v: DenseVector) => v}
-      val featuresArrays: Array[DenseVector] = features.collect()
-      assert(featuresArrays.size === 2)
-      assert(featuresArrays.contains(new DenseVector(Array(1.0, 0.0))))
-      assert(featuresArrays.contains(new DenseVector(Array(1.0, -1.0))))
+    // TODO: This test works even when the deserialize method is never used.  How can I test deserialize?
+    val features: RDD[DenseVector] =
+      pointsRDD.select('features).map { case Row(v: DenseVector) => v}
+    val featuresArrays: Array[DenseVector] = features.collect()
+    assert(featuresArrays.size === 2)
+    assert(featuresArrays.contains(new DenseVector(Array(0.1, 1.0))))
+    assert(featuresArrays.contains(new DenseVector(Array(0.2, 2.0))))
 
-      val labels: RDD[Double] = pointsRDD.select('labels).map { case Row(v: Double) => v}
-      val labelsArrays: Array[Double] = labels.collect()
-      assert(labelsArrays.size === 2)
-      assert(labelsArrays.contains(1.0))
-      assert(labelsArrays.contains(0.0))
-      */
-    } catch {
-      case e: Exception =>
-        e.printStackTrace()
-    }
+    val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v}
+    val labelsArrays: Array[Double] = labels.collect()
+    assert(labelsArrays.size === 2)
+    assert(labelsArrays.contains(1.0))
+    assert(labelsArrays.contains(0.0))
+  }
+
+  test("UDTs cannot be registered twice") {
+    // TODO
+  }
+
+  test("UDTs cannot override built-in types") {
+    // TODO
   }
 
 }
