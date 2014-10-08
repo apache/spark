@@ -253,7 +253,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
-    assert(rootNode.predict === 1)
+    assert(rootNode.predict.predict === 1)
     assert(stats.impurity > 0.2)
   }
 
@@ -282,7 +282,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
-    assert(rootNode.predict === 0.6)
+    assert(rootNode.predict.predict === 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -352,7 +352,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
-    assert(rootNode.predict === 1)
+    assert(rootNode.predict.predict === 1)
   }
 
   test("Binary classification stump with fixed label 0 for Entropy") {
@@ -377,7 +377,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
-    assert(rootNode.predict === 0)
+    assert(rootNode.predict.predict === 0)
   }
 
   test("Binary classification stump with fixed label 1 for Entropy") {
@@ -402,7 +402,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(stats.gain === 0)
     assert(stats.leftImpurity === 0)
     assert(stats.rightImpurity === 0)
-    assert(rootNode.predict === 1)
+    assert(rootNode.predict.predict === 1)
   }
 
   test("Second level node building with vs. without groups") {
@@ -646,7 +646,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val model = DecisionTree.train(rdd, strategy)
     assert(model.topNode.isLeaf)
-    assert(model.topNode.predict == 0.0)
+    assert(model.topNode.predict.predict == 0.0)
     val predicts = rdd.map(p => model.predict(p.features)).collect()
     predicts.foreach { predict =>
       assert(predict == 0.0)
@@ -693,7 +693,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val model = DecisionTree.train(input, strategy)
     assert(model.topNode.isLeaf)
-    assert(model.topNode.predict == 0.0)
+    assert(model.topNode.predict.predict == 0.0)
     val predicts = input.map(p => model.predict(p.features)).collect()
     predicts.foreach { predict =>
       assert(predict == 0.0)
