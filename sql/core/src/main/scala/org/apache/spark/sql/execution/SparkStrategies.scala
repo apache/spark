@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.parquet._
 
+
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
@@ -34,13 +35,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
-        val semiJoin = execution.LeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right))
+        val semiJoin = join.LeftSemiJoinHash(leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // no predicate can be evaluated by matching hash keys
       case logical.Join(left, right, LeftSemi, condition) =>
-        execution.LeftSemiJoinBNL(
-          planLater(left), planLater(right), condition) :: Nil
+        join.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
     }
   }
@@ -50,13 +49,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * evaluated by matching hash keys.
    *
    * This strategy applies a simple optimization based on the estimates of the physical sizes of
-   * the two join sides.  When planning a [[execution.BroadcastHashJoin]], if one side has an
+   * the two join sides.  When planning a [[join.BroadcastHashJoin]], if one side has an
    * estimated physical size smaller than the user-settable threshold
    * [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]], the planner would mark it as the
    * ''build'' relation and mark the other relation as the ''stream'' side.  The build table will be
    * ''broadcasted'' to all of the executors involved in the join, as a
    * [[org.apache.spark.broadcast.Broadcast]] object.  If both estimates exceed the threshold, they
-   * will instead be used to decide the build side in a [[execution.ShuffledHashJoin]].
+   * will instead be used to decide the build side in a [[join.ShuffledHashJoin]].
    */
   object HashJoin extends Strategy with PredicateHelper {
 
@@ -66,8 +65,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         left: LogicalPlan,
         right: LogicalPlan,
         condition: Option[Expression],
-        side: BuildSide) = {
-      val broadcastHashJoin = execution.BroadcastHashJoin(
+        side: join.BuildSide) = {
+      val broadcastHashJoin = execution.join.BroadcastHashJoin(
         leftKeys, rightKeys, side, planLater(left), planLater(right))
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
@@ -76,27 +75,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if sqlContext.autoBroadcastJoinThreshold > 0 &&
            right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
-        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, join.BuildRight)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if sqlContext.autoBroadcastJoinThreshold > 0 &&
            left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
-          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
+          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, join.BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-            BuildRight
+            join.BuildRight
           } else {
-            BuildLeft
+            join.BuildLeft
           }
-        val hashJoin =
-          execution.ShuffledHashJoin(
-            leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
+        val hashJoin = join.ShuffledHashJoin(
+          leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        execution.HashOuterJoin(
+        join.HashOuterJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
       case _ => Nil
@@ -164,8 +162,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) BuildRight else BuildLeft
-        execution.BroadcastNestedLoopJoin(
+          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+            join.BuildRight
+          } else {
+            join.BuildLeft
+          }
+        join.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
       case _ => Nil
     }
@@ -174,10 +176,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, _, None) =>
-        execution.CartesianProduct(planLater(left), planLater(right)) :: Nil
+        execution.join.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
-          execution.CartesianProduct(planLater(left), planLater(right))) :: Nil
+          execution.join.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
     }
   }
