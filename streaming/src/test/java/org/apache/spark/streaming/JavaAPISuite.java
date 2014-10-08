@@ -1746,15 +1746,20 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           return null;
         }
       });
+    test.print();
     Thread.sleep(1000);
-    System.out.println("Saving old data to " + tempDir.getAbsolutePath());
-    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/1412725941839/",
+    System.out.println("Saving old data to " + tempDir.getAbsolutePath() +"/1/");
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/2/",
                                     LongWritable.class, IntWritable.class,
                                     SequenceFileOutputFormat.class);
-    test.print();
-    Thread.sleep(5000);
-    Assert.assertEquals(new Long(1L), new Long(total.value()));
-    Assert.assertEquals(new Long(1L), new Long(elem.value()));
+    Thread.sleep(1000);
+    System.out.println("Saving old data to " + tempDir.getAbsolutePath() +"/2/");
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/2/",
+                                    LongWritable.class, IntWritable.class,
+                                    SequenceFileOutputFormat.class);
+
+    Assert.assertEquals(new Long(2L), new Long(total.value()));
+    Assert.assertEquals(new Long(2L), new Long(elem.value()));
   }
 
   @Test
