@@ -43,7 +43,7 @@ private[yarn] class YarnAllocationHandler(
     args: ApplicationMasterArguments,
     preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
     securityMgr: SecurityManager)
-  extends YarnAllocator(conf, sparkConf, args, preferredNodes, securityMgr) {
+  extends YarnAllocator(conf, sparkConf, appAttemptId, args, preferredNodes, securityMgr) {
 
   private val lastResponseId = new AtomicInteger()
   private val releaseList: CopyOnWriteArrayList[ContainerId] = new CopyOnWriteArrayList()
