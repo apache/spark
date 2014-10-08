@@ -69,14 +69,14 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   cd("../python/docs")
   puts `make html`
 
-  puts "Moving back into docs dir."
-  cd("../docs")
+  puts "Moving back into home dir."
+  cd("../../")
 
   puts "Making directory api/python"
-  mkdir_p "api/python"
+  mkdir_p "docs/api/python"
 
-  puts "cp -r ../python/docs/_build/html/. api/python"
-  cp_r("../python/docs/_build/html/.", "api/python")
+  puts "cp -r python/docs/_build/html/. docs/api/python"
+  cp_r("python/docs/_build/html/.", "docs/api/python")
 
   cd("..")
 end
