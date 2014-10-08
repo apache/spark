@@ -162,7 +162,7 @@ function check_valid_character() {
       echo "" >> "$LOG_FILE"
     fi
   done
-  
+
   if [ "$has_invalid_char_error" -eq 1 ]; then
     echo "Please remove invalid characters."
     echo "Alphabet, Number, White-Spaces and Punctual-Characters are allowed." >> "$LOG_FILE"
