@@ -24,6 +24,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
+import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -122,15 +123,17 @@ trait ClientBase extends Logging {
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
     val srcUri = srcFs.getUri()
     val dstUri = destFs.getUri()
-    if (srcUri.getScheme() == null) {
+    if (srcUri.getScheme() == null || srcUri.getScheme() != dstUri.getScheme()) {
       return false
     }
-    if (!srcUri.getScheme().equals(dstUri.getScheme())) {
-      return false
-    }
+
     var srcHost = srcUri.getHost()
     var dstHost = dstUri.getHost()
-    if ((srcHost != null) && (dstHost != null)) {
+
+    // In HA or when using viewfs, the host part of the URI may not actually be a host, but the
+    // name of the HDFS namespace. Those names won't resolve, so avoid even trying if they
+    // match.
+    if (srcHost != null && dstHost != null && srcHost != dstHost) {
       try {
         srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
         dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
@@ -138,19 +141,9 @@ trait ClientBase extends Logging {
         case e: UnknownHostException =>
           return false
       }
-      if (!srcHost.equals(dstHost)) {
-        return false
-      }
-    } else if (srcHost == null && dstHost != null) {
-      return false
-    } else if (srcHost != null && dstHost == null) {
-      return false
     }
-    if (srcUri.getPort() != dstUri.getPort()) {
-      false
-    } else {
-      true
-    }
+
+    Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
   }
 
   /** Copy the file into HDFS if needed. */
@@ -621,7 +614,7 @@ object ClientBase extends Logging {
     YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
             File.pathSeparator)
 
-  /** 
+  /**
    * Get the list of namenodes the user may access.
    */
   private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
