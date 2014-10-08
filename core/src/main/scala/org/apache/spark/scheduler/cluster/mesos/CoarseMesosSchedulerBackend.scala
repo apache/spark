@@ -110,7 +110,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
     val executorSparkHome = conf.getOption("spark.mesos.executor.home")
-      .orElse(sc.getSparkHome())
+      .orElse(sc.getSparkHome)
       .getOrElse {
         throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
       }

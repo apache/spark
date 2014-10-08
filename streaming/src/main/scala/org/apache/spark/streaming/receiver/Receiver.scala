@@ -230,7 +230,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
 
   /** Check if the receiver has started or not. */
   def isStarted(): Boolean = {
-    executor.isReceiverStarted()
+    executor.isReceiverStarted
   }
 
   /**
@@ -238,7 +238,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * the receiving of data should be stopped.
    */
   def isStopped(): Boolean = {
-    executor.isReceiverStopped()
+    executor.isReceiverStopped
   }
 
   /**
