@@ -32,19 +32,59 @@ object ScalaReflection {
   case class Schema(dataType: DataType, nullable: Boolean)
 
   /** Converts Scala objects to catalyst rows / types */
-  def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
+  /*
+  def convertToCatalyst(a: Any, dataType: DataType): Any = a match {
     // TODO: Why does this not need to flatMap stuff?  Does it not support nesting?
-    case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
-      convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
+    case o: Option[_] =>
+      println(s"convertToCatalyst: option")
+      o.map(convertToCatalyst(_, dataType)).orNull
+    case s: Seq[_] =>
+      println(s"convertToCatalyst: array")
+      s.map(convertToCatalyst(_, null))
+    case m: Map[_, _] =>
+      println(s"convertToCatalyst: map")
+      m.map { case (k, v) =>
+      convertToCatalyst(k, null) -> convertToCatalyst(v, null)
     }
-    case (p: Product, structType: StructType) => new GenericRow(
-      p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
-        convertToCatalyst(elem, field.dataType)
-      }.toArray)
-    case (udt: Any, udtType: UserDefinedType[_]) => udtType.serialize(udt)
-    case (other, _) => other
+    case p: Product =>
+      println(s"convertToCatalyst: struct")
+      new GenericRow(p.productIterator.map(convertToCatalyst(_, null)).toArray)
+    case other =>
+      println(s"convertToCatalyst: other")
+      other
+  }
+  */
+
+  def convertToCatalyst(a: Any, dataType: DataType): Any = {
+    println(s"convertToCatalyst: a = $a, dataType = $dataType")
+    (a, dataType) match {
+      // TODO: Why does this not need to flatMap stuff?  Does it not support nesting?
+      case (o: Option[_], _) =>
+        println(s"convertToCatalyst: option")
+        o.map(convertToCatalyst(_, dataType)).orNull
+      case (s: Seq[_], arrayType: ArrayType) =>
+        println(s"convertToCatalyst: array")
+        s.map(convertToCatalyst(_, arrayType.elementType))
+      case (m: Map[_, _], mapType: MapType) =>
+        println(s"convertToCatalyst: map")
+        m.map { case (k, v) =>
+          convertToCatalyst(k, mapType.keyType) -> convertToCatalyst(v, mapType.valueType)
+        }
+      case (p: Product, structType: StructType) =>
+        println(s"convertToCatalyst: struct with")
+        println(s"\t p: $p")
+        println(s"\t structType: $structType")
+        new GenericRow(
+          p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
+            convertToCatalyst(elem, field.dataType)
+          }.toArray)
+      case (udt: Any, udtType: UserDefinedType[_]) =>
+        println(s"convertToCatalyst: udt")
+        udtType.serialize(udt)
+      case (other, _) =>
+        println(s"convertToCatalyst: other")
+        other
+    }
   }
 
   /*
@@ -78,6 +118,7 @@ object ScalaReflection {
   def schemaFor[T: TypeTag](udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = {
     println(s"schemaFor: ${typeTag[T]}")
     if (udtRegistry.contains(typeTag[T])) {
+      println(s"  schemaFor T matched udtRegistry")
       val udtStructType: StructType = udtRegistry(typeTag[T]).dataType
       Schema(udtStructType, nullable = true)
     } else {
