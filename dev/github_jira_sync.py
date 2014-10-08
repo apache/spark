@@ -133,7 +133,7 @@ for issue, pr in sorted(jira_prs, key=lambda (k, v): int(v['number'])):
   # https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links
   # application = {"name": "Github pull requests", "type": "org.apache.spark.jira.github"}
   jira_client.add_remote_link(issue, destination)
-    
+
   comment = "User '%s' has created a pull request for this issue:" % pr['user']['login']
   comment = comment + ("\n%s" % pr['html_url'])
   if pr_num >= MIN_COMMENT_PR:

@@ -32,7 +32,7 @@ PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8.py"
 PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/1.5.7/pep8.py"
 PEP8_PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/"
 
-curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
+curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"
 curl_status=$?
 
 if [ $curl_status -ne 0 ]; then

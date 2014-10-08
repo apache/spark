@@ -73,10 +73,10 @@ $java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.t
 
 ERRORS="$(cat rat-results.txt | grep -e "??")"
 
-if test ! -z "$ERRORS"; then 
+if test ! -z "$ERRORS"; then
     echo "Could not find Apache license headers in the following files:"
     echo "$ERRORS"
     exit 1
-else 
+else
     echo -e "RAT checks passed."
 fi
