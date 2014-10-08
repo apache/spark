@@ -44,38 +44,37 @@ Type in expressions to have them evaluated.
 Type :help for more information.
 
 scala> val query = sql("SELECT * FROM (SELECT * FROM src) a")
-query: org.apache.spark.sql.ExecutedQuery =
-SELECT * FROM (SELECT * FROM src) a
-=== Query Plan ===
-Project [key#6:0.0,value#7:0.1]
- HiveTableScan [key#6,value#7], (MetastoreRelation default, src, None), None
+query: org.apache.spark.sql.SchemaRDD =
+== Query Plan ==
+== Physical Plan ==
+HiveTableScan [key#10,value#11], (MetastoreRelation default, src, None), None
 ```
 
 Query results are RDDs and can be operated as such.
 ```
 scala> query.collect()
-res8: Array[org.apache.spark.sql.execution.Row] = Array([238,val_238], [86,val_86], [311,val_311]...
+res2: Array[org.apache.spark.sql.Row] = Array([238,val_238], [86,val_86], [311,val_311], [27,val_27]...
 ```
 
 You can also build further queries on top of these RDDs using the query DSL.
 ```
-scala> query.where('key === 100).toRdd.collect()
-res11: Array[org.apache.spark.sql.execution.Row] = Array([100,val_100], [100,val_100])
+scala> query.where('key === 100).collect()
+res3: Array[org.apache.spark.sql.Row] = Array([100,val_100], [100,val_100])
 ```
 
-From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](http://databricks.github.io/catalyst/latest/api/#catalyst.trees.TreeNode) objects.
+From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](https://github.com/apache/spark/blob/master/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/trees/TreeNode.scala) objects.
 ```scala
-scala> query.logicalPlan
-res1: catalyst.plans.logical.LogicalPlan = 
-Project {key#0,value#1}
- Project {key#0,value#1}
+scala> query.queryExecution.analyzed
+res4: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
+Project [key#10,value#11]
+ Project [key#10,value#11]
   MetastoreRelation default, src, None
 
 
-scala> query.logicalPlan transform {
+scala> query.queryExecution.analyzed transform {
      |   case Project(projectList, child) if projectList == child.output => child
      | }
-res2: catalyst.plans.logical.LogicalPlan = 
-Project {key#0,value#1}
+res5: res17: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
+Project [key#10,value#11]
  MetastoreRelation default, src, None
 ```
