@@ -378,11 +378,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   def reset() {
     try {
-      // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.foreach { log =>
-        log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
-      }
-
       clearCache()
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
