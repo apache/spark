@@ -100,6 +100,14 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }
 
+case class BitwiseAND(left: Expression, right: Expression) extends BinaryArithmetic {
+  def symbol = "&"
+
+  override def eval(input: Row): Any = dataType match {
+    case _: IntegralType => b2(input, left , right, _.bitwiseAND(_, _))
+  }
+}
+
 case class MaxOf(left: Expression, right: Expression) extends Expression {
   type EvaluatedType = Any
 

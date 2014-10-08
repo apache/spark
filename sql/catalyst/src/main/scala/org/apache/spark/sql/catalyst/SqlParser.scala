@@ -308,7 +308,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     baseExpression * (
       "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1,e2) } |
       "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1,e2) } |
-      "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1,e2) }
+      "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1,e2) } |
+      "&" ^^^ { (e1: Expression, e2: Expression) => BitwiseAND(e1,e2) }
     )
 
   protected lazy val function: Parser[Expression] =
@@ -396,7 +397,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   delimiters += (
       "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-      ",", ";", "%", "{", "}", ":", "[", "]", "."
+      ",", ";", "%", "{", "}", ":", "[", "]", ".", "&"
   )
 
   override lazy val token: Parser[Token] = (

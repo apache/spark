@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
+import org.apache.spark.sql.catalyst.types.{BitwiseOpsType, DataType, FractionalType, IntegralType, NumericType, NativeType}
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -183,6 +183,39 @@ abstract class Expression extends TreeNode[Expression] {
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.asIntegral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
+        }
+      }
+    }
+  }
+
+  /**
+   * Evaluation helper function for 2 children expressions which do bitwise operations. Those expressions are
+   * supposed to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
+  @inline
+  protected final def b2(
+      i: Row,
+      e1: Expression,
+      e2: Expression,
+      f: ((BitwiseOpsType[Any], Any, Any) => Any)): Any  = {
+    if (e1.dataType != e2.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+    }
+
+    val evalE1 = e1.eval(i)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = e2.eval(i)
+      if (evalE2 == null) {
+        null
+      } else {
+        e1.dataType match {
+          case i: IntegralType =>
+            f.asInstanceOf[(BitwiseOpsType[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
+              i.asInstanceOf[BitwiseOpsType[i.JvmType]], evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+          case other => sys.error(s"Type $other does not support bitwise operations")
         }
       }
     }
