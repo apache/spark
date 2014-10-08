@@ -22,7 +22,7 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.{ArrayBuffer}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -223,7 +223,7 @@ class DAGScheduler(
             shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId,
             shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
- 
+
         stage
     }
   }
@@ -1019,7 +1019,7 @@ class DAGScheduler(
                   changeEpoch = true)
               }
               clearCacheLocs()
-              if (stage.outputLocs.contains(Nil)) {
+              if (stage.outputLocs.exists(_ == Nil)) {
                 // Some tasks had failed; let's resubmit this stage
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + stage + " (" + stage.name +
@@ -1202,7 +1202,7 @@ class DAGScheduler(
       logError("No stages registered for job " + job.jobId)
     }
     stages.foreach { stageId =>
-      val jobsForStage: Option[HashSet[Int]] = stageIdToStage.get(stageId).map(_.jobIds)
+      val jobsForStage: Option[mutable.HashSet[Int]] = stageIdToStage.get(stageId).map(_.jobIds)
       if (jobsForStage.isEmpty || !jobsForStage.get.contains(job.jobId)) {
         logError(
           "Job %d not registered for stage %d even though that stage was registered for the job"
@@ -1247,7 +1247,7 @@ class DAGScheduler(
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
     val waitingForVisit = new mutable.Stack[RDD[_]]
-    def visit(rdd: RDD[_]) {  
+    def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
         for (dep <- rdd.dependencies) {
