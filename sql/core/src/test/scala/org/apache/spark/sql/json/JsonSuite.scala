@@ -644,7 +644,9 @@ class JsonSuite extends QueryTest {
 
   test("Corrupt records") {
     // Test if we can query corrupt records.
+    val oldColumnNameOfCorruptRecord = TestSQLContext.columnNameOfCorruptJsonRecord
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_JSON_RECORD, "unparsed")
+
     val jsonSchemaRDD = jsonRDD(corruptRecords)
     jsonSchemaRDD.registerTempTable("jsonTable")
 
@@ -693,5 +695,7 @@ class JsonSuite extends QueryTest {
       Seq("""{"a":{, b:3}""") ::
       Seq("]") :: Nil
     )
+
+    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_JSON_RECORD, oldColumnNameOfCorruptRecord)
   }
 }
