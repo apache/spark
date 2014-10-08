@@ -8,6 +8,9 @@ gems:
 kramdown:
   entity_output: numeric
 
+include:
+  - _static
+
 # These allow the documentation to be updated with nerw releases
 # of Spark, Scala, and Mesos.
 SPARK_VERSION: 1.0.0-SNAPSHOT

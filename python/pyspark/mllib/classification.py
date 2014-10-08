@@ -79,15 +79,15 @@ class LogisticRegressionWithSGD(object):
         """
         Train a logistic regression model on the given data.
 
-        @param data:              The training data.
-        @param iterations:        The number of iterations (default: 100).
-        @param step:              The step parameter used in SGD
+        :param data:              The training data.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        @param miniBatchFraction: Fraction of data to be used for each SGD
+        :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
-        @param initialWeights:    The initial weights (default: None).
-        @param regParam:          The regularizer parameter (default: 1.0).
-        @param regType:           The type of regularizer used for training
+        :param initialWeights:    The initial weights (default: None).
+        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regType:           The type of regularizer used for training
                                   our model.
 
                                   :Allowed values:
@@ -151,15 +151,15 @@ class SVMWithSGD(object):
         """
         Train a support vector machine on the given data.
 
-        @param data:              The training data.
-        @param iterations:        The number of iterations (default: 100).
-        @param step:              The step parameter used in SGD
+        :param data:              The training data.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        @param regParam:          The regularizer parameter (default: 1.0).
-        @param miniBatchFraction: Fraction of data to be used for each SGD
+        :param regParam:          The regularizer parameter (default: 1.0).
+        :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
-        @param initialWeights:    The initial weights (default: None).
-        @param regType:           The type of regularizer used for training
+        :param initialWeights:    The initial weights (default: None).
+        :param regType:           The type of regularizer used for training
                                   our model.
 
                                   :Allowed values:
@@ -238,10 +238,10 @@ class NaiveBayes(object):
         classification.  By making every vector a 0-1 vector, it can also be
         used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
 
-        @param data: RDD of NumPy vectors, one per element, where the first
+        :param data: RDD of NumPy vectors, one per element, where the first
                coordinate is the label and the rest is the feature vector
                (e.g. a count vector).
-        @param lambda_: The smoothing parameter
+        :param lambda_: The smoothing parameter
         """
         sc = data.context
         jlist = sc._jvm.PythonMLLibAPI().trainNaiveBayes(data._to_java_object_rdd(), lambda_)
