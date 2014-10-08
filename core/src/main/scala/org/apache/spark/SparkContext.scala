@@ -1409,7 +1409,7 @@ object SparkContext extends Logging {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+    simpleWritableConverter[Array[Byte], BytesWritable](bw => bw.getBytes.take(bw.getLength))
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =
