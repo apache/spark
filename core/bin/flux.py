@@ -3,6 +3,7 @@
 import dateutil.parser
 import logging
 import os
+import pickle
 import signal
 import sys
 from time import sleep
@@ -14,6 +15,7 @@ if BASE_FOLDER not in sys.path:
 import argparse
 from core import settings
 from core.models import DagBag
+from core.models import DagPickle
 from core.models import TaskInstance
 from core.models import State
 from datetime import datetime
@@ -48,20 +50,27 @@ def backfill(args):
 def run(args):
     args.execution_date = dateutil.parser.parse(args.execution_date)
     iso = args.execution_date.isoformat()
-    directory = settings.BASE_LOG_FOLDER + \
-        "/{args.dag_id}/{args.task_id}".format(args=args)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    filename = "{directory}/{iso}".format(**locals())
-    logging.basicConfig(
-        filename=filename, level=logging.INFO, format=settings.LOG_FORMAT)
+    if not args.pickle:
+        directory = settings.BASE_LOG_FOLDER + \
+            "/{args.dag_id}/{args.task_id}".format(args=args)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        filename = "{directory}/{iso}".format(**locals())
+        logging.basicConfig(
+            filename=filename, level=logging.INFO, format=settings.LOG_FORMAT)
 
-    print("Logging into: " + filename)
-    dagbag = DagBag(args.subdir)
-    if args.dag_id not in dagbag.dags:
-        raise Exception('dag_id could not be found')
-    dag = dagbag.dags[args.dag_id]
-    task = dag.get_task(task_id=args.task_id)
+        print("Logging into: " + filename)
+        dagbag = DagBag(args.subdir)
+        if args.dag_id not in dagbag.dags:
+            raise Exception('dag_id could not be found')
+        dag = dagbag.dags[args.dag_id]
+        task = dag.get_task(task_id=args.task_id)
+    else:
+        session = settings.Session()
+        dag_pickle, = session.query(
+            DagPickle.pickle).filter(DagPickle.id==args.pickle).all()[0]
+        dag = pickle.get_object()
+        task = dag.get_task(task_id=args.task_id)
 
     # This is enough to fail the task instance
     def signal_handler(signum, frame):
@@ -222,6 +231,9 @@ if __name__ == '__main__':
     ht = "Ignore upstream and depends_on_past dependencies"
     parser_run.add_argument(
         "-i", "--ignore_dependencies", help=ht, action="store_true")
+    ht = "Serialized pickle object of the entire dag (used internally)"
+    parser_run.add_argument(
+        "-p", "--pickle", help=ht)
 
     ht = "Start a Flux webserver instance"
     parser_webserver = subparsers.add_parser('webserver', help=ht)

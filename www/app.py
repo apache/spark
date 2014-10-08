@@ -443,7 +443,7 @@ admin.add_view(mv)
 
 class JobModelView(ModelViewOnly):
     column_default_sort = ('start_date', True)
-mv = JobModelView(models.Job, session, name="Jobs", category="Objects")
+mv = JobModelView(models.BaseJob, session, name="Jobs", category="Objects")
 admin.add_view(mv)
 
 

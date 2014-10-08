@@ -26,6 +26,8 @@ TODO
 * CeleryExecutor
 * Clear should kill running jobs
 #### Misc
+* Require and use $FLUX_HOME
+* Rename core to flux
 * BaseJob
     * DagBackfillJob
     * TaskIntanceJob

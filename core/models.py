@@ -5,11 +5,12 @@ import inspect
 import jinja2
 import logging
 import os
+import pickle
 import re
 from time import sleep
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime,
+    Column, Integer, String, DateTime, Text,
     ForeignKey, func
 )
 from sqlalchemy.ext.declarative import declarative_base
@@ -116,6 +117,31 @@ class DatabaseConnection(Base):
         self.schema = schema
 
 
+class DagPickle(Base):
+    """
+    Dags can originate from different places (user repos, master repo, ...) 
+    and also get executed in different places (different executors). This
+    object represents a version of a DAG and becomes a source of truth for
+    a BackfillJob execution. A pickle is a native python serialized object,
+    and in this case gets stored in the database for the duration of the job.
+
+    The executors pick up the DagPickle id and read the dag definition from 
+    the database.
+    """
+    id = Column(Integer, primary_key=True)
+    pickle = Column(Text())
+
+    __tablename__ = "dag_pickle"
+    
+    def __init__(self, dag, job):
+        self.pickle = dag.pickle()
+        self.dag_id = dag.dag_id
+        self.job = job
+
+    def get_object(self):
+        return pickle.loads(self.pickle)
+
+
 class TaskInstance(Base):
     """
     Task instances store the state of a task instance. This table is the
@@ -148,13 +174,15 @@ class TaskInstance(Base):
         self.task = task
         self.try_number = 1
 
-    def command(self, mark_success=False):
+    def command(self, mark_success=False, pickle=None):
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
+        pickle = "--pickle {0}".format(pickle.id)  if pickle else ""
         return (
-            "./flux run {self.dag_id} {self.task_id} {iso} "
-            "-sd {self.task.dag.filepath} "
+            "./flux run "
+            "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
+            "{pickle} "
         ).format(**locals())
 
     @property
@@ -380,18 +408,24 @@ class Log(Base):
         self.owner = task_instance.task.owner
 
 
-class Job(Base):
+class BaseJob(Base):
 
     __tablename__ = "job"
 
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN), ForeignKey('dag.dag_id'))
     state = Column(String(20))
+    job_type = Column(String(30))
     start_date = Column(DateTime())
     end_date = Column(DateTime())
     latest_heartbeat = Column(DateTime())
     executor_class = Column(String(500))
     hostname = Column(String(500))
+
+    __mapper_args__ = {
+        'polymorphic_on': job_type,
+        'polymorphic_identity': 'BaseJob'
+    }
 
     def __init__(self, executor=DEFAULT_EXECUTOR):
         self.state = None
@@ -419,11 +453,26 @@ class Job(Base):
         session.commit()
         session.close()
 
-    def run_dag(self, dag, start_date=None, end_date=None, mark_success=False):
+    def run(self):
+        raise NotImplemented("This method needs to be overriden")
+
+class BackfillJob(BaseJob):
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'BackfillJob'
+    }
+
+    def run(self, dag, start_date=None, end_date=None, mark_success=False):
+        session = settings.Session()
 
         # Build a list of all intances to run
         task_instances = {}
         self.dag = dag
+
+        pickle = DagPickle(dag, self)
+        session.add(pickle)
+        session.commit()
+
         executor = self.executor
         for task in self.dag.tasks:
             start_date = start_date or task.start_date
@@ -442,7 +491,10 @@ class Job(Base):
                     del task_instances[key]
                 elif ti.is_runnable():
                     executor.queue_command(
-                        key=ti.key, command=ti.command(mark_success))
+                        key=ti.key, command=ti.command(
+                            mark_success=mark_success,
+                            pickle=pickle)
+                    )
             if task_instances:
                 self.heartbeat()
             executor.heartbeat()
@@ -466,10 +518,7 @@ class Job(Base):
                     del task_instances[key]
         executor.end()
         logging.info("Run summary:")
-
-    def run_task_instance(self, task_instance):
-        self.executor.execute(task_instance=task_instance)
-        self.executor.end()
+        session.close()
 
 
 class BaseOperator(Base):
@@ -567,6 +616,9 @@ class BaseOperator(Base):
     @property
     def downstream_list(self):
         return self._downstream_list
+
+    def pickle(self):
+        return pickle.dumps(self)
 
     def clear(
             self, start_date=None, end_date=None,
@@ -751,6 +803,9 @@ class DAG(Base):
         """
         raise NotImplemented("")
 
+    def pickle(self):
+        return pickle.dumps(self)
+
     def get_task_instances(self, start_date=None, end_date=None):
         session = settings.Session()
         TI = TaskInstance
@@ -847,11 +902,10 @@ class DAG(Base):
 
     def run(self, start_date=None, end_date=None, mark_success=False):
         session = settings.Session()
-
-        job = Job(executor=self.dagbag.executor)
+        job = BackfillJob(executor=self.executor)
         session.add(job)
         session.commit()
-        job.run_dag(self, start_date, end_date, mark_success)
+        job.run(self, start_date, end_date, mark_success)
         job.state = State.SUCCESS
         job.end_date = datetime.now()
         session.merge(job)
