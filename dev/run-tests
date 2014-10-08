@@ -133,10 +133,10 @@ CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
 
 echo ""
 echo "========================================================================="
-echo "Running Windows batch style checks"
+echo "Running Windows batch file style checks"
 echo "========================================================================="
 
-CURRENT_BLOCK=$BLOCK_WINDOWS_BATCH_STYLE
+CURRENT_BLOCK=$BLOCK_WINDOWS_BATCH_FILE_STYLE
 
 ./dev/lint-windows-cmd
 

@@ -19,22 +19,35 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
-TARGET_DIR="$SPARK_ROOT_DIR/bin"
+TARGET_DIRS=("$SPARK_ROOT_DIR/bin" "$SPARK_ROOT_DIR/python/docs")
+LOG_FILE=lint-windows-cmd.txt
 HAS_ERROR=0
 
 # check whether all of lines ends with CRLF.
-for file in "$TARGET_DIR"/*.cmd ; do
-  grep "^.*"$'\r'"$" "$file" &> /dev/null
-  if [ "$?" -ne "0" ]; then
-    HAS_ERROR=1
-    echo "$file has line(s) not ends with CRLF."
-  fi
+for directory in "$TARGET_DIRS"; do
+  for file in "$directory/"*.{cmd,bat}; do
+    if [ -f "$file" ]; then
+      line=`grep -v -nU $'\r' "$file"`
+      if [ "$?" -eq "0" ]; then
+        HAS_ERROR=1
+	echo "========================== $file ==========================" >> "$LOG_FILE"
+        echo "$line" >> "$LOG_FILE"
+      fi
+    fi
+  done
 done
 
-if [ "$HAS_ERROR" -eq "0" ];then
-  echo -e "Windows batch file style checks passed."
+if [ "$HAS_ERROR" -eq "1" ]; then
+  echo "Windows batch file style checks failed."
+  echo "Non-Windows-style line endings were found at the following location(s):"
+  cat "$LOG_FILE"
+  echo "Please fix the line endings to follow the Windows convention of CR/LF."
 else
-  echo -e "Windows batch file style checks failed."
+  echo "Windows batch file style checks passed."
+fi
+
+if [ -f "$LOG_FILE" ]; then
+  rm "$LOG_FILE"
 fi
 
 exit "$HAS_ERROR"
