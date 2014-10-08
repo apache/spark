@@ -238,7 +238,7 @@ private[sql] case class InMemoryColumnarTableScan(
       def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]) = {
         val rows = cacheBatches.flatMap { cachedBatch =>
           // Build column accessors
-          val columnAccessors = requestedColumnIndices .map { batch =>
+          val columnAccessors = requestedColumnIndices.map { batch =>
             ColumnAccessor(ByteBuffer.wrap(cachedBatch.buffers(batch)))
           }
 
