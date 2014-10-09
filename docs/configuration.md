@@ -272,6 +272,16 @@ Apart from these, the following properties are also available, and may be useful
     `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
   </td>
 </tr>
+<tr>
+  <td><code>spark.tmp.dir</code></td>
+  <td>system property of <code>java.io.tmpdir</code></td>
+  <td>
+    Set the temp directory for Spark. The Directory is mainly used for distribute files or jars by
+    Http File Server; store broadcast block; fetch and store dependencies(jars or files) by executors.
+    We recommend setting this directory to data disk to reduce the risk that the size of the system disk
+    will grow large.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior

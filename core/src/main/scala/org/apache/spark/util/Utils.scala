@@ -233,7 +233,11 @@ private[spark] object Utils extends Logging {
   }
 
   /** Create a temporary directory inside the given parent directory */
-  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
+  def createTempDir(): File = {
+    val root: String = SparkEnv.get.conf.contains("spark.tmp.dir") match {
+      case true => SparkEnv.get.conf.get("spark.tmp.dir")
+      case false => System.getProperty("java.io.tmpdir")
+    }
     var attempts = 0
     val maxAttempts = 10
     var dir: File = null
