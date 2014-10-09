@@ -113,8 +113,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       ("invalid.codec", false))
 
     testCodecs.foreach { case (codecName, valid) =>
-      val logDir = new File(testDir, "test")
       val codec = if (valid) CompressionCodec.createCodec(new SparkConf(), codecName) else null
+      val logDir = new File(testDir, codecName)
       logDir.mkdir()
       createEmptyFile(new File(logDir, provider.SPARK_VERSION_PREFIX + "1.0"))
       writeFile(new File(logDir, provider.LOG_PREFIX + "1"), false, Option(codec),
