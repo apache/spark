@@ -644,24 +644,25 @@ class JsonSuite extends QueryTest {
 
   test("Corrupt records") {
     // Test if we can query corrupt records.
-    val oldColumnNameOfCorruptRecord = TestSQLContext.columnNameOfCorruptJsonRecord
-    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_JSON_RECORD, "unparsed")
+    val oldColumnNameOfCorruptRecord = TestSQLContext.columnNameOfCorruptRecord
+    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
     val jsonSchemaRDD = jsonRDD(corruptRecords)
     jsonSchemaRDD.registerTempTable("jsonTable")
 
     val schema = StructType(
+      StructField("_unparsed", StringType, true) ::
       StructField("a", StringType, true) ::
       StructField("b", StringType, true) ::
-      StructField("c", StringType, true) ::
-      StructField("unparsed", StringType, true) :: Nil)
+      StructField("c", StringType, true) :: Nil)
 
     assert(schema === jsonSchemaRDD.schema)
 
+    // In HiveContext, backticks should be used to access columns starting with a underscore.
     checkAnswer(
       sql(
         """
-          |SELECT a, b, c, unparsed
+          |SELECT a, b, c, _unparsed
           |FROM jsonTable
         """.stripMargin),
       (null, null, null, "{") ::
@@ -677,7 +678,7 @@ class JsonSuite extends QueryTest {
         """
           |SELECT a, b, c
           |FROM jsonTable
-          |WHERE unparsed IS NULL
+          |WHERE _unparsed IS NULL
         """.stripMargin),
       ("str_a_4", "str_b_4", "str_c_4") :: Nil
     )
@@ -685,9 +686,9 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql(
         """
-          |SELECT unparsed
+          |SELECT _unparsed
           |FROM jsonTable
-          |WHERE unparsed IS NOT NULL
+          |WHERE _unparsed IS NOT NULL
         """.stripMargin),
       Seq("{") ::
       Seq("") ::
@@ -696,6 +697,6 @@ class JsonSuite extends QueryTest {
       Seq("]") :: Nil
     )
 
-    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_JSON_RECORD, oldColumnNameOfCorruptRecord)
+    TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
   }
 }
