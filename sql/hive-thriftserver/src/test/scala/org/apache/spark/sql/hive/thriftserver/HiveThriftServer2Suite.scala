@@ -41,13 +41,10 @@ import org.apache.spark.sql.catalyst.util.getTempFilePath
 class HiveThriftServer2Suite extends FunSuite with Logging {
   Class.forName(classOf[HiveDriver].getCanonicalName)
 
-  val verbose = Option(System.getenv("SPARK_SQL_TEST_VERBOSE")).isDefined
-  
   def startThriftServerWithin(timeout: FiniteDuration = 1.minute)(f: Statement => Unit) {
-    Thread.sleep(5000)
-
     val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
     val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
+
     val warehousePath = getTempFilePath("warehouse")
     val metastorePath = getTempFilePath("metastore")
     val metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
@@ -94,8 +91,9 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
           .run(ProcessLogger(captureLogOutput, _ => ()))
       }
     }
-    // reset SPARK_TESTING to avoid loading Log4J configurations in testing class paths
-    Process(command, None, ("SPARK_TESTING", "0")).run(ProcessLogger(
+
+    // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
+    Process(command, None, "SPARK_TESTING" -> "0").run(ProcessLogger(
       captureThriftServerOutput("stdout"),
       captureThriftServerOutput("stderr")))
 
