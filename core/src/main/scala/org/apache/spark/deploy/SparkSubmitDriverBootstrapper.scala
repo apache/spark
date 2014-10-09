@@ -123,10 +123,9 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val builder = new ProcessBuilder(filteredCommand)
     val env = builder.environment()
 
-    // SPARK-1720: use LD_LIBRARY_PATH instead of -Djava.library.path
     // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
     if (submitLibraryPath.isEmpty && confLibraryPath.nonEmpty) {
-      val libraryPaths = Seq(confLibraryPath, sys.env.get(Utils.libraryPath)).flatten
+      val libraryPaths = confLibraryPath ++ sys.env.get(Utils.libraryPath)
       env.put(Utils.libraryPath, libraryPaths.mkString(sys.props("path.separator")))
     }
 
