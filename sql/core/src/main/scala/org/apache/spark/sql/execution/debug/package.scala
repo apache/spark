@@ -134,6 +134,11 @@ package object debug {
     }
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Helper functions for checking that runtime types match a given schema.
+   */
+  @DeveloperApi
   object TypeCheck {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
@@ -159,13 +164,20 @@ package object debug {
     }
   }
 
-  case class TypeCheck(child: SparkPlan) extends SparkPlan {
+  /**
+   * :: DeveloperApi ::
+   * Augments SchemaRDDs with debug methods.
+   */
+  @DeveloperApi
+  private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {
     import TypeCheck._
-    //def otherCopyArgs = null :: Nil
 
     override def nodeName  = ""
 
-    override def makeCopy(args: Array[Object]): this.type = TypeCheck(args(0).asInstanceOf[SparkPlan]).asInstanceOf[this.type]
+    /* Only required when defining this class in a REPL.
+    override def makeCopy(args: Array[Object]): this.type =
+      TypeCheck(args(0).asInstanceOf[SparkPlan]).asInstanceOf[this.type]
+    */
 
     def output = child.output
 
