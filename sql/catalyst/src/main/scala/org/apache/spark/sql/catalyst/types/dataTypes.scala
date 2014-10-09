@@ -567,34 +567,19 @@ case class MapType(
       ("valueContainsNull" -> valueContainsNull)
 }
 
-// TODO: Where should this go?
-trait UserDefinedType[T] {
-  def dataType: StructType
-  def serialize(obj: T): Row
-  def deserialize(row: Row): T
-}
-
-object UserDefinedType {
-  /**
-   * Construct a [[UserDefinedType]] object with the given key type and value type.
-   * The `valueContainsNull` is true.
-   */
-  //def apply(keyType: DataType, valueType: DataType): MapType =
-  //  MapType(keyType: DataType, valueType: DataType, true)
-}
-
 /**
  * The data type for User Defined Types.
  */
 abstract class UserDefinedType[UserType] extends DataType {
 
-  // Used only in regex parser above.
-  //private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = { }
-
+  /** Underlying storage type for this UDT used by SparkSQL */
   def sqlType: DataType
 
+  /** Convert the user type to a Row object */
+  // TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst, where we need to convert Any to UserType.
   def serialize(obj: Any): Row
 
+  /** Convert a Row object to the user type */
   def deserialize(row: Row): UserType
 
   def simpleString: String = "udt"
