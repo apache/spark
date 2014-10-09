@@ -277,7 +277,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil
       case logical.LocalRelation(output, data) =>
-        println(s"BasicOperators.apply: creating schema from attributes: $output")
         val nPartitions = if (data.isEmpty) 1 else numPartitions
         PhysicalRDD(
           output,
