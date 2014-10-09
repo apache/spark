@@ -300,7 +300,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
    * Kill the given list of executors through the cluster manager.
    * In Yarn, this will be implemented in SPARK-3822.
    */
-  def killExecutors(executorIds: Seq[String]): Unit = { }
+  def killExecutor(executorId: String): Unit = { }
 
 }
 

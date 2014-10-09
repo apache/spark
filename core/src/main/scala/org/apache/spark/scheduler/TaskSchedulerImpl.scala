@@ -530,7 +530,7 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Callback for TaskSetMangers to signal that it no longer has any pending tasks.
    * If dynamic allocation of executors is enabled and there are no more task sets with
-   * pending tasks, this cancels any timer that add executors.
+   * pending tasks, this cancels any timer would have eventually added new executors.
    */
   def noMorePendingTasks(taskSetId: String): Unit = executorScalingLock.synchronized {
     taskSetsWithPendingTasks.remove(taskSetId)
@@ -542,19 +542,19 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Callback for TaskSetManagers to signal that the given executor is running a new task.
    * If dynamic allocation of executors is enabled, this cancels any timer that would have
-   * eventually marked the executor as idle.
+   * eventually removed the executor.
    */
   def newRunningTaskForExecutor(executorId: String, taskSetId: String): Unit = {
     executorScalingLock.synchronized {
       executorIdToRunningTaskSets.getOrElseUpdate(executorId, new HashSet[String]) += taskSetId
-      executorScalingManager.foreach(_.cancelExecutorIdleTimer(executorId))
+      executorScalingManager.foreach(_.cancelRemoveExecutorTimer(executorId))
     }
   }
 
   /**
    * Callback for TaskSetManagers to signal that the given executor is no longer running tasks.
    * If dynamic allocation of executors is enabled and this executor is no longer running
-   * tasks in any task set, this starts a timer to eventually mark this executor as idle.
+   * tasks in any task set, this starts an idle timer to remove this executor.
    */
   def noMoreRunningTasksForExecutor(executorId: String, taskSetId: String): Unit = {
     executorScalingLock.synchronized {
@@ -562,7 +562,7 @@ private[spark] class TaskSchedulerImpl(
       val contains = executorIdToRunningTaskSets.contains(executorId)
       if (!contains || executorIdToRunningTaskSets(executorId).isEmpty) {
         executorIdToRunningTaskSets.remove(executorId)
-        executorScalingManager.foreach(_.startExecutorIdleTimer(executorId))
+        executorScalingManager.foreach(_.startRemoveExecutorTimer(executorId))
       }
       if (!contains) {
         logWarning(s"Unknown executor $executorId has no more running tasks in task set $taskSetId")
