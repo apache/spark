@@ -121,8 +121,12 @@ private[spark] class TaskSchedulerImpl(
     if (executorScalingEnabled) Some(new ExecutorScalingManager(this)) else None
 
   // Keep track of which TaskSets have pending tasks
-  // This is used to decide when to dynamically add executors
+  // This is used to decide when to add executors if dynamic allocation is enabled
   private val taskSetsWithPendingTasks = new HashSet[String]
+
+  // Keep track of which TaskSets have running tasks for each executor
+  // This is used to decide when to remove executors if dynamic allocation is enabled
+  private val executorIdToRunningTaskSets = new HashMap[String, HashSet[String]]
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -509,7 +513,7 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Callback for TaskSetManagers to signal that a new pending task is added.
-   * If dynamically scaling executors is enabled, this starts a timer to add executors.
+   * If dynamic allocation of executors is enabled, this starts a timer to add executors.
    */
   def newPendingTask(taskSetId: String): Unit = {
     taskSetsWithPendingTasks.add(taskSetId)
@@ -518,13 +522,40 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Callback for TaskSetMangers to signal that it no longer has any pending tasks.
-   * If dynamically scaling executors is enabled and there are no more task sets with
+   * If dynamic allocation of executors is enabled and there are no more task sets with
    * pending tasks, this cancels any timer that add executors.
    */
   def noMorePendingTasks(taskSetId: String): Unit = {
     taskSetsWithPendingTasks.remove(taskSetId)
     if (taskSetsWithPendingTasks.isEmpty) {
       executorScalingManager.foreach(_.cancelAddExecutorTimer())
+    }
+  }
+
+  /**
+   * Callback for TaskSetManagers to signal that the given executor is running a new task.
+   * If dynamic allocation of executors is enabled, this cancels any timer that would have
+   * eventually marked the executor as idle.
+   */
+  def newRunningTaskForExecutor(executorId: String, taskSetId: String): Unit = {
+    executorIdToRunningTaskSets.getOrElseUpdate(executorId, new HashSet[String]) += taskSetId
+    executorScalingManager.foreach(_.cancelExecutorIdleTimer(executorId))
+  }
+
+  /**
+   * Callback for TaskSetManagers to signal that the given executor is no longer running tasks.
+   * If dynamic allocation of executors is enabled and this executor is no longer running
+   * tasks in any task set, this starts a timer to eventually mark this executor as idle.
+   */
+  def noMoreRunningTasksForExecutor(executorId: String, taskSetId: String): Unit = {
+    executorIdToRunningTaskSets.get(executorId).foreach(_.remove(taskSetId))
+    val contains = executorIdToRunningTaskSets.contains(executorId)
+    if (!contains || executorIdToRunningTaskSets(executorId).isEmpty) {
+      executorIdToRunningTaskSets.remove(executorId)
+      executorScalingManager.foreach(_.startExecutorIdleTimer(executorId))
+    }
+    if (!contains) {
+      logWarning(s"Unknown executor $executorId has no more running tasks in task set $taskSetId")
     }
   }
 

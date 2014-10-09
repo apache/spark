@@ -62,14 +62,17 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   }
 
   // How frequently to add and remove executors
-  private val addExecutorIntervalMs =
-    conf.getLong("spark.dynamicAllocation.addExecutorInterval", 60) * 1000
-  private val removeExecutorIntervalMs =
-    conf.getLong("spark.dynamicAllocation.removeExecutorInterval", 300) * 1000
+  private val addExecutorInterval =
+    conf.getLong("spark.dynamicAllocation.addExecutorInterval", 60) // s
+  private val removeExecutorInterval =
+    conf.getLong("spark.dynamicAllocation.removeExecutorInterval", 300) // s
+  private val executorIdleThreshold =
+    conf.getLong("spark.dynamicAllocation.executorIdleThreshold", removeExecutorInterval) // s
 
   // Timers that keep track of when to add and remove executors
   private var addExecutorTimer: Option[Timer] = None
   private var removeExecutorTimer: Option[Timer] = None
+  private val executorIdleTimers: mutable.Map[String, Timer] = new mutable.HashMap[String, Timer]
 
   // The number of pending executors that have not actually been added/removed yet
   private var numExecutorsPendingToAdd = 0
@@ -78,7 +81,13 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
   private val executorIds = new mutable.HashSet[String] ++= scheduler.executorIdToHost.keys
 
-  // TODO: deal with synchronization
+  // Keep track of idle executors to remove them later
+  private val idleExecutorIds = new mutable.HashSet[String]
+
+  // Start idle timer for all new executors
+  executorIds.foreach(startExecutorIdleTimer)
+
+  // TODO: deal with synchronization!!
 
   /**
    * Start a timer to add new executors (if there is not already one).
@@ -87,7 +96,8 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    */
   def startAddExecutorTimer(): Unit = {
     if (addExecutorTimer.isEmpty) {
-      logInfo(s"Starting add executor timer (to expire in $addExecutorIntervalMs ms)")
+      logInfo(s"Starting add executor timer (to expire in $addExecutorInterval seconds)")
+      val addExecutorIntervalMs = addExecutorInterval * 1000
       addExecutorTimer = Some(new Timer)
       addExecutorTimer.get.schedule(
         new AddExecutorTimerTask, addExecutorIntervalMs, addExecutorIntervalMs)
@@ -102,7 +112,8 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    */
   def startRemoveExecutorTimer(): Unit = {
     if (removeExecutorTimer.isEmpty) {
-      logInfo(s"Starting remove executor timer (to expire in $removeExecutorIntervalMs ms)")
+      logInfo(s"Starting remove executor timer (to expire in $removeExecutorInterval seconds)")
+      val removeExecutorIntervalMs = removeExecutorInterval * 1000
       removeExecutorTimer = Some(new Timer)
       removeExecutorTimer.get.schedule(
         new RemoveExecutorTimerTask, removeExecutorIntervalMs, removeExecutorIntervalMs)
@@ -110,6 +121,27 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   }
 
   /**
+   * Start a timer on the given executor to mark it idle.
+   * This is called when an existing executor has not been scheduled a task for
+   * `executorIdleThresholdMs`. When the task is triggered (only once), it marks
+   * the given executor as idle and starts the remove executor timer.
+   */
+  def startExecutorIdleTimer(executorId: String): Unit = {
+    if (!executorIdleTimers.contains(executorId)) {
+      logDebug(s"Starting idle timer for executor $executorId " +
+        s"(to expire in $executorIdleThreshold seconds)")
+      executorIdleTimers(executorId) = new Timer
+      executorIdleTimers(executorId).schedule(
+        new ExecutorIdleTimerTask(executorId), executorIdleThreshold * 1000)
+    }
+    if (!executorIds.contains(executorId)) {
+      logWarning(s"Started idle timer for unknown executor $executorId.")
+      executorIds.add(executorId)
+    }
+  }
+
+  /**
+   *
    * Cancel any existing timer that adds executors.
    * This is called when the pending task queue is drained.
    */
@@ -134,6 +166,26 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   }
 
   /**
+   * Cancel any existing idle timer on the given executor and un-mark it as idle if needed.
+   * This is called when the executor is scheduled a new task to run.
+   * If there are no more idle executors, cancel the remove executor timer if it exists.
+   */
+  def cancelExecutorIdleTimer(executorId: String): Unit = {
+    if (executorIdleTimers.contains(executorId)) {
+      logDebug(s"Canceling idle timer for executor $executorId.")
+      executorIdleTimers(executorId).cancel()
+      executorIdleTimers.remove(executorId)
+    }
+    if (idleExecutorIds.contains(executorId)) {
+      logDebug(s"Executor $executorId is no longer marked as idle.")
+      idleExecutorIds.remove(executorId)
+    }
+    if (idleExecutorIds.isEmpty) {
+      cancelRemoveExecutorTimer()
+    }
+  }
+
+  /**
    * Negotiate with the scheduler backend to add new executors.
    * This ensures the resulting number of executors is correctly constrained by the upper bound.
    * Return whether executors are actually added.
@@ -153,8 +205,8 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       getCoarseGrainedBackend.foreach { backend =>
         logInfo(s"Pending tasks are building up! " +
           s"Adding $numExecutorsToAdd new executors (new total is $newNumExecutors).")
-        backend.requestExecutors(numExecutorsToAdd)
         numExecutorsPendingToAdd += numExecutorsToAdd
+        backend.requestExecutors(numExecutorsToAdd)
         return numExecutorsToAdd
       }
     } else {
@@ -178,18 +230,21 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
         // Remove just enough to reach `minNumExecutors`
         numExistingExecutors - minNumExecutors
       }
-    val newNumExecutors = numExistingExecutors - numExecutorsToRemove
 
     if (numExecutorsToRemove > 0) {
       getCoarseGrainedBackend.foreach { backend =>
-        logInfo(s"Removing $numExecutorsToRemove idle executors! (new total is $newNumExecutors).")
-        // backend.killExecutors(...)
-        numExecutorsPendingToRemove += numExecutorsToRemove
-        return numExecutorsToRemove
+        val executorsToRemove = idleExecutorIds.take(numExecutorsToRemove)
+        val newNumExecutors = numExistingExecutors - executorsToRemove.size
+        logInfo(s"Removing ${executorsToRemove.size} idle executors(s): " +
+          s"${executorsToRemove.mkString(",")} (new total is $newNumExecutors).")
+        idleExecutorIds --= executorsToRemove
+        numExecutorsPendingToRemove += executorsToRemove.size
+        backend.killExecutors(executorsToRemove.toSeq)
+        return executorsToRemove.size
       }
     } else {
-      logDebug(s"Not removing idle executors because there are only $minNumExecutors executors " +
-        s"left, which is the limit.")
+      logDebug(s"Not removing idle executors because there are only $minNumExecutors " +
+        "executor(s) left, which is the limit.")
     }
     0
   }
@@ -205,6 +260,7 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
         logDebug(s"Decrementing pending executors to add (now at $numExecutorsPendingToAdd).")
       }
       executorIds += executorId
+      startExecutorIdleTimer(executorId)
     }
   }
 
@@ -238,6 +294,17 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       case _ =>
         throw new SparkException("Dynamic allocation of executors is not applicable to " +
           "fine-grained schedulers. Please set spark.dynamicAllocation.enabled to false.")
+    }
+  }
+
+  /** A timer task that marks an executor as idle. */
+  private class ExecutorIdleTimerTask(executorId: String) extends TimerTask {
+    override def run(): Unit = {
+      logInfo(s"Marking executor $executorId as idle because it has not been scheduled " +
+        s"a task for $executorIdleThreshold seconds.")
+      executorIdleTimers.remove(executorId)
+      idleExecutorIds.add(executorId)
+      startRemoveExecutorTimer()
     }
   }
 
