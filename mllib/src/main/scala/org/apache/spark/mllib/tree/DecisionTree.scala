@@ -533,7 +533,7 @@ object DecisionTree extends Serializable with Logging {
     }
 
     // array of nodes to train indexed by node index in group
-    val nodes = Array.fill[Node](numNodes)(null)
+    val nodes = new Array[Node](numNodes)
     nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
       nodesForTree.foreach { node =>
         nodes(treeToNodeToIndexInfo(treeIndex)(node.id).nodeIndexInGroup) = node
@@ -685,7 +685,7 @@ object DecisionTree extends Serializable with Logging {
    * Note that this function is called only once for each node.
    * @param leftImpurityCalculator left node aggregates for a split
    * @param rightImpurityCalculator right node aggregates for a split
-   * @return predict value for current node
+   * @return predict value and impurity for current node
    */
   private def calculatePredictImpurity(
       leftImpurityCalculator: ImpurityCalculator,
