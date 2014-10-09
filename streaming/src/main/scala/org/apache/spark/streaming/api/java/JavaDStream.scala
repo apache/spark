@@ -94,6 +94,14 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T]
    * returned DStream has exactly numPartitions partitions.
    */
   def repartition(numPartitions: Int): JavaDStream[T] = dstream.repartition(numPartitions)
+  
+  /**
+   * Print the first num elements of each RDD generated in this DStream. This is an output
+   * operator, so this DStream will be registered as an output stream and there materialized.
+   */
+  def print(num: Int): Unit = {
+    dstream.print(num)
+  }
 }
 
 object JavaDStream {
