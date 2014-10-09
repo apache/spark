@@ -77,10 +77,13 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
   protected val CACHE = Keyword("CACHE")
+  protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COUNT = Keyword("COUNT")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
+  protected val ELSE = Keyword("ELSE")
+  protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
@@ -122,11 +125,13 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SUBSTRING = Keyword("SUBSTRING")
   protected val SUM = Keyword("SUM")
   protected val TABLE = Keyword("TABLE")
+  protected val THEN = Keyword("THEN")
   protected val TIMESTAMP = Keyword("TIMESTAMP")
   protected val TRUE = Keyword("TRUE")
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
   protected val UPPER = Keyword("UPPER")
+  protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
 
   // Use reflection to find the reserved words defined in this class.
@@ -332,6 +337,15 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     LOWER ~> "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
+    } |
+    CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
+      (ELSE ~> expression).? <~ END ^^ {
+       case casePart ~ altPart ~ elsePart =>
+         val altExprs = altPart.flatMap {
+           case we ~ te =>
+             Seq(casePart.fold(we)(EqualTo(_, we)), te)
+        }
+        CaseWhen(altExprs ++ elsePart.toList)
     } |
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p => Substring(s,p,Literal(Integer.MAX_VALUE))
