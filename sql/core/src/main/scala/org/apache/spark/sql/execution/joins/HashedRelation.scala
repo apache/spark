@@ -49,7 +49,10 @@ private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, Com
 final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
   extends HashedRelation with Serializable {
 
-  override def get(key: Row) = CompactBuffer(hashTable.get(key))
+  override def get(key: Row) = {
+    val v = hashTable.get(key)
+    if (v eq null) null else CompactBuffer(v)
+  }
 
   def getValue(key: Row): Row = hashTable.get(key)
 }
