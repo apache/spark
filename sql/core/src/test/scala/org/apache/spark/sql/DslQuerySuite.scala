@@ -147,6 +147,14 @@ class DslQuerySuite extends QueryTest {
       (1, 1, 1, 2) :: Nil)
   }
 
+  test("SPARK-3858 generator qualifiers are discarded") {
+    checkAnswer(
+      arrayData.as('ad)
+        .generate(Explode("data" :: Nil, 'data), alias = Some("ex"))
+        .select("ex.data".attr),
+      Seq(1, 2, 3, 2, 3, 4).map(Seq(_)))
+  }
+
   test("average") {
     checkAnswer(
       testData2.groupBy()(avg('a)),
