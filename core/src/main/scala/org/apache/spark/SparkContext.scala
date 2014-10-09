@@ -873,6 +873,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
 
+  def getJobsIdsForGroup(jobGroup: String): Array[Int] = statusApi.jobIdsForGroup(jobGroup)
+
   def getJobInfo(jobId: Int): Option[SparkJobInfo] = statusApi.newJobInfo(jobId)
 
   def getStageInfo(stageId: Int): Option[SparkStageInfo] = statusApi.newStageInfo(stageId)

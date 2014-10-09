@@ -69,5 +69,6 @@ private[jobs] object UIData {
   case class JobUIData(
     jobId: Int,
     stageIds: Seq[Int],
+    jobGroup: Option[String],
     var status: String /* one of "running", "completed", or "failed" */)
 }

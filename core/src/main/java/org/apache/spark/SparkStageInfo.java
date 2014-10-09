@@ -26,4 +26,8 @@ package org.apache.spark;
 public interface SparkStageInfo {
   int stageId();
   String name();
+  int numTasks();
+  int numActiveTasks();
+  int numCompleteTasks();
+  int numFailedTasks();
 }

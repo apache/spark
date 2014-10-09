@@ -70,7 +70,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   def blockManagerIds = executorIdToBlockManagerId.values.toSeq
 
   override def onJobStart(jobStart: SparkListenerJobStart) = synchronized {
-    val jobData: JobUIData = JobUIData(jobStart.jobId, jobStart.stageIds, "running")
+    val jobGroup = Option(jobStart.properties).map(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+    val jobData: JobUIData = JobUIData(jobStart.jobId, jobStart.stageIds, jobGroup, "running")
     jobIdToData(jobStart.jobId) = jobData
     activeJobs(jobStart.jobId) = jobData
   }
