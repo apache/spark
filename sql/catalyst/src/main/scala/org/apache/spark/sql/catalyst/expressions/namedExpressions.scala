@@ -134,6 +134,7 @@ case class AttributeReference(
     var h = 17
     h = h * 37 + exprId.hashCode()
     h = h * 37 + dataType.hashCode()
+    h = h * 37 + metadata.hashCode()
     h
   }
 

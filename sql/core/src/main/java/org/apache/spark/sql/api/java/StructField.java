@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java;
 
+import java.util.Map;
+
 /**
  * A StructField object represents a field in a StructType object.
  * A StructField object comprises three fields, {@code String name}, {@code DataType dataType},
@@ -24,20 +26,28 @@ package org.apache.spark.sql.api.java;
  * The field of {@code dataType} specifies the data type of a StructField.
  * The field of {@code nullable} specifies if values of a StructField can contain {@code null}
  * values.
+ * The field of {@code metadata} provides extra information of the StructField, which is a map from
+ * string to simple type that can be serialized to JSON automatically
  *
  * To create a {@link StructField},
- * {@link DataType#createStructField(String, DataType, boolean)}
+ * {@link DataType#createStructField(String, DataType, boolean, Map)}
  * should be used.
  */
 public class StructField {
   private String name;
   private DataType dataType;
   private boolean nullable;
+  private Map<String, Object> metadata;
 
-  protected StructField(String name, DataType dataType, boolean nullable) {
+  protected StructField(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      Map<String, Object> metadata) {
     this.name = name;
     this.dataType = dataType;
     this.nullable = nullable;
+    this.metadata = metadata;
   }
 
   public String getName() {
@@ -52,6 +62,10 @@ public class StructField {
     return nullable;
   }
 
+  public Map<String, Object> getMetadata() {
+    return metadata;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
@@ -62,6 +76,7 @@ public class StructField {
     if (nullable != that.nullable) return false;
     if (!dataType.equals(that.dataType)) return false;
     if (!name.equals(that.name)) return false;
+    if (!metadata.equals(that.metadata)) return false;
 
     return true;
   }
@@ -71,6 +86,7 @@ public class StructField {
     int result = name.hashCode();
     result = 31 * result + dataType.hashCode();
     result = 31 * result + (nullable ? 1 : 0);
+    result = 31 * result + metadata.hashCode();
     return result;
   }
 }

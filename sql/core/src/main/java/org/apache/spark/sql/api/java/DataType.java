@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.api.java;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * The base type of all Spark SQL data types.
@@ -146,15 +144,31 @@ public abstract class DataType {
    * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}) and
    * whether values of this field can be null values ({@code nullable}).
    */
-  public static StructField createStructField(String name, DataType dataType, boolean nullable) {
+  public static StructField createStructField(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      Map<String, Object> metadata) {
     if (name == null) {
       throw new IllegalArgumentException("name should not be null.");
     }
     if (dataType == null) {
       throw new IllegalArgumentException("dataType should not be null.");
     }
+    if (metadata == null) {
+      throw new IllegalArgumentException("metadata should not be null.");
+    }
 
-    return new StructField(name, dataType, nullable);
+    return new StructField(name, dataType, nullable, metadata);
+  }
+
+  /**
+   * Creates a StructField with empty metadata.
+   *
+   * @see #createStructField(String, DataType, boolean, java.util.Map)
+   */
+  public static StructField createStructField(String name, DataType dataType, boolean nullable) {
+    return createStructField(name, dataType, nullable, new HashMap<String, Object>());
   }
 
   /**
