@@ -51,12 +51,10 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  *   spark.dynamicAllocation.addExecutorInterval - How often to add new executors (M)
  *   spark.dynamicAllocation.removeExecutorThreshold - How long before an executor is removed (K)
  *
- * Synchronization: Because the schedulers in Spark are single-threaded, multiple tasks cannot
- * be scheduled at the same time unless the application itself runs multiple jobs concurrently.
- * This means, under normal circumstances, concurrent accesses are only expected when executors
- * are added or removed. Thus, it is inexpensive to synchronize all methods on this class itself,
- * assuming thread biased locking is enabled in the JVM (on by default for Java 6+). Tighter
- * locks are also used where possible.
+ * Synchronization: Because the schedulers in Spark are single-threaded, contention only arises
+ * if the application itself runs multiple jobs concurrently. Under normal circumstances, however,
+ * synchronizing each method on this class should not be expensive assuming biased locking is
+ * enabled in the JVM (on by default for Java 6+). Tighter locks are also used where possible.
  *
  * Note: This is part of a larger implementation (SPARK-3174) and currently does not actually
  * request to add or remove executors. The mechanism to actually do this will be added separately,
@@ -136,7 +134,6 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   }
 
   /**
-   *
    * Cancel any existing timer that adds executors.
    * This is called when the pending task queue is drained.
    */
@@ -279,7 +276,9 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
     }
   }
 
-  /** A timer task that removes the given executor. */
+  /**
+   * A timer task that removes the given executor.
+   */
   private class RemoveExecutorTimerTask(executorId: String) extends TimerTask {
     override def run(): Unit = {
       removeExecutor(executorId)
