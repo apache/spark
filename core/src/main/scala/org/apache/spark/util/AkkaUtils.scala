@@ -67,7 +67,7 @@ private[spark] object AkkaUtils extends Logging {
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
     val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
     val akkaFrameSize = maxFrameSizeBytes(conf)
-    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
+    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", defaultValue = false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
     if (!akkaLogLifecycleEvents) {
       // As a workaround for Akka issue #3787, we coerce the "EndpointWriter" log to be silent.
@@ -75,7 +75,7 @@ private[spark] object AkkaUtils extends Logging {
       Option(Logger.getLogger("akka.remote.EndpointWriter")).map(l => l.setLevel(Level.FATAL))
     }
 
-    val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
+    val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", defaultValue = false)) "on" else "off"
 
     val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 600)
     val akkaFailureDetector =

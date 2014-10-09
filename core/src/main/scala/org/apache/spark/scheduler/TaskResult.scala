@@ -20,12 +20,13 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.Map
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
+
+import scala.collection.mutable
+import scala.collection.mutable.Map
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]
@@ -37,14 +38,14 @@ case class IndirectTaskResult[T](blockId: BlockId) extends TaskResult[T] with Se
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark]
 class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],
-    var metrics: TaskMetrics)
+  var metrics: TaskMetrics)
   extends TaskResult[T] with Externalizable {
 
   def this() = this(null.asInstanceOf[ByteBuffer], null, null)
 
   override def writeExternal(out: ObjectOutput) {
 
-    out.writeInt(valueBytes.remaining);
+    out.writeInt(valueBytes.remaining)
     Utils.writeByteBuffer(valueBytes, out)
 
     out.writeInt(accumUpdates.size)
@@ -66,7 +67,7 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
     if (numUpdates == 0) {
       accumUpdates = null
     } else {
-      accumUpdates = Map()
+      accumUpdates = mutable.Map()
       for (i <- 0 until numUpdates) {
         accumUpdates(in.readLong()) = in.readObject()
       }

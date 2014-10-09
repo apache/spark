@@ -20,13 +20,12 @@ package org.apache.spark.scheduler
 import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
+
+import scala.collection.mutable
 
 
 /**
@@ -73,11 +72,13 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   @transient protected var context: TaskContext = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
-  @volatile @transient private var taskThread: Thread = _
+  @volatile
+  @transient private var taskThread: Thread = _
 
   // A flag to indicate whether the task is killed. This is used in case context is not yet
   // initialized when kill() is invoked.
-  @volatile @transient private var _killed = false
+  @volatile
+  @transient private var _killed = false
 
   /**
    * Whether the task has been killed.
@@ -98,7 +99,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-  }  
+  }
 }
 
 /**
@@ -113,11 +114,10 @@ private[spark] object Task {
    * Serialize a task and the current app dependencies (files and JARs added to the SparkContext)
    */
   def serializeWithDependencies(
-      task: Task[_],
-      currentFiles: HashMap[String, Long],
-      currentJars: HashMap[String, Long],
-      serializer: SerializerInstance)
-    : ByteBuffer = {
+    task: Task[_],
+    currentFiles: mutable.HashMap[String, Long],
+    currentJars: mutable.HashMap[String, Long],
+    serializer: SerializerInstance): ByteBuffer = {
 
     val out = new ByteArrayOutputStream(4096)
     val dataOut = new DataOutputStream(out)
@@ -151,27 +151,27 @@ private[spark] object Task {
    * @return (taskFiles, taskJars, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+  : (mutable.HashMap[String, Long], mutable.HashMap[String, Long], ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
 
     // Read task's files
-    val taskFiles = new HashMap[String, Long]()
+    val taskFiles = new mutable.HashMap[String, Long]()
     val numFiles = dataIn.readInt()
     for (i <- 0 until numFiles) {
       taskFiles(dataIn.readUTF()) = dataIn.readLong()
     }
 
     // Read task's JARs
-    val taskJars = new HashMap[String, Long]()
+    val taskJars = new mutable.HashMap[String, Long]()
     val numJars = dataIn.readInt()
     for (i <- 0 until numJars) {
       taskJars(dataIn.readUTF()) = dataIn.readLong()
     }
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
-    val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
+    val subBuffer = serializedTask.slice() // ByteBufferInputStream will have read just up to task
     (taskFiles, taskJars, subBuffer)
   }
 }

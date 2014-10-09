@@ -17,11 +17,11 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
+
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A SparkListenerEvent bus that relays events to its listeners

@@ -17,13 +17,11 @@
 
 package org.apache.spark.scheduler
 
-import com.codahale.metrics.{Gauge,MetricRegistry}
-
-import org.apache.spark.SparkContext
+import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.spark.metrics.source.Source
 
 private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler)
-    extends Source {
+  extends Source {
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "DAGScheduler"
 

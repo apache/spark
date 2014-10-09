@@ -22,6 +22,7 @@ import java.util.{List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.{Scheduler => MScheduler}
@@ -63,13 +64,13 @@ private[spark] class CoarseMesosSchedulerBackend(
   val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
 
   // Cores we have acquired with each Mesos task ID
-  val coresByTaskId = new HashMap[Int, Int]
+  val coresByTaskId = new mutable.HashMap[Int, Int]
   var totalCoresAcquired = 0
 
-  val slaveIdsWithExecutors = new HashSet[String]
+  val slaveIdsWithExecutors = new mutable.HashSet[String]
 
-  val taskIdToSlaveId = new HashMap[Int, String]
-  val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
+  val taskIdToSlaveId = new mutable.HashMap[Int, String]
+  val failuresBySlaveId = new mutable.HashMap[String, Int] // How many times tasks on each slave failed
 
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
@@ -319,7 +320,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def applicationId(): String =
     Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
 
 }

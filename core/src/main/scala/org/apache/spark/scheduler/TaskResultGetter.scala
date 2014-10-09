@@ -19,12 +19,12 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
-import scala.util.control.NonFatal
-
-import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.Utils
+
+import scala.util.control.NonFatal
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
@@ -42,8 +42,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     }
   }
 
-  def enqueueSuccessfulTask(
-    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
+  def enqueueSuccessfulTask(taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
@@ -81,9 +80,11 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     })
   }
 
-  def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
+  def enqueueFailedTask(
+    taskSetManager: TaskSetManager,
+    tid: Long, taskState: TaskState,
     serializedData: ByteBuffer) {
-    var reason : TaskEndReason = UnknownReason
+    var reason: TaskEndReason = UnknownReason
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {

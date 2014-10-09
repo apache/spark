@@ -22,6 +22,7 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.mesos.protobuf.ByteString
@@ -54,8 +55,8 @@ private[spark] class MesosSchedulerBackend(
   var driver: SchedulerDriver = null
 
   // Which slave IDs we have executors on
-  val slaveIdsWithExecutors = new HashSet[String]
-  val taskIdToSlaveId = new HashMap[Long, String]
+  val slaveIdsWithExecutors = new mutable.HashSet[String]
+  val taskIdToSlaveId = new mutable.HashMap[Long, String]
 
   // An ExecutorInfo for our tasks
   var execArgs: Array[Byte] = null
@@ -154,7 +155,7 @@ private[spark] class MesosSchedulerBackend(
    */
   private def createExecArg(): Array[Byte] = {
     if (execArgs == null) {
-      val props = new HashMap[String, String]
+      val props = new mutable.HashMap[String, String]
       for ((key,value) <- sc.conf.getAll) {
         props(key) = value
       }
@@ -214,7 +215,7 @@ private[spark] class MesosSchedulerBackend(
         // Build a big list of the offerable workers, and remember their indices so that we can
         // figure out which Offer to reply to for each worker
         val offerableWorkers = new ArrayBuffer[WorkerOffer]
-        val offerableIndices = new HashMap[String, Int]
+        val offerableIndices = new mutable.HashMap[String, Int]
 
         def sufficientOffer(o: Offer) = {
           val mem = getResource(o.getResourcesList, "mem")
@@ -385,7 +386,7 @@ private[spark] class MesosSchedulerBackend(
   override def applicationId(): String =
     Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
 
 }

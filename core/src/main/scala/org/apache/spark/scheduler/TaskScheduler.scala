@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
 /**
@@ -42,7 +42,7 @@ private[spark] trait TaskScheduler {
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
   // wait for slave registerations, etc.
-  def postStartHook() { }
+  def postStartHook() {}
 
   // Disconnect from the cluster.
   def stop(): Unit

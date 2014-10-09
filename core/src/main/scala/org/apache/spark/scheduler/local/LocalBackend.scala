@@ -20,12 +20,11 @@ package org.apache.spark.scheduler.local
 import java.nio.ByteBuffer
 
 import akka.actor.{Actor, ActorRef, Props}
-
-import org.apache.spark.{Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.{Logging, SparkEnv, TaskState}
 
 private case class ReviveOffers()
 
