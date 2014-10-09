@@ -21,25 +21,29 @@ import java.net._
 import java.nio._
 import java.nio.channels._
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.LinkedList
 
 import org.apache.spark._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 private[nio]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,
-    val socketRemoteConnectionManagerId: ConnectionManagerId, val connectionId: ConnectionId)
+    val socketRemoteConnectionManagerId: ConnectionManagerId, val connectionId: ConnectionId,
+    val securityMgr: SecurityManager)
   extends Logging {
 
   var sparkSaslServer: SparkSaslServer = null
   var sparkSaslClient: SparkSaslClient = null
 
-  def this(channel_ : SocketChannel, selector_ : Selector, id_ : ConnectionId) = {
+  def this(channel_ : SocketChannel, selector_ : Selector, id_ : ConnectionId,
+      securityMgr_ : SecurityManager) = {
     this(channel_, selector_,
       ConnectionManagerId.fromSocketAddress(
-        channel_.socket.getRemoteSocketAddress.asInstanceOf[InetSocketAddress]), id_)
+        channel_.socket.getRemoteSocketAddress.asInstanceOf[InetSocketAddress]),
+        id_, securityMgr_)
   }
 
   channel.configureBlocking(false)
@@ -54,14 +58,6 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
   val remoteAddress = getRemoteAddress()
-
-  /**
-   * Used to synchronize client requests: client's work-related requests must
-   * wait until SASL authentication completes.
-   */
-  private val authenticated = new Object()
-
-  def getAuthenticated(): Object = authenticated
 
   def isSaslComplete(): Boolean
 
@@ -199,22 +195,22 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 
 private[nio]
 class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
-    remoteId_ : ConnectionManagerId, id_ : ConnectionId)
-  extends Connection(SocketChannel.open, selector_, remoteId_, id_) {
+    remoteId_ : ConnectionManagerId, id_ : ConnectionId,
+    securityMgr_ : SecurityManager)
+  extends Connection(SocketChannel.open, selector_, remoteId_, id_, securityMgr_) {
 
   def isSaslComplete(): Boolean = {
     if (sparkSaslClient != null) sparkSaslClient.isComplete() else false
   }
 
   private class Outbox {
-    val messages = new Queue[Message]()
+    val messages = new LinkedList[Message]()
     val defaultChunkSize = 65536
     var nextMessageToBeUsed = 0
 
     def addMessage(message: Message) {
       messages.synchronized {
-        /* messages += message */
-        messages.enqueue(message)
+        messages.add(message)
         logDebug("Added [" + message + "] to outbox for sending to " +
           "[" + getRemoteConnectionManagerId() + "]")
       }
@@ -225,10 +221,27 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
         while (!messages.isEmpty) {
           /* nextMessageToBeUsed = nextMessageToBeUsed % messages.size */
           /* val message = messages(nextMessageToBeUsed) */
-          val message = messages.dequeue()
+
+          val message = if (securityMgr.isAuthenticationEnabled() && !isSaslComplete()) {
+            // only allow sending of security messages until sasl is complete
+            var pos = 0
+            var securityMsg: Message = null
+            while (pos < messages.size() && securityMsg == null) {
+              if (messages.get(pos).isSecurityNeg) {
+                securityMsg = messages.remove(pos)
+              }
+              pos = pos + 1
+            }
+            // didn't find any security messages and auth isn't completed so return
+            if (securityMsg == null) return None
+            securityMsg
+          } else {
+            messages.removeFirst()
+          }
+
           val chunk = message.getChunkForSending(defaultChunkSize)
           if (chunk.isDefined) {
-            messages.enqueue(message)
+            messages.add(message)
             nextMessageToBeUsed = nextMessageToBeUsed + 1
             if (!message.started) {
               logDebug(
@@ -278,6 +291,15 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
   override def unregisterInterest() {
     changeConnectionKeyInterest(DEFAULT_INTEREST)
+  }
+
+  def registerAfterAuth(): Unit = {
+    outbox.synchronized {
+      needForceReregister = true
+    }
+    if (channel.isConnected) {
+      registerInterest()
+    }
   }
 
   def send(message: Message) {
@@ -422,8 +444,9 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 private[spark] class ReceivingConnection(
     channel_ : SocketChannel,
     selector_ : Selector,
-    id_ : ConnectionId)
-    extends Connection(channel_, selector_, id_) {
+    id_ : ConnectionId,
+    securityMgr_ : SecurityManager)
+    extends Connection(channel_, selector_, id_, securityMgr_) {
 
   def isSaslComplete(): Boolean = {
     if (sparkSaslServer != null) sparkSaslServer.isComplete() else false

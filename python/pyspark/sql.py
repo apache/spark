@@ -15,27 +15,36 @@
 # limitations under the License.
 #
 
+"""
+public classes of Spark SQL:
 
-import sys
-import types
+    - L{SQLContext}
+    Main entry point for SQL functionality.
+    - L{SchemaRDD}
+    A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
+    addition to normal RDD operations, SchemaRDDs also support SQL.
+    - L{Row}
+    A Row of data returned by a Spark SQL query.
+    - L{HiveContext}
+    Main entry point for accessing data stored in Apache Hive..
+"""
+
 import itertools
-import warnings
 import decimal
 import datetime
 import keyword
 import warnings
 from array import array
 from operator import itemgetter
+from itertools import imap
+
+from py4j.protocol import Py4JError
+from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-
-from itertools import chain, ifilter, imap
-
-from py4j.protocol import Py4JError
-from py4j.java_collections import ListConverter, MapConverter
 
 
 __all__ = [
@@ -201,7 +210,7 @@ class ArrayType(DataType):
         self.elementType = elementType
         self.containsNull = containsNull
 
-    def __str__(self):
+    def __repr__(self):
         return "ArrayType(%s,%s)" % (self.elementType,
                                      str(self.containsNull).lower())
 
@@ -899,8 +908,8 @@ class SQLContext(object):
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
-        @param sparkContext: The SparkContext to wrap.
-        @param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
+        :param sparkContext: The SparkContext to wrap.
+        :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
@@ -960,12 +969,12 @@ class SQLContext(object):
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func,
+        command = (func, None,
                    BatchedSerializer(PickleSerializer(), 1024),
                    BatchedSerializer(PickleSerializer(), 1024))
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
+        if len(pickled_command) > (1 << 20):  # 1M
             broadcast = self._sc.broadcast(pickled_command)
             pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
@@ -1325,8 +1334,8 @@ class HiveContext(SQLContext):
     def __init__(self, sparkContext, hiveContext=None):
         """Create a new HiveContext.
 
-        @param sparkContext: The SparkContext to wrap.
-        @param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
+        :param sparkContext: The SparkContext to wrap.
+        :param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
         HiveContext in the JVM, instead we make all calls to this object.
         """
         SQLContext.__init__(self, sparkContext)

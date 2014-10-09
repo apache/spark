@@ -37,7 +37,7 @@ trait Command {
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
+  protected lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
@@ -53,7 +53,7 @@ case class SetCommand(
     @transient context: SQLContext)
   extends LeafNode with Command with Logging {
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = (key, value) match {
+  override protected lazy val sideEffectResult: Seq[Row] = (key, value) match {
     // Set value for key k.
     case (Some(k), Some(v)) =>
       if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
@@ -121,7 +121,7 @@ case class ExplainCommand(
   extends LeafNode with Command {
 
   // Run through the optimizer to generate the physical plan.
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = try {
+  override protected lazy val sideEffectResult: Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = context.executePlan(logicalPlan)
     val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
@@ -138,15 +138,38 @@ case class ExplainCommand(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class CacheCommand(tableName: String, doCache: Boolean)(@transient context: SQLContext)
+case class CacheTableCommand(
+    tableName: String,
+    plan: Option[LogicalPlan],
+    isLazy: Boolean)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult = {
-    if (doCache) {
-      context.cacheTable(tableName)
-    } else {
-      context.uncacheTable(tableName)
+  override protected lazy val sideEffectResult = {
+    import sqlContext._
+
+    plan.foreach(_.registerTempTable(tableName))
+    val schemaRDD = table(tableName)
+    schemaRDD.cache()
+
+    if (!isLazy) {
+      // Performs eager caching
+      schemaRDD.count()
     }
+
+    Seq.empty[Row]
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class UncacheTableCommand(tableName: String) extends LeafNode with Command {
+  override protected lazy val sideEffectResult: Seq[Row] = {
+    sqlContext.table(tableName).unpersist()
     Seq.empty[Row]
   }
 
@@ -161,26 +184,8 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override protected lazy val sideEffectResult: Seq[Row] = {
     Row("# Registered as a temporary table", null, null) +:
       child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
-}
-
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case class CacheTableAsSelectCommand(tableName: String, logicalPlan: LogicalPlan)
-  extends LeafNode with Command {
-  
-  override protected[sql] lazy val sideEffectResult = {
-    import sqlContext._
-    logicalPlan.registerTempTable(tableName)
-    cacheTable(tableName) 
-    Seq.empty[Row]
-  }
-
-  override def output: Seq[Attribute] = Seq.empty  
-  
 }

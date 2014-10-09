@@ -32,7 +32,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
 import org.apache.spark._
-import org.apache.spark.util.{SystemClock, Utils}
+import org.apache.spark.util.Utils
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -76,8 +76,6 @@ private[nio] class ConnectionManager(
   private val selector = SelectorProvider.provider.openSelector()
   private val ackTimeoutMonitor = new Timer("AckTimeoutMonitor", true)
 
-  // default to 30 second timeout waiting for authentication
-  private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
   private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
@@ -458,7 +456,8 @@ private[nio] class ConnectionManager(
     while (newChannel != null) {
       try {
         val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
-        val newConnection = new ReceivingConnection(newChannel, selector, newConnectionId)
+        val newConnection = new ReceivingConnection(newChannel, selector, newConnectionId,
+          securityManager)
         newConnection.onReceive(receiveMessage)
         addListeners(newConnection)
         addConnection(newConnection)
@@ -584,9 +583,8 @@ private[nio] class ConnectionManager(
     if (waitingConn.isSaslComplete()) {
       logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
       connectionsAwaitingSasl -= waitingConn.connectionId
-      waitingConn.getAuthenticated().synchronized {
-        waitingConn.getAuthenticated().notifyAll()
-      }
+      waitingConn.registerAfterAuth()
+      wakeupSelector()
       return
     } else {
       var replyToken : Array[Byte] = null
@@ -595,9 +593,8 @@ private[nio] class ConnectionManager(
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
-          waitingConn.getAuthenticated().synchronized {
-            waitingConn.getAuthenticated().notifyAll()
-          }
+          waitingConn.registerAfterAuth()
+          wakeupSelector()
           return
         }
         val securityMsgResp = SecurityMessage.fromResponse(replyToken,
@@ -631,9 +628,11 @@ private[nio] class ConnectionManager(
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
         if (connection.isSaslComplete()) {
-          logDebug("Server sasl completed: " + connection.connectionId)
+          logDebug("Server sasl completed: " + connection.connectionId +
+            " for: " + connectionId)
         } else {
-          logDebug("Server sasl not completed: " + connection.connectionId)
+          logDebug("Server sasl not completed: " + connection.connectionId +
+            " for: " + connectionId)
         }
         if (replyToken != null) {
           val securityMsgResp = SecurityMessage.fromResponse(replyToken,
@@ -780,7 +779,8 @@ private[nio] class ConnectionManager(
             if (message == null) throw new Exception("Error creating security message")
             connectionsAwaitingSasl += ((conn.connectionId, conn))
             sendSecurityMessage(connManagerId, message)
-            logDebug("adding connectionsAwaitingSasl id: " + conn.connectionId)
+            logDebug("adding connectionsAwaitingSasl id: " + conn.connectionId +
+              " to: " + connManagerId)
           } catch {
             case e: Exception => {
               logError("Error getting first response from the SaslClient.", e)
@@ -801,7 +801,7 @@ private[nio] class ConnectionManager(
       val inetSocketAddress = new InetSocketAddress(connManagerId.host, connManagerId.port)
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
       val newConnection = new SendingConnection(inetSocketAddress, selector, connManagerId,
-        newConnectionId)
+        newConnectionId, securityManager)
       logInfo("creating new sending connection for security! " + newConnectionId )
       registerRequests.enqueue(newConnection)
 
@@ -826,7 +826,7 @@ private[nio] class ConnectionManager(
         connectionManagerId.port)
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
       val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId,
-        newConnectionId)
+        newConnectionId, securityManager)
       newConnection.onException {
         case (conn, e) => {
           logError("Exception while sending message.", e)
@@ -839,42 +839,22 @@ private[nio] class ConnectionManager(
       newConnection
     }
     val connection = connectionsById.getOrElseUpdate(connectionManagerId, startNewConnection())
-    if (authEnabled) {
-      checkSendAuthFirst(connectionManagerId, connection)
-    }
+
     message.senderAddress = id.toSocketAddress()
     logDebug("Before Sending [" + message + "] to [" + connectionManagerId + "]" + " " +
       "connectionid: "  + connection.connectionId)
 
     if (authEnabled) {
-      // if we aren't authenticated yet lets block the senders until authentication completes
       try {
-        connection.getAuthenticated().synchronized {
-          val clock = SystemClock
-          val startTime = clock.getTime()
-
-          while (!connection.isSaslComplete()) {
-            logDebug("getAuthenticated wait connectionid: " + connection.connectionId)
-            // have timeout in case remote side never responds
-            connection.getAuthenticated().wait(500)
-            if (((clock.getTime() - startTime) >= (authTimeout * 1000))
-              && (!connection.isSaslComplete())) {
-              // took to long to authenticate the connection, something probably went wrong
-              throw new Exception("Took to long for authentication to " + connectionManagerId +
-                ", waited " + authTimeout + "seconds, failing.")
-            }
-          }
-        }
+        checkSendAuthFirst(connectionManagerId, connection)
       } catch {
         case e: Exception => {
-          logError("Exception while waiting for authentication.", e)
           reportSendingMessageFailure(message.id, e)
         }
       }
     }
     logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     connection.send(message)
-
     wakeupSelector()
   }
 
