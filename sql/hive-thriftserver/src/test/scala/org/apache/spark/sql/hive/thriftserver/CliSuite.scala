@@ -62,9 +62,11 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
     def captureOutput(source: String)(line: String) {
       buffer += s"$source> $line"
-      if (line.contains(expectedAnswers(next.get()))) {
-        if (next.incrementAndGet() == expectedAnswers.size) {
-          foundAllExpectedAnswers.trySuccess(())
+      if (next.get() < expectedAnswers.size) {
+        if (line.startsWith(expectedAnswers(next.get()))) {
+          if (next.incrementAndGet() == expectedAnswers.size) {
+            foundAllExpectedAnswers.trySuccess(())
+          }
         }
       }
     }
