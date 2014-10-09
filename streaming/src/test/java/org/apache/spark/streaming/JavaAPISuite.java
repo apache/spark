@@ -1718,9 +1718,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
     ssc.checkpoint("checkpoint");
     // Set up some sequence files for streaming to read in
-    Tuple2<Long, Integer> data = new Tuple2(1L, 123456);
     List<Tuple2<Long, Integer>> test_input = new ArrayList<Tuple2<Long, Integer> >();
-    test_input.add(data);
+    test_input.add(new Tuple2(1L, 123456));
+    test_input.add(new Tuple2(2L, 123456));
     JavaPairRDD<Long, Integer> rdd = ssc.sc().parallelizePairs(test_input);
     File tempDir = Files.createTempDir();
     JavaPairRDD<LongWritable, IntWritable> saveable = rdd.mapToPair(
@@ -1766,7 +1766,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Thread.sleep(5000);
     Assert.assertTrue(calls.value() > 0);
     Assert.assertEquals(new Long(4L), new Long(total.value()));
-    Assert.assertEquals(new Long(4L), new Long(elem.value()));
+    Assert.assertEquals(new Long(2L), new Long(elem.value()));
   }
 
   @Test
