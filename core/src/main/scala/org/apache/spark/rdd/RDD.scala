@@ -1086,8 +1086,8 @@ abstract class RDD[T: ClassTag](
           numPartsToTry = partsScanned * 4
         } else {
           // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = ((1.5 * num * partsScanned / buf.size).toInt - partsScanned) max 1
-          numPartsToTry = numPartsToTry min (partsScanned * 4) 
+          numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
         }
       }
 
