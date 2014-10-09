@@ -141,14 +141,14 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     onKeyInterestChangeCallback = callback
   }
 
-  def callOnExceptionCallback(e: Throwable) {
+  def callOnExceptionCallbacks(e: Throwable) {
     onExceptionCallbacks foreach {
       callback =>
         try {
           callback(this, e)
         } catch {
           case NonFatal(e) => {
-            logWarning("Ignore error", e)
+            logWarning("Ignored error in onExceptionCallback", e)
           }
         }
     }
@@ -330,7 +330,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     } catch {
       case e: Exception => {
         logError("Error connecting to " + address, e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
       }
     }
   }
@@ -355,7 +355,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     } catch {
       case e: Exception => {
         logWarning("Error finishing connection to " + address, e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
       }
     }
     true
@@ -400,7 +400,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     } catch {
       case e: Exception => {
         logWarning("Error writing in connection to " + getRemoteConnectionManagerId(), e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
         close()
         return false
       }
@@ -427,7 +427,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
       case e: Exception =>
         logError("Exception while reading SendingConnection to " + getRemoteConnectionManagerId(),
           e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
         close()
     }
 
@@ -584,7 +584,7 @@ private[spark] class ReceivingConnection(
     } catch {
       case e: Exception => {
         logWarning("Error reading from connection to " + getRemoteConnectionManagerId(), e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
         close()
         return false
       }
