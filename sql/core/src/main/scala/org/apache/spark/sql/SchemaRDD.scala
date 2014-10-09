@@ -125,7 +125,7 @@ class SchemaRDD(
     *
     * @group schema
     */
-  def schema: StructType = queryExecution.analyzed.schema
+  val schema: StructType = queryExecution.analyzed.schema
 
   // =======================================================================
   // Query DSL
@@ -148,6 +148,7 @@ class SchemaRDD(
       case (ne: NamedExpression, _) => ne
       case (e, i) => Alias(e, s"c$i")()
     }
+    assert(sqlContext != null)
     new SchemaRDD(sqlContext, Project(aliases, logicalPlan))
   }
 

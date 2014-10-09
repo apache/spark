@@ -103,7 +103,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     println(s"createSchemaRDD called")
     val attributeSeq = ScalaReflection.attributesFor[A](udtRegistry)
     val schema = StructType.fromAttributes(attributeSeq)
-    new SchemaRDD(this, LogicalRDD(attributeSeq, RDDConversions.productToRowRdd(rdd, schema))(self))
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    println("done with productToRowRdd")
+    new SchemaRDD(this, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**

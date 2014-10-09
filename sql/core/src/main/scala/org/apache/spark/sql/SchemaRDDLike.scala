@@ -29,8 +29,6 @@ private[sql] trait SchemaRDDLike {
   @transient val sqlContext: SQLContext
   @transient val baseLogicalPlan: LogicalPlan
 
-  assert(sqlContext != null)
-
   private[sql] def baseSchemaRDD: SchemaRDD
 
   /**
@@ -51,10 +49,7 @@ private[sql] trait SchemaRDDLike {
    */
   @transient
   @DeveloperApi
-  lazy val queryExecution = {
-    assert(sqlContext != null)
-    sqlContext.executePlan(baseLogicalPlan)
-  }
+  lazy val queryExecution = sqlContext.executePlan(baseLogicalPlan)
 
   @transient protected[spark] val logicalPlan: LogicalPlan = baseLogicalPlan match {
     // For various commands (like DDL) and queries with side effects, we force query optimization to
