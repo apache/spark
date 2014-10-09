@@ -97,17 +97,6 @@ class PrimitiveTypeSingleton(type):
         return cls._instances[cls]
 
 
-class NullType(DataType):
-
-    """Spark SQL NullType"""
-
-    __metaclass__ = PrimitiveTypeSingleton
-
-    def __eq__(self, other):
-        # because they should be the same object
-        return self is other
-
-
 class PrimitiveType(DataType):
 
     """Spark SQL PrimitiveType"""
@@ -117,6 +106,15 @@ class PrimitiveType(DataType):
     def __eq__(self, other):
         # because they should be the same object
         return self is other
+
+
+class NullType(PrimitiveType):
+
+    """Spark SQL NullType
+
+    The data type representing None, used for the types which has not
+    been inferred.
+    """
 
 
 class StringType(PrimitiveType):
