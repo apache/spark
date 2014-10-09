@@ -51,21 +51,20 @@ private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP: ClassTag](
      */
 
     while (iteration < maxIterations && activeRuns.nonEmpty) {
-      // remove the empty clusters
-      log.info("iteration {}", iteration)
+      logInfo(s"iteration $iteration")
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
 
       if (log.isInfoEnabled) {
         for (r <- 0 until activeCenters.length)
-          log.info("run {} has {} centers", activeRuns(r), activeCenters(r).length)
+          logInfo(s"run ${activeRuns(r)} has ${activeCenters(r).length} centers")
       }
 
       // Find the sum and count of points mapping to each center
       val (centroids, runDistortion) = getCentroids(data, activeCenters)
 
       if (log.isInfoEnabled) {
-        for (run <- activeRuns) log.info("run {} distortion {}", run, runDistortion(run))
+        for (run <- activeRuns) logInfo(s"run $run distortion ${runDistortion(run)}")
       }
 
       for (run <- activeRuns) active(run) = false
@@ -88,7 +87,7 @@ private[mllib] class MultiKMeans[P <: FP: ClassTag, C <: FP: ClassTag](
       // update distortions and print log message if run completed during this iteration
       for ((run, runIndex) <- activeRuns.zipWithIndex) {
         costs(run) = runDistortion(runIndex)
-        if (!active(run)) log.info("run {} finished in {} iterations", run, iteration + 1)
+        if (!active(run)) logInfo(s"run $run finished in ${iteration + 1} iterations")
       }
       activeRuns = activeRuns.filter(active(_))
       iteration += 1
