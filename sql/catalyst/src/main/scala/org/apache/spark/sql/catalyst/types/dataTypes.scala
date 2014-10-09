@@ -275,36 +275,45 @@ abstract class IntegralType extends NumericType {
   private[sql] val integral: Integral[JvmType]
 }
 
-case object LongType extends IntegralType {
+/** Matcher for any expressions that evaluate which do bitwise operations */
+trait BitwiseOpsType[T] {
+  def bitwiseAND(x: T, y: T): T
+}
+
+case object LongType extends IntegralType with BitwiseOpsType[Long] {
   private[sql] type JvmType = Long
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def bitwiseAND(x: JvmType, y: JvmType): JvmType = x & y
 }
 
-case object IntegerType extends IntegralType {
+case object IntegerType extends IntegralType with BitwiseOpsType[Int] {
   private[sql] type JvmType = Int
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def bitwiseAND(x: JvmType, y: JvmType): JvmType = x & y
 }
 
-case object ShortType extends IntegralType {
+case object ShortType extends IntegralType with BitwiseOpsType[Short] {
   private[sql] type JvmType = Short
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def bitwiseAND(x: JvmType, y: JvmType): JvmType = (x & y).toShort
 }
 
-case object ByteType extends IntegralType {
+case object ByteType extends IntegralType with BitwiseOpsType[Byte] {
   private[sql] type JvmType = Byte
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  def bitwiseAND(x: JvmType, y: JvmType): JvmType = (x & y).toByte
 }
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
