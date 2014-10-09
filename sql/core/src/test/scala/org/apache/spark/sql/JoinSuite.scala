@@ -24,6 +24,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter, FullOuter, Inner, LeftSemi}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
