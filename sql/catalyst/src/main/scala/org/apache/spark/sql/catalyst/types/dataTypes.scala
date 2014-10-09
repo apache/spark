@@ -70,10 +70,11 @@ object DataType {
 
   private def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
+        ("metadata", metadata: JObject),
         ("name", JString(name)),
         ("nullable", JBool(nullable)),
         ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable)
+      StructField(name, parseDataType(dataType), nullable, metadata.values)
   }
 
   @deprecated("Use DataType.fromJson instead")
@@ -393,14 +394,15 @@ case class StructField(
   }
 
   override def toString: String = {
-    // TODO: Remove this function after SPARK-3713.
+    // Do not add metadata to be consistent with CaseClassStringParser.
     s"StructField($name,$dataType,$nullable)"
   }
-  
+
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
-      ("nullable" -> nullable)
+      ("nullable" -> nullable) ~
+      ("metadata" -> Extraction.decompose(metadata)(DefaultFormats))
   }
 }
 

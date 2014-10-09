@@ -82,5 +82,6 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(
     StructType(Seq(
       StructField("a", IntegerType, nullable = true),
-      StructField("b", ArrayType(DoubleType), nullable = false))))
+      StructField("b", ArrayType(DoubleType), nullable = false),
+      StructField("c", DoubleType, nullable = false, metadata = Map("name" -> "age")))))
 }
