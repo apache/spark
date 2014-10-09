@@ -77,10 +77,10 @@ class MLUtils(object):
         method parses each line into a LabeledPoint, where the feature
         indices are converted to zero-based.
 
-        @param sc: Spark context
-        @param path: file or directory path in any Hadoop-supported file
+        :param sc: Spark context
+        :param path: file or directory path in any Hadoop-supported file
                      system URI
-        @param numFeatures: number of features, which will be determined
+        :param numFeatures: number of features, which will be determined
                             from the input data if a nonpositive value
                             is given. This is useful when the dataset is
                             already split into multiple files and you
@@ -88,7 +88,7 @@ class MLUtils(object):
                             features may not present in certain files,
                             which leads to inconsistent feature
                             dimensions.
-        @param minPartitions: min number of partitions
+        :param minPartitions: min number of partitions
         @return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
@@ -126,8 +126,8 @@ class MLUtils(object):
         """
         Save labeled data in LIBSVM format.
 
-        @param data: an RDD of LabeledPoint to be saved
-        @param dir: directory to save the data
+        :param data: an RDD of LabeledPoint to be saved
+        :param dir: directory to save the data
 
         >>> from tempfile import NamedTemporaryFile
         >>> from fileinput import input
@@ -149,10 +149,10 @@ class MLUtils(object):
         """
         Load labeled points saved using RDD.saveAsTextFile.
 
-        @param sc: Spark context
-        @param path: file or directory path in any Hadoop-supported file
+        :param sc: Spark context
+        :param path: file or directory path in any Hadoop-supported file
                      system URI
-        @param minPartitions: min number of partitions
+        :param minPartitions: min number of partitions
         @return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
