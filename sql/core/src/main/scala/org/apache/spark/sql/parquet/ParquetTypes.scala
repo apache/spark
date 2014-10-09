@@ -19,6 +19,8 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -323,14 +325,14 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   def convertFromString(string: String): Seq[Attribute] = {
-    DataType(string) match {
+    Try(DataType.fromJson(string)).getOrElse(DataType.fromCaseClassString(string)) match {
       case s: StructType => s.toAttributes
       case other => sys.error(s"Can convert $string to row")
     }
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
-    StructType.fromAttributes(schema).toString
+    StructType.fromAttributes(schema).json
   }
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {
