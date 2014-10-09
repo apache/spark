@@ -116,6 +116,7 @@ object RecoverableNetworkWordCount {
       () => {
         createContext(ip, port, outputPath)
       })
+    ssc.checkpoint(checkpointDirectory)
     ssc.start()
     ssc.awaitTermination()
   }
