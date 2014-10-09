@@ -106,7 +106,8 @@ class SqlParser extends AbstractSparkSQLParser {
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
-    this.getClass
+    this
+      .getClass
       .getMethods
       .filter(_.getReturnType == classOf[Keyword])
       .map(_.invoke(this).asInstanceOf[Keyword].str)
@@ -132,13 +133,13 @@ class SqlParser extends AbstractSparkSQLParser {
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> DISTINCT.? ~
-      repsep(projection, ",": Parser[String]) ~
+      repsep(projection, ",") ~
       (FROM   ~> relations).? ~
       (WHERE  ~> expression).? ~
       (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
       (HAVING ~> expression).? ~
       (ORDER  ~  BY ~> ordering).? ~
-      (LIMIT  ~> expression).? <~ ";".? ^^ {
+      (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
           val base = r.getOrElse(NoRelation)
           val withFilter = f.map(f => Filter(f, base)).getOrElse(base)
@@ -153,7 +154,7 @@ class SqlParser extends AbstractSparkSQLParser {
       }
 
   protected lazy val insert: Parser[LogicalPlan] =
-    INSERT ~> OVERWRITE.? ~ (INTO ~> relation) ~ select <~ ";".? ^^ {
+    INSERT ~> OVERWRITE.? ~ (INTO ~> relation) ~ select ^^ {
       case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o.isDefined)
     }
 
