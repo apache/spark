@@ -198,7 +198,7 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private[sql] val all = Seq(DecimalType, TimestampType, BinaryType) ++ NativeType.all
+  private[sql] val all = Seq(NullType, DecimalType, TimestampType, BinaryType) ++ NativeType.all
 
   private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
 }
