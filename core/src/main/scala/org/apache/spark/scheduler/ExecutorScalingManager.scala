@@ -101,7 +101,7 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    */
   def startAddExecutorTimer(): Unit = addExecutorTimer.synchronized {
     if (addExecutorTimer.isEmpty) {
-      logInfo(s"Starting add executor timer (to expire in $addExecutorInterval seconds)")
+      logInfo(s"Starting add executor timer (to expire every $addExecutorInterval seconds)")
       val addExecutorIntervalMs = addExecutorInterval * 1000
       addExecutorTimer = Some(new Timer)
       addExecutorTimer.get.schedule(
@@ -117,7 +117,7 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    */
   def startRemoveExecutorTimer(): Unit = removeExecutorTimer.synchronized {
     if (removeExecutorTimer.isEmpty) {
-      logInfo(s"Starting remove executor timer (to expire in $removeExecutorInterval seconds)")
+      logInfo(s"Starting remove executor timer (to expire every $removeExecutorInterval seconds)")
       val removeExecutorIntervalMs = removeExecutorInterval * 1000
       removeExecutorTimer = Some(new Timer)
       removeExecutorTimer.get.schedule(
