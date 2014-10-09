@@ -211,11 +211,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
-    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
-    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
-    the application is still running.
+    Enable periodic cleanup of worker / application directories in standalone mode.  Note that this
+    only affects standalone mode, as executors in YARN and Mesos are handled by those resource
+    managers.  Applications directories are only cleaned up if the application is still running.
   </td>
 </tr>
 <tr>
