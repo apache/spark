@@ -46,7 +46,7 @@ private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, Com
  * A specialized [[HashedRelation]] that maps key into a single value. This implementation
  * assumes the key is unique.
  */
-final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
+private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
   extends HashedRelation with Serializable {
 
   override def get(key: Row) = {
