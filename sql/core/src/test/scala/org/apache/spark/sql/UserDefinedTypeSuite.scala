@@ -33,50 +33,42 @@ class DenseVector(val data: Array[Double]) extends Serializable {
 
 case class LabeledPoint(label: Double, features: DenseVector)
 
-class UserDefinedTypeSuite extends QueryTest {
+case object DenseVectorUDT extends UserDefinedType[DenseVector] {
 
-  object LabeledPointUDT {
-    def dataType: StructType =
-      StructType(Seq(
-        StructField("label", DoubleType, nullable = false),
-        StructField("features", ArrayType(DoubleType, containsNull = false), nullable = false)))
-  }
+  override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
 
-  case class LabeledPointUDT() extends UserDefinedType[LabeledPoint](LabeledPointUDT.dataType) {
-
-    override def serialize(obj: Any): Row = obj match {
-      case lp: LabeledPoint =>
-        val row: GenericMutableRow = new GenericMutableRow(1 + lp.features.data.length)
-        row.setDouble(0, lp.label)
-        var i = 0
-        while (i < lp.features.data.length) {
-          row.setDouble(1 + i, lp.features.data(i))
-          i += 1
-        }
-        row
-    }
-
-    override def deserialize(row: Row): LabeledPoint = {
-      assert(row.length >= 1)
-      val label = row.getDouble(0)
-      val numFeatures = row.length - 1
-      val features = new DenseVector(new Array[Double](numFeatures))
+  override def serialize(obj: Any): Row = obj match {
+    case features: DenseVector =>
+      val row: GenericMutableRow = new GenericMutableRow(features.data.length)
+      // TODO: Is there a copyTo command I can use?
       var i = 0
-      while (i < numFeatures) {
-        features.data(i) = row.getDouble(1 + i)
+      while (i < features.data.length) {
+        row.setDouble(i, features.data(i))
         i += 1
       }
-      LabeledPoint(label, features)
-    }
+      row
   }
 
-  test("register user type: LabeledPoint") {
-    TestSQLContext.registerUserType(new LabeledPointUDT())
+  override def deserialize(row: Row): DenseVector = {
+    val features = new DenseVector(new Array[Double](row.length))
+    var i = 0
+    while (i < row.length) {
+      features.data(i) = row.getDouble(i)
+      i += 1
+    }
+    features
+  }
+}
+
+class UserDefinedTypeSuite extends QueryTest {
+
+  test("register user type: DenseVector for LabeledPoint") {
+    TestSQLContext.registerType(DenseVectorUDT)
     println("udtRegistry:")
     TestSQLContext.udtRegistry.foreach { case (t, s) => println(s"$t -> $s")}
 
-    println(s"test: ${scala.reflect.runtime.universe.typeTag[LabeledPoint]}")
-    assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeTag[LabeledPoint]))
+    println(s"test: ${scala.reflect.runtime.universe.typeOf[DenseVector]}")
+    assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeOf[DenseVector]))
 
     val points = Seq(
       LabeledPoint(1.0, new DenseVector(Array(0.1, 1.0))),
@@ -89,27 +81,28 @@ class UserDefinedTypeSuite extends QueryTest {
     println(s"SchemaRDD count: ${tmpSchemaRDD.count()}")
     println("Done converting to SchemaRDD")
 
-    // TODO: This test works even when the deserialize method is never used.  How can I test deserialize?
+    val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v}
+    val labelsArrays: Array[Double] = labels.collect()
+    assert(labelsArrays.size === 2)
+    assert(labelsArrays.contains(1.0))
+    assert(labelsArrays.contains(0.0))
+
     val features: RDD[DenseVector] =
       pointsRDD.select('features).map { case Row(v: DenseVector) => v}
     val featuresArrays: Array[DenseVector] = features.collect()
     assert(featuresArrays.size === 2)
     assert(featuresArrays.contains(new DenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new DenseVector(Array(0.2, 2.0))))
-
-    val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v}
-    val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 2)
-    assert(labelsArrays.contains(1.0))
-    assert(labelsArrays.contains(0.0))
   }
 
-  test("UDTs cannot be registered twice") {
+  /*
+    test("UDTs can be registered twice, overriding previous registration") {
     // TODO
   }
 
   test("UDTs cannot override built-in types") {
     // TODO
   }
+  */
 
 }

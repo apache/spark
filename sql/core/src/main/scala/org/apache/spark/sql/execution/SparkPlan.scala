@@ -83,7 +83,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[Row] = {
-    execute().map(_.copy).collect() //(ScalaReflection.convertRowToScala(_, schema)).collect()
+    execute().map(ScalaReflection.convertRowToScala(_, schema)).collect()
   }
 
   protected def newProjection(
