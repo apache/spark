@@ -25,10 +25,9 @@ private[streaming] object HdfsUtils {
     // HDFS is not thread-safe when getFileSystem is called, so synchronize on that
 
     val dfsPath = new Path(path)
-    val dfs =
-      this.synchronized {
-        dfsPath.getFileSystem(conf)
-      }
+    val dfs = this.synchronized {
+      dfsPath.getFileSystem(conf)
+    }
     // If the file exists and we have append support, append instead of creating a new file
     val stream: FSDataOutputStream = {
       if (dfs.isFile(dfsPath)) {
@@ -54,17 +53,16 @@ private[streaming] object HdfsUtils {
   }
 
   def checkState(state: Boolean, errorMsg: => String) {
-    if(!state) {
+    if (!state) {
       throw new IllegalStateException(errorMsg)
     }
   }
 
   def getBlockLocations(path: String, conf: Configuration): Option[Array[String]] = {
     val dfsPath = new Path(path)
-    val dfs =
-      this.synchronized {
-        dfsPath.getFileSystem(conf)
-      }
+    val dfs = this.synchronized {
+      dfsPath.getFileSystem(conf)
+    }
     val fileStatus = dfs.getFileStatus(dfsPath)
     val blockLocs = Option(dfs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen))
     blockLocs.map(_.flatMap(_.getHosts))

@@ -183,10 +183,6 @@ private[streaming] class WriteAheadLogManager(
       pastLogs ++= logFileInfo
       logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
       logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
-    } else {
-      fileSystem.mkdirs(logDirectoryPath,
-        FsPermission.createImmutable(Integer.parseInt("770", 8).toShort))
-      logInfo(s"Created ${logDirectory} for write ahead log files")
     }
   }
 
