@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{ShuffledHashJoin, BroadcastHashJoin}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.test._
 import org.scalatest.BeforeAndAfterAll
 import java.util.TimeZone
