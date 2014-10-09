@@ -25,16 +25,17 @@ FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
 cd "$FWDIR/python"
 
 FAILED=0
+LOG_FILE=unit-tests.log
 
-rm -f unit-tests.log
+rm -f $LOG_FILE
 
 # Remove the metastore and warehouse directory created by the HiveContext tests in Spark SQL
 rm -rf metastore warehouse
 
 function run_test() {
-    echo "Running test: $1"
+    echo "Running test: $1" | tee -a $LOG_FILE
 
-    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 2>&1 | tee -a unit-tests.log
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 2>&1 | tee -a $LOG_FILE
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
