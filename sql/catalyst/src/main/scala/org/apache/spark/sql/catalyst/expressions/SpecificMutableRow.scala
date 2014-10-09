@@ -233,9 +233,9 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def iterator: Iterator[Any] = values.map(_.boxed).iterator
 
-  def setString(ordinal: Int, value: String) = update(ordinal, value)
+  override def setString(ordinal: Int, value: String) = update(ordinal, value)
 
-  def getString(ordinal: Int) = apply(ordinal).asInstanceOf[String]
+  override def getString(ordinal: Int) = apply(ordinal).asInstanceOf[String]
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]
@@ -305,5 +305,9 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
+  }
+
+  override def getAs[T](i: Int): T = {
+    values(i).boxed.asInstanceOf[T]
   }
 }
