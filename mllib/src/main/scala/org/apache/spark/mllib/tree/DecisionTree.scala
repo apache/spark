@@ -533,14 +533,11 @@ object DecisionTree extends Serializable with Logging {
     }
 
     // array of nodes to train indexed by node index in group
-    val nodes = {
-      val nodes = Array.fill[Node](numNodes)(null)
-      nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
-        nodesForTree.foreach { node =>
-          nodes(treeToNodeToIndexInfo(treeIndex)(node.id).nodeIndexInGroup) = node
-        }
+    val nodes = Array.fill[Node](numNodes)(null)
+    nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
+      nodesForTree.foreach { node =>
+        nodes(treeToNodeToIndexInfo(treeIndex)(node.id).nodeIndexInGroup) = node
       }
-      nodes
     }
 
     // Calculate best splits for all nodes in the group
@@ -607,14 +604,18 @@ object DecisionTree extends Serializable with Logging {
         if (!isLeaf) {
           node.split = Some(split)
           val childIsLeaf = (Node.indexToLevel(nodeIndex) + 1) == metadata.maxDepth
+          val leftChildIsLeaf = childIsLeaf || (stats.leftImpurity == 0.0)
+          val rightChildIsLeaf = childIsLeaf || (stats.rightImpurity == 0.0)
           node.leftNode = Some(Node(Node.leftChildIndex(nodeIndex),
-            stats.leftPredict, stats.leftImpurity, childIsLeaf))
+            stats.leftPredict, stats.leftImpurity, leftChildIsLeaf))
           node.rightNode = Some(Node(Node.rightChildIndex(nodeIndex),
-            stats.rightPredict, stats.rightImpurity, childIsLeaf))
+            stats.rightPredict, stats.rightImpurity, rightChildIsLeaf))
 
           // enqueue left child and right child if they are not leaves
-          if (!childIsLeaf) {
+          if (!leftChildIsLeaf) {
             nodeQueue.enqueue((treeIndex, node.leftNode.get))
+          }
+          if (!rightChildIsLeaf) {
             nodeQueue.enqueue((treeIndex, node.rightNode.get))
           }
 
@@ -691,11 +692,10 @@ object DecisionTree extends Serializable with Logging {
       rightImpurityCalculator: ImpurityCalculator): (Predict, Double) =  {
     val parentNodeAgg = leftImpurityCalculator.copy
     parentNodeAgg.add(rightImpurityCalculator)
-    val predict = parentNodeAgg.predict
-    val prob = parentNodeAgg.prob(predict)
+    val predict = calculatePredict(parentNodeAgg)
     val impurity = parentNodeAgg.calculate()
 
-    (new Predict(predict, prob), impurity)
+    (predict, impurity)
   }
 
   /**
@@ -709,7 +709,7 @@ object DecisionTree extends Serializable with Logging {
       featuresForNode: Option[Array[Int]],
       node: Node): (Split, InformationGainStats, Predict) = {
 
-    // calculate predict and impurity if current node are top node
+    // calculate predict and impurity if current node is top node
     val level = Node.indexToLevel(node.id)
     var predictWithImpurity: Option[(Predict, Double)] = if (level == 0) {
       None
