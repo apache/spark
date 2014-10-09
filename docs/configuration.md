@@ -104,6 +104,14 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
