@@ -119,9 +119,9 @@ object SparkGLRM {
               usersProx: (BDV[Double], Double, Double) => BDV[Double],
               rank: Int,
               numIterations: Int,
-              regPen: Double) : (Array[BDV[Double]], Array[BDV[Double]]) = {
+              regPen: Double) : (Array[BDV[Double]], Array[BDV[Double]], Array[Double]) = {
     // Transpose data
-    val RT = R.map { case (i, j, rij) => (j, i, rij) }
+    val RT = R.map { case (i, j, rij) => (j, i, rij) }.cache()
 
     val sc = R.context
 
@@ -145,7 +145,9 @@ object SparkGLRM {
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
 
-    val stepSize = 1.0 / (maxU + maxM)
+    val stepSize = 5.0 / (maxU + maxM)
+
+    val errs = Array.ofDim[Double](numIterations)
 
     for (iter <- 1 to numIterations) {
       println("Iteration " + iter + ":")
@@ -163,9 +165,14 @@ object SparkGLRM {
       println("Updating U factors")
       us = update(msb, usb, lg, stepSize, uCount, usersProx, regPen)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
+
+      errs(iter - 1) = math.sqrt(R.map { case (i, j, rij) =>
+        val err = ms(i).dot(us(j)) - rij
+        err * err
+      }.mean())
     }
 
-    (msb.value, usb.value)
+    (msb.value, usb.value, errs)
   }
 
 
@@ -178,14 +185,13 @@ object SparkGLRM {
     // Number of users
     val U = 1000
     // Number of non-zeros per row
-    val NNZ = 10
+    val NNZ = 100
     // Number of features
-    val rank = 5
+    val rank = 2
     // Number of iterations
     val numIterations = 100
     // regularization parameter
     val regPen = 0.1
-
 
     // Number of partitions for data
     val numChunks = 4
@@ -196,21 +202,15 @@ object SparkGLRM {
         inds += scala.util.Random.nextInt(U)
       }
       inds.toArray.map(j => (i, j, scala.math.random))
-    }
+    }.cache()
 
     printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, regPen=%f\n",
       M, U, NNZ, rank, numIterations, regPen)
 
     // Fit GLRM
-    val (ms, us) = fitGLRM(R, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
+    val (ms, us, errs) = fitGLRM(R, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
 
-    // Output RMSE using learned model
-    val finalRMSE = math.sqrt(R.map { case (i, j, rij) =>
-      val err = ms(i).dot(us(j)) - rij
-      err * err
-    }.mean())
-
-    println(s"RMSE: $finalRMSE")
+    println(s"RMSEs: " + errs.mkString(", "))
 
     sc.stop()
   }
