@@ -1,3 +1,0 @@
-# Batch files run on Windows so EOL of those files should be CRLF
-*.cmd text eol=crlf
-*.bat text eol=crlf

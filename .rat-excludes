@@ -1,6 +1,5 @@
 target
 .gitignore
-.gitattributes
 .project
 .classpath
 .mima-excludes
