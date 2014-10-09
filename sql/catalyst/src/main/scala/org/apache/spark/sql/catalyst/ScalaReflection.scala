@@ -82,8 +82,8 @@ object ScalaReflection {
           p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
             convertToCatalyst(elem, field.dataType)
           }.toArray)
-      case (udt: Any, udtType: UserDefinedType[_]) =>
-        println(s"convertToCatalyst: udt")
+      case (udt, udtType: UserDefinedType[_]) =>
+        println(s"convertToCatalyst: udt with $udtType")
         udtType.serialize(udt)
       case (d: BigDecimal, _) => Decimal(d)
       case (other, _) =>
@@ -92,7 +92,6 @@ object ScalaReflection {
     }
   }
 
-  /*
   /** Converts Catalyst types used internally in rows to standard Scala types */
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
     // TODO: Why does this not need to flatMap stuff?  Does it not support nesting?
@@ -109,7 +108,6 @@ object ScalaReflection {
   def convertRowToScala(r: Row, schema: StructType): Row = {
     new GenericRow(r.toArray.map(convertToScala(_, schema)))
   }
-  */
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag](
@@ -121,67 +119,66 @@ object ScalaReflection {
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag](udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = {
-    println(s"schemaFor: ${typeTag[T]}")
-    if (udtRegistry.contains(typeTag[T])) {
-      println(s"  schemaFor T matched udtRegistry")
-      val udtStructType: StructType = udtRegistry(typeTag[T]).dataType
-      Schema(udtStructType, nullable = true)
-    } else {
-      schemaFor(typeOf[T])
-    }
-  }
+  def schemaFor[T: TypeTag](udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema =
+    schemaFor(typeOf[T], udtRegistry)
 
   /**
    * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
    * TODO: ADD DOC
    */
-  def schemaFor(tpe: `Type`): Schema = tpe match {
-    case t if t <:< typeOf[Option[_]] =>
-      val TypeRef(_, _, Seq(optType)) = t
-      Schema(schemaFor(optType).dataType, nullable = true)
-    case t if t <:< typeOf[Product] =>
-      val formalTypeArgs = t.typeSymbol.asClass.typeParams
-      val TypeRef(_, _, actualTypeArgs) = t
-      val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
-      Schema(StructType(
-        params.head.map { p =>
-          val Schema(dataType, nullable) =
-            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs))
-          StructField(p.name.toString, dataType, nullable)
-        }), nullable = true)
-    // Need to decide if we actually need a special type here.
-    case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
-    case t if t <:< typeOf[Array[_]] =>
-      sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
-    case t if t <:< typeOf[Seq[_]] =>
-      val TypeRef(_, _, Seq(elementType)) = t
-      val Schema(dataType, nullable) = schemaFor(elementType)
-      Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-    case t if t <:< typeOf[Map[_,_]] =>
-      val TypeRef(_, _, Seq(keyType, valueType)) = t
-      val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-      Schema(MapType(schemaFor(keyType).dataType,
-        valueDataType, valueContainsNull = valueNullable), nullable = true)
-    case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
-    case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
-    case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
-    case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
-    case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
-    case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
-    case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
-    case t if t <:< typeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
-    case t if t <:< typeOf[java.lang.Float] => Schema(FloatType, nullable = true)
-    case t if t <:< typeOf[java.lang.Short] => Schema(ShortType, nullable = true)
-    case t if t <:< typeOf[java.lang.Byte] => Schema(ByteType, nullable = true)
-    case t if t <:< typeOf[java.lang.Boolean] => Schema(BooleanType, nullable = true)
-    case t if t <:< definitions.IntTpe => Schema(IntegerType, nullable = false)
-    case t if t <:< definitions.LongTpe => Schema(LongType, nullable = false)
-    case t if t <:< definitions.DoubleTpe => Schema(DoubleType, nullable = false)
-    case t if t <:< definitions.FloatTpe => Schema(FloatType, nullable = false)
-    case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
-    case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
-    case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+  def schemaFor(tpe: `Type`, udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = {
+    println(s"schemaFor: $tpe")
+    tpe match {
+      case t if udtRegistry.contains(t) =>
+        println(s"  schemaFor T matched udtRegistry")
+        Schema(udtRegistry(t), nullable = true)
+      case t if t <:< typeOf[Option[_]] =>
+        val TypeRef(_, _, Seq(optType)) = t
+        Schema(schemaFor(optType, udtRegistry).dataType, nullable = true)
+      case t if t <:< typeOf[Product] =>
+        println(s" --schemaFor matched on Product")
+        val formalTypeArgs = t.typeSymbol.asClass.typeParams
+        val TypeRef(_, _, actualTypeArgs) = t
+        val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
+        Schema(StructType(
+          params.head.map { p =>
+            val Schema(dataType, nullable) =
+              schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs), udtRegistry)
+            StructField(p.name.toString, dataType, nullable)
+          }), nullable = true)
+      // Need to decide if we actually need a special type here.
+      case t if t <:< typeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
+      case t if t <:< typeOf[Array[_]] =>
+        sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
+      case t if t <:< typeOf[Seq[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType, udtRegistry)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+      case t if t <:< typeOf[Map[_, _]] =>
+        val TypeRef(_, _, Seq(keyType, valueType)) = t
+        val Schema(valueDataType, valueNullable) = schemaFor(valueType, udtRegistry)
+        Schema(MapType(schemaFor(keyType, udtRegistry).dataType,
+          valueDataType, valueContainsNull = valueNullable), nullable = true)
+      case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
+      case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
+      case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
+      case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
+      case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
+      case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
+      case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
+      case t if t <:< typeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
+      case t if t <:< typeOf[java.lang.Float] => Schema(FloatType, nullable = true)
+      case t if t <:< typeOf[java.lang.Short] => Schema(ShortType, nullable = true)
+      case t if t <:< typeOf[java.lang.Byte] => Schema(ByteType, nullable = true)
+      case t if t <:< typeOf[java.lang.Boolean] => Schema(BooleanType, nullable = true)
+      case t if t <:< definitions.IntTpe => Schema(IntegerType, nullable = false)
+      case t if t <:< definitions.LongTpe => Schema(LongType, nullable = false)
+      case t if t <:< definitions.DoubleTpe => Schema(DoubleType, nullable = false)
+      case t if t <:< definitions.FloatTpe => Schema(FloatType, nullable = false)
+      case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
+      case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
+      case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+    }
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {
@@ -219,4 +216,5 @@ object ScalaReflection {
       LocalRelation(output, data)
     }
   }
+
 }

@@ -114,7 +114,7 @@ class SchemaRDD(
   // =========================================================================================
 
   override def compute(split: Partition, context: TaskContext): Iterator[Row] =
-    firstParent[Row].compute(split, context).map(_.copy) //(ScalaReflection.convertRowToScala(_, this.schema))
+    firstParent[Row].compute(split, context).map(ScalaReflection.convertRowToScala(_, this.schema))
 
   override def getPartitions: Array[Partition] = firstParent[Row].partitions
 

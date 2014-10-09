@@ -293,12 +293,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * RDDs of user types and SchemaRDDs.
    * Fails if this type has been registered already.
    */
-  def registerUserType[UserType](
+  def registerType[UserType](
       udt: UserDefinedType[UserType])(implicit userType: TypeTag[UserType]): Unit = {
-    require(!udtRegistry.contains(userType),
+    require(!udtRegistry.contains(userType.tpe),
       "registerUserType called on type which was already registered.")
     // TODO: Check to see if type is built-in.  Throw exception?
-    udtRegistry(userType) = udt
+    udtRegistry(userType.tpe) = udt
   }
 
   /** Map: UserType --> UserDefinedType */

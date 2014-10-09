@@ -586,10 +586,12 @@ object UserDefinedType {
 /**
  * The data type for User Defined Types.
  */
-abstract class UserDefinedType[UserType](val dataType: StructType) extends DataType {
+abstract class UserDefinedType[UserType] extends DataType {
 
   // Used only in regex parser above.
   //private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = { }
+
+  def sqlType: DataType
 
   def serialize(obj: Any): Row
 
