@@ -238,8 +238,8 @@ class SparseVector(Vector):
         (index, value) pairs, or two separate arrays of indices and
         values (sorted by index).
 
-        @param size: Size of the vector.
-        @param args: Non-zero entries, as a dictionary, list of tupes,
+        :param size: Size of the vector.
+        :param args: Non-zero entries, as a dictionary, list of tupes,
                or two sorted lists containing indices and values.
 
         >>> print SparseVector(4, {1: 1.0, 3: 5.5})
@@ -458,8 +458,8 @@ class Vectors(object):
         (index, value) pairs, or two separate arrays of indices and
         values (sorted by index).
 
-        @param size: Size of the vector.
-        @param args: Non-zero entries, as a dictionary, list of tupes,
+        :param size: Size of the vector.
+        :param args: Non-zero entries, as a dictionary, list of tupes,
                      or two sorted lists containing indices and values.
 
         >>> print Vectors.sparse(4, {1: 1.0, 3: 5.5})
