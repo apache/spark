@@ -24,11 +24,16 @@ import org.apache.hadoop.io.BytesWritable
 class SparkContextSuite extends FunSuite {
   test("test of writing spark scala test") {
     val bytesWritable = new BytesWritable()
-    bytesWritable.set((1 to 10).map(_.toByte).toArray, 0, 10)
-    bytesWritable.set((1 to 5).map(_.toByte).toArray, 0, 5)
+    val inputArray = (1 to 10).map(_.toByte).toArray
+    bytesWritable.set(inputArray, 0, 10)
+    bytesWritable.set(inputArray, 0, 5)
 
     val converter = SparkContext.bytesWritableConverter()
     val byteArray = converter.convert(bytesWritable)
     assert(byteArray.length === 5)
+
+    bytesWritable.set(inputArray, 0, 0)
+    val byteArray2 = converter.convert(bytesWritable)
+    assert(byteArray2.length === 0)
   }
 }

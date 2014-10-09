@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.Arrays
+
 import scala.language.implicitConversions
 
 import java.io._
@@ -1409,7 +1411,7 @@ object SparkContext extends Logging {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](bw => bw.getBytes.take(bw.getLength))
+    simpleWritableConverter[Array[Byte], BytesWritable](bw => Arrays.copyOfRange(bw.getBytes, 0, bw.getLength))
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =
