@@ -100,7 +100,7 @@ private[hive] object HiveShim {
     if (ids != null && ids.size > 0) {
       ColumnProjectionUtils.appendReadColumns(conf, ids)
     }
-    if (names == null && names.size > 0) {
+    if (names != null && names.size > 0) {
       appendReadColumnNames(conf, names)
     }
   }
