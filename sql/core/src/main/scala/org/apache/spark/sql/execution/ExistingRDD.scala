@@ -33,14 +33,12 @@ import org.apache.spark.sql.catalyst.types.UserDefinedType
 @DeveloperApi
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], schema: StructType): RDD[Row] = {
-    println(s"productToRowRdd called with datatype: $schema")
     data.mapPartitions { iterator =>
       if (iterator.isEmpty) {
         Iterator.empty
       } else {
         val bufferedIterator = iterator.buffered
         val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
-        assert(bufferedIterator.head.productArity == schema.fields.length)
         val schemaFields = schema.fields.toArray
         bufferedIterator.map { r =>
           var i = 0
