@@ -63,7 +63,7 @@ case object DenseVectorUDT extends UserDefinedType[DenseVector] {
 class UserDefinedTypeSuite extends QueryTest {
 
   test("register user type: DenseVector for LabeledPoint") {
-    TestSQLContext.registerType(DenseVectorUDT)
+    registerType(DenseVectorUDT)
     println("udtRegistry:")
     TestSQLContext.udtRegistry.foreach { case (t, s) => println(s"$t -> $s")}
 
@@ -81,12 +81,14 @@ class UserDefinedTypeSuite extends QueryTest {
     println(s"SchemaRDD count: ${tmpSchemaRDD.count()}")
     println("Done converting to SchemaRDD")
 
+    println("testing labels")
     val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v}
     val labelsArrays: Array[Double] = labels.collect()
     assert(labelsArrays.size === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
+    println("testing features")
     val features: RDD[DenseVector] =
       pointsRDD.select('features).map { case Row(v: DenseVector) => v}
     val featuresArrays: Array[DenseVector] = features.collect()
