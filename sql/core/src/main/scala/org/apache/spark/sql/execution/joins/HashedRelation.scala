@@ -28,6 +28,12 @@ import org.apache.spark.util.collection.CompactBuffer
  * object.
  */
 private[joins] sealed trait HashedRelation {
+  /**
+   * Get the rows matching the key back as a [[CompactBuffer]]. If no rows match this key,
+   * null is returned.
+   *
+   * The concrete implementation may reuse the returned [[CompactBuffer]].
+   */
   def get(key: Row): CompactBuffer[Row]
 }
 
@@ -49,9 +55,16 @@ private[joins] final class GeneralHashedRelation(hashTable: JavaHashMap[Row, Com
 private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, Row])
   extends HashedRelation with Serializable {
 
+  private[this] val compactBuf = CompactBuffer[Row](null)
+
   override def get(key: Row) = {
     val v = hashTable.get(key)
-    if (v eq null) null else CompactBuffer(v)
+    if (v eq null) {
+      null
+    } else {
+      compactBuf(0) = v
+      compactBuf
+    }
   }
 
   def getValue(key: Row): Row = hashTable.get(key)
