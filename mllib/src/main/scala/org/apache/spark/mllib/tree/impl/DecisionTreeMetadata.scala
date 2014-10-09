@@ -75,6 +75,16 @@ private[tree] class DecisionTreeMetadata(
     numBins(featureIndex) - 1
   }
 
+
+  /**
+   *
+   */
+  def setNumBinForFeature(featureIndex: Int, numBin: Int) {
+    require(isContinuous(featureIndex),
+      s"Can only set number of bin for continuous feature.")
+    numBins(featureIndex) = numBin
+  }
+
   /**
    * Indicates if feature subsampling is being used.
    */
