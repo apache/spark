@@ -111,7 +111,7 @@ private[sql] case class InMemoryRelation(
 
   override def newInstance() = {
     new InMemoryRelation(
-      output.map(_.newInstance),
+      output.map(_.newInstance()),
       useCompression,
       batchSize,
       storageLevel,
