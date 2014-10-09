@@ -136,7 +136,7 @@ private[spark] class ExecutorRunner(
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
       val builder = new ProcessBuilder(command: _*).directory(executorDir)
       val env = builder.environment()
-      for ((key, value) <- appDesc.command.environment) {
+      for ((key, value) <- CommandUtils.buildEnvironment(appDesc.command)) {
         env.put(key, value)
       }
       // In case we are running this from within the Spark Shell, avoid creating a "scala"

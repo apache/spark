@@ -86,7 +86,8 @@ private[spark] class DriverRunner(
             driverDesc.command.javaOpts)
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
-          launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)
+          val envVars = CommandUtils.buildEnvironment(newCommand)
+          launchDriver(command, envVars, driverDir, driverDesc.supervise)
         }
         catch {
           case e: Exception => finalException = Some(e)

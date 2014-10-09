@@ -1734,10 +1734,10 @@ private[spark] object Utils extends Logging {
   }
 
   def libraryPathScriptVar: String = {
-    if (Utils.isWindows) {
-      s"%${Utils.libraryPath}%"
+    if (isWindows) {
+      s"%${libraryPath}%"
     } else {
-      "$" + Utils.libraryPath
+      "$" + libraryPath
     }
   }
 

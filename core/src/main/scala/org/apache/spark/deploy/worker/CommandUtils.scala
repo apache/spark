@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.worker
 
+import scala.collection.Map
+
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
 
@@ -34,16 +36,20 @@ object CommandUtils extends Logging {
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
-    buildPrefixEnv(command) ++ Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++
+    Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++
       Seq(command.mainClass) ++ command.arguments
   }
 
-  private def buildPrefixEnv(command: Command): Seq[String] = {
+  def buildEnvironment(command: Command): Map[String, String] = {
+    val libraryPath = Utils.libraryPath
+    val pathSeparator = File.pathSeparator
     if (command.libraryPathEntries.size > 0) {
-      val libraryPaths = command.libraryPathEntries
-      Seq(s"${Utils.libraryPath}=${libraryPaths.mkString(File.pathSeparator)}")
+      val sysLibraryPath = sys.env.get(libraryPath)
+      val cmdLibraryPath = command.environment.get(libraryPath)
+      val libraryPaths = command.libraryPathEntries ++ cmdLibraryPath ++ sysLibraryPath
+      command.environment + ((Utils.libraryPath, libraryPaths.mkString(pathSeparator)))
     } else {
-      Seq()
+      command.environment
     }
   }
 

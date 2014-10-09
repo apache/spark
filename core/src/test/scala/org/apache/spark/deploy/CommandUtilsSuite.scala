@@ -24,10 +24,11 @@ import org.scalatest.Matchers
 
 class CommandUtilsSuite extends FunSuite with Matchers {
 
-  test("set java.library.path correctly") {
-    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val cmd = CommandUtils.buildCommandSeq(new Command("mainClass", Seq(), Map(), Seq(),
-      Seq("libraryPathToB"), Seq()), 512, sparkHome)
-    assert(cmd.head.contains("libraryPathToB"))
+  test("set libraryPath correctly") {
+    val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
+    val libraryPath = Utils.libraryPath
+    val env = CommandUtils.buildEnvironment(cmd)
+    env.keySet should contain(libraryPath)
+    assert(env(libraryPath).startsWith("libraryPathToB"))
   }
 }
