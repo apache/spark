@@ -82,7 +82,7 @@ class UserDefinedTypeSuite extends QueryTest {
     println("Done converting to SchemaRDD")
 
     println("testing labels")
-    val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v}
+    val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
     assert(labelsArrays.size === 2)
     assert(labelsArrays.contains(1.0))
@@ -90,7 +90,7 @@ class UserDefinedTypeSuite extends QueryTest {
 
     println("testing features")
     val features: RDD[DenseVector] =
-      pointsRDD.select('features).map { case Row(v: DenseVector) => v}
+      pointsRDD.select('features).map { case Row(v: DenseVector) => v }
     val featuresArrays: Array[DenseVector] = features.collect()
     assert(featuresArrays.size === 2)
     assert(featuresArrays.contains(new DenseVector(Array(0.1, 1.0))))

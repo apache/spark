@@ -96,17 +96,28 @@ object ScalaReflection {
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
     // TODO: Why does this not need to flatMap stuff?  Does it not support nesting?
     // TODO: What about Option and Product?
-    case (s: Seq[_], arrayType: ArrayType) => s.map(convertToScala(_, arrayType.elementType))
-    case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
+    case (s: Seq[_], arrayType: ArrayType) =>
+      println("convertToScala: Seq")
+      s.map(convertToScala(_, arrayType.elementType))
+    case (m: Map[_, _], mapType: MapType) =>
+      println("convertToScala: Map")
+      m.map { case (k, v) =>
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
-    case d: Decimal => d.toBigDecimal
-    case (udt: Row, udtType: UserDefinedType[_]) => udtType.deserialize(udt)
-    case (other, _) => other
+    case (d: Decimal, DecimalType) => d.toBigDecimal
+    case (udt: Row, udtType: UserDefinedType[_]) =>
+      println("convertToScala: udt")
+      udtType.deserialize(udt)
+    case (other, _) =>
+      println("convertToScala: other")
+      other
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
-    new GenericRow(r.toArray.map(convertToScala(_, schema)))
+    println("convertRowToScala called with schema: $schema")
+    new GenericRow(
+      r.zip(schema.fields.map(_.dataType))
+        .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
   }
 
   /** Returns a Sequence of attributes for the given case class type. */
@@ -129,9 +140,6 @@ object ScalaReflection {
   def schemaFor(tpe: `Type`, udtRegistry: scala.collection.Map[Any, UserDefinedType[_]]): Schema = {
     println(s"schemaFor: $tpe")
     tpe match {
-      case t if udtRegistry.contains(t) =>
-        println(s"  schemaFor T matched udtRegistry")
-        Schema(udtRegistry(t), nullable = true)
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType, udtRegistry).dataType, nullable = true)
@@ -178,6 +186,9 @@ object ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
+      case t if udtRegistry.contains(t) =>
+        println(s"  schemaFor T matched udtRegistry")
+        Schema(udtRegistry(t), nullable = true)
     }
   }
 
