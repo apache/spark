@@ -20,12 +20,11 @@ package org.apache.spark.serializer
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferInputStream, Utils}
+
+import scala.reflect.ClassTag
 
 private[spark] class JavaSerializationStream(out: OutputStream, counterReset: Int)
   extends SerializationStream {
@@ -48,19 +47,27 @@ private[spark] class JavaSerializationStream(out: OutputStream, counterReset: In
     this
   }
 
-  def flush() { objOut.flush() }
-  def close() { objOut.close() }
+  def flush() {
+    objOut.flush()
+  }
+
+  def close() {
+    objOut.close()
+  }
 }
 
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
-extends DeserializationStream {
+  extends DeserializationStream {
   private val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) =
       Class.forName(desc.getName, false, loader)
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
-  def close() { objIn.close() }
+
+  def close() {
+    objIn.close()
+  }
 }
 
 

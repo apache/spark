@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent._
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
@@ -41,12 +42,11 @@ private[spark] class Executor(
     slaveHostname: String,
     properties: Seq[(String, String)],
     isLocal: Boolean = false)
-  extends Logging
-{
+  extends Logging {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
-  private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
-  private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
+  private val currentFiles: mutable.HashMap[String, Long] = new mutable.HashMap[String, Long]()
+  private val currentJars: mutable.HashMap[String, Long] = new mutable.HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -278,7 +278,7 @@ private[spark] class Executor(
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
+    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", defaultValue = false)
     userClassPathFirst match {
       case true => new ChildExecutorURLClassLoader(urls, currentLoader)
       case false => new ExecutorURLClassLoader(urls, currentLoader)
@@ -294,7 +294,7 @@ private[spark] class Executor(
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       val userClassPathFirst: java.lang.Boolean =
-        conf.getBoolean("spark.files.userClassPathFirst", false)
+        conf.getBoolean("spark.files.userClassPathFirst", defaultValue = false)
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
@@ -316,24 +316,24 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+  private def updateDependencies(newFiles: mutable.HashMap[String, Long], newJars: mutable.HashMap[String, Long]) {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
           hadoopConf)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
           hadoopConf)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
-        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+        val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
         if (!urlClassLoader.getURLs.contains(url)) {
           logInfo("Adding " + url + " to class loader")
           urlClassLoader.addURL(url)
@@ -357,9 +357,9 @@ private[spark] class Executor(
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
-            if (!taskRunner.attemptedTask.isEmpty) {
+            if (taskRunner.attemptedTask.nonEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
-                metrics.updateShuffleReadMetrics
+                metrics.updateShuffleReadMetrics()
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
                   // onExecutorMetricsUpdate(), then JobProgressListener can not see

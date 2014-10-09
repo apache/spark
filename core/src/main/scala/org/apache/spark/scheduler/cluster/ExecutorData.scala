@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import akka.actor.{Address, ActorRef}
+import akka.actor.{ActorRef, Address}
 
 /**
  * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.

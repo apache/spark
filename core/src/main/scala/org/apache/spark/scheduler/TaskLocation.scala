@@ -29,22 +29,22 @@ private[spark] sealed trait TaskLocation {
 /**
  * A location that includes both a host and an executor id on that host.
  */
-private [spark] case class ExecutorCacheTaskLocation(override val host: String,
-    val executorId: String) extends TaskLocation {
+private[spark] case class ExecutorCacheTaskLocation(override val host: String, executorId: String) extends TaskLocation {
+
 }
 
 /**
  * A location on a host.
  */
-private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
+private[spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
   override def toString = host
 }
 
 /**
  * A location on a host that is cached by HDFS.
  */
-private [spark] case class HDFSCacheTaskLocation(override val host: String)
-    extends TaskLocation {
+private[spark] case class HDFSCacheTaskLocation(override val host: String)
+  extends TaskLocation {
   override def toString = TaskLocation.inMemoryLocationTag + host
 }
 

@@ -544,7 +544,7 @@ class JavaSparkContext(val sc: SparkContext)
    * or the spark.home Java property, or the SPARK_HOME environment variable
    * (in that order of preference). If neither of these is set, return None.
    */
-  def getSparkHome(): Optional[String] = JavaUtils.optionToOptional(sc.getSparkHome())
+  def getSparkHome: Optional[String] = JavaUtils.optionToOptional(sc.getSparkHome)
 
   /**
    * Add a file to be downloaded with this Spark job on every node.

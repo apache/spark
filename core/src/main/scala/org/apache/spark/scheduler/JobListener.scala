@@ -24,5 +24,6 @@ package org.apache.spark.scheduler
  */
 private[spark] trait JobListener {
   def taskSucceeded(index: Int, result: Any)
+
   def jobFailed(exception: Exception)
 }

@@ -24,12 +24,13 @@ import java.util.Properties
  * missing partitions of a particular stage.
  */
 private[spark] class TaskSet(
-    val tasks: Array[Task[_]],
-    val stageId: Int,
-    val attempt: Int,
-    val priority: Int,
-    val properties: Properties) {
-    val id: String = stageId + "." + attempt
+  val tasks: Array[Task[_]],
+  val stageId: Int,
+  val attempt: Int,
+  val priority: Int,
+  val properties: Properties) {
+
+  val id: String = stageId + "." + attempt
 
   override def toString: String = "TaskSet " + id
 }

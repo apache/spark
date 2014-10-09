@@ -18,14 +18,14 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
+
+import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.{Logging, SparkConf}
 
 import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.storage.StreamBlockId
-import java.util.concurrent.CountDownLatch
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
-import ExecutionContext.Implicits.global
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -41,6 +41,7 @@ private[streaming] abstract class ReceiverSupervisor(
     type CheckpointState = Value
     val Initialized, Started, Stopped = Value
   }
+
   import ReceiverState._
 
   // Attach the executor to the receiver
@@ -89,16 +90,16 @@ private[streaming] abstract class ReceiverSupervisor(
   def reportError(message: String, throwable: Throwable)
 
   /** Called when supervisor is started */
-  protected def onStart() { }
+  protected def onStart() {}
 
   /** Called when supervisor is stopped */
-  protected def onStop(message: String, error: Option[Throwable]) { }
+  protected def onStop(message: String, error: Option[Throwable]) {}
 
   /** Called when receiver is started */
-  protected def onReceiverStart() { }
+  protected def onReceiverStart() {}
 
   /** Called when receiver is stopped */
-  protected def onReceiverStop(message: String, error: Option[Throwable]) { }
+  protected def onReceiverStop(message: String, error: Option[Throwable]) {}
 
   /** Start the supervisor */
   def start() {
@@ -150,8 +151,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Restart receiver with delay */
   def restartReceiver(message: String, error: Option[Throwable], delay: Int) {
     Future {
-      logWarning("Restarting receiver with delay " + delay + " ms: " + message,
-        error.getOrElse(null))
+      logWarning("Restarting receiver with delay " + delay + " ms: " + message, error.orNull)
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
@@ -162,17 +162,16 @@ private[streaming] abstract class ReceiverSupervisor(
   }
 
   /** Check if receiver has been marked for stopping */
-  def isReceiverStarted() = {
+  def isReceiverStarted = {
     logDebug("state = " + receiverState)
     receiverState == Started
   }
 
   /** Check if receiver has been marked for stopping */
-  def isReceiverStopped() = {
+  def isReceiverStopped = {
     logDebug("state = " + receiverState)
     receiverState == Stopped
   }
-
 
   /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {

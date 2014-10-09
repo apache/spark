@@ -28,7 +28,7 @@ object SparkFiles {
    * Get the absolute path of a file added through `SparkContext.addFile()`.
    */
   def get(filename: String): String =
-    new File(getRootDirectory(), filename).getAbsolutePath()
+    new File(getRootDirectory(), filename).getAbsolutePath
 
   /**
    * Get the root directory that contains files added through `SparkContext.addFile()`.

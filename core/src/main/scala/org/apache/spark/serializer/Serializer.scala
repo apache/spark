@@ -17,14 +17,14 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayOutputStream, EOFException, InputStream, OutputStream}
+import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
-
-import scala.reflect.ClassTag
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.NextIterator
+
+import scala.reflect.ClassTag
 
 /**
  * :: DeveloperApi ::
@@ -102,7 +102,9 @@ abstract class SerializerInstance {
 @DeveloperApi
 abstract class SerializationStream {
   def writeObject[T: ClassTag](t: T): SerializationStream
+
   def flush(): Unit
+
   def close(): Unit
 
   def writeAll[T: ClassTag](iter: Iterator[T]): SerializationStream = {
@@ -121,6 +123,7 @@ abstract class SerializationStream {
 @DeveloperApi
 abstract class DeserializationStream {
   def readObject[T: ClassTag](): T
+
   def close(): Unit
 
   /**

@@ -50,7 +50,7 @@ private[spark] object CoarseGrainedClusterMessages {
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
     def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer)
-      : StatusUpdate = {
+    : StatusUpdate = {
       StatusUpdate(executorId, taskId, state, new SerializableBuffer(data))
     }
   }
@@ -66,7 +66,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
 
-  case class AddWebUIFilter(filterName:String, filterParams: Map[String, String], proxyBase :String)
+  case class AddWebUIFilter(filterName: String, filterParams: Map[String, String], proxyBase: String)
     extends CoarseGrainedClusterMessage
 
 }

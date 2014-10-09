@@ -20,10 +20,10 @@ package org.apache.spark.scheduler
 import java.io.{FileInputStream, InputStream}
 import java.util.{NoSuchElementException, Properties}
 
-import scala.xml.XML
-
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
+
+import scala.xml.XML
 
 /**
  * An interface to build Schedulable tree
@@ -77,7 +77,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         }
       }
 
-      is.foreach { i => buildFairSchedulerPool(i) }
+      is.foreach { i => buildFairSchedulerPool(i)}
     } finally {
       is.foreach(_.close())
     }

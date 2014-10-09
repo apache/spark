@@ -17,11 +17,11 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
+import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -33,7 +33,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   var client: AppClient = null
   var stopping = false
-  var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
+  var shutdownCallback: (SparkDeploySchedulerBackend) => Unit = _
   @volatile var appId: String = _
 
   val registrationLock = new Object()
@@ -109,8 +109,8 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
-    memory: Int) {
+  override def executorAdded(fullId: String, workerId: String, hostPort: String,
+    cores: Int, memory: Int) {
     logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
@@ -131,7 +131,7 @@ private[spark] class SparkDeploySchedulerBackend(
   override def applicationId(): String =
     Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
 
   private def waitForRegistration() = {

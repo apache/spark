@@ -21,11 +21,11 @@ import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+
+import scala.collection.mutable
 
 /**
  * :: DeveloperApi ::
@@ -53,9 +53,9 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
       "/tmp/spark-%s".format(user)
     }
 
-  private val jobIdToPrintWriter = new HashMap[Int, PrintWriter]
-  private val stageIdToJobId = new HashMap[Int, Int]
-  private val jobIdToStageIds = new HashMap[Int, Seq[Int]]
+  private val jobIdToPrintWriter = new mutable.HashMap[Int, PrintWriter]
+  private val stageIdToJobId = new mutable.HashMap[Int, Int]
+  private val jobIdToStageIds = new mutable.HashMap[Int, Seq[Int]]
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue() = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
@@ -110,7 +110,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    */
   protected def buildJobStageDependencies(jobId: Int, stageIds: Seq[Int]) = {
     jobIdToStageIds(jobId) = stageIds
-    stageIds.foreach { stageId => stageIdToJobId(stageId) = jobId }
+    stageIds.foreach { stageId => stageIdToJobId(stageId) = jobId}
   }
 
   /**
@@ -146,31 +146,31 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    * @param taskMetrics Task running metrics
    */
   protected def recordTaskMetrics(stageId: Int, status: String,
-                                taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
+                                  taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
     val info = " TID=" + taskInfo.taskId + " STAGE_ID=" + stageId +
-               " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime +
-               " EXECUTOR_ID=" + taskInfo.executorId +  " HOST=" + taskMetrics.hostname
+      " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime +
+      " EXECUTOR_ID=" + taskInfo.executorId + " HOST=" + taskMetrics.hostname
     val executorRunTime = " EXECUTOR_RUN_TIME=" + taskMetrics.executorRunTime
     val gcTime = " GC_TIME=" + taskMetrics.jvmGCTime
     val inputMetrics = taskMetrics.inputMetrics match {
       case Some(metrics) =>
         " READ_METHOD=" + metrics.readMethod.toString +
-        " INPUT_BYTES=" + metrics.bytesRead
+          " INPUT_BYTES=" + metrics.bytesRead
       case None => ""
     }
     val shuffleReadMetrics = taskMetrics.shuffleReadMetrics match {
       case Some(metrics) =>
         " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
-        " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
-        " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
-        " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
-        " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
+          " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
+          " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
+          " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
+          " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
       case None => ""
     }
     val writeMetrics = taskMetrics.shuffleWriteMetrics match {
       case Some(metrics) =>
         " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten +
-        " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime
+          " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime
       case None => ""
     }
     stageLogInfo(stageId, status + info + executorRunTime + gcTime + inputMetrics +
@@ -213,12 +213,12 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         recordTaskMetrics(taskEnd.stageId, taskStatus, taskInfo, taskMetrics)
       case Resubmitted =>
         taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId +
-                      " STAGE_ID=" + taskEnd.stageId
+          " STAGE_ID=" + taskEnd.stageId
         stageLogInfo(taskEnd.stageId, taskStatus)
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" +
-                      taskEnd.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
-                      mapId + " REDUCE_ID=" + reduceId
+          taskEnd.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
+          mapId + " REDUCE_ID=" + reduceId
         stageLogInfo(taskEnd.stageId, taskStatus)
       case _ =>
     }

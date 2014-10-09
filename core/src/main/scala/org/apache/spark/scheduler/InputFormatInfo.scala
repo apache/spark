@@ -17,18 +17,18 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.JavaConversions._
-import scala.collection.immutable.Set
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.util.ReflectionUtils
-
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
+
+import scala.collection.JavaConversions._
+import scala.collection.immutable.Set
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * :: DeveloperApi ::
@@ -125,7 +125,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
         org.apache.hadoop.mapred.InputFormat[_, _]]
 
     val retval = new ArrayBuffer[SplitInfo]()
-    instance.getSplits(jobConf, jobConf.getNumMapTasks()).foreach(
+    instance.getSplits(jobConf, jobConf.getNumMapTasks).foreach(
         elem => retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, elem)
     )
 
@@ -169,13 +169,13 @@ object InputFormatInfo {
   */
   def computePreferredLocations(formats: Seq[InputFormatInfo]): Map[String, Set[SplitInfo]] = {
 
-    val nodeToSplit = new HashMap[String, HashSet[SplitInfo]]
+    val nodeToSplit = new mutable.HashMap[String, mutable.HashSet[SplitInfo]]
     for (inputSplit <- formats) {
       val splits = inputSplit.findPreferredLocations()
 
       for (split <- splits){
         val location = split.hostLocation
-        val set = nodeToSplit.getOrElseUpdate(location, new HashSet[SplitInfo])
+        val set = nodeToSplit.getOrElseUpdate(location, new mutable.HashSet[SplitInfo])
         set += split
       }
     }

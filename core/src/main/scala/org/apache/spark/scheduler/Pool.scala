@@ -88,11 +88,12 @@ private[spark] class Pool(
   }
 
   override def checkSpeculatableTasks(): Boolean = {
-    var shouldRevive = false
     for (schedulable <- schedulableQueue) {
-      shouldRevive |= schedulable.checkSpeculatableTasks()
+      if(schedulable.checkSpeculatableTasks()){
+        return true
+      }
     }
-    shouldRevive
+    false
   }
 
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {

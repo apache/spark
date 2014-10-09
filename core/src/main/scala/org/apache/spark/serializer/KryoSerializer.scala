@@ -20,14 +20,13 @@ package org.apache.spark.serializer
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
+import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
-
 import org.apache.spark._
 import org.apache.spark.broadcast.HttpBroadcast
-import org.apache.spark.network.nio.{PutBlock, GotBlock, GetBlock}
+import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.util.BoundedPriorityQueue
@@ -47,12 +46,10 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSize =
-    (conf.getDouble("spark.kryoserializer.buffer.mb", 0.064) * 1024 * 1024).toInt
-
+  private val bufferSize = (conf.getDouble("spark.kryoserializer.buffer.mb", 0.064) * 1024 * 1024).toInt
   private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 64) * 1024 * 1024
-  private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
-  private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
+  private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", defaultValue = true)
+  private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", defaultValue = false)
   private val registrator = conf.getOption("spark.kryo.registrator")
 
   def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
@@ -120,8 +117,13 @@ class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends Seria
     this
   }
 
-  override def flush() { output.flush() }
-  override def close() { output.close() }
+  override def flush() {
+    output.flush()
+  }
+
+  override def close() {
+    output.close()
+  }
 }
 
 private[spark]
@@ -211,8 +213,7 @@ private[serializer] object KryoSerializer {
  * The underlying object is scala.collection.convert.Wrappers$IterableWrapper.
  * Kryo deserializes this into an AbstractCollection, which unfortunately doesn't work.
  */
-private class JavaIterableWrapperSerializer
-  extends com.esotericsoftware.kryo.Serializer[java.lang.Iterable[_]] {
+private class JavaIterableWrapperSerializer extends com.esotericsoftware.kryo.Serializer[java.lang.Iterable[_]] {
 
   import JavaIterableWrapperSerializer._
 
@@ -227,7 +228,7 @@ private class JavaIterableWrapperSerializer
   }
 
   override def read(kryo: Kryo, in: KryoInput, clz: Class[java.lang.Iterable[_]])
-    : java.lang.Iterable[_] = {
+  : java.lang.Iterable[_] = {
     kryo.readClassAndObject(in) match {
       case scalaIterable: Iterable[_] =>
         scala.collection.JavaConversions.asJavaIterable(scalaIterable)

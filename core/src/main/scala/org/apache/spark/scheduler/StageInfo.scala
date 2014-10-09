@@ -17,10 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.RDDInfo
+
+import scala.collection.mutable
 
 /**
  * :: DeveloperApi ::
@@ -28,12 +28,12 @@ import org.apache.spark.storage.RDDInfo
  */
 @DeveloperApi
 class StageInfo(
-    val stageId: Int,
-    val attemptId: Int,
-    val name: String,
-    val numTasks: Int,
-    val rddInfos: Seq[RDDInfo],
-    val details: String) {
+  val stageId: Int,
+  val attemptId: Int,
+  val name: String,
+  val numTasks: Int,
+  val rddInfos: Seq[RDDInfo],
+  val details: String) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
@@ -41,7 +41,7 @@ class StageInfo(
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
   /** Terminal values of accumulables updated during this stage. */
-  val accumulables = HashMap[Long, AccumulableInfo]()
+  val accumulables = mutable.HashMap[Long, AccumulableInfo]()
 
   def stageFailed(reason: String) {
     failureReason = Some(reason)
