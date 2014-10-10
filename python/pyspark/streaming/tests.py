@@ -119,7 +119,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             output.sort(key=lambda x: x[0])
 
 
-class TestBasicOperations(PySparkStreamingTestCase):
+class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
         """Basic operation test for DStream.map."""
@@ -340,15 +340,13 @@ class TestBasicOperations(PySparkStreamingTestCase):
         expected = [[('a', (1, None)), ('b', (2, 3)), ('c', (None, 4))]]
         self._test_func(input, func, expected, True, input2)
 
-    def update_state_by_key(self):
+    def test_update_state_by_key(self):
 
-        def updater(it):
-            for k, vs, s in it:
-                if not s:
-                    s = vs
-                else:
-                    s.extend(vs)
-                yield (k, s)
+        def updater(vs, s):
+            if not s:
+                s = []
+            s.extend(vs)
+            return s
 
         input = [[('k', i)] for i in range(5)]
 
@@ -360,7 +358,7 @@ class TestBasicOperations(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
 
-class TestWindowFunctions(PySparkStreamingTestCase):
+class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 20
 
@@ -417,7 +415,7 @@ class TestWindowFunctions(PySparkStreamingTestCase):
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 1, 0.1))
 
 
-class TestStreamingContext(PySparkStreamingTestCase):
+class StreamingContextTests(PySparkStreamingTestCase):
 
     duration = 0.1
 
@@ -480,7 +478,7 @@ class TestStreamingContext(PySparkStreamingTestCase):
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
 
-class TestCheckpoint(PySparkStreamingTestCase):
+class CheckpointTests(PySparkStreamingTestCase):
 
     def setUp(self):
         pass

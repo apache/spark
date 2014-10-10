@@ -564,19 +564,19 @@ class DStream(object):
         Return a new "state" DStream where the state for each key is updated by applying
         the given function on the previous state of the key and the new values of the key.
 
-        @param updateFunc: State update function ([(k, vs, s)] -> [(k, s)]).
-                          If `s` is None, then `k` will be eliminated.
+        @param updateFunc: State update function. If this function returns None, then
+                           corresponding state key-value pair will be eliminated.
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
 
         def reduceFunc(t, a, b):
             if a is None:
-                g = b.groupByKey(numPartitions).map(lambda (k, vs): (k, list(vs), None))
+                g = b.groupByKey(numPartitions).mapValues(lambda vs: (list(vs), None))
             else:
                 g = a.cogroup(b, numPartitions)
-                g = g.map(lambda (k, (va, vb)): (k, list(vb), list(va)[0] if len(va) else None))
-            state = g.mapPartitions(lambda x: updateFunc(x))
+                g = g.mapValues(lambda (va, vb): (list(vb), list(va)[0] if len(va) else None))
+            state = g.mapValues(lambda (vs, s): updateFunc(vs, s))
             return state.filter(lambda (k, v): v is not None)
 
         jreduceFunc = TransformFunction(self._sc, reduceFunc,
