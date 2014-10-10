@@ -26,13 +26,16 @@ private[spark] trait SchedulerBackend {
   private val appId = "spark-application-" + System.currentTimeMillis
 
   def start(): Unit
+
   def stop(): Unit
+
   def reviveOffers(): Unit
+
   def defaultParallelism(): Int
 
-  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
-    throw new UnsupportedOperationException
-  def isReady(): Boolean = true
+  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = throw new UnsupportedOperationException
+
+  def isReady: Boolean = true
 
   /**
    * Get an application ID associated with the job.

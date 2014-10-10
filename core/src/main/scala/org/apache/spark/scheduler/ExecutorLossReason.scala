@@ -28,7 +28,7 @@ class ExecutorLossReason(val message: String) {
 }
 
 private[spark]
-case class ExecutorExited(val exitCode: Int)
+case class ExecutorExited(exitCode: Int)
   extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
 }
 

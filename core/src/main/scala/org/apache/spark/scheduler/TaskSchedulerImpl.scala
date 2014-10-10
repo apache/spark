@@ -21,10 +21,9 @@ import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 import scala.language.postfixOps
 import scala.util.Random
 
@@ -34,7 +33,6 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -55,8 +53,7 @@ private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
     isLocal: Boolean = false)
-  extends TaskScheduler with Logging
-{
+  extends TaskScheduler with Logging {
   def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
 
   val conf = sc.conf
@@ -72,10 +69,10 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
-  val activeTaskSets = new HashMap[String, TaskSetManager]
+  val activeTaskSets = new mutable.HashMap[String, TaskSetManager]
 
-  val taskIdToTaskSetId = new HashMap[Long, String]
-  val taskIdToExecutorId = new HashMap[Long, String]
+  val taskIdToTaskSetId = new mutable.HashMap[Long, String]
+  val taskIdToExecutorId = new mutable.HashMap[Long, String]
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
@@ -85,15 +82,15 @@ private[spark] class TaskSchedulerImpl(
   val nextTaskId = new AtomicLong(0)
 
   // Which executor IDs we have executors on
-  val activeExecutorIds = new HashSet[String]
+  val activeExecutorIds = new mutable.HashSet[String]
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
-  protected val executorsByHost = new HashMap[String, HashSet[String]]
+  protected val executorsByHost = new mutable.HashMap[String, mutable.HashSet[String]]
 
-  protected val hostsByRack = new HashMap[String, HashSet[String]]
+  protected val hostsByRack = new mutable.HashMap[String, mutable.HashSet[String]]
 
-  protected val executorIdToHost = new HashMap[String, String]
+  protected val executorIdToHost = new mutable.HashMap[String, String]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -135,12 +132,12 @@ private[spark] class TaskSchedulerImpl(
     schedulableBuilder.buildPools()
   }
 
-  def newTaskId(): Long = nextTaskId.getAndIncrement()
+  def newTaskId(): Long = nextTaskId.getAndIncrement
 
   override def start() {
     backend.start()
 
-    if (!isLocal && conf.getBoolean("spark.speculation", false)) {
+    if (!isLocal && conf.getBoolean("spark.speculation", defaultValue = false)) {
       logInfo("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
@@ -222,12 +219,12 @@ private[spark] class TaskSchedulerImpl(
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
-        executorsByHost(o.host) = new HashSet[String]()
+        executorsByHost(o.host) = new mutable.HashSet[String]()
         executorAdded(o.executorId, o.host)
         newExecAvail = true
       }
       for (rack <- getRackForHost(o.host)) {
-        hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
+        hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += o.host
       }
     }
 
@@ -441,7 +438,7 @@ private[spark] class TaskSchedulerImpl(
   private def removeExecutor(executorId: String) {
     activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
-    val execs = executorsByHost.getOrElse(host, new HashSet)
+    val execs = executorsByHost.getOrElse(host, new mutable.HashSet)
     execs -= executorId
     if (execs.isEmpty) {
       executorsByHost -= host
@@ -507,7 +504,7 @@ private[spark] object TaskSchedulerImpl {
    * For example, given <h1, [o1, o2, o3]>, <h2, [o4]>, <h1, [o5, o6]>, returns
    * [o1, o5, o4, 02, o6, o3]
    */
-  def prioritizeContainers[K, T] (map: HashMap[K, ArrayBuffer[T]]): List[T] = {
+  def prioritizeContainers[K, T] (map: mutable.HashMap[K, ArrayBuffer[T]]): List[T] = {
     val _keyList = new ArrayBuffer[K](map.size)
     _keyList ++= map.keys
 
@@ -523,7 +520,7 @@ private[spark] object TaskSchedulerImpl {
     while (found) {
       found = false
       for (key <- keyList) {
-        val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
+        val containerList: ArrayBuffer[T] = map.getOrElse(key, null)
         assert(containerList != null)
         // Get the index'th entry for this host - if present
         if (index < containerList.size){

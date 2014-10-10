@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import org.scalatest.{Assertions, FunSuite}
 import org.apache.spark.storage.StorageLevel
+import org.scalatest.{Assertions, FunSuite}
 
 class SparkContextInfoSuite extends FunSuite with LocalSparkContext {
   test("getPersistentRDDs only returns RDDs that are marked as cached") {
@@ -78,7 +78,7 @@ package object testPackage extends Assertions {
   def runCallSiteTest(sc: SparkContext) {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val rddCreationSite = rdd.getCreationSite
-    val curCallSite = sc.getCallSite().shortForm // note: 2 lines after definition of "rdd"
+    val curCallSite = sc.getCallSite.shortForm // note: 2 lines after definition of "rdd"
 
     val rddCreationLine = rddCreationSite match {
       case CALL_SITE_REGEX(func, file, line) => {

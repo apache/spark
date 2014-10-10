@@ -29,7 +29,7 @@ private[spark] object MemoryUtils {
       sc.conf.getOption("spark.mesos.executor.memoryOverhead")
         .getOrElse(OVERHEAD_MINIMUM.toString)
         .toInt + sc.executorMemory,
-        OVERHEAD_FRACTION * sc.executorMemory
+      OVERHEAD_FRACTION * sc.executorMemory
     )
   }
 }

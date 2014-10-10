@@ -42,7 +42,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)
     val app = state.activeApps.find(_.id == appId).getOrElse({
-      state.completedApps.find(_.id == appId).getOrElse(null)
+      state.completedApps.find(_.id == appId).orNull
     })
     JsonProtocol.writeApplicationInfo(app)
   }

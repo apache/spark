@@ -133,8 +133,7 @@ private object ParallelCollectionRDD {
         } else {
           1
         }
-        slice(new Range(
-          r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
+        slice(new Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
       }
       case r: Range => {
         positions(r.length, numSlices).map({

@@ -17,46 +17,43 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
+import org.apache.spark.{Logging, SPARK_VERSION, SparkConf}
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.io.CompressionCodec
-import org.apache.spark.SPARK_VERSION
-import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A SparkListener that logs events to persistent storage.
  *
  * Event logging is specified by the following configurable parameters:
- *   spark.eventLog.enabled - Whether event logging is enabled.
- *   spark.eventLog.compress - Whether to compress logged events
- *   spark.eventLog.overwrite - Whether to overwrite any existing files.
- *   spark.eventLog.dir - Path to the directory in which events are logged.
- *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
+ * spark.eventLog.enabled - Whether event logging is enabled.
+ * spark.eventLog.compress - Whether to compress logged events
+ * spark.eventLog.overwrite - Whether to overwrite any existing files.
+ * spark.eventLog.dir - Path to the directory in which events are logged.
+ * spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
 private[spark] class EventLoggingListener(
-    appId: String,
-    logBaseDir: String,
-    sparkConf: SparkConf,
-    hadoopConf: Configuration)
-  extends SparkListener with Logging {
+   appId: String,
+   logBaseDir: String,
+   sparkConf: SparkConf,
+   hadoopConf: Configuration) extends SparkListener with Logging {
 
-  import EventLoggingListener._
+  import org.apache.spark.scheduler.EventLoggingListener._
 
   def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
     this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
-  private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
-  private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
-  private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
+  private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", defaultValue = false)
+  private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", defaultValue = false)
+  private val testing = sparkConf.getBoolean("spark.eventLog.testing", defaultValue = false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   val logDir = EventLoggingListener.getLogDirPath(logBaseDir, appId)
   val logDirName: String = logDir.split("/").last
@@ -95,36 +92,41 @@ private[spark] class EventLoggingListener(
   }
 
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted) =
-    logEvent(event)
-  override def onTaskStart(event: SparkListenerTaskStart) =
-    logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted) = logEvent(event)
+
+  override def onTaskStart(event: SparkListenerTaskStart) = logEvent(event)
+
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult) =
     logEvent(event)
-  override def onTaskEnd(event: SparkListenerTaskEnd) =
-    logEvent(event)
-  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) =
-    logEvent(event)
+
+  override def onTaskEnd(event: SparkListenerTaskEnd) = logEvent(event)
+
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) = logEvent(event)
 
   // Events that trigger a flush
-  override def onStageCompleted(event: SparkListenerStageCompleted) =
-    logEvent(event, flushLogger = true)
-  override def onJobStart(event: SparkListenerJobStart) =
-    logEvent(event, flushLogger = true)
-  override def onJobEnd(event: SparkListenerJobEnd) =
-    logEvent(event, flushLogger = true)
+  override def onStageCompleted(event: SparkListenerStageCompleted) = logEvent(event, flushLogger = true)
+
+  override def onJobStart(event: SparkListenerJobStart) = logEvent(event, flushLogger = true)
+
+  override def onJobEnd(event: SparkListenerJobEnd) = logEvent(event, flushLogger = true)
+
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded) =
     logEvent(event, flushLogger = true)
+
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved) =
     logEvent(event, flushLogger = true)
+
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
     logEvent(event, flushLogger = true)
+
   override def onApplicationStart(event: SparkListenerApplicationStart) =
     logEvent(event, flushLogger = true)
+
   override def onApplicationEnd(event: SparkListenerApplicationEnd) =
     logEvent(event, flushLogger = true)
+
   // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) { }
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) {}
 
   /**
    * Stop logging events.
@@ -207,20 +209,20 @@ private[spark] object EventLoggingListener extends Logging {
         logWarning("No files found in logging directory %s".format(logDir))
       }
       EventLoggingInfo(
-        logPaths = filePaths.filter { path => isEventLogFile(path.getName) },
+        logPaths = filePaths.filter { path => isEventLogFile(path.getName)},
         sparkVersion = filePaths
-          .find { path => isSparkVersionFile(path.getName) }
-          .map { path => parseSparkVersion(path.getName) }
+          .find { path => isSparkVersionFile(path.getName)}
+          .map { path => parseSparkVersion(path.getName)}
           .getOrElse("<Unknown>"),
         compressionCodec = filePaths
-          .find { path => isCompressionCodecFile(path.getName) }
+          .find { path => isCompressionCodecFile(path.getName)}
           .map { path =>
-            val codec = EventLoggingListener.parseCompressionCodec(path.getName)
-            val conf = new SparkConf
-            conf.set("spark.io.compression.codec", codec)
-            codecMap.getOrElseUpdate(codec, CompressionCodec.createCodec(conf))
-          },
-        applicationComplete = filePaths.exists { path => isApplicationCompleteFile(path.getName) }
+          val codec = EventLoggingListener.parseCompressionCodec(path.getName)
+          val conf = new SparkConf
+          conf.set("spark.io.compression.codec", codec)
+          codecMap.getOrElseUpdate(codec, CompressionCodec.createCodec(conf))
+        },
+        applicationComplete = filePaths.exists { path => isApplicationCompleteFile(path.getName)}
       )
     } catch {
       case e: Exception =>
@@ -242,10 +244,10 @@ private[spark] object EventLoggingListener extends Logging {
  * Information needed to process the event logs associated with an application.
  */
 private[spark] case class EventLoggingInfo(
-    logPaths: Seq[Path],
-    sparkVersion: String,
-    compressionCodec: Option[CompressionCodec],
-    applicationComplete: Boolean = false)
+  logPaths: Seq[Path],
+  sparkVersion: String,
+  compressionCodec: Option[CompressionCodec],
+  applicationComplete: Boolean = false)
 
 private[spark] object EventLoggingInfo {
   def empty = EventLoggingInfo(Seq[Path](), "<Unknown>", None, applicationComplete = false)

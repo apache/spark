@@ -19,13 +19,13 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.mutable.Map
-import scala.language.existentials
-
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
+
+import scala.collection.mutable
+import scala.language.existentials
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue
@@ -36,15 +36,14 @@ import org.apache.spark.util.CallSite
 private[scheduler] sealed trait DAGSchedulerEvent
 
 private[scheduler] case class JobSubmitted(
-    jobId: Int,
-    finalRDD: RDD[_],
-    func: (TaskContext, Iterator[_]) => _,
-    partitions: Array[Int],
-    allowLocal: Boolean,
-    callSite: CallSite,
-    listener: JobListener,
-    properties: Properties = null)
-  extends DAGSchedulerEvent
+  jobId: Int,
+  finalRDD: RDD[_],
+  func: (TaskContext, Iterator[_]) => _,
+  partitions: Array[Int],
+  allowLocal: Boolean,
+  callSite: CallSite,
+  listener: JobListener,
+  properties: Properties = null) extends DAGSchedulerEvent
 
 private[scheduler] case class StageCancelled(stageId: Int) extends DAGSchedulerEvent
 
@@ -61,13 +60,12 @@ private[scheduler]
 case class GettingResultEvent(taskInfo: TaskInfo) extends DAGSchedulerEvent
 
 private[scheduler] case class CompletionEvent(
-    task: Task[_],
-    reason: TaskEndReason,
-    result: Any,
-    accumUpdates: Map[Long, Any],
-    taskInfo: TaskInfo,
-    taskMetrics: TaskMetrics)
-  extends DAGSchedulerEvent
+  task: Task[_],
+  reason: TaskEndReason,
+  result: Any,
+  accumUpdates: mutable.Map[Long, Any],
+  taskInfo: TaskInfo,
+  taskMetrics: TaskMetrics) extends DAGSchedulerEvent
 
 private[scheduler] case class ExecutorAdded(execId: String, host: String) extends DAGSchedulerEvent
 

@@ -21,7 +21,8 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -85,24 +86,24 @@ class DAGScheduler(
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
   private val nextStageId = new AtomicInteger(0)
 
-  private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
-  private[scheduler] val stageIdToStage = new HashMap[Int, Stage]
-  private[scheduler] val shuffleToMapStage = new HashMap[Int, Stage]
-  private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
+  private[scheduler] val jobIdToStageIds = new mutable.HashMap[Int, mutable.HashSet[Int]]
+  private[scheduler] val stageIdToStage = new mutable.HashMap[Int, Stage]
+  private[scheduler] val shuffleToMapStage = new mutable.HashMap[Int, Stage]
+  private[scheduler] val jobIdToActiveJob = new mutable.HashMap[Int, ActiveJob]
 
   // Stages we need to run whose parents aren't done
-  private[scheduler] val waitingStages = new HashSet[Stage]
+  private[scheduler] val waitingStages = new mutable.HashSet[Stage]
 
   // Stages we are running right now
-  private[scheduler] val runningStages = new HashSet[Stage]
+  private[scheduler] val runningStages = new mutable.HashSet[Stage]
 
   // Stages that must be resubmitted due to fetch failures
-  private[scheduler] val failedStages = new HashSet[Stage]
+  private[scheduler] val failedStages = new mutable.HashSet[Stage]
 
-  private[scheduler] val activeJobs = new HashSet[ActiveJob]
+  private[scheduler] val activeJobs = new mutable.HashSet[ActiveJob]
 
   // Contains the locations that each RDD's partitions are cached on
-  private val cacheLocs = new HashMap[Int, Array[Seq[TaskLocation]]]
+  private val cacheLocs = new mutable.HashMap[Int, Array[Seq[TaskLocation]]]
 
   // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
   // every task. When we detect a node failing, we note the current epoch number and failed
@@ -110,7 +111,7 @@ class DAGScheduler(
   //
   // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
-  private val failedEpoch = new HashMap[String, Long]
+  private val failedEpoch = new mutable.HashMap[String, Long]
 
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
@@ -122,7 +123,7 @@ class DAGScheduler(
   private[scheduler] var eventProcessActor: ActorRef = _
 
   /** If enabled, we may run certain actions like take() and first() locally. */
-  private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
+  private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", defaultValue = false)
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -151,7 +152,7 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any],
+      accumUpdates: mutable.Map[Long, Any],
       taskInfo: TaskInfo,
       taskMetrics: TaskMetrics) {
     eventProcessActor ! CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics)
@@ -222,7 +223,7 @@ class DAGScheduler(
             shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId,
             shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
- 
+
         stage
     }
   }
@@ -234,15 +235,14 @@ class DAGScheduler(
    * directly.
    */
   private def newStage(
-      rdd: RDD[_],
-      numTasks: Int,
-      shuffleDep: Option[ShuffleDependency[_, _, _]],
-      jobId: Int,
-      callSite: CallSite)
-    : Stage =
-  {
+    rdd: RDD[_],
+    numTasks: Int,
+    shuffleDep: Option[ShuffleDependency[_, _, _]],
+    jobId: Int,
+    callSite: CallSite)
+  : Stage = {
     val parentStages = getParentStages(rdd, jobId)
-    val id = nextStageId.getAndIncrement()
+    val id = nextStageId.getAndIncrement
     val stage = new Stage(id, rdd, numTasks, shuffleDep, parentStages, jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
@@ -256,13 +256,12 @@ class DAGScheduler(
    * recovered from the MapOutputTracker
    */
   private def newOrUsedStage(
-      rdd: RDD[_],
-      numTasks: Int,
-      shuffleDep: ShuffleDependency[_, _, _],
-      jobId: Int,
-      callSite: CallSite)
-    : Stage =
-  {
+    rdd: RDD[_],
+    numTasks: Int,
+    shuffleDep: ShuffleDependency[_, _, _],
+    jobId: Int,
+    callSite: CallSite)
+  : Stage = {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
@@ -285,11 +284,11 @@ class DAGScheduler(
    * provided jobId if they haven't already been created with a lower jobId.
    */
   private def getParentStages(rdd: RDD[_], jobId: Int): List[Stage] = {
-    val parents = new HashSet[Stage]
-    val visited = new HashSet[RDD[_]]
+    val parents = new mutable.HashSet[Stage]
+    val visited = new mutable.HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
+    val waitingForVisit = new mutable.Stack[RDD[_]]
     def visit(r: RDD[_]) {
       if (!visited(r)) {
         visited += r
@@ -326,12 +325,12 @@ class DAGScheduler(
   }
 
   // Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet
-  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
-    val parents = new Stack[ShuffleDependency[_, _, _]]
-    val visited = new HashSet[RDD[_]]
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): mutable.Stack[ShuffleDependency[_, _, _]] = {
+    val parents = new mutable.Stack[ShuffleDependency[_, _, _]]
+    val visited = new mutable.HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
+    val waitingForVisit = new mutable.Stack[RDD[_]]
     def visit(r: RDD[_]) {
       if (!visited(r)) {
         visited += r
@@ -358,11 +357,11 @@ class DAGScheduler(
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
-    val missing = new HashSet[Stage]
-    val visited = new HashSet[RDD[_]]
+    val missing = new mutable.HashSet[Stage]
+    val visited = new mutable.HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
+    val waitingForVisit = new mutable.Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
@@ -397,7 +396,7 @@ class DAGScheduler(
       if (stages.nonEmpty) {
         val s = stages.head
         s.jobIds += jobId
-        jobIdToStageIds.getOrElseUpdate(jobId, new HashSet[Int]()) += s.id
+        jobIdToStageIds.getOrElseUpdate(jobId, new mutable.HashSet[Int]()) += s.id
         val parents: List[Stage] = getParentStages(s.rdd, jobId)
         val parentsWithoutThisJobId = parents.filter { ! _.jobIds.contains(jobId) }
         updateJobIdStageIdMapsList(parentsWithoutThisJobId ++ stages.tail)
@@ -485,7 +484,7 @@ class DAGScheduler(
           "Total number of partitions: " + maxPartitions)
     }
 
-    val jobId = nextJobId.getAndIncrement()
+    val jobId = nextJobId.getAndIncrement
     if (partitions.size == 0) {
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
@@ -533,7 +532,7 @@ class DAGScheduler(
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
-    val jobId = nextJobId.getAndIncrement()
+    val jobId = nextJobId.getAndIncrement
     eventProcessActor ! JobSubmitted(
       jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties)
     listener.awaitResult()    // Will throw an exception if the job fails
@@ -1177,7 +1176,7 @@ class DAGScheduler(
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTime())
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
+      failJobAndIndependentStages(job, "Job aborted due to stage failure: $reason")
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -1201,7 +1200,7 @@ class DAGScheduler(
       logError("No stages registered for job " + job.jobId)
     }
     stages.foreach { stageId =>
-      val jobsForStage: Option[HashSet[Int]] = stageIdToStage.get(stageId).map(_.jobIds)
+      val jobsForStage: Option[mutable.HashSet[Int]] = stageIdToStage.get(stageId).map(_.jobIds)
       if (jobsForStage.isEmpty || !jobsForStage.get.contains(job.jobId)) {
         logError(
           "Job %d not registered for stage %d even though that stage was registered for the job"
@@ -1241,11 +1240,11 @@ class DAGScheduler(
     if (stage == target) {
       return true
     }
-    val visitedRdds = new HashSet[RDD[_]]
-    val visitedStages = new HashSet[Stage]
+    val visitedRdds = new mutable.HashSet[RDD[_]]
+    val visitedStages = new mutable.HashSet[Stage]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
+    val waitingForVisit = new mutable.Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
@@ -1278,16 +1277,15 @@ class DAGScheduler(
    */
   private[spark]
   def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = synchronized {
-    getPreferredLocsInternal(rdd, partition, new HashSet)
+    getPreferredLocsInternal(rdd, partition, new mutable.HashSet)
   }
 
   /** Recursive implementation for getPreferredLocs. */
   private def getPreferredLocsInternal(
-      rdd: RDD[_],
-      partition: Int,
-      visited: HashSet[(RDD[_],Int)])
-    : Seq[TaskLocation] =
-  {
+    rdd: RDD[_],
+    partition: Int,
+    visited: mutable.HashSet[(RDD[_],Int)])
+  : Seq[TaskLocation] = {
     // If the partition has already been visited, no need to re-visit.
     // This avoids exponential path exploration.  SPARK-695
     if (!visited.add((rdd,partition))) {

@@ -26,12 +26,11 @@ import org.apache.spark.util.SerializableBuffer
  * [[TaskSetManager.resourceOffer]].
  */
 private[spark] class TaskDescription(
-    val taskId: Long,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
+  val taskId: Long,
+  val executorId: String,
+  val name: String,
+  val index: Int, // Index within this task's TaskSet
+  _serializedTask: ByteBuffer) extends Serializable {
 
   // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
   private val buffer = new SerializableBuffer(_serializedTask)
