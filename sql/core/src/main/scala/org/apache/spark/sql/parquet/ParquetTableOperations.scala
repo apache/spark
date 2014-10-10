@@ -339,6 +339,10 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
     new Path(committer.getWorkPath, filename)
   }
 
+  // The TaskAttemptContext is a class in hadoop-1 but is an interface in hadoop-2.
+  // The signatures of the method TaskAttemptContext.getTaskAttemptID for the both versions
+  // are the same, so the method calls are source-compatible but NOT binary-compatible because
+  // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
   private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
     context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
   }
