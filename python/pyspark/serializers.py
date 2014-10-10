@@ -220,7 +220,7 @@ class AutoBatchedSerializer(BatchedSerializer):
     Choose the size of batch automatically based on the size of object
     """
 
-    def __init__(self, serializer, bestSize=1 << 20):
+    def __init__(self, serializer, bestSize=1 << 16):
         BatchedSerializer.__init__(self, serializer, -1)
         self.bestSize = bestSize
 
@@ -247,7 +247,7 @@ class AutoBatchedSerializer(BatchedSerializer):
                 other.serializer == self.serializer)
 
     def __str__(self):
-        return "BatchedSerializer<%s>" % str(self.serializer)
+        return "AutoBatchedSerializer<%s>" % str(self.serializer)
 
 
 class CartesianDeserializer(FramedSerializer):
