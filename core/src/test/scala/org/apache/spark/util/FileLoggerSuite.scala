@@ -21,7 +21,6 @@ import java.io.{File, IOException}
 
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -44,7 +43,7 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
   private var logDirPathString: String = _
 
   before {
-    testDir = Files.createTempDir()
+    testDir = Utils.createTempDir()
     logDirPath = Utils.getFilePath(testDir, "test-file-logger")
     logDirPathString = logDirPath.toString
   }
