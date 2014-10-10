@@ -198,8 +198,8 @@ private[sql] class DateColumnStats extends ColumnStats {
   override def gatherStats(row: Row, ordinal: Int) {
     if (!row.isNullAt(ordinal)) {
       val value = row(ordinal).asInstanceOf[Date]
-      if (upper == null || value.toString.compareTo(upper.toString) > 0) upper = value
-      if (lower == null || value.toString.compareTo(lower.toString) < 0) lower = value
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
     } else {
       nullCount += 1
     }

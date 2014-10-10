@@ -62,6 +62,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       buildCast[Timestamp](_, t => t.getTime() != 0 || t.getNanos() != 0)
     case DateType =>
+      // Hive would return null when cast from date to boolean
       buildCast[Date](_, d => null)
     case LongType =>
       buildCast[Long](_, _ != 0)

@@ -341,7 +341,7 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 8) {
     date
   }
 
-  override def append(v: Date, buffer: ByteBuffer) {
+  override def append(v: Date, buffer: ByteBuffer): Unit = {
     buffer.putLong(v.getTime)
   }
 
@@ -349,7 +349,7 @@ private[sql] object DATE extends NativeColumnType(DateType, 8, 8) {
     row(ordinal).asInstanceOf[Date]
   }
 
-  override def setField(row: MutableRow, ordinal: Int, value: Date) {
+  override def setField(row: MutableRow, ordinal: Int, value: Date): Unit = {
     row(ordinal) = value
   }
 }
