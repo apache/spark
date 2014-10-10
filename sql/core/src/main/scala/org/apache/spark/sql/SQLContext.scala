@@ -100,11 +100,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
     SparkPlan.currentContext.set(self)
-    println(s"createSchemaRDD called")
     val attributeSeq = ScalaReflection.attributesFor[A]
     val schema = StructType.fromAttributes(attributeSeq)
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
-    println("done with productToRowRdd")
     new SchemaRDD(this, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 

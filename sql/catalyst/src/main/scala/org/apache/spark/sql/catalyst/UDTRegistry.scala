@@ -35,25 +35,16 @@ private[sql] object UDTRegistry {
   /**
    * Register a user-defined type and its serializer, to allow automatic conversion between
    * RDDs of user types and SchemaRDDs.
-   * Fails if this type has been registered already.
+   * If this type has already been registered, this does nothing.
    */
-  /*
-  def registerType[UserType](implicit userType: TypeTag[UserType]): Unit = {
-    // TODO: Check to see if type is built-in.  Throw exception?
-    val udt: UserDefinedTypeType[_] =
-      userType.getClass.getAnnotation(classOf[UserDefinedType]).udt().newInstance()
-    UDTRegistry.udtRegistry(userType.tpe) = udt
-  }*/
-
   def registerType[UserType](implicit userType: Type): Unit = {
     // TODO: Check to see if type is built-in.  Throw exception?
     if (!UDTRegistry.udtRegistry.contains(userType)) {
-      val udt: UserDefinedTypeType[_] =
-        userType.getClass.getAnnotation(classOf[UserDefinedType]).udt().newInstance()
+      val udt =
+        getClass.getClassLoader.loadClass(userType.typeSymbol.asClass.fullName)
+          .getAnnotation(classOf[UserDefinedType]).udt().newInstance()
       UDTRegistry.udtRegistry(userType) = udt
     }
     // TODO: Else: Should we check (assert) that udt is the same as what is in the registry?
   }
-
-  //def getUDT
 }

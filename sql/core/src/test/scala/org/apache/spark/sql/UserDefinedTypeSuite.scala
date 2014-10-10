@@ -42,7 +42,6 @@ class DenseVectorUDT extends UserDefinedTypeType[DenseVector] {
   override def serialize(obj: Any): Row = obj match {
     case features: DenseVector =>
       val row: GenericMutableRow = new GenericMutableRow(features.data.length)
-      // TODO: Is there a copyTo command I can use?
       var i = 0
       while (i < features.data.length) {
         row.setDouble(i, features.data(i))
@@ -65,26 +64,17 @@ class DenseVectorUDT extends UserDefinedTypeType[DenseVector] {
 class UserDefinedTypeSuite extends QueryTest {
 
   test("register user type: DenseVector for LabeledPoint") {
-    //registerType(DenseVectorUDT)
     val points = Seq(
       LabeledPoint(1.0, new DenseVector(Array(0.1, 1.0))),
       LabeledPoint(0.0, new DenseVector(Array(0.2, 2.0))))
     val pointsRDD: RDD[LabeledPoint] = sparkContext.parallelize(points)
 
-    println("Converting to SchemaRDD")
-    val tmpSchemaRDD: SchemaRDD = TestSQLContext.createSchemaRDD(pointsRDD)
-    println("blah")
-    println(s"SchemaRDD count: ${tmpSchemaRDD.count()}")
-    println("Done converting to SchemaRDD")
-
-    println("testing labels")
     val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
     assert(labelsArrays.size === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
-    println("testing features")
     val features: RDD[DenseVector] =
       pointsRDD.select('features).map { case Row(v: DenseVector) => v }
     val featuresArrays: Array[DenseVector] = features.collect()

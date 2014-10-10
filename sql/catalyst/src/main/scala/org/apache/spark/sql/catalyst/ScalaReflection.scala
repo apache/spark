@@ -87,7 +87,6 @@ object ScalaReflection {
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = {
-    println(s"schemaFor: tpe = $tpe, tpe.getClass = ${tpe.getClass}, classOf[UserDefinedType] = ${classOf[UserDefinedType]}")
     tpe match {
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
@@ -134,7 +133,8 @@ object ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
-      case t if t.getClass.isAnnotationPresent(classOf[UserDefinedType]) =>
+      case t if getClass.getClassLoader.loadClass(t.typeSymbol.asClass.fullName)
+        .isAnnotationPresent(classOf[UserDefinedType]) =>
         UDTRegistry.registerType(t)
         Schema(UDTRegistry.udtRegistry(t), nullable = true)
     }
