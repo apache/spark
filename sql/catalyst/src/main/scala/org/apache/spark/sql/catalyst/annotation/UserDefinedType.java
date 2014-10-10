@@ -15,21 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.annotation;
+package org.apache.spark.sql.catalyst.annotation;
 
-    import java.lang.annotation.*;
+import org.apache.spark.sql.catalyst.types.UserDefinedTypeType;
+
+import java.lang.annotation.*;
 
 /**
- * A lower-level, unstable API intended for developers.
- *
- * Developer API's might change or be removed in minor versions of Spark.
- *
- * NOTE: If there exists a Scaladoc comment that immediately precedes this annotation, the first
- * line of the comment must be ":: DeveloperApi ::" with no trailing blank line. This is because
- * of the known issue that Scaladoc displays only either the annotation or the comment, whichever
- * comes first.
+ * A user-defined type which can be automatically recognized by a SQLContext and registered.
  */
+// TODO: Should I used @Documented ?
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
-    ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
-public @interface DeveloperApi {}
+@Target(ElementType.TYPE)
+public @interface UserDefinedType {
+  Class<? extends UserDefinedTypeType<?> > udt();
+}

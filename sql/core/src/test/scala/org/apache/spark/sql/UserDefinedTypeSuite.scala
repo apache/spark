@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.annotation.UserDefinedType
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.UserDefinedType
+import org.apache.spark.sql.catalyst.types.UserDefinedTypeType
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
+@UserDefinedType(udt = classOf[DenseVectorUDT])
 class DenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: DenseVector =>
@@ -33,7 +35,7 @@ class DenseVector(val data: Array[Double]) extends Serializable {
 
 case class LabeledPoint(label: Double, features: DenseVector)
 
-case object DenseVectorUDT extends UserDefinedType[DenseVector] {
+class DenseVectorUDT extends UserDefinedTypeType[DenseVector] {
 
   override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
 
@@ -63,13 +65,7 @@ case object DenseVectorUDT extends UserDefinedType[DenseVector] {
 class UserDefinedTypeSuite extends QueryTest {
 
   test("register user type: DenseVector for LabeledPoint") {
-    registerType(DenseVectorUDT)
-    println("udtRegistry:")
-    TestSQLContext.udtRegistry.foreach { case (t, s) => println(s"$t -> $s")}
-
-    println(s"test: ${scala.reflect.runtime.universe.typeOf[DenseVector]}")
-    assert(TestSQLContext.udtRegistry.contains(scala.reflect.runtime.universe.typeOf[DenseVector]))
-
+    //registerType(DenseVectorUDT)
     val points = Seq(
       LabeledPoint(1.0, new DenseVector(Array(0.1, 1.0))),
       LabeledPoint(0.0, new DenseVector(Array(0.2, 2.0))))
