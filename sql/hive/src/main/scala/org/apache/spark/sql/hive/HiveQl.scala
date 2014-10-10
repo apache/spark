@@ -638,7 +638,7 @@ private[hive] object HiveQl {
   def nodeToRelation(node: Node): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
-      Subquery(alias, nodeToPlan(query))
+      Subquery(cleanIdentifier(alias), nodeToPlan(query))
 
     case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
       val Token("TOK_SELECT",
