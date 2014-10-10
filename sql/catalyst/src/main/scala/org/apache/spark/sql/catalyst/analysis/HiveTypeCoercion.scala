@@ -253,11 +253,6 @@ trait HiveTypeCoercion {
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
       case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == DateType) =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == TimestampType) =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-
 
       case Sum(e) if e.dataType == StringType =>
         Sum(Cast(e, DoubleType))
