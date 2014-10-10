@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.annotation;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.sql.catalyst.types.UserDefinedTypeType;
+import org.apache.spark.sql.catalyst.types.UserDefinedType;
 
 import java.lang.annotation.*;
 
@@ -29,6 +29,6 @@ import java.lang.annotation.*;
 @DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface UserDefinedType {
-  Class<? extends UserDefinedTypeType<?> > udt();
+public @interface SQLUserDefinedType {
+  Class<? extends UserDefinedType<?> > udt();
 }
