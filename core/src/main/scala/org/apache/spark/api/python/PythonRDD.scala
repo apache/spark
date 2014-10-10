@@ -53,7 +53,8 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
+  val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
+  val memoryLimit = conf.getInt("spark.executor.python.memory.limit", 0)
 
   override def getPartitions = parent.partitions
 
@@ -65,11 +66,12 @@ private[spark] class PythonRDD(
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
     envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
-    if (reuse_worker) {
+    if (reuseWorker) {
       envVars += ("SPARK_REUSE_WORKER" -> "1")
     }
-    envVars += ("SPARK_WORKER_MEMORY_LIMIT" ->
-      conf.getInt("spark.executor.python.memory.limit", 0).toString)
+    if (memoryLimit > 0) {
+      envVars += ("SPARK_WORKER_MEMORY_LIMIT" -> memoryLimit.toString)
+    }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
@@ -78,7 +80,7 @@ private[spark] class PythonRDD(
     var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-      if (reuse_worker && complete_cleanly) {
+      if (reuseWorker && complete_cleanly) {
         env.releasePythonWorker(pythonExec, envVars.toMap, worker)
       } else {
         try {
