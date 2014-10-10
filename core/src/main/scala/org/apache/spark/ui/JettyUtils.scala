@@ -231,8 +231,10 @@ private[spark] object JettyUtils extends Logging {
     ServerInfo(server, boundPort, collection)
   }
 
-  // to generate a new url string scheme://server:port+path
-  private def newURL(scheme: String, server: String, port: Int, path: String, query: String) = {
+  // Create a new URI from the arguments, handling IPv6 host encoding and default ports. Based on:
+  // https://github.com/eclipse/jetty.project/blob/master/jetty-util/src/main/java/org/eclipse/
+  // jetty/util/URIUtil.java#L726-L733
+  private def newURI(scheme: String, server: String, port: Int, path: String, query: String) = {
     val builder = new StringBuilder
 
     if (server.indexOf(':') >= 0 && server.charAt(0) != '[') {
@@ -258,11 +260,11 @@ private[spark] object JettyUtils extends Logging {
         if (baseRequest.isSecure) {
           return
         }
-        val httpsURL = newURL(scheme, baseRequest.getServerName, securePort,
+        val httpsURI = newURI(scheme, baseRequest.getServerName, securePort,
           baseRequest.getRequestURI, baseRequest.getQueryString)
         response.setContentLength(0)
-        response.encodeRedirectURL(httpsURL)
-        response.sendRedirect(httpsURL)
+        response.encodeRedirectURL(httpsURI)
+        response.sendRedirect(httpsURI)
         baseRequest.setHandled(true)
       }
     })
