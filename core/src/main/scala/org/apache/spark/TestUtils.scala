@@ -26,6 +26,8 @@ import scala.collection.JavaConversions._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 import com.google.common.io.Files
 
+import org.apache.spark.util.Utils
+
 /**
  * Utilities for tests. Included in main codebase since it's used by multiple
  * projects.
@@ -42,8 +44,7 @@ private[spark] object TestUtils {
    * in order to avoid interference between tests.
    */
   def createJarWithClasses(classNames: Seq[String], value: String = ""): URL = {
-    val tempDir = Files.createTempDir()
-    tempDir.deleteOnExit()
+    val tempDir = Utils.createTempDir()
     val files = for (name <- classNames) yield createCompiledClass(name, tempDir, value)
     val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
     createJar(files, jarFile)

@@ -352,8 +352,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
   extends Thread with Logging {
 
   override def run() {
-    val localTestDir = Files.createTempDir()
-    localTestDir.deleteOnExit()
+    val localTestDir = Utils.createTempDir()
     var fs = testDir.getFileSystem(new Configuration())
     val maxTries = 3
     try {

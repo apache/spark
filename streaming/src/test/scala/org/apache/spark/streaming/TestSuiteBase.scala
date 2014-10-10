@@ -24,12 +24,12 @@ import scala.collection.mutable.SynchronizedBuffer
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import com.google.common.io.Files
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -120,9 +120,8 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   // Directory where the checkpoint data will be saved
   lazy val checkpointDir = {
-    val dir = Files.createTempDir()
+    val dir = Utils.createTempDir()
     logDebug(s"checkpointDir: $dir")
-    dir.deleteOnExit()
     dir.toString
   }
 

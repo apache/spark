@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
 
-import com.google.common.io.Files
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -39,8 +38,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   private var testDir: File = _
 
   before {
-    testDir = Files.createTempDir()
-    testDir.deleteOnExit()
+    testDir = Utils.createTempDir()
   }
 
   after {

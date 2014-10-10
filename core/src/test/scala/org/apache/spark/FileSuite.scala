@@ -21,7 +21,6 @@ import java.io.{File, FileWriter}
 
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
 import org.apache.hadoop.mapred.{JobConf, FileAlreadyExistsException, FileSplit, TextInputFormat, TextOutputFormat}
@@ -39,8 +38,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
 
   override def beforeEach() {
     super.beforeEach()
-    tempDir = Files.createTempDir()
-    tempDir.deleteOnExit()
+    tempDir = Utils.createTempDir()
   }
 
   override def afterEach() {
