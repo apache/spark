@@ -35,6 +35,7 @@ import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import akka.actor.Props
+import org.apache.spark.deploy.worker.Statistics
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -86,6 +87,9 @@ private[spark] class TaskSchedulerImpl(
 
   // Which executor IDs we have executors on
   val activeExecutorIds = new HashSet[String]
+
+  // Worker node stats
+  val nodeStats = new HashMap[String, Statistics]
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
@@ -330,8 +334,13 @@ private[spark] class TaskSchedulerImpl(
   override def executorHeartbeatReceived(
       execId: String,
       taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
-      blockManagerId: BlockManagerId): Boolean = {
-
+      blockManagerId: BlockManagerId,
+      stats: Statistics): Boolean = {
+    // Update node stats
+    synchronized {
+      val hostName = executorIdToHost(execId)
+      nodeStats(hostName) = stats
+    }
     val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
       taskMetrics.flatMap { case (id, metrics) =>
         taskIdToTaskSetId.get(id)
@@ -339,7 +348,7 @@ private[spark] class TaskSchedulerImpl(
           .map(taskSetMgr => (id, taskSetMgr.stageId, taskSetMgr.taskSet.attempt, metrics))
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId, stats)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {

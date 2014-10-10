@@ -200,7 +200,8 @@ private[spark] class Worker(
       }
 
     case SendHeartbeat =>
-      if (connected) { master ! Heartbeat(workerId) }
+      if (connected) { master ! Heartbeat(workerId,
+        new NodeStats(masterAddress.host.getOrElse("localhost")).getAllStats) }
 
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor

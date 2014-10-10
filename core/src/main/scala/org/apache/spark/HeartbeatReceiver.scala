@@ -22,6 +22,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.TaskScheduler
 import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.deploy.worker.Statistics
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -30,7 +31,8 @@ import org.apache.spark.util.ActorLogReceive
 private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
-    blockManagerId: BlockManagerId)
+    blockManagerId: BlockManagerId,
+    stats: Statistics)
 
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
@@ -41,9 +43,9 @@ private[spark] class HeartbeatReceiver(scheduler: TaskScheduler)
   extends Actor with ActorLogReceive with Logging {
 
   override def receiveWithLogging = {
-    case Heartbeat(executorId, taskMetrics, blockManagerId) =>
+    case Heartbeat(executorId, taskMetrics, blockManagerId, stats) =>
       val response = HeartbeatResponse(
-        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
+        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId, stats))
       sender ! response
   }
 }

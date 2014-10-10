@@ -41,8 +41,9 @@ case class Statistics(cpuspeed: List[Float], diskspeed: List[Float], maxMem: Lon
  *
  * @param latency     Current average node latency
  * @param diskspeed   List of diskspeeds (in accesses per millisecond)
+ * @param availMem    Available memory (in bytes)
  */
-case class LeanStatistics(latency: Float, diskspeed: List[Float])
+case class LeanStatistics(latency: Float, diskspeed: List[Float], availMem: Long)
 
 /**
  * Node stats
@@ -55,11 +56,12 @@ class NodeStats(val masterNode: String) {
    */
   def getAllStats: Statistics = {
     val cpu = getCPUInfo
-    val disks = getDiskInfo
     val (maxMem, availMem) = getMemInfo
+    val lean = getLeanStats
+    val disks = lean.diskspeed
     // If we don't get this (i.e. parsing error), just set it to a high value
     // since connectivity is obviously not lost.
-    val latency = getLatency.getOrElse(2000.0)
+    val latency = lean.latency
     new Statistics(cpu, disks, maxMem, availMem, latency)
   }
 
@@ -69,9 +71,10 @@ class NodeStats(val masterNode: String) {
    * @return  Lean statistics
    */
   def getLeanStats: LeanStatistics = {
-    val disks   = getDiskInfo
-    val latency = getLatency.getOrElse(2000.0)
-    new LeanStatistics(latency, disks)
+    val disks    = getDiskInfo
+    val latency: Float = getLatency.getOrElse(2000)
+    val (_, availMem) = getMemInfo
+    new LeanStatistics(latency, disks, availMem)
   }
 
   /**
@@ -81,7 +84,7 @@ class NodeStats(val masterNode: String) {
    */
   def getMemInfo: (Long,Long) = {
     val rt = Runtime.getRuntime
-    (rt.maxMemory, rt.freeMemory)
+    (rt.maxMemory(), rt.freeMemory())
   }
 
   /**

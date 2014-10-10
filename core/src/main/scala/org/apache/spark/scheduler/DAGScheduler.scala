@@ -41,6 +41,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.deploy.worker.Statistics
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -165,7 +166,8 @@ class DAGScheduler(
   def executorHeartbeatReceived(
       execId: String,
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
-      blockManagerId: BlockManagerId): Boolean = {
+      blockManagerId: BlockManagerId,
+      stats: Statistics): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     implicit val timeout = Timeout(600 seconds)
 

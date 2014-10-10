@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.deploy.worker.Statistics
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.
@@ -65,7 +66,7 @@ private[spark] trait TaskScheduler {
    * indicating that the block manager should re-register.
    */
   def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-    blockManagerId: BlockManagerId): Boolean
+    blockManagerId: BlockManagerId, stats: Statistics): Boolean
 
   /**
    * Get an application ID associated with the job.

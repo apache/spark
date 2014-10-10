@@ -343,10 +343,12 @@ private[spark] class Master(
       }
     }
 
-    case Heartbeat(workerId) => {
+    case Heartbeat(workerId, stats) => {
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
+          workerInfo.stats = stats
+          logInfo("UPDATED!!!!")
         case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
       }

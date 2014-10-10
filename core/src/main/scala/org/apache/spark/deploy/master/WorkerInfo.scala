@@ -33,7 +33,7 @@ private[spark] class WorkerInfo(
     val actor: ActorRef,
     val webUiPort: Int,
     val publicAddress: String,
-    val stats: Statistics)
+    var stats: Statistics)
   extends Serializable {
 
   Utils.checkHost(host, "Expected hostname")
