@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 case class BigData(s: String)
 
@@ -55,10 +55,10 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 1000000, 1).map(_ => BigData(data)).registerTempTable("bigData")
-    cacheTable("bigData")
-    assert(table("bigData").count() === 1000000L)
-    uncacheTable("bigData")
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
+    table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
+    assert(table("bigData").count() === 200000L)
+    table("bigData").unpersist()
   }
 
   test("calling .cache() should use in-memory columnar caching") {
