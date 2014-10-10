@@ -72,7 +72,10 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     var channel: FileChannel = null
     try {
       channel = new RandomAccessFile(file, "r").getChannel
-      channel.map(MapMode.READ_ONLY, offset, length)
+      val buf = ByteBuffer.allocate(length.toInt)
+      channel.read(buf, offset)
+      buf.flip()
+      buf
     } catch {
       case e: IOException =>
         Try(channel.size).toOption match {
