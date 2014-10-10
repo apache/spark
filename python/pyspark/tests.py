@@ -683,7 +683,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.sqlCtx.registerFunction("strlen", lambda string: len(string))
         self.sqlCtx.inferSchema(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
         [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
-        self.assertEqual(4, res[0])
+        self.assertEqual(u"4", res[0])
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
