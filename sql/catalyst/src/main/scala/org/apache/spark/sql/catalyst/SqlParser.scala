@@ -205,7 +205,7 @@ class SqlParser extends AbstractSparkSQLParser {
     )
 
   protected lazy val singleOrder: Parser[SortOrder] =
-    expression ~ direction ^^ { case e ~ o => SortOrder(e,o) }
+    expression ~ direction ^^ { case e ~ o => SortOrder(e, o) }
 
   protected lazy val direction: Parser[SortDirection] =
     ( ASC  ^^^ Ascending
@@ -216,10 +216,10 @@ class SqlParser extends AbstractSparkSQLParser {
     orExpression
 
   protected lazy val orExpression: Parser[Expression] =
-    andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1,e2) })
+    andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1, e2) })
 
   protected lazy val andExpression: Parser[Expression] =
-    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1,e2) })
+    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
 
   protected lazy val comparisonExpression: Parser[Expression] =
     ( termExpression ~ ("="  ~> termExpression) ^^ { case e1 ~ e2 => EqualTo(e1, e2) }
@@ -249,15 +249,15 @@ class SqlParser extends AbstractSparkSQLParser {
 
   protected lazy val termExpression: Parser[Expression] =
     productExpression *
-      ( "+" ^^^ { (e1: Expression, e2: Expression) => Add(e1,e2) }
-      | "-" ^^^ { (e1: Expression, e2: Expression) => Subtract(e1,e2) }
+      ( "+" ^^^ { (e1: Expression, e2: Expression) => Add(e1, e2) }
+      | "-" ^^^ { (e1: Expression, e2: Expression) => Subtract(e1, e2) }
       )
 
   protected lazy val productExpression: Parser[Expression] =
     baseExpression *
-      ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1,e2) }
-      | "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1,e2) }
-      | "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1,e2) }
+      ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
+      | "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1, e2) }
+      | "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1, e2) }
       )
 
   protected lazy val function: Parser[Expression] =
@@ -288,9 +288,9 @@ class SqlParser extends AbstractSparkSQLParser {
             CaseWhen(altExprs ++ elsePart.toList)
         }
     | (SUBSTR | SUBSTRING) ~ "(" ~> expression ~ ("," ~> expression) <~ ")" ^^
-      { case s ~ p => Substring(s,p,Literal(Integer.MAX_VALUE)) }
+      { case s ~ p => Substring(s, p, Literal(Integer.MAX_VALUE)) }
     | (SUBSTR | SUBSTRING) ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
-      { case s ~ p ~ l => Substring(s,p,l) }
+      { case s ~ p ~ l => Substring(s, p, l) }
     | SQRT  ~ "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) }
     | ABS   ~ "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) }
     | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
