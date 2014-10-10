@@ -118,7 +118,7 @@
     <mesos.version>0.18.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <akka.group>org.spark-project.akka</akka.group>
-    <akka.version>2.2.3-shaded-protobuf</akka.version>
+    <akka.version>2.3.4-spark</akka.version>
     <slf4j.version>1.7.5</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
@@ -127,7 +127,7 @@
     <hbase.version>0.94.6</hbase.version>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
-    <hive.version>0.12.0</hive.version>
+    <hive.version>0.12.0-protobuf</hive.version>
     <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
