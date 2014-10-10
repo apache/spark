@@ -17,7 +17,7 @@
 
 package org.apache.spark.annotation;
 
-    import java.lang.annotation.*;
+import java.lang.annotation.*;
 
 /**
  * A lower-level, unstable API intended for developers.
@@ -31,5 +31,5 @@ package org.apache.spark.annotation;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
-    ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
 public @interface DeveloperApi {}
