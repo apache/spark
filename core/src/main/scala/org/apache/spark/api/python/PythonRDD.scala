@@ -68,6 +68,8 @@ private[spark] class PythonRDD(
     if (reuse_worker) {
       envVars += ("SPARK_REUSE_WORKER" -> "1")
     }
+    envVars += ("SPARK_WORKER_MEMORY_LIMIT" ->
+      conf.getInt("spark.executor.python.memory.limit", 0).toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator

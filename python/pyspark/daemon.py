@@ -24,9 +24,11 @@ import sys
 import traceback
 import time
 import gc
+import resource
 from errno import EINTR, ECHILD, EAGAIN
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN
+
 from pyspark.worker import main as worker_main
 from pyspark.serializers import read_int, write_int
 
@@ -77,6 +79,12 @@ def cleanup_dead_children():
 def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
+
+    limit = int(os.environ.get("SPARK_WORKER_MEMORY_LIMIT", "0"))
+    if limit:
+        # limit the memory used by each worker, in MBytes
+        vslimit = limit * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (vslimit, vslimit))
 
     # Create a listening socket on the AF_INET loopback interface
     listen_sock = socket.socket(AF_INET, SOCK_STREAM)
