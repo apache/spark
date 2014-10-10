@@ -42,7 +42,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     TimeZone.setDefault(origZone)
   }
 
-
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
       sql("SELECT ABS(-1.3)"),
@@ -60,7 +59,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT LAST(n) FROM lowerCaseData"),
       4)
   }
-
 
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
@@ -694,6 +692,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("SPARK-3813 CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END") {
     checkAnswer(
-      sql("SELECT CASE WHEN key=1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"), 1)
+      sql("SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"), 1)
   }
 }
