@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.annotation.UserDefinedType
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.types.UserDefinedTypeType
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 
 import scala.reflect.runtime.universe._
 
@@ -30,7 +30,7 @@ import scala.reflect.runtime.universe._
  */
 private[sql] object UDTRegistry {
   /** Map: UserType --> UserDefinedType */
-  val udtRegistry = new mutable.HashMap[Any, UserDefinedTypeType[_]]()
+  val udtRegistry = new mutable.HashMap[Any, UserDefinedType[_]]()
 
   /**
    * Register a user-defined type and its serializer, to allow automatic conversion between
@@ -42,7 +42,7 @@ private[sql] object UDTRegistry {
     if (!UDTRegistry.udtRegistry.contains(userType)) {
       val udt =
         getClass.getClassLoader.loadClass(userType.typeSymbol.asClass.fullName)
-          .getAnnotation(classOf[UserDefinedType]).udt().newInstance()
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
       UDTRegistry.udtRegistry(userType) = udt
     }
     // TODO: Else: Should we check (assert) that udt is the same as what is in the registry?

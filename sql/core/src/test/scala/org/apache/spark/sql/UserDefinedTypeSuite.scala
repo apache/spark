@@ -18,13 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.annotation.UserDefinedType
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.UserDefinedTypeType
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
-@UserDefinedType(udt = classOf[DenseVectorUDT])
+@SQLUserDefinedType(udt = classOf[DenseVectorUDT])
 class DenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: DenseVector =>
@@ -35,7 +34,7 @@ class DenseVector(val data: Array[Double]) extends Serializable {
 
 case class LabeledPoint(label: Double, features: DenseVector)
 
-class DenseVectorUDT extends UserDefinedTypeType[DenseVector] {
+class DenseVectorUDT extends UserDefinedType[DenseVector] {
 
   override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
 
@@ -82,15 +81,5 @@ class UserDefinedTypeSuite extends QueryTest {
     assert(featuresArrays.contains(new DenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new DenseVector(Array(0.2, 2.0))))
   }
-
-  /*
-    test("UDTs can be registered twice, overriding previous registration") {
-    // TODO
-  }
-
-  test("UDTs cannot override built-in types") {
-    // TODO
-  }
-  */
 
 }
