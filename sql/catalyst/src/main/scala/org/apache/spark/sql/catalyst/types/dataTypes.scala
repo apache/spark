@@ -492,7 +492,7 @@ case class MapType(
 /**
  * The data type for User Defined Types.
  */
-abstract class UserDefinedType[UserType] extends DataType {
+abstract class UserDefinedTypeType[UserType] extends DataType {
 
   /** Underlying storage type for this UDT used by SparkSQL */
   def sqlType: DataType

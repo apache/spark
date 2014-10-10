@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.types.UserDefinedType
-
-import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
@@ -101,7 +98,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
     SparkPlan.currentContext.set(self)
     println(s"createSchemaRDD called")
-    val attributeSeq = ScalaReflection.attributesFor[A](udtRegistry)
+    val attributeSeq = ScalaReflection.attributesFor[A]
     val schema = StructType.fromAttributes(attributeSeq)
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
     println("done with productToRowRdd")
@@ -250,7 +247,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(
       this,
       ParquetRelation.createEmpty(
-        path, ScalaReflection.attributesFor[A](udtRegistry), allowExisting, conf, this))
+        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
   }
 
   /**
@@ -280,22 +277,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
-
-  /**
-   * Register a user-defined type and its serializer, to allow automatic conversion between
-   * RDDs of user types and SchemaRDDs.
-   * Fails if this type has been registered already.
-   */
-  def registerType[UserType](
-      udt: UserDefinedType[UserType])(implicit userType: TypeTag[UserType]): Unit = {
-    require(!udtRegistry.contains(userType.tpe),
-      "registerUserType called on type which was already registered.")
-    // TODO: Check to see if type is built-in.  Throw exception?
-    udtRegistry(userType.tpe) = udt
-  }
-
-  /** Map: UserType --> UserDefinedType */
-  protected[sql] val udtRegistry = new mutable.HashMap[Any, UserDefinedType[_]]()
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
