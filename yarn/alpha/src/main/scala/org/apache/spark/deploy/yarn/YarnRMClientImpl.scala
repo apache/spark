@@ -17,13 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.net.URI
+
 import scala.collection.{Map, Set}
-import java.net.URI;
 
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.yarn.api._
-import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
