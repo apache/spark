@@ -360,7 +360,7 @@ class SchemaRDD(
       join: Boolean = false,
       outer: Boolean = false,
       alias: Option[String] = None) =
-    new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
+    new SchemaRDD(sqlContext, Generate(generator, join, outer, alias, logicalPlan))
 
   /**
    * Returns this RDD as a SchemaRDD.  Intended primarily to force the invocation of the implicit

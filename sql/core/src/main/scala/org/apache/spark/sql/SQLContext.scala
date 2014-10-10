@@ -66,12 +66,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = true)
+
   @transient
   protected[sql] val optimizer = Optimizer
-  @transient
-  protected[sql] val parser = new catalyst.SqlParser
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = parser(sql)
+  @transient
+  protected[sql] val sqlParser = {
+    val fallback = new catalyst.SqlParser
+    new catalyst.SparkSQLParser(fallback(_))
+  }
+
+  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -197,9 +202,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
+    val columnNameOfCorruptJsonRecord = columnNameOfCorruptRecord
     val appliedSchema =
-      Option(schema).getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0)))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+      Option(schema).getOrElse(
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 
@@ -208,8 +216,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val appliedSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    val columnNameOfCorruptJsonRecord = columnNameOfCorruptRecord
+    val appliedSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 
