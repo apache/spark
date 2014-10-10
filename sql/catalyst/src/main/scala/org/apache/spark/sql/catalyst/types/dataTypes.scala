@@ -460,7 +460,7 @@ object MapType {
   def apply(keyType: DataType, valueType: DataType): MapType =
     MapType(keyType: DataType, valueType: DataType, true)
 
-  def simpleName = "map"
+  def typeName = "map"
 }
 
 /**
