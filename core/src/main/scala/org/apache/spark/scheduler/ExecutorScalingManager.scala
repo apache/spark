@@ -70,13 +70,13 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
     throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
   }
 
-  // How frequently to add and remove executors
+  // How frequently to add and remove executors (seconds)
   private val addExecutorThreshold =
-    conf.getLong("spark.dynamicAllocation.addExecutorThreshold", 60) // s
+    conf.getLong("spark.dynamicAllocation.addExecutorThreshold", 60)
   private val addExecutorInterval =
-    conf.getLong("spark.dynamicAllocation.addExecutorInterval", addExecutorThreshold) // s
+    conf.getLong("spark.dynamicAllocation.addExecutorInterval", addExecutorThreshold)
   private val removeExecutorThreshold =
-    conf.getLong("spark.dynamicAllocation.removeExecutorThreshold", 300) // s
+    conf.getLong("spark.dynamicAllocation.removeExecutorThreshold", 600)
 
   // Timers that keep track of when to add and remove executors
   private var addExecutorTimer: Option[Timer] = None
@@ -113,14 +113,11 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   /**
    * Start the add executor timer using the given delay if the timer does not already exist.
    */
-  private def startAddExecutorTimer(timerDelaySeconds: Long): Unit = {
-    addExecutorTimer.synchronized {
-      if (addExecutorTimer.isEmpty) {
-        logDebug(s"Starting add executor timer (to expire in $timerDelaySeconds seconds)")
-        addExecutorTimer = Some(new Timer)
-        addExecutorTimer.get.schedule(
-          new AddExecutorTimerTask(numExecutorsToAdd), timerDelaySeconds * 1000)
-      }
+  private def startAddExecutorTimer(timerDelaySeconds: Long): Unit = synchronized {
+    if (addExecutorTimer.isEmpty) {
+      logDebug(s"Starting add executor timer (to expire in $timerDelaySeconds seconds)")
+      addExecutorTimer = Some(new Timer)
+      addExecutorTimer.get.schedule(new AddExecutorTask, timerDelaySeconds * 1000)
     }
   }
 
@@ -130,22 +127,18 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    * a task. The removal is then triggered if the executor stays idle (i.e. not running a task)
    * for `removeExecutorThreshold` seconds.
    */
-  def startRemoveExecutorTimer(executorId: String): Unit = {
-    removeExecutorTimers.synchronized {
-      if (!removeExecutorTimers.contains(executorId)) {
-        logDebug(s"Starting idle timer for executor $executorId " +
-          s"(to expire in $removeExecutorThreshold seconds)")
-        removeExecutorTimers(executorId) = new Timer
-        removeExecutorTimers(executorId).schedule(
-          new RemoveExecutorTimerTask(executorId), removeExecutorThreshold * 1000)
-      }
+  def startRemoveExecutorTimer(executorId: String): Unit = synchronized {
+    if (!removeExecutorTimers.contains(executorId)) {
+      logDebug(s"Starting idle timer for executor $executorId " +
+        s"(to expire in $removeExecutorThreshold seconds)")
+      removeExecutorTimers(executorId) = new Timer
+      removeExecutorTimers(executorId).schedule(
+        new RemoveExecutorTask(executorId), removeExecutorThreshold * 1000)
     }
-    // Acquire a more general lock here because we might mutate `executorId`
-    synchronized {
-      if (!executorIds.contains(executorId)) {
-        logWarning(s"Started idle timer for unknown executor $executorId.")
-        executorIds.add(executorId)
-      }
+    // If we do not already know about this executor, keep track of it (should never happen)
+    if (!executorIds.contains(executorId)) {
+      logWarning(s"Started idle timer for unknown executor $executorId.")
+      executorIds.add(executorId)
     }
   }
 
@@ -153,7 +146,7 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    * Cancel any existing timer that adds executors.
    * This is called when the pending task queue is drained.
    */
-  def cancelAddExecutorTimer(): Unit = addExecutorTimer.synchronized {
+  def cancelAddExecutorTimer(): Unit = synchronized {
     addExecutorTimer.foreach { timer =>
       logDebug("Canceling add executor timer because task queue is drained!")
       timer.cancel()
@@ -166,7 +159,7 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    * Cancel any existing timer that removes the given executor.
    * This is called when the executor is no longer idle.
    */
-  def cancelRemoveExecutorTimer(executorId: String): Unit = removeExecutorTimers.synchronized {
+  def cancelRemoveExecutorTimer(executorId: String): Unit = synchronized {
     if (removeExecutorTimers.contains(executorId)) {
       logDebug(s"Canceling idle timer for executor $executorId.")
       removeExecutorTimers(executorId).cancel()
@@ -179,24 +172,24 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    * This ensures the resulting number of executors is correctly constrained by the upper bound.
    * Return the number of executors actually requested.
    */
-  private def addExecutors(numExecutorsRequested: Int): Int = synchronized {
+  private def addExecutors(): Int = synchronized {
     val numExistingExecutors = executorIds.size + numExecutorsPendingToAdd
-    val numExecutorsToAdd =
-      if (numExistingExecutors + numExecutorsRequested <= maxNumExecutors) {
-        numExecutorsRequested
+    val actualNumExecutorsToAdd =
+      if (numExistingExecutors + numExecutorsToAdd <= maxNumExecutors) {
+        numExecutorsToAdd
       } else {
         // Add just enough to reach `maxNumExecutors`
         maxNumExecutors - numExistingExecutors
       }
-    val newNumExecutors = numExistingExecutors + numExecutorsToAdd
+    val newNumExecutors = numExistingExecutors + actualNumExecutorsToAdd
 
-    if (numExecutorsToAdd > 0) {
+    if (actualNumExecutorsToAdd > 0) {
       getCoarseGrainedBackend.foreach { backend =>
         logInfo(s"Pending tasks are building up! " +
-          s"Adding $numExecutorsToAdd new executor(s) (new total is $newNumExecutors).")
-        numExecutorsPendingToAdd += numExecutorsToAdd
-        backend.requestExecutors(numExecutorsToAdd)
-        return numExecutorsToAdd
+          s"Adding $actualNumExecutorsToAdd new executor(s) (new total is $newNumExecutors).")
+        numExecutorsPendingToAdd += actualNumExecutorsToAdd
+        backend.requestExecutors(actualNumExecutorsToAdd)
+        return actualNumExecutorsToAdd
       }
     } else {
       logDebug(s"Not adding executors because there are already $maxNumExecutors executors, " +
@@ -284,38 +277,37 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    * bound is not reached), the number to request next round increases exponentially. Finally,
    * after requesting executors, this restarts the add executor timer unless the timer is canceled.
    */
-  private class AddExecutorTimerTask(_numExecutorsToAdd: Int) extends TimerTask {
-    override def run(): Unit = {
-      // Whether we have successfully requested the expected number of executors
-      var success = false
-
-      synchronized {
-        // Do not add executors until those requested in the previous round have registered
-        if (numExecutorsPendingToAdd == 0) {
-          val numExecutorsAdded = addExecutors(_numExecutorsToAdd)
-          success = numExecutorsAdded == _numExecutorsToAdd
-        } else {
-          logInfo(s"Not adding new executors until all $numExecutorsPendingToAdd pending " +
-            "executor(s) have registered.")
-        }
+  private class AddExecutorTask extends TimerTask {
+    override def run(): Unit = ExecutorScalingManager.this.synchronized {
+      // Check whether the timer has been canceled in the mean time
+      if (addExecutorTimer.isEmpty) {
+        logDebug("Add executor timer was canceled but task is running!")
+        return
       }
 
-      addExecutorTimer.synchronized {
-        // Do this check in case the timer has been canceled in the mean time
-        if (addExecutorTimer.isDefined) {
-          numExecutorsToAdd = if (success) { _numExecutorsToAdd * 2 } else 1
-          addExecutorTimer = None
-          restartAddExecutorTimer()
-        }
+      // Request new executors unless previous requests are still in flight
+      // If no new requests are made or the upper bound is reached, reset the delta
+      if (numExecutorsPendingToAdd == 0) {
+        val numExecutorsAdded = addExecutors()
+        val limitReached = numExecutorsAdded < numExecutorsToAdd
+        numExecutorsToAdd = if (limitReached) 1 else { numExecutorsToAdd * 2 }
+      } else {
+        logInfo(s"Not adding new executors until all $numExecutorsPendingToAdd " +
+          s"pending executor(s) have registered.")
+        numExecutorsToAdd = 1
       }
+
+      // Restart the timer
+      addExecutorTimer = None
+      restartAddExecutorTimer()
     }
   }
 
   /**
    * A timer task that removes the given executor.
    */
-  private class RemoveExecutorTimerTask(executorId: String) extends TimerTask {
-    override def run(): Unit = {
+  private class RemoveExecutorTask(executorId: String) extends TimerTask {
+    override def run(): Unit = ExecutorScalingManager.this.synchronized {
       removeExecutor(executorId)
       cancelRemoveExecutorTimer(executorId)
     }
