@@ -49,7 +49,7 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
     }
   }
 
-  def update(position: Int, value: T): Unit = {
+  private def update(position: Int, value: T): Unit = {
     if (position < 0 || position >= curSize) {
       throw new IndexOutOfBoundsException
     }
