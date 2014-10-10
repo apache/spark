@@ -181,24 +181,8 @@ private[spark] class TaskSetManager(
     }
 
     for (loc <- tasks(index).preferredLocations) {
-      loc match {
-        case e: ExecutorCacheTaskLocation =>
-          addTo(pendingTasksForExecutor.getOrElseUpdate(e.executorId, new ArrayBuffer))
-        case e: HDFSCacheTaskLocation => {
-          val exe = sched.getExecutorsAliveOnHost(loc.host)
-          exe match {
-            case Some(set) => {
-              for (e <- set) {
-                addTo(pendingTasksForExecutor.getOrElseUpdate(e, new ArrayBuffer))
-              }
-              logInfo(s"Pending task $index has a cached location at ${e.host} " +
-                ", where there are executors " + set.mkString(","))
-            }
-            case None => logDebug(s"Pending task $index has a cached location at ${e.host} " +
-                ", but there are no executors alive there.")
-          }
-        }
-        case _ => Unit
+      for (execId <- loc.executorId) {
+        addTo(pendingTasksForExecutor.getOrElseUpdate(execId, new ArrayBuffer))
       }
       addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
       for (rack <- sched.getRackForHost(loc.host)) {
@@ -299,10 +283,7 @@ private[spark] class TaskSetManager(
       // on multiple nodes when we replicate cached blocks, as in Spark Streaming
       for (index <- speculatableTasks if canRunOnHost(index)) {
         val prefs = tasks(index).preferredLocations
-        val executors = prefs.flatMap(_ match {
-          case e: ExecutorCacheTaskLocation => Some(e.executorId)
-          case _ => None
-        });
+        val executors = prefs.flatMap(_.executorId)
         if (executors.contains(execId)) {
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))

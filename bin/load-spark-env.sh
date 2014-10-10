@@ -25,14 +25,14 @@ if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1
 
   # Returns the parent of the directory this script lives in.
-  parent_dir="$(cd "`dirname "$0"`"/..; pwd)"
+  parent_dir="$(cd `dirname $0`/..; pwd)"
 
-  user_conf_dir="${SPARK_CONF_DIR:-"$parent_dir"/conf}"
+  use_conf_dir=${SPARK_CONF_DIR:-"$parent_dir/conf"}
 
-  if [ -f "${user_conf_dir}/spark-env.sh" ]; then
+  if [ -f "${use_conf_dir}/spark-env.sh" ]; then
     # Promote all variable declarations to environment (exported) variables
     set -a
-    . "${user_conf_dir}/spark-env.sh"
+    . "${use_conf_dir}/spark-env.sh"
     set +a
   fi
 fi

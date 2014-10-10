@@ -17,15 +17,14 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark._
+import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
+import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
+import org.apache.spark.storage.{BlockObjectWriter}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle._
-import org.apache.spark.storage.BlockObjectWriter
 
 private[spark] class HashShuffleWriter[K, V](
-    shuffleBlockManager: FileShuffleBlockManager,
     handle: BaseShuffleHandle[K, V, _],
     mapId: Int,
     context: TaskContext)
@@ -44,6 +43,7 @@ private[spark] class HashShuffleWriter[K, V](
   metrics.shuffleWriteMetrics = Some(writeMetrics)
 
   private val blockManager = SparkEnv.get.blockManager
+  private val shuffleBlockManager = blockManager.shuffleBlockManager
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
   private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser,
     writeMetrics)
@@ -103,11 +103,13 @@ private[spark] class HashShuffleWriter[K, V](
 
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
-    val sizes: Array[Long] = shuffle.writers.map { writer: BlockObjectWriter =>
+    val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
       writer.commitAndClose()
-      writer.fileSegment().length
+      val size = writer.fileSegment().length
+      MapOutputTracker.compressSize(size)
     }
-    MapStatus(blockManager.blockManagerId, sizes)
+
+    new MapStatus(blockManager.blockManagerId, compressedSizes)
   }
 
   private def revertWrites(): Unit = {

@@ -97,8 +97,8 @@ private[ui] class StageTableBase(
     }
     // scalastyle:on
 
-    val nameLinkUri ="%s/stages/stage?id=%s&attempt=%s"
-      .format(UIUtils.prependBaseUri(parent.basePath), s.stageId, s.attemptId)
+    val nameLinkUri ="%s/stages/stage?id=%s"
+      .format(UIUtils.prependBaseUri(parent.basePath), s.stageId)
     val nameLink = <a href={nameLinkUri}>{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
@@ -121,7 +121,7 @@ private[ui] class StageTableBase(
     }
 
     val stageDesc = for {
-      stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
+      stageData <- listener.stageIdToData.get(s.stageId)
       desc <- stageData.description
     } yield {
       <div><em>{desc}</em></div>
@@ -131,7 +131,7 @@ private[ui] class StageTableBase(
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
-    val stageDataOption = listener.stageIdToData.get((s.stageId, s.attemptId))
+    val stageDataOption = listener.stageIdToData.get(s.stageId)
     if (stageDataOption.isEmpty) {
       return <td>{s.stageId}</td><td>No data available for this stage</td>
     }
@@ -154,11 +154,7 @@ private[ui] class StageTableBase(
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 
-    {if (s.attemptId > 0) {
-      <td>{s.stageId} (retry {s.attemptId})</td>
-    } else {
-      <td>{s.stageId}</td>
-    }} ++
+    <td>{s.stageId}</td> ++
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"

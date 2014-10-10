@@ -29,9 +29,9 @@ class IntegralDeltaSuite extends FunSuite {
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 
   def testIntegralDelta[I <: IntegralType](
-      columnStats: ColumnStats,
+      columnStats: NativeColumnStats[I],
       columnType: NativeColumnType[I],
-      scheme: CompressionScheme) {
+      scheme: IntegralDelta[I]) {
 
     def skeleton(input: Seq[I#JvmType]) {
       // -------------
@@ -96,15 +96,10 @@ class IntegralDeltaSuite extends FunSuite {
       buffer.rewind().position(headerSize + 4)
 
       val decoder = scheme.decoder(buffer, columnType)
-      val mutableRow = new GenericMutableRow(1)
-
       if (input.nonEmpty) {
         input.foreach{
           assert(decoder.hasNext)
-          assertResult(_, "Wrong decoded value") {
-            decoder.next(mutableRow, 0)
-            columnType.getField(mutableRow, 0)
-          }
+          assertResult(_, "Wrong decoded value")(decoder.next())
         }
       }
       assert(!decoder.hasNext)

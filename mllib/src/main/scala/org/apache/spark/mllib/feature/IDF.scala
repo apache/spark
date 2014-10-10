@@ -30,18 +30,9 @@ import org.apache.spark.rdd.RDD
  * Inverse document frequency (IDF).
  * The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`, where `m` is the total
  * number of documents and `d(t)` is the number of documents that contain term `t`.
- *
- * This implementation supports filtering out terms which do not appear in a minimum number
- * of documents (controlled by the variable `minDocFreq`). For terms that are not in
- * at least `minDocFreq` documents, the IDF is found as 0, resulting in TF-IDFs of 0.
- *
- * @param minDocFreq minimum of documents in which a term
- *                   should appear for filtering
  */
 @Experimental
-class IDF(val minDocFreq: Int) {
-
-  def this() = this(0)
+class IDF {
 
   // TODO: Allow different IDF formulations.
 
@@ -50,8 +41,7 @@ class IDF(val minDocFreq: Int) {
    * @param dataset an RDD of term frequency vectors
    */
   def fit(dataset: RDD[Vector]): IDFModel = {
-    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
-          minDocFreq = minDocFreq))(
+    val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator)(
       seqOp = (df, v) => df.add(v),
       combOp = (df1, df2) => df1.merge(df2)
     ).idf()
@@ -70,15 +60,12 @@ class IDF(val minDocFreq: Int) {
 private object IDF {
 
   /** Document frequency aggregator. */
-  class DocumentFrequencyAggregator(val minDocFreq: Int) extends Serializable {
+  class DocumentFrequencyAggregator extends Serializable {
 
     /** number of documents */
     private var m = 0L
     /** document frequency vector */
     private var df: BDV[Long] = _
-
-
-    def this() = this(0)
 
     /** Adds a new document. */
     def add(doc: Vector): this.type = {
@@ -136,18 +123,7 @@ private object IDF {
       val inv = new Array[Double](n)
       var j = 0
       while (j < n) {
-        /*
-         * If the term is not present in the minimum
-         * number of documents, set IDF to 0. This
-         * will cause multiplication in IDFModel to
-         * set TF-IDF to 0.
-         *
-         * Since arrays are initialized to 0 by default,
-         * we just omit changing those entries.
-         */
-        if(df(j) >= minDocFreq) {
-          inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
-        }
+        inv(j) = math.log((m + 1.0)/ (df(j) + 1.0))
         j += 1
       }
       Vectors.dense(inv)
@@ -164,11 +140,6 @@ class IDFModel private[mllib] (val idf: Vector) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
-   *
-   * If `minDocFreq` was set for the IDF calculation,
-   * the terms which occur in fewer than `minDocFreq`
-   * documents will have an entry of 0.
-   *
    * @param dataset an RDD of term frequency vectors
    * @return an RDD of TF-IDF vectors
    */

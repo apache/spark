@@ -126,8 +126,6 @@ object CassandraTest {
       }
     }.saveAsNewAPIHadoopFile("casDemo", classOf[ByteBuffer], classOf[List[Mutation]],
       classOf[ColumnFamilyOutputFormat], job.getConfiguration)
-
-    sc.stop()
   }
 }
 

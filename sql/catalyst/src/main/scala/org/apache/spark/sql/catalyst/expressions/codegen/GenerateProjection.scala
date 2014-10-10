@@ -69,10 +69,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           ..${evaluatedExpression.code}
           if(${evaluatedExpression.nullTerm})
             setNullAt($iLit)
-          else {
-            nullBits($iLit) = false
+          else
             $elementName = ${evaluatedExpression.primitiveTerm}
-          }
         }
         """.children : Seq[Tree]
     }
@@ -108,10 +106,9 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
             if(value == null) {
               setNullAt(i)
             } else {
-              nullBits(i) = false
               $elementName = value.asInstanceOf[${termForType(e.dataType)}]
+              return
             }
-            return
           }"""
       }
       q"final def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
@@ -140,7 +137,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           val elementName = newTermName(s"c$i")
           // TODO: The string of ifs gets pretty inefficient as the row grows in size.
           // TODO: Optional null checks?
-          q"if(i == $i) { nullBits($i) = false; $elementName = value; return }" :: Nil
+          q"if(i == $i) { $elementName = value; return }" :: Nil
         case _ => Nil
       }
 

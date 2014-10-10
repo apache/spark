@@ -79,14 +79,14 @@ private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
-    serializer: Option[Serializer] = None)
-  extends Logging with Spillable[SizeTrackingPairCollection[(Int, K), C]] {
+    serializer: Option[Serializer] = None) extends Logging {
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
   private val shouldPartition = numPartitions > 1
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
+  private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
   private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
@@ -115,13 +115,21 @@ private[spark] class ExternalSorter[K, V, C](
 
   // Number of pairs read from input since last spill; note that we count them even if a value is
   // merged with a previous key in case we're doing something like groupBy where the result grows
-  protected[this] var elementsRead = 0L
+  private var elementsRead = 0L
+
+  // What threshold of elementsRead we start estimating map size at.
+  private val trackMemoryThreshold = 1000
 
   // Total spilling statistics
+  private var spillCount = 0
+  private var _memoryBytesSpilled = 0L
   private var _diskBytesSpilled = 0L
 
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
+
+  // How much of the shared memory pool this collection has claimed
+  private var myMemoryThreshold = 0L
 
   // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't need
   // local aggregation and sorting, write numPartitions files directly and just concatenate them
@@ -144,7 +152,7 @@ private[spark] class ExternalSorter[K, V, C](
     override def compare(a: K, b: K): Int = {
       val h1 = if (a == null) 0 else a.hashCode()
       val h2 = if (b == null) 0 else b.hashCode()
-      if (h1 < h2) -1 else if (h1 == h2) 0 else 1
+      h1 - h2
     }
   })
 
@@ -201,7 +209,7 @@ private[spark] class ExternalSorter[K, V, C](
         elementsRead += 1
         kv = records.next()
         map.changeValue((getPartition(kv._1), kv._1), update)
-        maybeSpillCollection(usingMap = true)
+        maybeSpill(usingMap = true)
       }
     } else {
       // Stick values into our buffer
@@ -209,7 +217,7 @@ private[spark] class ExternalSorter[K, V, C](
         elementsRead += 1
         val kv = records.next()
         buffer.insert((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
-        maybeSpillCollection(usingMap = false)
+        maybeSpill(usingMap = false)
       }
     }
   }
@@ -219,31 +227,61 @@ private[spark] class ExternalSorter[K, V, C](
    *
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
-  private def maybeSpillCollection(usingMap: Boolean): Unit = {
+  private def maybeSpill(usingMap: Boolean): Unit = {
     if (!spillingEnabled) {
       return
     }
 
-    if (usingMap) {
-      if (maybeSpill(map, map.estimateSize())) {
-        map = new SizeTrackingAppendOnlyMap[(Int, K), C]
-      }
-    } else {
-      if (maybeSpill(buffer, buffer.estimateSize())) {
-        buffer = new SizeTrackingPairBuffer[(Int, K), C]
+    val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
+
+    // TODO: factor this out of both here and ExternalAppendOnlyMap
+    if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
+        collection.estimateSize() >= myMemoryThreshold)
+    {
+      // Claim up to double our current memory from the shuffle memory pool
+      val currentMemory = collection.estimateSize()
+      val amountToRequest = 2 * currentMemory - myMemoryThreshold
+      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
+      myMemoryThreshold += granted
+      if (myMemoryThreshold <= currentMemory) {
+        // We were granted too little memory to grow further (either tryToAcquire returned 0,
+        // or we already had more memory than myMemoryThreshold); spill the current collection
+        spill(currentMemory, usingMap)  // Will also release memory back to ShuffleMemoryManager
       }
     }
   }
 
   /**
    * Spill the current in-memory collection to disk, adding a new file to spills, and clear it.
+   *
+   * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
-  override protected[this] def spill(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
+  private def spill(memorySize: Long, usingMap: Boolean): Unit = {
+    val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
+    val memorySize = collection.estimateSize()
+
+    spillCount += 1
+    val threadId = Thread.currentThread().getId
+    logInfo("Thread %d spilling in-memory batch of %d MB to disk (%d spill%s so far)"
+      .format(threadId, memorySize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+
     if (bypassMergeSort) {
       spillToPartitionFiles(collection)
     } else {
       spillToMergeableFile(collection)
     }
+
+    if (usingMap) {
+      map = new SizeTrackingAppendOnlyMap[(Int, K), C]
+    } else {
+      buffer = new SizeTrackingPairBuffer[(Int, K), C]
+    }
+
+    // Release our memory back to the shuffle pool so that other threads can grab it
+    shuffleMemoryManager.release(myMemoryThreshold)
+    myMemoryThreshold = 0
+
+    _memoryBytesSpilled += memorySize
   }
 
   /**
@@ -681,20 +719,20 @@ private[spark] class ExternalSorter[K, V, C](
   def iterator: Iterator[Product2[K, C]] = partitionedIterator.flatMap(pair => pair._2)
 
   /**
-   * Write all the data added into this ExternalSorter into a file in the disk store. This is
-   * called by the SortShuffleWriter and can go through an efficient path of just concatenating
-   * binary files if we decided to avoid merge-sorting.
+   * Write all the data added into this ExternalSorter into a file in the disk store, creating
+   * an .index file for it as well with the offsets of each partition. This is called by the
+   * SortShuffleWriter and can go through an efficient path of just concatenating binary files
+   * if we decided to avoid merge-sorting.
    *
    * @param blockId block ID to write to. The index file will be blockId.name + ".index".
    * @param context a TaskContext for a running Spark task, for us to update shuffle metrics.
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
-  def writePartitionedFile(
-      blockId: BlockId,
-      context: TaskContext,
-      outputFile: File): Array[Long] = {
+  def writePartitionedFile(blockId: BlockId, context: TaskContext): Array[Long] = {
+    val outputFile = blockManager.diskBlockManager.getFile(blockId)
 
     // Track location of each range in the output file
+    val offsets = new Array[Long](numPartitions + 1)
     val lengths = new Array[Long](numPartitions)
 
     if (bypassMergeSort && partitionWriters != null) {
@@ -712,6 +750,7 @@ private[spark] class ExternalSorter[K, V, C](
           in.close()
           in = null
           lengths(i) = size
+          offsets(i + 1) = offsets(i) + lengths(i)
         }
       } finally {
         if (out != null) {
@@ -733,13 +772,34 @@ private[spark] class ExternalSorter[K, V, C](
           }
           writer.commitAndClose()
           val segment = writer.fileSegment()
+          offsets(id + 1) = segment.offset + segment.length
           lengths(id) = segment.length
+        } else {
+          // The partition is empty; don't create a new writer to avoid writing headers, etc
+          offsets(id + 1) = offsets(id)
         }
       }
     }
 
     context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+
+    // Write an index file with the offsets of each block, plus a final offset at the end for the
+    // end of the output file. This will be used by SortShuffleManager.getBlockLocation to figure
+    // out where each block begins and ends.
+
+    val diskBlockManager = blockManager.diskBlockManager
+    val indexFile = diskBlockManager.getFile(blockId.name + ".index")
+    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
+    try {
+      var i = 0
+      while (i < numPartitions + 1) {
+        out.writeLong(offsets(i))
+        i += 1
+      }
+    } finally {
+      out.close()
+    }
 
     lengths
   }
@@ -751,7 +811,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (writer.isOpen) {
       writer.commitAndClose()
     }
-    blockManager.diskStore.getValues(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
+    blockManager.getLocalFromDisk(writer.blockId, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
   }
 
   def stop(): Unit = {
@@ -765,6 +825,8 @@ private[spark] class ExternalSorter[K, V, C](
       partitionWriters = null
     }
   }
+
+  def memoryBytesSpilled: Long = _memoryBytesSpilled
 
   def diskBytesSpilled: Long = _diskBytesSpilled
 

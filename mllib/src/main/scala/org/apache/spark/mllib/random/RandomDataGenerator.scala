@@ -20,14 +20,14 @@ package org.apache.spark.mllib.random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Trait for random data generators that generate i.i.d. data.
  */
-@DeveloperApi
+@Experimental
 trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
 
   /**
@@ -43,10 +43,10 @@ trait RandomDataGenerator[T] extends Pseudorandom with Serializable {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Generates i.i.d. samples from U[0.0, 1.0]
  */
-@DeveloperApi
+@Experimental
 class UniformGenerator extends RandomDataGenerator[Double] {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
@@ -62,10 +62,10 @@ class UniformGenerator extends RandomDataGenerator[Double] {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Generates i.i.d. samples from the standard normal distribution.
  */
-@DeveloperApi
+@Experimental
 class StandardNormalGenerator extends RandomDataGenerator[Double] {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
@@ -81,12 +81,12 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Generates i.i.d. samples from the Poisson distribution with the given mean.
  *
  * @param mean mean for the Poisson distribution.
  */
-@DeveloperApi
+@Experimental
 class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 
   private var rng = new Poisson(mean, new DRand)

@@ -42,7 +42,7 @@ private[spark] class ExecutorRunner(
     val workerId: String,
     val host: String,
     val sparkHome: File,
-    val executorDir: File,
+    val workDir: File,
     val workerUrl: String,
     val conf: SparkConf,
     var state: ExecutorState.Value)
@@ -130,6 +130,12 @@ private[spark] class ExecutorRunner(
    */
   def fetchAndRunExecutor() {
     try {
+      // Create the executor's working directory
+      val executorDir = new File(workDir, appId + "/" + execId)
+      if (!executorDir.mkdirs()) {
+        throw new IOException("Failed to create directory " + executorDir)
+      }
+
       // Launch the process
       val command = getCommandSeq
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
@@ -153,8 +159,6 @@ private[spark] class ExecutorRunner(
       Files.write(header, stderr, Charsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
-      state = ExecutorState.RUNNING
-      worker ! ExecutorStateChanged(appId, execId, state, None, None)
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()

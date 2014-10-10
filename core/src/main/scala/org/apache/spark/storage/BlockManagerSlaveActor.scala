@@ -21,7 +21,7 @@ import scala.concurrent.Future
 
 import akka.actor.{ActorRef, Actor}
 
-import org.apache.spark.{Logging, MapOutputTracker, SparkEnv}
+import org.apache.spark.{Logging, MapOutputTracker}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.ActorLogReceive
 
@@ -55,12 +55,12 @@ class BlockManagerSlaveActor(
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
-        SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+        blockManager.shuffleBlockManager.removeShuffle(shuffleId)
       }
 
-    case RemoveBroadcast(broadcastId, _) =>
+    case RemoveBroadcast(broadcastId, tellMaster) =>
       doAsync[Int]("removing broadcast " + broadcastId, sender) {
-        blockManager.removeBroadcast(broadcastId, tellMaster = true)
+        blockManager.removeBroadcast(broadcastId, tellMaster)
       }
 
     case GetBlockStatus(blockId, _) =>

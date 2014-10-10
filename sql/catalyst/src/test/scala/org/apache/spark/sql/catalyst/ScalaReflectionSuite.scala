@@ -53,14 +53,11 @@ case class OptionalData(
     floatField: Option[Float],
     shortField: Option[Short],
     byteField: Option[Byte],
-    booleanField: Option[Boolean],
-    structField: Option[PrimitiveData])
+    booleanField: Option[Boolean])
 
 case class ComplexData(
     arrayField: Seq[Int],
-    arrayFieldContainsNull: Seq[java.lang.Integer],
-    mapField: Map[Int, Long],
-    mapFieldValueContainsNull: Map[Int, java.lang.Long],
+    mapField: Map[Int, String],
     structField: PrimitiveData)
 
 case class GenericData[A](
@@ -101,7 +98,7 @@ class ScalaReflectionSuite extends FunSuite {
       nullable = true))
   }
 
-  test("optional data") {
+  test("optinal data") {
     val schema = schemaFor[OptionalData]
     assert(schema === Schema(
       StructType(Seq(
@@ -111,8 +108,7 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("floatField", FloatType, nullable = true),
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
-        StructField("booleanField", BooleanType, nullable = true),
-        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
+        StructField("booleanField", BooleanType, nullable = true))),
       nullable = true))
   }
 
@@ -120,22 +116,8 @@ class ScalaReflectionSuite extends FunSuite {
     val schema = schemaFor[ComplexData]
     assert(schema === Schema(
       StructType(Seq(
-        StructField(
-          "arrayField",
-          ArrayType(IntegerType, containsNull = false),
-          nullable = true),
-        StructField(
-          "arrayFieldContainsNull",
-          ArrayType(IntegerType, containsNull = true),
-          nullable = true),
-        StructField(
-          "mapField",
-          MapType(IntegerType, LongType, valueContainsNull = false),
-          nullable = true),
-        StructField(
-          "mapFieldValueContainsNull",
-          MapType(IntegerType, LongType, valueContainsNull = true),
-          nullable = true),
+        StructField("arrayField", ArrayType(IntegerType), nullable = true),
+        StructField("mapField", MapType(IntegerType, StringType), nullable = true),
         StructField(
           "structField",
           StructType(Seq(
@@ -229,18 +211,5 @@ class ScalaReflectionSuite extends FunSuite {
 
     assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
     assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
-  }
-
-  test("convert PrimitiveData to catalyst") {
-    val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
-    assert(convertToCatalyst(data) === convertedData)
-  }
-
-  test("convert Option[Product] to catalyst") {
-    val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true), Some(primitiveData))
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true, convertToCatalyst(primitiveData))
-    assert(convertToCatalyst(data) === convertedData)
   }
 }

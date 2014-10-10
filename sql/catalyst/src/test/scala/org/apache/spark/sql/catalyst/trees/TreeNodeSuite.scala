@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.types.{StringType, NullType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression {
   def children = optKey.toSeq
+  def references = Set.empty[Attribute]
   def nullable = true
   def dataType = NullType
   override lazy val resolved = true
@@ -51,10 +52,7 @@ class TreeNodeSuite extends FunSuite {
     val after = before transform { case Literal(5, _) => Literal(1)}
 
     assert(before === after)
-    // Ensure that the objects after are the same objects before the transformation.
-    before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach {
-      case (b, a) => assert(b eq a)
-    }
+    assert(before.map(_.id) === after.map(_.id))
   }
 
   test("collect") {

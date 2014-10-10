@@ -39,9 +39,7 @@ import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
  */
-private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
-  extends OperationManager with Logging {
-
+class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManager with Logging {
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
@@ -68,10 +66,9 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
         if (!iter.hasNext) {
           new RowSet()
         } else {
-          // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
-          val maxRows = maxRowsL.toInt
+          val maxRows = maxRowsL.toInt // Do you really want a row batch larger than Int Max? No.
           var curRow = 0
-          var rowSet = new ArrayBuffer[Row](maxRows.min(1024))
+          var rowSet = new ArrayBuffer[Row](maxRows)
 
           while (curRow < maxRows && iter.hasNext) {
             val sparkRow = iter.next()
@@ -113,7 +110,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
           case ByteType =>
             to.addColumnValue(ColumnValue.byteValue(from.getByte(ordinal)))
           case ShortType =>
-            to.addColumnValue(ColumnValue.shortValue(from.getShort(ordinal)))
+            to.addColumnValue(ColumnValue.intValue(from.getShort(ordinal)))
           case TimestampType =>
             to.addColumnValue(
               ColumnValue.timestampValue(from.get(ordinal).asInstanceOf[Timestamp]))
@@ -145,7 +142,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
           case ByteType =>
             to.addColumnValue(ColumnValue.byteValue(null))
           case ShortType =>
-            to.addColumnValue(ColumnValue.shortValue(null))
+            to.addColumnValue(ColumnValue.intValue(null))
           case TimestampType =>
             to.addColumnValue(ColumnValue.timestampValue(null))
           case BinaryType | _: ArrayType | _: StructType | _: MapType =>
@@ -154,7 +151,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
       }
 
       def getResultSetSchema: TableSchema = {
-        logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
+        logWarning(s"Result Schema: ${result.queryExecution.analyzed.output}")
         if (result.queryExecution.analyzed.output.size == 0) {
           new TableSchema(new FieldSchema("Result", "string", "") :: Nil)
         } else {

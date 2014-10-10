@@ -67,7 +67,6 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   }
 
   private val appHeader = Seq(
-    "App ID",
     "App Name",
     "Started",
     "Completed",
@@ -82,8 +81,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val duration = UIUtils.formatDuration(info.endTime - info.startTime)
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
-      <td><a href={uiAddress}>{info.id}</a></td>
-      <td>{info.name}</td>
+      <td><a href={uiAddress}>{info.name}</a></td>
       <td>{startTime}</td>
       <td>{endTime}</td>
       <td>{duration}</td>

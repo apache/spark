@@ -52,7 +52,7 @@ import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
 val data = sc.textFile("data/mllib/kmeans_data.txt")
-val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
+val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
 
 // Cluster the data into two classes using KMeans
 val numClusters = 2
@@ -100,7 +100,6 @@ public class KMeansExample {
         }
       }
     );
-    parsedData.cache();
 
     // Cluster the data into two classes using KMeans
     int numClusters = 2;

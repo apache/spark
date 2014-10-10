@@ -216,10 +216,8 @@ private[spark] object UIUtils extends Logging {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <a style="text-decoration: none" href={prependBaseUri("/")}>
-                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
-                       style="margin-right: 15px;" />
-                </a>
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
+                     style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>
@@ -234,7 +232,7 @@ private[spark] object UIUtils extends Logging {
   def listingTable[T](
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
-      data: Iterable[T],
+      data: Seq[T],
       fixedWidth: Boolean = false): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS

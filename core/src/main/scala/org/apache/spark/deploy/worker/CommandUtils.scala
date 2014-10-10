@@ -30,13 +30,16 @@ import org.apache.spark.util.Utils
 private[spark]
 object CommandUtils extends Logging {
   def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val runner = sys.env.get("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
+    val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++ Seq(command.mainClass) ++
       command.arguments
   }
+
+  private def getEnv(key: String, command: Command): Option[String] =
+    command.environment.get(key).orElse(Option(System.getenv(key)))
 
   /**
    * Attention: this must always be aligned with the environment variables in the run scripts and
@@ -61,6 +64,8 @@ object CommandUtils extends Logging {
         Seq()
       }
 
+    val permGenOpt = Seq("-XX:MaxPermSize=128m")
+
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
@@ -68,8 +73,6 @@ object CommandUtils extends Logging {
       extraEnvironment = command.environment)
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
-    val javaVersion = System.getProperty("java.version")
-    val permGenOpt = if (!javaVersion.startsWith("1.8")) Some("-XX:MaxPermSize=128m") else None
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
       permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
   }

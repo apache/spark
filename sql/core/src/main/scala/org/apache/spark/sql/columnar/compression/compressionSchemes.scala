@@ -23,8 +23,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.runtimeMirror
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.util.Utils
@@ -34,20 +33,18 @@ private[sql] case object PassThrough extends CompressionScheme {
 
   override def supports(columnType: ColumnType[_, _]) = true
 
-  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    new this.Encoder[T](columnType)
-  }
+  override def encoder[T <: NativeType] = new this.Encoder[T]
 
   override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
     new this.Decoder(buffer, columnType)
   }
 
-  class Encoder[T <: NativeType](columnType: NativeColumnType[T]) extends compression.Encoder[T] {
+  class Encoder[T <: NativeType] extends compression.Encoder[T] {
     override def uncompressedSize = 0
 
     override def compressedSize = 0
 
-    override def compress(from: ByteBuffer, to: ByteBuffer) = {
+    override def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[T]) = {
       // Writes compression type ID and copies raw contents
       to.putInt(PassThrough.typeId).put(from).rewind()
       to
@@ -57,9 +54,7 @@ private[sql] case object PassThrough extends CompressionScheme {
   class Decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T])
     extends compression.Decoder[T] {
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
-      columnType.extract(buffer, row, ordinal)
-    }
+    override def next() = columnType.extract(buffer)
 
     override def hasNext = buffer.hasRemaining
   }
@@ -68,9 +63,7 @@ private[sql] case object PassThrough extends CompressionScheme {
 private[sql] case object RunLengthEncoding extends CompressionScheme {
   override val typeId = 1
 
-  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    new this.Encoder[T](columnType)
-  }
+  override def encoder[T <: NativeType] = new this.Encoder[T]
 
   override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
     new this.Decoder(buffer, columnType)
@@ -81,25 +74,24 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
     case _ => false
   }
 
-  class Encoder[T <: NativeType](columnType: NativeColumnType[T]) extends compression.Encoder[T] {
+  class Encoder[T <: NativeType] extends compression.Encoder[T] {
     private var _uncompressedSize = 0
     private var _compressedSize = 0
 
     // Using `MutableRow` to store the last value to avoid boxing/unboxing cost.
-    private val lastValue = new SpecificMutableRow(Seq(columnType.dataType))
+    private val lastValue = new GenericMutableRow(1)
     private var lastRun = 0
 
     override def uncompressedSize = _uncompressedSize
 
     override def compressedSize = _compressedSize
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
-      val value = columnType.getField(row, ordinal)
-      val actualSize = columnType.actualSize(row, ordinal)
+    override def gatherCompressibilityStats(value: T#JvmType, columnType: NativeColumnType[T]) {
+      val actualSize = columnType.actualSize(value)
       _uncompressedSize += actualSize
 
       if (lastValue.isNullAt(0)) {
-        columnType.copyField(row, ordinal, lastValue, 0)
+        columnType.setField(lastValue, 0, value)
         lastRun = 1
         _compressedSize += actualSize + 4
       } else {
@@ -107,40 +99,37 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
           lastRun += 1
         } else {
           _compressedSize += actualSize + 4
-          columnType.copyField(row, ordinal, lastValue, 0)
+          columnType.setField(lastValue, 0, value)
           lastRun = 1
         }
       }
     }
 
-    override def compress(from: ByteBuffer, to: ByteBuffer) = {
+    override def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[T]) = {
       to.putInt(RunLengthEncoding.typeId)
 
       if (from.hasRemaining) {
-        val currentValue = new SpecificMutableRow(Seq(columnType.dataType))
+        var currentValue = columnType.extract(from)
         var currentRun = 1
-        val value = new SpecificMutableRow(Seq(columnType.dataType))
-
-        columnType.extract(from, currentValue, 0)
 
         while (from.hasRemaining) {
-          columnType.extract(from, value, 0)
+          val value = columnType.extract(from)
 
-          if (value.head == currentValue.head) {
+          if (value == currentValue) {
             currentRun += 1
           } else {
             // Writes current run
-            columnType.append(currentValue, 0, to)
+            columnType.append(currentValue, to)
             to.putInt(currentRun)
 
             // Resets current run
-            columnType.copyField(value, 0, currentValue, 0)
+            currentValue = value
             currentRun = 1
           }
         }
 
         // Writes the last run
-        columnType.append(currentValue, 0, to)
+        columnType.append(currentValue, to)
         to.putInt(currentRun)
       }
 
@@ -156,7 +145,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
     private var valueCount = 0
     private var currentValue: T#JvmType = _
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next() = {
       if (valueCount == run) {
         currentValue = columnType.extract(buffer)
         run = buffer.getInt()
@@ -165,7 +154,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
         valueCount += 1
       }
 
-      columnType.setField(row, ordinal, currentValue)
+      currentValue
     }
 
     override def hasNext = valueCount < run || buffer.hasRemaining
@@ -182,16 +171,14 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
     new this.Decoder(buffer, columnType)
   }
 
-  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    new this.Encoder[T](columnType)
-  }
+  override def encoder[T <: NativeType] = new this.Encoder[T]
 
   override def supports(columnType: ColumnType[_, _]) = columnType match {
     case INT | LONG | STRING => true
     case _ => false
   }
 
-  class Encoder[T <: NativeType](columnType: NativeColumnType[T]) extends compression.Encoder[T] {
+  class Encoder[T <: NativeType] extends compression.Encoder[T] {
     // Size of the input, uncompressed, in bytes. Note that we only count until the dictionary
     // overflows.
     private var _uncompressedSize = 0
@@ -213,11 +200,9 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
     // to store dictionary element count.
     private var dictionarySize = 4
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
-      val value = columnType.getField(row, ordinal)
-
+    override def gatherCompressibilityStats(value: T#JvmType, columnType: NativeColumnType[T]) {
       if (!overflow) {
-        val actualSize = columnType.actualSize(row, ordinal)
+        val actualSize = columnType.actualSize(value)
         count += 1
         _uncompressedSize += actualSize
 
@@ -236,7 +221,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
       }
     }
 
-    override def compress(from: ByteBuffer, to: ByteBuffer) = {
+    override def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[T]) = {
       if (overflow) {
         throw new IllegalStateException(
           "Dictionary encoding should not be used because of dictionary overflow.")
@@ -279,9 +264,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
       }
     }
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
-      columnType.setField(row, ordinal, dictionary(buffer.getShort()))
-    }
+    override def next() = dictionary(buffer.getShort())
 
     override def hasNext = buffer.hasRemaining
   }
@@ -296,20 +279,25 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
     new this.Decoder(buffer).asInstanceOf[compression.Decoder[T]]
   }
 
-  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    (new this.Encoder).asInstanceOf[compression.Encoder[T]]
-  }
+  override def encoder[T <: NativeType] = (new this.Encoder).asInstanceOf[compression.Encoder[T]]
 
   override def supports(columnType: ColumnType[_, _]) = columnType == BOOLEAN
 
   class Encoder extends compression.Encoder[BooleanType.type] {
     private var _uncompressedSize = 0
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
+    override def gatherCompressibilityStats(
+        value: Boolean,
+        columnType: NativeColumnType[BooleanType.type]) {
+
       _uncompressedSize += BOOLEAN.defaultSize
     }
 
-    override def compress(from: ByteBuffer, to: ByteBuffer) = {
+    override def compress(
+        from: ByteBuffer,
+        to: ByteBuffer,
+        columnType: NativeColumnType[BooleanType.type]) = {
+
       to.putInt(BooleanBitSet.typeId)
         // Total element count (1 byte per Boolean value)
         .putInt(from.remaining)
@@ -361,7 +349,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
 
     private var visited: Int = 0
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(): Boolean = {
       val bit = visited % BITS_PER_LONG
 
       visited += 1
@@ -369,167 +357,123 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
         currentWord = buffer.getLong()
       }
 
-      row.setBoolean(ordinal, ((currentWord >> bit) & 1) != 0)
+      ((currentWord >> bit) & 1) != 0
     }
 
     override def hasNext: Boolean = visited < count
   }
 }
 
-private[sql] case object IntDelta extends CompressionScheme {
-  override def typeId: Int = 4
-
+private[sql] sealed abstract class IntegralDelta[I <: IntegralType] extends CompressionScheme {
   override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
-    new Decoder(buffer, INT).asInstanceOf[compression.Decoder[T]]
+    new this.Decoder(buffer, columnType.asInstanceOf[NativeColumnType[I]])
+      .asInstanceOf[compression.Decoder[T]]
   }
 
-  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    (new Encoder).asInstanceOf[compression.Encoder[T]]
-  }
+  override def encoder[T <: NativeType] = (new this.Encoder).asInstanceOf[compression.Encoder[T]]
 
-  override def supports(columnType: ColumnType[_, _]) = columnType == INT
+  /**
+   * Computes `delta = x - y`, returns `(true, delta)` if `delta` can fit into a single byte, or
+   * `(false, 0: Byte)` otherwise.
+   */
+  protected def byteSizedDelta(x: I#JvmType, y: I#JvmType): (Boolean, Byte)
 
-  class Encoder extends compression.Encoder[IntegerType.type] {
-    protected var _compressedSize: Int = 0
-    protected var _uncompressedSize: Int = 0
+  /**
+   * Simply computes `x + delta`
+   */
+  protected def addDelta(x: I#JvmType, delta: Byte): I#JvmType
 
-    override def compressedSize = _compressedSize
-    override def uncompressedSize = _uncompressedSize
+  class Encoder extends compression.Encoder[I] {
+    private var _compressedSize: Int = 0
 
-    private var prevValue: Int = _
+    private var _uncompressedSize: Int = 0
 
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
-      val value = row.getInt(ordinal)
-      val delta = value - prevValue
+    private var prev: I#JvmType = _
 
-      _compressedSize += 1
+    private var initial = true
 
-      // If this is the first integer to be compressed, or the delta is out of byte range, then give
-      // up compressing this integer.
-      if (_uncompressedSize == 0 || delta <= Byte.MinValue || delta > Byte.MaxValue) {
-        _compressedSize += INT.defaultSize
+    override def gatherCompressibilityStats(value: I#JvmType, columnType: NativeColumnType[I]) {
+      _uncompressedSize += columnType.defaultSize
+
+      if (initial) {
+        initial = false
+        _compressedSize += 1 + columnType.defaultSize
+      } else {
+        val (smallEnough, _) = byteSizedDelta(value, prev)
+        _compressedSize += (if (smallEnough) 1 else 1 + columnType.defaultSize)
       }
 
-      _uncompressedSize += INT.defaultSize
-      prevValue = value
+      prev = value
     }
 
-    override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
+    override def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[I]) = {
       to.putInt(typeId)
 
       if (from.hasRemaining) {
-        var prev = from.getInt()
+        var prev = columnType.extract(from)
         to.put(Byte.MinValue)
-        to.putInt(prev)
+        columnType.append(prev, to)
 
         while (from.hasRemaining) {
-          val current = from.getInt()
-          val delta = current - prev
+          val current = columnType.extract(from)
+          val (smallEnough, delta) = byteSizedDelta(current, prev)
           prev = current
 
-          if (Byte.MinValue < delta && delta <= Byte.MaxValue) {
-            to.put(delta.toByte)
+          if (smallEnough) {
+            to.put(delta)
           } else {
             to.put(Byte.MinValue)
-            to.putInt(current)
+            columnType.append(current, to)
           }
         }
       }
 
-      to.rewind().asInstanceOf[ByteBuffer]
+      to.rewind()
+      to
     }
+
+    override def uncompressedSize = _uncompressedSize
+
+    override def compressedSize = _compressedSize
   }
 
-  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[IntegerType.type])
-    extends compression.Decoder[IntegerType.type] {
+  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[I])
+    extends compression.Decoder[I] {
 
-    private var prev: Int = _
+    private var prev: I#JvmType = _
 
-    override def hasNext: Boolean = buffer.hasRemaining
-
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next() = {
       val delta = buffer.get()
-      prev = if (delta > Byte.MinValue) prev + delta else buffer.getInt()
-      row.setInt(ordinal, prev)
+      prev = if (delta > Byte.MinValue) addDelta(prev, delta) else columnType.extract(buffer)
+      prev
     }
+
+    override def hasNext = buffer.hasRemaining
   }
 }
 
-private[sql] case object LongDelta extends CompressionScheme {
-  override def typeId: Int = 5
+private[sql] case object IntDelta extends IntegralDelta[IntegerType.type] {
+  override val typeId = 4
 
-  override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
-    new Decoder(buffer, LONG).asInstanceOf[compression.Decoder[T]]
-  }
+  override def supports(columnType: ColumnType[_, _]) = columnType == INT
 
-  override def encoder[T <: NativeType](columnType: NativeColumnType[T]) = {
-    (new Encoder).asInstanceOf[compression.Encoder[T]]
+  override protected def addDelta(x: Int, delta: Byte) = x + delta
+
+  override protected def byteSizedDelta(x: Int, y: Int): (Boolean, Byte) = {
+    val delta = x - y
+    if (math.abs(delta) <= Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
   }
+}
+
+private[sql] case object LongDelta extends IntegralDelta[LongType.type] {
+  override val typeId = 5
 
   override def supports(columnType: ColumnType[_, _]) = columnType == LONG
 
-  class Encoder extends compression.Encoder[LongType.type] {
-    protected var _compressedSize: Int = 0
-    protected var _uncompressedSize: Int = 0
+  override protected def addDelta(x: Long, delta: Byte) = x + delta
 
-    override def compressedSize = _compressedSize
-    override def uncompressedSize = _uncompressedSize
-
-    private var prevValue: Long = _
-
-    override def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
-      val value = row.getLong(ordinal)
-      val delta = value - prevValue
-
-      _compressedSize += 1
-
-      // If this is the first long integer to be compressed, or the delta is out of byte range, then
-      // give up compressing this long integer.
-      if (_uncompressedSize == 0 || delta <= Byte.MinValue || delta > Byte.MaxValue) {
-        _compressedSize += LONG.defaultSize
-      }
-
-      _uncompressedSize += LONG.defaultSize
-      prevValue = value
-    }
-
-    override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
-      to.putInt(typeId)
-
-      if (from.hasRemaining) {
-        var prev = from.getLong()
-        to.put(Byte.MinValue)
-        to.putLong(prev)
-
-        while (from.hasRemaining) {
-          val current = from.getLong()
-          val delta = current - prev
-          prev = current
-
-          if (Byte.MinValue < delta && delta <= Byte.MaxValue) {
-            to.put(delta.toByte)
-          } else {
-            to.put(Byte.MinValue)
-            to.putLong(current)
-          }
-        }
-      }
-
-      to.rewind().asInstanceOf[ByteBuffer]
-    }
-  }
-
-  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[LongType.type])
-    extends compression.Decoder[LongType.type] {
-
-    private var prev: Long = _
-
-    override def hasNext: Boolean = buffer.hasRemaining
-
-    override def next(row: MutableRow, ordinal: Int): Unit = {
-      val delta = buffer.get()
-      prev = if (delta > Byte.MinValue) prev + delta else buffer.getLong()
-      row.setLong(ordinal, prev)
-    }
+  override protected def byteSizedDelta(x: Long, y: Long): (Boolean, Byte) = {
+    val delta = x - y
+    if (math.abs(delta) <= Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
   }
 }

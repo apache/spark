@@ -26,9 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 import java.io.File
@@ -41,8 +39,7 @@ import java.io.File
  * read and deserialized into actual SparkListenerEvents.
  */
 class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
-  private val fileSystem = Utils.getHadoopFileSystem("/",
-    SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+  private val fileSystem = Utils.getHadoopFileSystem("/")
   private val allCompressionCodecs = Seq[String](
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
@@ -169,9 +166,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify logging directory exists
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val logBaseDir = conf.get("spark.eventLog.dir")
-    val appId = EventLoggingListenerSuite.getUniqueApplicationId
-    val eventLogger = new EventLoggingListener(appId, logBaseDir, conf)
+    val eventLogger = new EventLoggingListener("test", conf)
     eventLogger.start()
     val logPath = new Path(eventLogger.logDir)
     assert(fileSystem.exists(logPath))
@@ -199,7 +194,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     def assertInfoCorrect(info: EventLoggingInfo, loggerStopped: Boolean) {
       assert(info.logPaths.size > 0)
-      assert(info.sparkVersion === SPARK_VERSION)
+      assert(info.sparkVersion === SparkContext.SPARK_VERSION)
       assert(info.compressionCodec.isDefined === compressionCodec.isDefined)
       info.compressionCodec.foreach { codec =>
         assert(compressionCodec.isDefined)
@@ -211,9 +206,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify that all information is correctly parsed before stop()
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val logBaseDir = conf.get("spark.eventLog.dir")
-    val appId = EventLoggingListenerSuite.getUniqueApplicationId
-    val eventLogger = new EventLoggingListener(appId, logBaseDir, conf)
+    val eventLogger = new EventLoggingListener("test", conf)
     eventLogger.start()
     var eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
     assertInfoCorrect(eventLoggingInfo, loggerStopped = false)
@@ -232,12 +225,9 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private def testEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val logBaseDir = conf.get("spark.eventLog.dir")
-    val appId = EventLoggingListenerSuite.getUniqueApplicationId
-    val eventLogger = new EventLoggingListener(appId, logBaseDir, conf)
+    val eventLogger = new EventLoggingListener("test", conf)
     val listenerBus = new LiveListenerBus
-    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
+    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", 125L, "Mickey")
     val applicationEnd = SparkListenerApplicationEnd(1000L)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
@@ -388,7 +378,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
   private def assertSparkVersionIsValid(logFiles: Array[FileStatus]) {
     val file = logFiles.map(_.getPath.getName).find(EventLoggingListener.isSparkVersionFile)
     assert(file.isDefined)
-    assert(EventLoggingListener.parseSparkVersion(file.get) === SPARK_VERSION)
+    assert(EventLoggingListener.parseSparkVersion(file.get) === SparkContext.SPARK_VERSION)
   }
 
   private def assertCompressionCodecIsValid(logFiles: Array[FileStatus], compressionCodec: String) {
@@ -414,6 +404,4 @@ object EventLoggingListenerSuite {
     }
     conf
   }
-
-  def getUniqueApplicationId = "test-" + System.currentTimeMillis
 }

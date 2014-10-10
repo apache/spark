@@ -50,7 +50,8 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
           "flatMap" -> xflatMap _,
           "filter" -> xfilter _,
           "mapPartitions" -> xmapPartitions _,
-          "mapPartitionsWithIndex" -> xmapPartitionsWithIndex _)) {
+          "mapPartitionsWithIndex" -> xmapPartitionsWithIndex _,
+          "mapPartitionsWithContext" -> xmapPartitionsWithContext _)) {
     val (name, xf) = transformation
 
     test(s"$name transformations throw proactive serialization exceptions") {
@@ -77,5 +78,8 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
 
   private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] = 
     x.mapPartitionsWithIndex((_, it) => it.map(y=>uc.op(y)))
+
+  private def xmapPartitionsWithContext(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+    x.mapPartitionsWithContext((_, it) => it.map(y=>uc.op(y)))
   
 }

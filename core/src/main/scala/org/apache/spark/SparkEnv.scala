@@ -31,8 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.BlockTransferService
-import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.network.ConnectionManager
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
@@ -43,8 +42,9 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  * :: DeveloperApi ::
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
  * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
- * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
- * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
+ * Spark code finds the SparkEnv through a thread-local variable, so each thread that accesses these
+ * objects needs to have the right SparkEnv set. You can get the current environment with
+ * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
  *
  * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
  *       in a future release.
@@ -59,8 +59,8 @@ class SparkEnv (
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
-    val blockTransferService: BlockTransferService,
     val blockManager: BlockManager,
+    val connectionManager: ConnectionManager,
     val securityManager: SecurityManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
@@ -88,8 +88,6 @@ class SparkEnv (
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
     // actorSystem.awaitTermination()
-
-    // Note that blockTransferService is stopped by BlockManager since it is started by it.
   }
 
   private[spark]
@@ -107,39 +105,30 @@ class SparkEnv (
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
-
-  private[spark]
-  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
-    synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers.get(key).foreach(_.releaseWorker(worker))
-    }
-  }
 }
 
 object SparkEnv extends Logging {
-  @volatile private var env: SparkEnv = _
-
-  private[spark] val driverActorSystemName = "sparkDriver"
-  private[spark] val executorActorSystemName = "sparkExecutor"
+  private val env = new ThreadLocal[SparkEnv]
+  @volatile private var lastSetSparkEnv : SparkEnv = _
 
   def set(e: SparkEnv) {
-    env = e
+    lastSetSparkEnv = e
+    env.set(e)
   }
 
   /**
-   * Returns the SparkEnv.
+   * Returns the ThreadLocal SparkEnv, if non-null. Else returns the SparkEnv
+   * previously set in any thread.
    */
   def get: SparkEnv = {
-    env
+    Option(env.get()).getOrElse(lastSetSparkEnv)
   }
 
   /**
    * Returns the ThreadLocal SparkEnv.
    */
-  @deprecated("Use SparkEnv.get instead", "1.2")
   def getThreadLocal: SparkEnv = {
-    env
+    env.get()
   }
 
   private[spark] def create(
@@ -157,9 +146,9 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
-    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      actorSystemName, hostname, port, conf, securityManager)
+
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
+      securityManager = securityManager)
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     // This is so that we tell the executors the correct port to connect to.
@@ -225,20 +214,20 @@ object SparkEnv extends Logging {
     val shortShuffleMgrNames = Map(
       "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
       "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
-    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
+    val shuffleMgrName = conf.get("spark.shuffle.manager", "hash")
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
-    val blockTransferService = new NioBlockTransferService(conf, securityManager)
-
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
+      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
+      serializer, conf, securityManager, mapOutputTracker, shuffleManager)
+
+    val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
@@ -256,15 +245,11 @@ object SparkEnv extends Logging {
       }
 
     val metricsSystem = if (isDriver) {
-      // Don't start metrics system right now for Driver.
-      // We need to wait for the task scheduler to give us an app ID.
-      // Then we can start the metrics system.
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
-      val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
-      ms.start()
-      ms
+      MetricsSystem.createMetricsSystem("executor", conf, securityManager)
     }
+    metricsSystem.start()
 
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working
@@ -290,8 +275,8 @@ object SparkEnv extends Logging {
       mapOutputTracker,
       shuffleManager,
       broadcastManager,
-      blockTransferService,
       blockManager,
+      connectionManager,
       securityManager,
       httpFileServer,
       sparkFilesDir,

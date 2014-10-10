@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{ArrayType, DataType, StructField, StructType}
 
@@ -29,7 +29,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = AttributeSet(output)
+  def outputSet: Set[Attribute] = output.toSet
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
@@ -50,11 +50,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpressionDown(e: Expression) = {
       val newE = e.transformDown(rule)
-      if (newE.fastEquals(e)) {
-        e
-      } else {
+      if (newE.id != e.id && newE != e) {
         changed = true
         newE
+      } else {
+        e
       }
     }
 
@@ -82,11 +82,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpressionUp(e: Expression) = {
       val newE = e.transformUp(rule)
-      if (newE.fastEquals(e)) {
-        e
-      } else {
+      if (newE.id != e.id && newE != e) {
         changed = true
         newE
+      } else {
+        e
       }
     }
 

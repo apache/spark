@@ -86,14 +86,14 @@ public abstract class DataType {
 
   /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
-   * The field of {@code containsNull} is set to {@code true}.
+   * The field of {@code containsNull} is set to {@code false}.
    */
   public static ArrayType createArrayType(DataType elementType) {
     if (elementType == null) {
       throw new IllegalArgumentException("elementType should not be null.");
     }
 
-    return new ArrayType(elementType, true);
+    return new ArrayType(elementType, false);
   }
 
   /**

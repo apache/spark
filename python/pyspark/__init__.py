@@ -20,21 +20,33 @@ PySpark is the Python API for Spark.
 
 Public classes:
 
-  - :class:`SparkContext`:
+  - L{SparkContext<pyspark.context.SparkContext>}
       Main entry point for Spark functionality.
-  - L{RDD}
+  - L{RDD<pyspark.rdd.RDD>}
       A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-  - L{Broadcast}
+  - L{Broadcast<pyspark.broadcast.Broadcast>}
       A broadcast variable that gets reused across tasks.
-  - L{Accumulator}
+  - L{Accumulator<pyspark.accumulators.Accumulator>}
       An "add-only" shared variable that tasks can only add values to.
-  - L{SparkConf}
+  - L{SparkConf<pyspark.conf.SparkConf>}
       For configuring Spark.
-  - L{SparkFiles}
+  - L{SparkFiles<pyspark.files.SparkFiles>}
       Access files shipped with jobs.
-  - L{StorageLevel}
+  - L{StorageLevel<pyspark.storagelevel.StorageLevel>}
       Finer-grained cache persistence levels.
 
+Spark SQL:
+  - L{SQLContext<pyspark.sql.SQLContext>}
+      Main entry point for SQL functionality.
+  - L{SchemaRDD<pyspark.sql.SchemaRDD>}
+      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
+      addition to normal RDD operations, SchemaRDDs also support SQL.
+  - L{Row<pyspark.sql.Row>}
+      A Row of data returned by a Spark SQL query.
+
+Hive:
+  - L{HiveContext<pyspark.context.HiveContext>}
+      Main entry point for accessing data stored in Apache Hive..
 """
 
 # The following block allows us to import python's random instead of mllib.random for scripts in
@@ -49,17 +61,13 @@ sys.path.insert(0, s)
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
+from pyspark.sql import SQLContext
 from pyspark.rdd import RDD
+from pyspark.sql import SchemaRDD
+from pyspark.sql import Row
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
-from pyspark.accumulators import Accumulator, AccumulatorParam
-from pyspark.broadcast import Broadcast
-from pyspark.serializers import MarshalSerializer, PickleSerializer
 
-# for back compatibility
-from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 
-__all__ = [
-    "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
-    "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-]
+__all__ = ["SparkConf", "SparkContext", "SQLContext", "RDD", "SchemaRDD",
+           "SparkFiles", "StorageLevel", "Row"]

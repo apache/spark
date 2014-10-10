@@ -30,9 +30,11 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
 /**
  *  Entry in vocabulary 
@@ -67,7 +69,7 @@ private case class VocabWord(
 class Word2Vec extends Serializable with Logging {
 
   private var vectorSize = 100
-  private var learningRate = 0.025
+  private var startingAlpha = 0.025
   private var numPartitions = 1
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
@@ -84,7 +86,7 @@ class Word2Vec extends Serializable with Logging {
    * Sets initial learning rate (default: 0.025).
    */
   def setLearningRate(learningRate: Double): this.type = {
-    this.learningRate = learningRate
+    this.startingAlpha = learningRate
     this
   }
 
@@ -283,10 +285,10 @@ class Word2Vec extends Serializable with Logging {
     
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
-    val syn0Global =
+    var syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
-    val syn1Global = new Array[Float](vocabSize * vectorSize)
-    var alpha = learningRate
+    var syn1Global = new Array[Float](vocabSize * vectorSize)
+    var alpha = startingAlpha
     for (k <- 1 to numIterations) {
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
@@ -300,8 +302,8 @@ class Word2Vec extends Serializable with Logging {
               lwc = wordCount
               // TODO: discount by iteration?
               alpha =
-                learningRate * (1 - numPartitions * wordCount.toDouble / (trainWordsCount + 1))
-              if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
+                startingAlpha * (1 - numPartitions * wordCount.toDouble / (trainWordsCount + 1))
+              if (alpha < startingAlpha * 0.0001) alpha = startingAlpha * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
             }
             wc += sentence.size
@@ -347,22 +349,21 @@ class Word2Vec extends Serializable with Logging {
         }
         val syn0Local = model._1
         val syn1Local = model._2
-        // Only output modified vectors.
-        Iterator.tabulate(vocabSize) { index =>
-          if (syn0Modify(index) > 0) {
-            Some((index, syn0Local.slice(index * vectorSize, (index + 1) * vectorSize)))
-          } else {
-            None
+        val synOut = new PrimitiveKeyOpenHashMap[Int, Array[Float]](vocabSize * 2)
+        var index = 0
+        while(index < vocabSize) {
+          if (syn0Modify(index) != 0) {
+            synOut.update(index, syn0Local.slice(index * vectorSize, (index + 1) * vectorSize))
           }
-        }.flatten ++ Iterator.tabulate(vocabSize) { index =>
-          if (syn1Modify(index) > 0) {
-            Some((index + vocabSize, syn1Local.slice(index * vectorSize, (index + 1) * vectorSize)))
-          } else {
-            None
+          if (syn1Modify(index) != 0) {
+            synOut.update(index + vocabSize,
+              syn1Local.slice(index * vectorSize, (index + 1) * vectorSize))
           }
-        }.flatten
+          index += 1
+        }
+        Iterator(synOut)
       }
-      val synAgg = partial.reduceByKey { case (v1, v2) =>
+      val synAgg = partial.flatMap(x => x).reduceByKey { case (v1, v2) =>
           blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
           v1
       }.collect()
@@ -437,7 +438,7 @@ class Word2VecModel private[mllib] (
    * Find synonyms of a word
    * @param word a word
    * @param num number of synonyms to find  
-   * @return array of (word, cosineSimilarity)
+   * @return array of (word, similarity)
    */
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)

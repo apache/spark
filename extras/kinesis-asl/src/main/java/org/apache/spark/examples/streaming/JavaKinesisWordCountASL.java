@@ -71,14 +71,11 @@ import com.google.common.collect.Lists;
  *            org.apache.spark.examples.streaming.JavaKinesisWordCountASL mySparkStream \
  *            https://kinesis.us-east-1.amazonaws.com
  *
- * Note that number of workers/threads should be 1 more than the number of receivers.
- * This leaves one thread available for actually processing the data.
- *
  * There is a companion helper class called KinesisWordCountProducerASL which puts dummy data 
  *   onto the Kinesis stream. 
  * Usage instructions for KinesisWordCountProducerASL are provided in the class definition.
  */
-public final class JavaKinesisWordCountASL { // needs to be public for access from run-example
+public final class JavaKinesisWordCountASL {
     private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
     private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
@@ -90,10 +87,10 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         /* Check that all required args were passed in. */
         if (args.length < 2) {
           System.err.println(
-              "Usage: JavaKinesisWordCountASL <stream-name> <endpoint-url>\n" +
-              "    <stream-name> is the name of the Kinesis stream\n" +
-              "    <endpoint-url> is the endpoint of the Kinesis service\n" +
-              "                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n");
+              "|Usage: KinesisWordCount <stream-name> <endpoint-url>\n" +
+              "|    <stream-name> is the name of the Kinesis stream\n" +
+              "|    <endpoint-url> is the endpoint of the Kinesis service\n" +
+              "|                   (e.g. https://kinesis.us-east-1.amazonaws.com)\n");
           System.exit(1);
         }
 
@@ -117,8 +114,12 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         /* In this example, we're going to create 1 Kinesis Worker/Receiver/DStream for each shard */ 
         int numStreams = numShards;
 
+        /* Must add 1 more thread than the number of receivers or the output won't show properly from the driver */
+        int numSparkThreads = numStreams + 1;
+
         /* Setup the Spark config. */
-        SparkConf sparkConfig = new SparkConf().setAppName("KinesisWordCount");
+        SparkConf sparkConfig = new SparkConf().setAppName("KinesisWordCount").setMaster(
+                "local[" + numSparkThreads + "]");
 
         /* Kinesis checkpoint interval.  Same as batchInterval for this example. */
         Duration checkpointInterval = batchInterval;
@@ -129,10 +130,10 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         /* Create the same number of Kinesis DStreams/Receivers as Kinesis stream's shards */
         List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
         for (int i = 0; i < numStreams; i++) {
-          streamsList.add(
-            KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
-            InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
-          );
+        	streamsList.add(
+                KinesisUtils.createStream(jssc, streamName, endpointUrl, checkpointInterval, 
+                InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2())
+            );
         }
 
         /* Union all the streams if there is more than 1 stream */

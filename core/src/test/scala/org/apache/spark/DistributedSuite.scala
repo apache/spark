@@ -24,7 +24,8 @@ import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.network.ConnectionManagerId
+import org.apache.spark.storage.{BlockManagerWorker, GetBlock, RDDBlockId, StorageLevel}
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
@@ -135,6 +136,7 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
         sc.parallelize(1 to 10, 2).foreach { x => if (x == 1) System.exit(42) }
       }
       assert(thrown.getClass === classOf[SparkException])
+      System.out.println(thrown.getMessage)
       assert(thrown.getMessage.contains("failed 4 times"))
     }
   }
@@ -200,13 +202,12 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
-    val blockTransfer = SparkEnv.get.blockTransferService
-    blockManager.master.getLocations(blockId).foreach { cmId =>
-      val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, blockId.toString)
-      val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
-        .asInstanceOf[Iterator[Int]].toList
+    blockManager.master.getLocations(blockId).foreach(id => {
+      val bytes = BlockManagerWorker.syncGetBlock(
+        GetBlock(blockId), ConnectionManagerId(id.host, id.port))
+      val deserialized = blockManager.dataDeserialize(blockId, bytes).asInstanceOf[Iterator[Int]].toList
       assert(deserialized === (1 to 100).toList)
-    }
+    })
   }
 
   test("compute without caching when no partitions fit in memory") {

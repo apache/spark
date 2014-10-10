@@ -18,17 +18,20 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark._
-import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnSparkHadoopUtil}
+import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnAllocationHandler}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
+import org.apache.hadoop.conf.Configuration
 
 /**
- * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of
- * ApplicationMaster, etc is done
+ *
+ * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of ApplicationMaster, etc is done
  */
-private[spark] class YarnClusterScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration) extends TaskSchedulerImpl(sc) {
 
   logInfo("Created YarnClusterScheduler")
+
+  def this(sc: SparkContext) = this(sc, new Configuration())
 
   // Nothing else for now ... initialize application master : which needs a SparkContext to
   // determine how to allocate.
@@ -39,7 +42,8 @@ private[spark] class YarnClusterScheduler(sc: SparkContext) extends TaskSchedule
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {
     val host = Utils.parseHostPort(hostPort)._1
-    Option(YarnSparkHadoopUtil.lookupRack(sc.hadoopConfiguration, host))
+    val retval = YarnAllocationHandler.lookupRack(conf, host)
+    if (retval != null) Some(retval) else None
   }
 
   override def postStartHook() {
@@ -47,10 +51,4 @@ private[spark] class YarnClusterScheduler(sc: SparkContext) extends TaskSchedule
     super.postStartHook()
     logInfo("YarnClusterScheduler.postStartHook done")
   }
-
-  override def stop() {
-    super.stop()
-    ApplicationMaster.sparkContextStopped(sc)
-  }
-
 }

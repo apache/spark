@@ -43,9 +43,6 @@ import org.apache.spark.util.CallSite
  * stage, the callSite gives the user code that created the RDD being shuffled. For a result
  * stage, the callSite gives the user code that executes the associated action (e.g. count()).
  *
- * A single stage can consist of multiple attempts. In that case, the latestInfo field will
- * be updated for each attempt.
- *
  */
 private[spark] class Stage(
     val id: Int,
@@ -74,8 +71,8 @@ private[spark] class Stage(
   val name = callSite.shortForm
   val details = callSite.longForm
 
-  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
-  var latestInfo: StageInfo = StageInfo.fromStage(this)
+  /** Pointer to the [StageInfo] object, set by DAGScheduler. */
+  var info: StageInfo = StageInfo.fromStage(this)
 
   def isAvailable: Boolean = {
     if (!isShuffleMap) {
@@ -119,7 +116,6 @@ private[spark] class Stage(
     }
   }
 
-  /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
     nextAttemptId += 1

@@ -64,7 +64,6 @@ private[spark] object CompressionCodec {
   }
 
   val DEFAULT_COMPRESSION_CODEC = "snappy"
-  val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
 

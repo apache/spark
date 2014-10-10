@@ -23,7 +23,6 @@ import java.sql.Timestamp
 import org.scalatest.FunSuite
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -47,12 +46,10 @@ class ColumnTypeSuite extends FunSuite with Logging {
     def checkActualSize[T <: DataType, JvmType](
         columnType: ColumnType[T, JvmType],
         value: JvmType,
-        expected: Int): Unit = {
+        expected: Int) {
 
       assertResult(expected, s"Wrong actualSize for $columnType") {
-        val row = new GenericMutableRow(1)
-        columnType.setField(row, 0, value)
-        columnType.actualSize(row, 0)
+        columnType.actualSize(value)
       }
     }
 
@@ -150,7 +147,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   def testNativeColumnType[T <: NativeType](
       columnType: NativeColumnType[T],
       putter: (ByteBuffer, T#JvmType) => Unit,
-      getter: (ByteBuffer) => T#JvmType): Unit = {
+      getter: (ByteBuffer) => T#JvmType) {
 
     testColumnType[T, T#JvmType](columnType, putter, getter)
   }
@@ -158,7 +155,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   def testColumnType[T <: DataType, JvmType](
       columnType: ColumnType[T, JvmType],
       putter: (ByteBuffer, JvmType) => Unit,
-      getter: (ByteBuffer) => JvmType): Unit = {
+      getter: (ByteBuffer) => JvmType) {
 
     val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE)
     val seq = (0 until 4).map(_ => makeRandomValue(columnType))

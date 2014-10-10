@@ -24,8 +24,8 @@ import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
-/** Stage summary grouped by executors. */
-private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobProgressTab) {
+/** Page showing executor summary */
+private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
   private val listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {
@@ -65,7 +65,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
       executorIdToAddress.put(executorId, address)
     }
 
-    listener.stageIdToData.get((stageId, stageAttemptId)) match {
+    listener.stageIdToData.get(stageId) match {
       case Some(stageData: StageUIData) =>
         stageData.executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
           <tr>

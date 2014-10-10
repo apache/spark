@@ -21,8 +21,10 @@ import java.net.ServerSocket
 import javax.servlet.http.HttpServletRequest
 
 import scala.io.Source
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
+import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
@@ -34,25 +36,11 @@ import scala.xml.Node
 
 class UISuite extends FunSuite {
 
-  /**
-   * Create a test SparkContext with the SparkUI enabled.
-   * It is safe to `get` the SparkUI directly from the SparkContext returned here.
-   */
-  private def newSparkContext(): SparkContext = {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
-      .set("spark.ui.enabled", "true")
-    val sc = new SparkContext(conf)
-    assert(sc.ui.isDefined)
-    sc
-  }
-
   ignore("basic ui visibility") {
-    withSpark(newSparkContext()) { sc =>
+    withSpark(new SparkContext("local", "test")) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sc.ui.get.appUIAddress).mkString
+        val html = Source.fromURL(sc.ui.appUIAddress).mkString
         assert(!html.contains("random data that should not be present"))
         assert(html.toLowerCase.contains("stages"))
         assert(html.toLowerCase.contains("storage"))
@@ -63,7 +51,7 @@ class UISuite extends FunSuite {
   }
 
   ignore("visibility at localhost:4040") {
-    withSpark(newSparkContext()) { sc =>
+    withSpark(new SparkContext("local", "test")) { sc =>
       // test if visible from http://localhost:4040
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         val html = Source.fromURL("http://localhost:4040").mkString
@@ -73,8 +61,8 @@ class UISuite extends FunSuite {
   }
 
   ignore("attaching a new tab") {
-    withSpark(newSparkContext()) { sc =>
-      val sparkUI = sc.ui.get
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val sparkUI = sc.ui
 
       val newTab = new WebUITab(sparkUI, "foo") {
         attachPage(new WebUIPage("") {
@@ -85,7 +73,7 @@ class UISuite extends FunSuite {
       }
       sparkUI.attachTab(newTab)
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sparkUI.appUIAddress).mkString
+        val html = Source.fromURL(sc.ui.appUIAddress).mkString
         assert(!html.contains("random data that should not be present"))
 
         // check whether new page exists
@@ -99,7 +87,7 @@ class UISuite extends FunSuite {
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sparkUI.appUIAddress.stripSuffix("/") + "/foo").mkString
+        val html = Source.fromURL(sc.ui.appUIAddress.stripSuffix("/") + "/foo").mkString
         // check whether new page exists
         assert(html.contains("magic"))
       }
@@ -107,8 +95,14 @@ class UISuite extends FunSuite {
   }
 
   test("jetty selects different port under contention") {
-    val server = new ServerSocket(0)
-    val startPort = server.getLocalPort
+    val startPort = 4040
+    val server = new Server(startPort)
+
+    Try { server.start() } match {
+      case Success(s) =>
+      case Failure(e) =>
+      // Either case server port is busy hence setup for test complete
+    }
     val serverInfo1 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
     val serverInfo2 = JettyUtils.startJettyServer(
@@ -119,9 +113,6 @@ class UISuite extends FunSuite {
     assert(boundPort1 != startPort)
     assert(boundPort2 != startPort)
     assert(boundPort1 != boundPort2)
-    serverInfo1.server.stop()
-    serverInfo2.server.stop()
-    server.close()
   }
 
   test("jetty binds to port 0 correctly") {
@@ -138,20 +129,16 @@ class UISuite extends FunSuite {
   }
 
   test("verify appUIAddress contains the scheme") {
-    withSpark(newSparkContext()) { sc =>
-      val ui = sc.ui.get
-      val uiAddress = ui.appUIAddress
-      val uiHostPort = ui.appUIHostPort
-      assert(uiAddress.equals("http://" + uiHostPort))
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val uiAddress = sc.ui.appUIAddress
+      assert(uiAddress.equals("http://" + sc.ui.appUIHostPort))
     }
   }
 
   test("verify appUIAddress contains the port") {
-    withSpark(newSparkContext()) { sc =>
-      val ui = sc.ui.get
-      val splitUIAddress = ui.appUIAddress.split(':')
-      val boundPort = ui.boundPort
-      assert(splitUIAddress(2).toInt == boundPort)
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val splitUIAddress = sc.ui.appUIAddress.split(':')
+      assert(splitUIAddress(2).toInt == sc.ui.boundPort)
     }
   }
 }

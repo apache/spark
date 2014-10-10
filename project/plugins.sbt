@@ -26,7 +26,3 @@ addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.1")
 
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
-
-libraryDependencies += "org.ow2.asm"  % "asm" % "5.0.3"
-
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "5.0.3"

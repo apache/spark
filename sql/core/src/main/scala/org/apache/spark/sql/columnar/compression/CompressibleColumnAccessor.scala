@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import org.apache.spark.sql.catalyst.expressions.MutableRow
+import java.nio.ByteBuffer
+
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
 
@@ -33,7 +34,5 @@ private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAcc
 
   abstract override def hasNext = super.hasNext || decoder.hasNext
 
-  override def extractSingle(row: MutableRow, ordinal: Int): Unit = {
-    decoder.next(row, ordinal)
-  }
+  override def extractSingle(buffer: ByteBuffer): T#JvmType = decoder.next()
 }

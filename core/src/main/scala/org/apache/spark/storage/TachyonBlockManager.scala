@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
 private[spark] class TachyonBlockManager(
-    blockManager: BlockManager,
+    shuffleManager: ShuffleBlockManager,
     rootDirs: String,
     val master: String)
   extends Logging {
@@ -49,7 +49,7 @@ private[spark] class TachyonBlockManager(
 
   private val MAX_DIR_CREATION_ATTEMPTS = 10
   private val subDirsPerTachyonDir =
-    blockManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
+    shuffleManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
 
   // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName;
   // then, inside this directory, create multiple subdirectories that we will hash files into,

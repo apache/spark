@@ -19,9 +19,7 @@ log4j.properties
 log4j.properties.template
 metrics.properties.template
 slaves
-slaves.template
 spark-env.sh
-spark-env.cmd
 spark-env.sh.template
 log4j-defaults.properties
 bootstrap-tooltip.js
@@ -33,7 +31,6 @@ sorttable.js
 .*data
 .*log
 cloudpickle.py
-heapq3.py
 join.py
 SparkExprTyper.scala
 SparkILoop.scala
@@ -60,4 +57,3 @@ dist/*
 .*iws
 logs
 .*scalastyle-output.xml
-.*dependency-reduced-pom.xml

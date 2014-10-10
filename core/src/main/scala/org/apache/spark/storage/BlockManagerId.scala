@@ -36,10 +36,11 @@ import org.apache.spark.util.Utils
 class BlockManagerId private (
     private var executorId_ : String,
     private var host_ : String,
-    private var port_ : Int)
-  extends Externalizable {
+    private var port_ : Int,
+    private var nettyPort_ : Int
+  ) extends Externalizable {
 
-  private def this() = this(null, null, 0)  // For deserialization only
+  private def this() = this(null, null, 0, 0)  // For deserialization only
 
   def executorId: String = executorId_
 
@@ -59,30 +60,32 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  def isDriver: Boolean = (executorId == "<driver>")
+  def nettyPort: Int = nettyPort_
 
   override def writeExternal(out: ObjectOutput) {
     out.writeUTF(executorId_)
     out.writeUTF(host_)
     out.writeInt(port_)
+    out.writeInt(nettyPort_)
   }
 
   override def readExternal(in: ObjectInput) {
     executorId_ = in.readUTF()
     host_ = in.readUTF()
     port_ = in.readInt()
+    nettyPort_ = in.readInt()
   }
 
   @throws(classOf[IOException])
   private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
-  override def toString = s"BlockManagerId($executorId, $host, $port)"
+  override def toString = "BlockManagerId(%s, %s, %d, %d)".format(executorId, host, port, nettyPort)
 
-  override def hashCode: Int = (executorId.hashCode * 41 + host.hashCode) * 41 + port
+  override def hashCode: Int = (executorId.hashCode * 41 + host.hashCode) * 41 + port + nettyPort
 
   override def equals(that: Any) = that match {
     case id: BlockManagerId =>
-      executorId == id.executorId && port == id.port && host == id.host
+      executorId == id.executorId && port == id.port && host == id.host && nettyPort == id.nettyPort
     case _ =>
       false
   }
@@ -97,10 +100,11 @@ private[spark] object BlockManagerId {
    * @param execId ID of the executor.
    * @param host Host name of the block manager.
    * @param port Port of the block manager.
+   * @param nettyPort Optional port for the Netty-based shuffle sender.
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
-  def apply(execId: String, host: String, port: Int) =
-    getCachedBlockManagerId(new BlockManagerId(execId, host, port))
+  def apply(execId: String, host: String, port: Int, nettyPort: Int) =
+    getCachedBlockManagerId(new BlockManagerId(execId, host, port, nettyPort))
 
   def apply(in: ObjectInput) = {
     val obj = new BlockManagerId()

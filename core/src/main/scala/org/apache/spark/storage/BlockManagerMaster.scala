@@ -27,11 +27,7 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
-class BlockManagerMaster(
-    var driverActor: ActorRef,
-    conf: SparkConf,
-    isDriver: Boolean)
-  extends Logging {
+class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Logging {
   private val AKKA_RETRY_ATTEMPTS: Int = AkkaUtils.numRetries(conf)
   private val AKKA_RETRY_INTERVAL_MS: Int = AkkaUtils.retryWaitMs(conf)
 
@@ -84,8 +80,13 @@ class BlockManagerMaster(
   }
 
   /** Get ids of other nodes in the cluster from the driver */
-  def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId))
+  def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
+    val result = askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
+    if (result.length != numPeers) {
+      throw new SparkException(
+        "Error getting peers, only got " + result.size + " instead of " + numPeers)
+    }
+    result
   }
 
   /**
@@ -100,8 +101,7 @@ class BlockManagerMaster(
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
     future.onFailure {
-      case e: Exception =>
-        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
+      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -112,8 +112,7 @@ class BlockManagerMaster(
   def removeShuffle(shuffleId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.onFailure {
-      case e: Exception =>
-        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
+      case e: Throwable => logError("Failed to remove shuffle " + shuffleId, e)
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -125,9 +124,9 @@ class BlockManagerMaster(
     val future = askDriverWithReply[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.onFailure {
-      case e: Exception =>
-        logWarning(s"Failed to remove broadcast $broadcastId" +
-          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
+      case e: Throwable =>
+        logError("Failed to remove broadcast " + broadcastId +
+          " with removeFromMaster = " + removeFromMaster, e)
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -195,7 +194,7 @@ class BlockManagerMaster(
 
   /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
-    if (driverActor != null && isDriver) {
+    if (driverActor != null) {
       tell(StopBlockManagerMaster)
       driverActor = null
       logInfo("BlockManagerMaster stopped")

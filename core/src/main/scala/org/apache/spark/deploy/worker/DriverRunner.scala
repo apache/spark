@@ -28,8 +28,8 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.{Command, DriverDescription, SparkHadoopUtil}
+import org.apache.spark.Logging
+import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -39,7 +39,6 @@ import org.apache.spark.deploy.master.DriverState.DriverState
  * This is currently only used in standalone cluster deploy mode.
  */
 private[spark] class DriverRunner(
-    val conf: SparkConf,
     val driverId: String,
     val workDir: File,
     val sparkHome: File,
@@ -145,8 +144,8 @@ private[spark] class DriverRunner(
 
     val jarPath = new Path(driverDesc.jarUrl)
 
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val jarFileSystem = jarPath.getFileSystem(hadoopConf)
+    val emptyConf = new Configuration()
+    val jarFileSystem = jarPath.getFileSystem(emptyConf)
 
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
@@ -155,7 +154,7 @@ private[spark] class DriverRunner(
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, hadoopConf)
+      FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded

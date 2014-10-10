@@ -24,11 +24,8 @@
 # Use the SPARK_HISTORY_OPTS environment variable to set history server configuration.
 #
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
-
-. "$sbin/spark-config.sh"
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
 if [ $# != 0 ]; then
   echo "Using command line arguments for setting the log directory is deprecated. Please "

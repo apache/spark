@@ -52,8 +52,7 @@ private[spark] class MesosExecutorBackend
       slaveInfo: SlaveInfo) {
     logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
     this.driver = driver
-    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
-      Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
+    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
     executor = new Executor(
       executorInfo.getExecutorId.getValue,
       slaveInfo.getHostname,

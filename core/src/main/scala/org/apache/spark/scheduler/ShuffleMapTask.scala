@@ -69,15 +69,12 @@ private[spark] class ShuffleMapTask(
       return writer.stop(success = true).get
     } catch {
       case e: Exception =>
-        try {
-          if (writer != null) {
-            writer.stop(success = false)
-          }
-        } catch {
-          case e: Exception =>
-            log.debug("Could not stop writer", e)
+        if (writer != null) {
+          writer.stop(success = false)
         }
         throw e
+    } finally {
+      context.markTaskCompleted()
     }
   }
 

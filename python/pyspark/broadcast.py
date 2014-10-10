@@ -31,10 +31,6 @@ import os
 
 from pyspark.serializers import CompressedSerializer, PickleSerializer
 
-
-__all__ = ['Broadcast']
-
-
 # Holds broadcasted data received from Java, keyed by its id.
 _broadcastRegistry = {}
 
@@ -63,30 +59,27 @@ class Broadcast(object):
         """
         self.bid = bid
         if path is None:
-            self._value = value
+            self.value = value
         self._jbroadcast = java_broadcast
         self._pickle_registry = pickle_registry
         self.path = path
 
-    @property
-    def value(self):
-        """ Return the broadcasted value
-        """
-        if not hasattr(self, "_value") and self.path is not None:
-            ser = CompressedSerializer(PickleSerializer())
-            self._value = ser.load_stream(open(self.path)).next()
-        return self._value
-
     def unpersist(self, blocking=False):
-        """
-        Delete cached copies of this broadcast on the executors.
-        """
         self._jbroadcast.unpersist(blocking)
         os.unlink(self.path)
 
     def __reduce__(self):
         self._pickle_registry.add(self)
         return (_from_id, (self.bid, ))
+
+    def __getattr__(self, item):
+        if item == 'value' and self.path is not None:
+            ser = CompressedSerializer(PickleSerializer())
+            value = ser.load_stream(open(self.path)).next()
+            self.value = value
+            return value
+
+        raise AttributeError(item)
 
 
 if __name__ == "__main__":

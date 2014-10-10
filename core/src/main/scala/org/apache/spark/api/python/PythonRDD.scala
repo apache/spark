@@ -23,7 +23,6 @@ import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Try, Success, Failure}
@@ -53,7 +52,6 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions = parent.partitions
 
@@ -64,27 +62,20 @@ private[spark] class PythonRDD(
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
-    envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
-    if (reuse_worker) {
-      envVars += ("SPARK_REUSE_WORKER" -> "1")
-    }
+    envVars += ("SPARK_LOCAL_DIR" -> localdir) // it's also used in monitor thread
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
-    var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-      if (reuse_worker && complete_cleanly) {
-        env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-      } else {
-        try {
-          worker.close()
-        } catch {
-          case e: Exception =>
-            logWarning("Failed to close worker socket", e)
-        }
+
+      // Cleanup the worker socket. This will also cause the Python worker to exit.
+      try {
+        worker.close()
+      } catch {
+        case e: Exception => logWarning("Failed to close worker socket", e)
       }
     }
 
@@ -124,10 +115,6 @@ private[spark] class PythonRDD(
               val total = finishTime - startTime
               logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
                 init, finish))
-              val memoryBytesSpilled = stream.readLong()
-              val diskBytesSpilled = stream.readLong()
-              context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
-              context.taskMetrics.diskBytesSpilled += diskBytesSpilled
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python
@@ -146,7 +133,6 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
-               complete_cleanly = true
               null
           }
         } catch {
@@ -196,6 +182,7 @@ private[spark] class PythonRDD(
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
+        SparkEnv.set(env)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         // Partition index
@@ -208,26 +195,11 @@ private[spark] class PythonRDD(
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
-        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.map(_.id).toSet
-        // number of different broadcasts
-        val cnt = oldBids.diff(newBids).size + newBids.diff(oldBids).size
-        dataOut.writeInt(cnt)
-        for (bid <- oldBids) {
-          if (!newBids.contains(bid)) {
-            // remove the broadcast from worker
-            dataOut.writeLong(- bid - 1)  // bid >= 0
-            oldBids.remove(bid)
-          }
-        }
+        dataOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
-          if (!oldBids.contains(broadcast.id)) {
-            // send new broadcast
-            dataOut.writeLong(broadcast.id)
-            dataOut.writeInt(broadcast.value.length)
-            dataOut.write(broadcast.value)
-            oldBids.add(broadcast.id)
-          }
+          dataOut.writeLong(broadcast.id)
+          dataOut.writeInt(broadcast.value.length)
+          dataOut.write(broadcast.value)
         }
         dataOut.flush()
         // Serialized command:
@@ -235,23 +207,17 @@ private[spark] class PythonRDD(
         dataOut.write(command)
         // Data values
         PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.flush()
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
-          worker.shutdownOutput()
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-          worker.shutdownOutput()
       } finally {
-        // Release memory used by this thread for shuffles
-        env.shuffleMemoryManager.releaseMemoryForThisThread()
-        // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
+        Try(worker.shutdownOutput()) // kill Python worker process
       }
     }
   }
@@ -312,14 +278,6 @@ private object SpecialLengths {
 private[spark] object PythonRDD extends Logging {
   val UTF8 = Charset.forName("UTF-8")
 
-  // remember the broadcasts sent to each worker
-  private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
-  private def getWorkerBroadcasts(worker: Socket) = {
-    synchronized {
-      workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
-    }
-  }
-
   /**
    * Adapter for calling SparkContext#runJob from Python.
    *
@@ -343,34 +301,26 @@ private[spark] object PythonRDD extends Logging {
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
     val file = new DataInputStream(new FileInputStream(filename))
+    val objs = new collection.mutable.ArrayBuffer[Array[Byte]]
     try {
-      val objs = new collection.mutable.ArrayBuffer[Array[Byte]]
-      try {
-        while (true) {
-          val length = file.readInt()
-          val obj = new Array[Byte](length)
-          file.readFully(obj)
-          objs.append(obj)
-        }
-      } catch {
-        case eof: EOFException => {}
+      while (true) {
+        val length = file.readInt()
+        val obj = new Array[Byte](length)
+        file.readFully(obj)
+        objs.append(obj)
       }
-      JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
-    } finally {
-      file.close()
+    } catch {
+      case eof: EOFException => {}
     }
+    JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
   def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
     val file = new DataInputStream(new FileInputStream(filename))
-    try {
-      val length = file.readInt()
-      val obj = new Array[Byte](length)
-      file.readFully(obj)
-      sc.broadcast(obj)
-    } finally {
-      file.close()
-    }
+    val length = file.readInt()
+    val obj = new Array[Byte](length)
+    file.readFully(obj)
+    sc.broadcast(obj)
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
@@ -787,53 +737,17 @@ private[spark] object PythonRDD extends Logging {
     }.toJavaRDD()
   }
 
-  private class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
-    private val pickle = new Pickler()
-    private var batch = 1
-    private val buffer = new mutable.ArrayBuffer[Any]
-
-    override def hasNext(): Boolean = iter.hasNext
-
-    override def next(): Array[Byte] = {
-      while (iter.hasNext && buffer.length < batch) {
-        buffer += iter.next()
-      }
-      val bytes = pickle.dumps(buffer.toArray)
-      val size = bytes.length
-      // let  1M < size < 10M
-      if (size < 1024 * 1024) {
-        batch *= 2
-      } else if (size > 1024 * 1024 * 10 && batch > 1) {
-        batch /= 2
-      }
-      buffer.clear()
-      bytes
-    }
-  }
-
   /**
-   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
+   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
    * PySpark.
    */
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
-    jRDD.rdd.mapPartitions { iter => new AutoBatchedPickler(iter) }
-  }
-
-  /**
-    * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
-    */
-  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
-    pyRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Unpickler
-      iter.flatMap { row =>
-        val obj = unpickle.loads(row)
-        if (batched) {
-          obj.asInstanceOf[JArrayList[_]]
-        } else {
-          Seq(obj)
-        }
+    jRDD.rdd.mapPartitions { iter =>
+      val pickle = new Pickler
+      iter.map { row =>
+        pickle.dumps(row)
       }
-    }.toJavaRDD()
+    }
   }
 }
 

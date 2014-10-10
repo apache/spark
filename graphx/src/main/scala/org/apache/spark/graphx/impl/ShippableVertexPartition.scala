@@ -36,7 +36,7 @@ private[graphx]
 object ShippableVertexPartition {
   /** Construct a `ShippableVertexPartition` from the given vertices without any routing table. */
   def apply[VD: ClassTag](iter: Iterator[(VertexId, VD)]): ShippableVertexPartition[VD] =
-    apply(iter, RoutingTablePartition.empty, null.asInstanceOf[VD], (a, b) => a)
+    apply(iter, RoutingTablePartition.empty, null.asInstanceOf[VD])
 
   /**
    * Construct a `ShippableVertexPartition` from the given vertices with the specified routing
@@ -44,28 +44,10 @@ object ShippableVertexPartition {
    */
   def apply[VD: ClassTag](
       iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD)
-    : ShippableVertexPartition[VD] =
-    apply(iter, routingTable, defaultVal, (a, b) => a)
-
-  /**
-   * Construct a `ShippableVertexPartition` from the given vertices with the specified routing
-   * table, filling in missing vertices mentioned in the routing table using `defaultVal`,
-   * and merging duplicate vertex atrribute with mergeFunc.
-   */
-  def apply[VD: ClassTag](
-      iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD,
-      mergeFunc: (VD, VD) => VD): ShippableVertexPartition[VD] = {
-    val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
-    // Merge the given vertices using mergeFunc
-    iter.foreach { pair =>
-      map.setMerge(pair._1, pair._2, mergeFunc)
-    }
-    // Fill in missing vertices mentioned in the routing table
-    routingTable.iterator.foreach { vid =>
-      map.changeValue(vid, defaultVal, identity)
-    }
-
-    new ShippableVertexPartition(map.keySet, map._values, map.keySet.getBitSet, routingTable)
+    : ShippableVertexPartition[VD] = {
+    val fullIter = iter ++ routingTable.iterator.map(vid => (vid, defaultVal))
+    val (index, values, mask) = VertexPartitionBase.initFrom(fullIter, (a: VD, b: VD) => a)
+    new ShippableVertexPartition(index, values, mask, routingTable)
   }
 
   import scala.language.implicitConversions

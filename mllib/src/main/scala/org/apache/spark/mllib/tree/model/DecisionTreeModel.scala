@@ -46,7 +46,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * Predict values for the given data set using the model trained.
    *
    * @param features RDD representing data points to be predicted
-   * @return RDD of predictions for each of the given data points
+   * @return RDD[Int] where each entry contains the corresponding prediction
    */
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
@@ -68,23 +68,15 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   }
 
   /**
-   * Print a summary of the model.
+   * Print full model.
    */
   override def toString: String = algo match {
     case Classification =>
-      s"DecisionTreeModel classifier of depth $depth with $numNodes nodes"
+      s"DecisionTreeModel classifier\n" + topNode.subtreeToString(2)
     case Regression =>
-      s"DecisionTreeModel regressor of depth $depth with $numNodes nodes"
+      s"DecisionTreeModel regressor\n" + topNode.subtreeToString(2)
     case _ => throw new IllegalArgumentException(
       s"DecisionTreeModel given unknown algo parameter: $algo.")
-  }
-
-  /**
-   * Print the full model to a string.
-   */
-  def toDebugString: String = {
-    val header = toString + "\n"
-    header + topNode.subtreeToString(2)
   }
 
 }

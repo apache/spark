@@ -45,19 +45,13 @@ import org.apache.spark.util.Utils
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
   final def run(attemptId: Long): T = {
-    context = new TaskContext(stageId, partitionId, attemptId, false)
-    TaskContext.setTaskContext(context)
+    context = new TaskContext(stageId, partitionId, attemptId, runningLocally = false)
     context.taskMetrics.hostname = Utils.localHostName()
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
-    try {
-      runTask(context)
-    } finally {
-      context.markTaskCompleted()
-      TaskContext.unset()
-    }
+    runTask(context)
   }
 
   def runTask(context: TaskContext): T
@@ -98,7 +92,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-  }  
+  }
 }
 
 /**

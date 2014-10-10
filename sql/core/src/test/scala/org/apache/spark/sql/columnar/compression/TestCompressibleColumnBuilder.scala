@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar._
 
 class TestCompressibleColumnBuilder[T <: NativeType](
-    override val columnStats: ColumnStats,
+    override val columnStats: NativeColumnStats[T],
     override val columnType: NativeColumnType[T],
     override val schemes: Seq[CompressionScheme])
   extends NativeColumnBuilder(columnStats, columnType)
@@ -33,7 +33,7 @@ class TestCompressibleColumnBuilder[T <: NativeType](
 
 object TestCompressibleColumnBuilder {
   def apply[T <: NativeType](
-      columnStats: ColumnStats,
+      columnStats: NativeColumnStats[T],
       columnType: NativeColumnType[T],
       scheme: CompressionScheme) = {
 

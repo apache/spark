@@ -25,30 +25,34 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.test.TestSQLContext
 
 // Implicits
 import scala.collection.JavaConversions._
 
 class JavaHiveQLSuite extends FunSuite {
-  lazy val javaCtx = new JavaSparkContext(TestHive.sparkContext)
+  lazy val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
 
   // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
   lazy val javaHiveCtx = new JavaHiveContext(javaCtx) {
     override val sqlContext = TestHive
   }
 
-  test("SELECT * FROM src") {
+  ignore("SELECT * FROM src") {
     assert(
       javaHiveCtx.sql("SELECT * FROM src").collect().map(_.getInt(0)) ===
         TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
   }
 
+  private val explainCommandClassName =
+    classOf[ExplainCommand].getSimpleName.stripSuffix("$")
+
   def isExplanation(result: JavaSchemaRDD) = {
     val explanation = result.collect().map(_.getString(0))
-    explanation.size > 1 && explanation.head.startsWith("== Physical Plan ==")
+    explanation.size > 1 && explanation.head.startsWith(explainCommandClassName)
   }
 
-  test("Query Hive native command execution result") {
+  ignore("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
     assertResult(0) {
@@ -59,18 +63,23 @@ class JavaHiveQLSuite extends FunSuite {
       javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
     }
 
+    javaHiveCtx.sql("SHOW TABLES").registerTempTable("show_tables")
+
     assert(
       javaHiveCtx
-        .sql("SHOW TABLES")
+        .sql("SELECT result FROM show_tables")
         .collect()
         .map(_.getString(0))
         .contains(tableName))
 
-    assertResult(Array(Array("key", "int"), Array("value", "string"))) {
+    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
+      javaHiveCtx.sql(s"DESCRIBE $tableName").registerTempTable("describe_table")
+
+
       javaHiveCtx
-        .sql(s"describe $tableName")
+        .sql("SELECT result FROM describe_table")
         .collect()
-        .map(row => Array(row.get(0).asInstanceOf[String], row.get(1).asInstanceOf[String]))
+        .map(_.getString(0).split("\t").map(_.trim))
         .toArray
     }
 
@@ -80,7 +89,7 @@ class JavaHiveQLSuite extends FunSuite {
     TestHive.reset()
   }
 
-  test("Exactly once semantics for DDL and command statements") {
+  ignore("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
     val q0 = javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 

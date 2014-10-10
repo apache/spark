@@ -36,31 +36,33 @@ private[spark] class WholeTextFileRecordReader(
     index: Integer)
   extends RecordReader[String, String] {
 
-  private[this] val path = split.getPath(index)
-  private[this] val fs = path.getFileSystem(context.getConfiguration)
+  private val path = split.getPath(index)
+  private val fs = path.getFileSystem(context.getConfiguration)
 
   // True means the current file has been processed, then skip it.
-  private[this] var processed = false
+  private var processed = false
 
-  private[this] val key = path.toString
-  private[this] var value: String = null
+  private val key = path.toString
+  private var value: String = null
 
-  override def initialize(split: InputSplit, context: TaskAttemptContext): Unit = {}
+  override def initialize(split: InputSplit, context: TaskAttemptContext) = {}
 
-  override def close(): Unit = {}
+  override def close() = {}
 
-  override def getProgress: Float = if (processed) 1.0f else 0.0f
+  override def getProgress = if (processed) 1.0f else 0.0f
 
-  override def getCurrentKey: String = key
+  override def getCurrentKey = key
 
-  override def getCurrentValue: String = value
+  override def getCurrentValue = value
 
-  override def nextKeyValue(): Boolean = {
+  override def nextKeyValue = {
     if (!processed) {
       val fileIn = fs.open(path)
       val innerBuffer = ByteStreams.toByteArray(fileIn)
+
       value = new Text(innerBuffer).toString
       Closeables.close(fileIn, false)
+
       processed = true
       true
     } else {

@@ -86,15 +86,15 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
         try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0)))
+      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0) * 1000))
     case LongType =>
-      buildCast[Long](_, l => new Timestamp(l))
+      buildCast[Long](_, l => new Timestamp(l * 1000))
     case IntegerType =>
-      buildCast[Int](_, i => new Timestamp(i))
+      buildCast[Int](_, i => new Timestamp(i * 1000))
     case ShortType =>
-      buildCast[Short](_, s => new Timestamp(s))
+      buildCast[Short](_, s => new Timestamp(s * 1000))
     case ByteType =>
-      buildCast[Byte](_, b => new Timestamp(b))
+      buildCast[Byte](_, b => new Timestamp(b * 1000))
     // TimestampWritable.decimalToTimestamp
     case DecimalType =>
       buildCast[BigDecimal](_, d => decimalToTimestamp(d))
@@ -107,10 +107,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   private[this]  def decimalToTimestamp(d: BigDecimal) = {
-    val seconds = Math.floor(d.toDouble).toLong
+    val seconds = d.longValue()
     val bd = (d - seconds) * 1000000000
     val nanos = bd.intValue()
 
+    // Convert to millis
     val millis = seconds * 1000
     val t = new Timestamp(millis)
 
@@ -120,11 +121,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   // Timestamp to long, converting milliseconds to seconds
-  private[this] def timestampToLong(ts: Timestamp) = Math.floor(ts.getTime / 1000.0).toLong
+  private[this] def timestampToLong(ts: Timestamp) = ts.getTime / 1000
 
   private[this] def timestampToDouble(ts: Timestamp) = {
     // First part is the seconds since the beginning of time, followed by nanosecs.
-    Math.floor(ts.getTime / 1000.0).toLong + ts.getNanos.toDouble / 1000000000
+    ts.getTime / 1000 + ts.getNanos.toDouble / 1000000000
   }
 
   // Converts Timestamp to string according to Hive TimestampWritable convention
@@ -244,7 +245,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   private[this] lazy val cast: Any => Any = dataType match {
-    case dt if dt == child.dataType => identity[Any]
     case StringType => castToString
     case BinaryType => castToBinary
     case DecimalType => castToDecimal

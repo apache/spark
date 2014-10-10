@@ -23,7 +23,6 @@ import org.apache.spark.{AccumulatorParam, Accumulator, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext._
 import org.apache.spark.sql.{SchemaRDD, Row}
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * :: DeveloperApi ::
@@ -44,10 +43,10 @@ package object debug {
   implicit class DebugQuery(query: SchemaRDD) {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
-      val visited = new collection.mutable.HashSet[TreeNodeRef]()
+      val visited = new collection.mutable.HashSet[Long]()
       val debugPlan = plan transform {
-        case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
-          visited += new TreeNodeRef(s)
+        case s: SparkPlan if !visited.contains(s.id) =>
+          visited += s.id
           DebugNode(s)
       }
       println(s"Results returned: ${debugPlan.execute().count()}")
@@ -59,6 +58,8 @@ package object debug {
   }
 
   private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
+    def references = Set.empty
+
     def output = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
@@ -74,22 +75,22 @@ package object debug {
     }
 
     /**
-     * A collection of metrics for each column of output.
+     * A collection of stats for each column of output.
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
      *        causing the wrong data to be projected.
      */
-    case class ColumnMetrics(
+    case class ColumnStat(
         elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
     val tupleCount = sparkContext.accumulator[Int](0)
 
     val numColumns = child.output.size
-    val columnStats = Array.fill(child.output.size)(new ColumnMetrics())
+    val columnStats = Array.fill(child.output.size)(new ColumnStat())
 
     def dumpStats(): Unit = {
       println(s"== ${child.simpleString} ==")
       println(s"Tuples output: ${tupleCount.value}")
-      child.output.zip(columnStats).foreach { case(attr, metric) =>
-        val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
+      child.output.zip(columnStats).foreach { case(attr, stat) =>
+        val actualDataTypes =stat.elementTypes.value.mkString("{", ",", "}")
         println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }

@@ -17,18 +17,18 @@
 
 package org.apache.spark.streaming
 
-import java.io.{ObjectInputStream, IOException}
+import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.util.ManualClock
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
 import scala.reflect.ClassTag
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
-import com.google.common.io.Files
+import java.io.{ObjectInputStream, IOException}
 
-import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
-import org.apache.spark.streaming.util.ManualClock
-import org.apache.spark.{SparkConf, Logging}
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import org.apache.spark.{SparkContext, SparkConf, Logging}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -119,12 +119,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def batchDuration = Seconds(1)
 
   // Directory where the checkpoint data will be saved
-  lazy val checkpointDir = {
-    val dir = Files.createTempDir()
-    logDebug(s"checkpointDir: $dir")
-    dir.deleteOnExit()
-    dir.toString
-  }
+  def checkpointDir = "checkpoint"
 
   // Number of partitions of the input parallel collections created for testing
   def numInputPartitions = 2
@@ -247,9 +242,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     logInfo("numBatches = " + numBatches + ", numExpectedOutput = " + numExpectedOutput)
 
     // Get the output buffer
-    val outputStream = ssc.graph.getOutputStreams.
-      filter(_.isInstanceOf[TestOutputStreamWithPartitions[_]]).
-      head.asInstanceOf[TestOutputStreamWithPartitions[V]]
+    val outputStream = ssc.graph.getOutputStreams.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     val output = outputStream.output
 
     try {

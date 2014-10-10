@@ -96,12 +96,10 @@ private[spark] class ApplicationInfo(
 
   def retryCount = _retryCount
 
-  def incrementRetryCount() = {
+  def incrementRetryCount = {
     _retryCount += 1
     _retryCount
   }
-
-  def resetRetryCount() = _retryCount = 0
 
   def markFinished(endState: ApplicationState.Value) {
     state = endState

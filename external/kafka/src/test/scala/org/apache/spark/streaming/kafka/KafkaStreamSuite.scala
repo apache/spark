@@ -24,7 +24,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 
 import kafka.admin.CreateTopicCommand
-import kafka.common.{KafkaException, TopicAndPartition}
+import kafka.common.TopicAndPartition
 import kafka.producer.{KeyedMessage, ProducerConfig, Producer}
 import kafka.utils.ZKStringSerializer
 import kafka.serializer.{StringDecoder, StringEncoder}
@@ -42,13 +42,14 @@ import org.apache.spark.util.Utils
 class KafkaStreamSuite extends TestSuiteBase {
   import KafkaTestUtils._
 
-  val zkHost = "localhost"
-  var zkPort: Int = 0
+  val zkConnect = "localhost:2181"
   val zkConnectionTimeout = 6000
   val zkSessionTimeout = 6000
 
-  protected var brokerPort = 9092
-  protected var brokerConf: KafkaConfig = _
+  val brokerPort = 9092
+  val brokerProps = getBrokerConfig(brokerPort, zkConnect)
+  val brokerConf = new KafkaConfig(brokerProps)
+
   protected var zookeeper: EmbeddedZookeeper = _
   protected var zkClient: ZkClient = _
   protected var server: KafkaServer = _
@@ -58,35 +59,16 @@ class KafkaStreamSuite extends TestSuiteBase {
 
   override def beforeFunction() {
     // Zookeeper server startup
-    zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
-    // Get the actual zookeeper binding port
-    zkPort = zookeeper.actualPort
+    zookeeper = new EmbeddedZookeeper(zkConnect)
     logInfo("==================== 0 ====================")
-
-    zkClient = new ZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout,
-      ZKStringSerializer)
+    zkClient = new ZkClient(zkConnect, zkSessionTimeout, zkConnectionTimeout, ZKStringSerializer)
     logInfo("==================== 1 ====================")
 
     // Kafka broker startup
-    var bindSuccess: Boolean = false
-    while(!bindSuccess) {
-      try {
-        val brokerProps = getBrokerConfig(brokerPort, s"$zkHost:$zkPort")
-        brokerConf = new KafkaConfig(brokerProps)
-        server = new KafkaServer(brokerConf)
-        logInfo("==================== 2 ====================")
-        server.startup()
-        logInfo("==================== 3 ====================")
-        bindSuccess = true
-      } catch {
-        case e: KafkaException =>
-          if (e.getMessage != null && e.getMessage.contains("Socket server failed to bind to")) {
-            brokerPort += 1
-          }
-        case e: Exception => throw new Exception("Kafka server create failed", e)
-      }
-    }
-
+    server = new KafkaServer(brokerConf)
+    logInfo("==================== 2 ====================")
+    server.startup()
+    logInfo("==================== 3 ====================")
     Thread.sleep(2000)
     logInfo("==================== 4 ====================")
     super.beforeFunction()
@@ -110,7 +92,7 @@ class KafkaStreamSuite extends TestSuiteBase {
     createTopic(topic)
     produceAndSendMessage(topic, sent)
 
-    val kafkaParams = Map("zookeeper.connect" -> s"$zkHost:$zkPort",
+    val kafkaParams = Map("zookeeper.connect" -> zkConnect,
       "group.id" -> s"test-consumer-${random.nextInt(10000)}",
       "auto.offset.reset" -> "smallest")
 
@@ -217,8 +199,6 @@ object KafkaTestUtils {
     val factory = new NIOServerCnxnFactory()
     factory.configure(new InetSocketAddress(ip, port), 16)
     factory.startup(zookeeper)
-
-    val actualPort = factory.getLocalPort
 
     def shutdown() {
       factory.shutdown()

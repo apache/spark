@@ -231,12 +231,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient protected[hive] lazy val sessionState = {
     val ss = new SessionState(hiveconf)
     setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
-    SessionState.start(ss)
-    ss.err = new PrintStream(outputBuffer, true, "UTF-8")
-    ss.out = new PrintStream(outputBuffer, true, "UTF-8")
-
     ss
   }
+
+  sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
+  sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
@@ -245,35 +244,37 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
+    override def lookupRelation(
+      databaseName: Option[String],
+      tableName: String,
+      alias: Option[String] = None): LogicalPlan = {
+
+      LowerCaseSchema(super.lookupRelation(databaseName, tableName, alias))
+    }
+  }
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
-  @transient
   override protected[sql] lazy val functionRegistry =
     new HiveFunctionRegistry with OverrideFunctionRegistry
 
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
-      override val extendedRules =
-        catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
-        ExtractPythonUdfs ::
-        Nil
-    }
+    new Analyzer(catalog, functionRegistry, caseSensitive = false)
 
   /**
    * Runs the specified SQL query using Hive.
    */
   protected[sql] def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
-    val results = runHive(sql, maxResults)
+    val results = runHive(sql, 100000)
     // It is very confusing when you only get back some of the results...
     if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
     results
   }
 
+  SessionState.start(sessionState)
 
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
@@ -281,13 +282,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     try {
-      // Session state must be initilized before the CommandProcessor is created .
-      SessionState.start(sessionState)
-
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hiveconf)
+
+      SessionState.start(sessionState)
 
       proc match {
         case driver: Driver =>
@@ -352,6 +352,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
+    // TODO: Create mixin for the analyzer instead of overriding things here.
+    override lazy val optimizedPlan =
+      optimizer(ExtractPythonUdfs(catalog.PreInsertionCasts(catalog.CreateTables(analyzed))))
 
     override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
@@ -385,7 +388,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
+      case (map: Map[_,_], MapType(kType, vType, _)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -405,7 +408,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // be similar with Hive.
         describeHiveTableCommand.hiveString
       case command: PhysicalCommand =>
-        command.executeCollect().map(_.head.toString)
+        command.sideEffectResult.map(_.toString)
 
       case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
@@ -420,7 +423,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       logical match {
         case _: NativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-        case _ => super.simpleString
+        case _ => executedPlan.toString
       }
   }
 }

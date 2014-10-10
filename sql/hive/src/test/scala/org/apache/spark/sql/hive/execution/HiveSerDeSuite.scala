@@ -17,19 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.hive.test.TestHive
-
 /**
  * A set of tests that validates support for Hive SerDe.
  */
-class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
-
-  override def beforeAll() = {
-    TestHive.cacheTables = false
-  }
-
+class HiveSerDeSuite extends HiveComparisonTest {
   createQueryTest(
     "Read and write with LazySimpleSerDe (tab separated)",
     "SELECT * from serdeins")
@@ -37,6 +28,4 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
   createQueryTest("Read with RegexSerDe", "SELECT * FROM sales")
 
   createQueryTest("Read with AvroSerDe", "SELECT * FROM episodes")
-
-  createQueryTest("Read Partitioned with AvroSerDe", "SELECT * FROM episodes_part")
 }

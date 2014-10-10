@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.planning
 
 import scala.annotation.tailrec
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -135,8 +134,8 @@ object PartialAggregation {
       // Only do partial aggregation if supported by all aggregate expressions.
       if (allAggregates.size == partialAggregates.size) {
         // Create a map of expressions to their partial evaluations for all aggregate expressions.
-        val partialEvaluations: Map[TreeNodeRef, SplitEvaluation] =
-          partialAggregates.map(a => (new TreeNodeRef(a), a.asPartial)).toMap
+        val partialEvaluations: Map[Long, SplitEvaluation] =
+          partialAggregates.map(a => (a.id, a.asPartial)).toMap
 
         // We need to pass all grouping expressions though so the grouping can happen a second
         // time. However some of them might be unnamed so we alias them allowing them to be
@@ -149,8 +148,8 @@ object PartialAggregation {
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
         val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
-          case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
-            partialEvaluations(new TreeNodeRef(e)).finalEvaluation
+          case e: Expression if partialEvaluations.contains(e.id) =>
+            partialEvaluations(e.id).finalEvaluation
           case e: Expression if namedGroupingExpressions.contains(e) =>
             namedGroupingExpressions(e).toAttribute
         }).asInstanceOf[Seq[NamedExpression]]
