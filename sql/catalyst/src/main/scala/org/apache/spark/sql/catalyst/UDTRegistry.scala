@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-
 import scala.collection.mutable
-
-import org.apache.spark.sql.catalyst.types.UserDefinedType
-
 import scala.reflect.runtime.universe._
+
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 
 /**
  * Global registry for user-defined types (UDTs).
