@@ -19,15 +19,18 @@ package org.apache.spark.mllib.util
 
 import scala.util.Random
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
 
 /**
+ * :: DeveloperApi ::
  * Generate test data for LogisticRegression. This class chooses positive labels
  * with probability `probOne` and scales features for positive examples by `eps`.
  */
-
+@DeveloperApi
 object LogisticRegressionDataGenerator {
 
   /**
@@ -54,7 +57,7 @@ object LogisticRegressionDataGenerator {
       val x = Array.fill[Double](nfeatures) {
         rnd.nextGaussian() + (y * eps)
       }
-      LabeledPoint(y, x)
+      LabeledPoint(y, Vectors.dense(x))
     }
     data
   }
@@ -76,7 +79,8 @@ object LogisticRegressionDataGenerator {
     val sc = new SparkContext(sparkMaster, "LogisticRegressionDataGenerator")
     val data = generateLogisticRDD(sc, nexamples, nfeatures, eps, parts)
 
-    MLUtils.saveLabeledData(data, outputPath)
+    data.saveAsTextFile(outputPath)
+
     sc.stop()
   }
 }

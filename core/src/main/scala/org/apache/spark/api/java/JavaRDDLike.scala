@@ -17,7 +17,8 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, List => JList, Iterator => JIterator}
+import java.lang.{Iterable => JIterable, Long => JLong}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -25,13 +26,15 @@ import scala.reflect.ClassTag
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.{FutureAction, Partition, SparkContext, TaskContext}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def wrapRDD(rdd: RDD[T]): This
@@ -40,8 +43,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  /** Set of partitions in this RDD. */
+  @deprecated("Use partitions() instead.", "1.1.0")
   def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
+  
+  /** Set of partitions in this RDD. */
+  def partitions: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
@@ -72,11 +78,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    */
-  def mapPartitionsWithIndex[R: ClassTag](
+  def mapPartitionsWithIndex[R](
       f: JFunction2[java.lang.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
     new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
-        preservesPartitioning))
+        preservesPartitioning)(fakeClassTag))(fakeClassTag)
 
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
@@ -203,7 +209,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K](f: JFunction[T, K]): JavaPairRDD[K, JList[T]] = {
+  def groupBy[K](f: JFunction[T, K]): JavaPairRDD[K, JIterable[T]] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[JList[T]] = fakeClassTag
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f)(fakeClassTag)))
@@ -213,7 +219,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K](f: JFunction[T, K], numPartitions: Int): JavaPairRDD[K, JList[T]] = {
+  def groupBy[K](f: JFunction[T, K], numPartitions: Int): JavaPairRDD[K, JIterable[T]] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[JList[T]] = fakeClassTag
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f, numPartitions)(fakeClassTag[K])))
@@ -261,6 +267,26 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
       rdd.zipPartitions(other.rdd)(fn)(other.classTag, fakeClassTag[V]))(fakeClassTag[V])
   }
 
+  /**
+   * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
+   * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
+   * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   */
+  def zipWithUniqueId(): JavaPairRDD[T, JLong] = {
+    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, JLong]]
+  }
+
+  /**
+   * Zips this RDD with its element indices. The ordering is first based on the partition index
+   * and then the ordering of items within each partition. So the first item in the first
+   * partition gets index 0, and the last item in the last partition receives the largest index.
+   * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
+   * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   */
+  def zipWithIndex(): JavaPairRDD[T, JLong] = {
+    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, JLong]]
+  }
+
   // Actions (launch a job to return a value to the user program)
 
   /**
@@ -279,6 +305,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val arr: java.util.Collection[T] = rdd.collect().toSeq
     new java.util.ArrayList(arr)
   }
+
+  /**
+   * Return an iterator that contains all of the elements in this RDD.
+   *
+   * The iterator will consume as much memory as the largest partition in this RDD.
+   */
+  def toLocalIterator(): JIterator[T] = {
+     import scala.collection.JavaConversions._
+     rdd.toLocalIterator
+  }
+
 
   /**
    * Return an array that contains all of the elements in this RDD.
@@ -331,16 +368,20 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def count(): Long = rdd.count()
 
   /**
-   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * :: Experimental ::
+   * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
+  @Experimental
   def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout, confidence)
 
   /**
-   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * :: Experimental ::
+   * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
+  @Experimental
   def countApprox(timeout: Long): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout)
 
@@ -377,7 +418,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new java.util.ArrayList(arr)
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Int): JList[T] = {
+  def takeSample(withReplacement: Boolean, num: Int): JList[T] = 
+    takeSample(withReplacement, num, Utils.random.nextLong)
+    
+  def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[T] = rdd.takeSample(withReplacement, num, seed).toSeq
     new java.util.ArrayList(arr)
@@ -391,19 +435,24 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String) = rdd.saveAsTextFile(path)
+  def saveAsTextFile(path: String): Unit = {
+    rdd.saveAsTextFile(path)
+  }
 
 
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) =
+  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsTextFile(path, codec)
+  }
 
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String) = rdd.saveAsObjectFile(path)
+  def saveAsObjectFile(path: String): Unit = {
+    rdd.saveAsObjectFile(path)
+  }
 
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
@@ -420,7 +469,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint() = rdd.checkpoint()
+  def checkpoint(): Unit = {
+    rdd.checkpoint()
+  }
 
   /**
    * Return whether this RDD has been checkpointed or not
@@ -479,6 +530,26 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Returns the maximum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @param comp the comparator that defines ordering
+   * @return the maximum of the RDD
+   * */
+  def max(comp: Comparator[T]): T = {
+    rdd.max()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
+   * Returns the minimum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @param comp the comparator that defines ordering
+   * @return the minimum of the RDD
+   * */
+  def min(comp: Comparator[T]): T = {
+    rdd.min()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
    * Returns the first K elements from this RDD using the
    * natural ordering for T while maintain the order.
    * @param num the number of top elements to return
@@ -492,13 +563,28 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Return approximate number of distinct elements in the RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. The default value of
-   * relativeSD is 0.05.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
    */
-  def countApproxDistinct(relativeSD: Double = 0.05): Long = rdd.countApproxDistinct(relativeSD)
+  def countApproxDistinct(relativeSD: Double): Long = rdd.countApproxDistinct(relativeSD)
 
   def name(): String = rdd.name
+
+  /**
+   * :: Experimental ::
+   * The asynchronous version of the foreach action.
+   *
+   * @param f the function to apply to all the elements of the RDD
+   * @return a FutureAction for the action
+   */
+  @Experimental
+  def foreachAsync(f: VoidFunction[T]): FutureAction[Unit] = {
+    import org.apache.spark.SparkContext._
+    rdd.foreachAsync(x => f.call(x))
+  }
 
 }

@@ -21,6 +21,7 @@ import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
@@ -32,7 +33,7 @@ import org.apache.spark._
  * @param parentsIndices list of indices in the parent that have been coalesced into this partition
  * @param preferredLocation the preferred location for this partition
  */
-case class CoalescedRDDPartition(
+private[spark] case class CoalescedRDDPartition(
                                   index: Int,
                                   @transient rdd: RDD[_],
                                   parentsIndices: Array[Int],
@@ -48,8 +49,8 @@ case class CoalescedRDDPartition(
   }
 
   /**
-   * Computes how many of the parents partitions have getPreferredLocation
-   * as one of their preferredLocations
+   * Computes the fraction of the parents' partitions containing preferredLocation within
+   * their getPreferredLocs.
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction: Double = {
@@ -70,7 +71,7 @@ case class CoalescedRDDPartition(
  * @param maxPartitions number of desired partitions in the coalesced RDD
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
-class CoalescedRDD[T: ClassTag](
+private[spark] class CoalescedRDD[T: ClassTag](
                                       @transient var prev: RDD[T],
                                       maxPartitions: Int,
                                       balanceSlack: Double = 0.10)
@@ -257,7 +258,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
         val pgroup = PartitionGroup(nxt_replica)
         groupArr += pgroup
         addPartToPGroup(nxt_part, pgroup)
-        groupHash += (nxt_replica -> (ArrayBuffer(pgroup))) // list in case we have multiple
+        groupHash.put(nxt_replica, ArrayBuffer(pgroup)) // list in case we have multiple
         numCreated += 1
       }
     }
@@ -266,7 +267,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
       var (nxt_replica, nxt_part) = rotIt.next()
       val pgroup = PartitionGroup(nxt_replica)
       groupArr += pgroup
-      groupHash.get(nxt_replica).get += pgroup
+      groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       var tries = 0
       while (!addPartToPGroup(nxt_part, pgroup) && tries < targetLen) { // ensure at least one part
         nxt_part = rotIt.next()._2

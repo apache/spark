@@ -28,24 +28,24 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
+import scala.reflect.ClassTag
+
 object WikipediaPageRankStandalone {
   def main(args: Array[String]) {
-    if (args.length < 5) {
+    if (args.length < 4) {
       System.err.println("Usage: WikipediaPageRankStandalone <inputFile> <threshold> " +
-        "<numIterations> <host> <usePartitioner>")
+        "<numIterations> <usePartitioner>")
       System.exit(-1)
     }
     val sparkConf = new SparkConf()
     sparkConf.set("spark.serializer", "spark.bagel.examples.WPRSerializer")
 
-
     val inputFile = args(0)
     val threshold = args(1).toDouble
     val numIterations = args(2).toInt
-    val host = args(3)
-    val usePartitioner = args(4).toBoolean
+    val usePartitioner = args(3).toBoolean
 
-    sparkConf.setMaster(host).setAppName("WikipediaPageRankStandalone")
+    sparkConf.setAppName("WikipediaPageRankStandalone")
 
     val sc = new SparkContext(sparkConf)
 
@@ -79,7 +79,7 @@ object WikipediaPageRankStandalone {
     val time = (System.currentTimeMillis - startTime) / 1000.0
     println("Completed %d iterations in %f seconds: %f seconds per iteration"
       .format(numIterations, time, time / numIterations))
-    System.exit(0)
+    sc.stop()
   }
 
   def parseArticle(line: String): (String, Array[String]) = {
@@ -115,12 +115,16 @@ object WikipediaPageRankStandalone {
     var ranks = links.mapValues { edges => defaultRank }
     for (i <- 1 to numIterations) {
       val contribs = links.groupWith(ranks).flatMap {
-        case (id, (linksWrapper, rankWrapper)) =>
-          if (linksWrapper.length > 0) {
-            if (rankWrapper.length > 0) {
-              linksWrapper(0).map(dest => (dest, rankWrapper(0) / linksWrapper(0).size))
+        case (id, (linksWrapperIterable, rankWrapperIterable)) =>
+          val linksWrapper = linksWrapperIterable.iterator
+          val rankWrapper = rankWrapperIterable.iterator
+          if (linksWrapper.hasNext) {
+            val linksWrapperHead = linksWrapper.next
+            if (rankWrapper.hasNext) {
+              val rankWrapperHead = rankWrapper.next
+              linksWrapperHead.map(dest => (dest, rankWrapperHead / linksWrapperHead.size))
             } else {
-              linksWrapper(0).map(dest => (dest, defaultRank / linksWrapper(0).size))
+              linksWrapperHead.map(dest => (dest, defaultRank / linksWrapperHead.size))
             }
           } else {
             Array[(String, Double)]()
@@ -141,15 +145,15 @@ class WPRSerializer extends org.apache.spark.serializer.Serializer {
 }
 
 class WPRSerializerInstance extends SerializerInstance {
-  def serialize[T](t: T): ByteBuffer = {
+  def serialize[T: ClassTag](t: T): ByteBuffer = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T](bytes: ByteBuffer): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     throw new UnsupportedOperationException()
   }
 
@@ -165,7 +169,7 @@ class WPRSerializerInstance extends SerializerInstance {
 class WPRSerializationStream(os: OutputStream) extends SerializationStream {
   val dos = new DataOutputStream(os)
 
-  def writeObject[T](t: T): SerializationStream = t match {
+  def writeObject[T: ClassTag](t: T): SerializationStream = t match {
     case (id: String, wrapper: ArrayBuffer[_]) => wrapper(0) match {
       case links: Array[String] => {
         dos.writeInt(0) // links
@@ -198,7 +202,7 @@ class WPRSerializationStream(os: OutputStream) extends SerializationStream {
 class WPRDeserializationStream(is: InputStream) extends DeserializationStream {
   val dis = new DataInputStream(is)
 
-  def readObject[T](): T = {
+  def readObject[T: ClassTag](): T = {
     val typeId = dis.readInt()
     typeId match {
       case 0 => {

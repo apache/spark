@@ -17,52 +17,116 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 /**
+ * :: DeveloperApi ::
  * Various possible reasons why a task ended. The low-level TaskScheduler is supposed to retry
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
-private[spark] sealed trait TaskEndReason
+@DeveloperApi
+sealed trait TaskEndReason
 
-private[spark] case object Success extends TaskEndReason
+/**
+ * :: DeveloperApi ::
+ * Task succeeded.
+ */
+@DeveloperApi
+case object Success extends TaskEndReason
 
-private[spark] 
-case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
+/**
+ * :: DeveloperApi ::
+ * Various possible reasons why a task failed.
+ */
+@DeveloperApi
+sealed trait TaskFailedReason extends TaskEndReason {
+  /** Error message displayed in the web UI. */
+  def toErrorString: String
+}
 
-private[spark] case class FetchFailed(
-    bmAddress: BlockManagerId,
+/**
+ * :: DeveloperApi ::
+ * A [[org.apache.spark.scheduler.ShuffleMapTask]] that completed successfully earlier, but we
+ * lost the executor before the stage completed. This means Spark needs to reschedule the task
+ * to be re-executed on a different executor.
+ */
+@DeveloperApi
+case object Resubmitted extends TaskFailedReason {
+  override def toErrorString: String = "Resubmitted (resubmitted due to lost executor)"
+}
+
+/**
+ * :: DeveloperApi ::
+ * Task failed to fetch shuffle data from a remote node. Probably means we have lost the remote
+ * executors the task is trying to fetch from, and thus need to rerun the previous stage.
+ */
+@DeveloperApi
+case class FetchFailed(
+    bmAddress: BlockManagerId,  // Note that bmAddress can be null
     shuffleId: Int,
     mapId: Int,
     reduceId: Int)
-  extends TaskEndReason
+  extends TaskFailedReason {
+  override def toErrorString: String = {
+    val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
+    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId)"
+  }
+}
 
-private[spark] case class ExceptionFailure(
+/**
+ * :: DeveloperApi ::
+ * Task failed due to a runtime exception. This is the most common failure case and also captures
+ * user program exceptions.
+ */
+@DeveloperApi
+case class ExceptionFailure(
     className: String,
     description: String,
     stackTrace: Array[StackTraceElement],
     metrics: Option[TaskMetrics])
-  extends TaskEndReason
+  extends TaskFailedReason {
+  override def toErrorString: String = Utils.exceptionString(className, description, stackTrace)
+}
 
 /**
+ * :: DeveloperApi ::
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
-private[spark] case object TaskResultLost extends TaskEndReason
-
-private[spark] case object TaskKilled extends TaskEndReason
+@DeveloperApi
+case object TaskResultLost extends TaskFailedReason {
+  override def toErrorString: String = "TaskResultLost (result lost from block manager)"
+}
 
 /**
+ * :: DeveloperApi ::
+ * Task was killed intentionally and needs to be rescheduled.
+ */
+@DeveloperApi
+case object TaskKilled extends TaskFailedReason {
+  override def toErrorString: String = "TaskKilled (killed intentionally)"
+}
+
+/**
+ * :: DeveloperApi ::
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
-private[spark] case object ExecutorLostFailure extends TaskEndReason
+@DeveloperApi
+case object ExecutorLostFailure extends TaskFailedReason {
+  override def toErrorString: String = "ExecutorLostFailure (executor lost)"
+}
 
 /**
+ * :: DeveloperApi ::
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */
-private[spark] case object UnknownReason extends TaskEndReason
-
+@DeveloperApi
+case object UnknownReason extends TaskFailedReason {
+  override def toErrorString: String = "UnknownReason"
+}

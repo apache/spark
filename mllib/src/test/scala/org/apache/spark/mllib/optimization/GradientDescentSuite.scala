@@ -17,16 +17,15 @@
 
 package org.apache.spark.mllib.optimization
 
-import scala.util.Random
 import scala.collection.JavaConversions._
+import scala.util.Random
 
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.{FunSuite, Matchers}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 
 object GradientDescentSuite {
 
@@ -47,7 +46,7 @@ object GradientDescentSuite {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
-    val unifRand = new scala.util.Random(45)
+    val unifRand = new Random(45)
     val rLogis = (0 until nPoints).map { i =>
       val u = unifRand.nextDouble()
       math.log(u) - math.log(1.0-u)
@@ -58,12 +57,11 @@ object GradientDescentSuite {
       if (yVal > 0) 1 else 0
     }
 
-    val testData = (0 until nPoints).map(i => LabeledPoint(y(i), Array(x1(i))))
-    testData
+    (0 until nPoints).map(i => LabeledPoint(y(i), Vectors.dense(x1(i))))
   }
 }
 
-class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers {
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000
@@ -83,11 +81,11 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Array(1.0, features: _*)
+      label -> Vectors.dense(1.0 +: features.toArray)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Array(1.0, initialWeights: _*)
+    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
@@ -113,13 +111,13 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(2.0, -1.5, 10000, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Array(1.0, features: _*)
+      label -> Vectors.dense(1.0 +: features.toArray)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
 
     // Prepare non-zero weights
-    val initialWeightsWithIntercept = Array(1.0, 0.5)
+    val initialWeightsWithIntercept = Vectors.dense(1.0, 0.5)
 
     val regParam0 = 0
     val (newWeights0, loss0) = GradientDescent.runMiniBatchSGD(
@@ -129,20 +127,38 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     val (newWeights1, loss1) = GradientDescent.runMiniBatchSGD(
       dataRDD, gradient, updater, 1, 1, regParam1, 1.0, initialWeightsWithIntercept)
 
-    def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
-      math.abs(x - y) / (math.abs(y) + 1e-15) < tol
-    }
-
-    assert(compareDouble(
-      loss1(0),
-      loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
-        math.pow(initialWeightsWithIntercept(1), 2)) / 2),
+    assert(
+      loss1(0) ~= (loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
+        math.pow(initialWeightsWithIntercept(1), 2)) / 2) absTol 1E-5,
       """For non-zero weights, the regVal should be \frac{1}{2}\sum_i w_i^2.""")
 
     assert(
-      compareDouble(newWeights1(0) , newWeights0(0) - initialWeightsWithIntercept(0)) &&
-      compareDouble(newWeights1(1) , newWeights0(1) - initialWeightsWithIntercept(1)),
+      (newWeights1(0) ~= (newWeights0(0) - initialWeightsWithIntercept(0)) absTol 1E-5) &&
+      (newWeights1(1) ~= (newWeights0(1) - initialWeightsWithIntercept(1)) absTol 1E-5),
       "The different between newWeights with/without regularization " +
         "should be initialWeightsWithIntercept.")
+  }
+}
+
+class GradientDescentClusterSuite extends FunSuite with LocalClusterSparkContext {
+
+  test("task size should be small") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val (weights, loss) = GradientDescent.runMiniBatchSGD(
+      points,
+      new LogisticGradient,
+      new SquaredL2Updater,
+      0.1,
+      2,
+      1.0,
+      1.0,
+      Vectors.dense(new Array[Double](n)))
   }
 }

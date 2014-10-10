@@ -35,7 +35,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{SecurityManager, SparkConf, Logging}
 
 
 class ExecutorRunnable(
@@ -46,7 +46,9 @@ class ExecutorRunnable(
     slaveId: String,
     hostname: String,
     executorMemory: Int,
-    executorCores: Int)
+    executorCores: Int,
+    appId: String,
+    securityMgr: SecurityManager)
   extends Runnable with ExecutorRunnableUtil with Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
@@ -78,10 +80,14 @@ class ExecutorRunnable(
     credentials.writeTokenStorageToStream(dob)
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
-    val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores)
+    val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
+      appId, localResources)
 
+    logInfo(s"Setting up executor with environment: $env")
     logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)
+
+    ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
     // Send the start request to the ContainerManager
     nmClient.startContainer(container, ctx)

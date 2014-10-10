@@ -30,6 +30,7 @@ import org.apache.spark.Partitioner
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.SparkEnv
 import org.apache.spark.TaskContext
+import org.apache.spark.serializer.Serializer
 
 /**
  * An optimized version of cogroup for set difference/subtraction.
@@ -53,10 +54,11 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 
-  private var serializerClass: String = null
+  private var serializer: Option[Serializer] = None
 
-  def setSerializer(cls: String): SubtractedRDD[K, V, W] = {
-    serializerClass = cls
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
+  def setSerializer(serializer: Serializer): SubtractedRDD[K, V, W] = {
+    this.serializer = Option(serializer)
     this
   }
 
@@ -67,7 +69,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd, part, serializerClass)
+        new ShuffleDependency(rdd, part, serializer)
       }
     }
   }
@@ -78,8 +80,8 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
       // Each CoGroupPartition will depend on rdd1 and rdd2
       array(i) = new CoGroupPartition(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
         dependencies(j) match {
-          case s: ShuffleDependency[_, _] =>
-            new ShuffleCoGroupSplitDep(s.shuffleId)
+          case s: ShuffleDependency[_, _, _] =>
+            new ShuffleCoGroupSplitDep(s.shuffleHandle)
           case _ =>
             new NarrowCoGroupSplitDep(rdd, i, rdd.partitions(i))
         }
@@ -92,7 +94,6 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]
-    val serializer = SparkEnv.get.serializerManager.get(serializerClass, SparkEnv.get.conf)
     val map = new JHashMap[K, ArrayBuffer[V]]
     def getSeq(k: K): ArrayBuffer[V] = {
       val seq = map.get(k)
@@ -105,14 +106,14 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
       }
     }
     def integrate(dep: CoGroupSplitDep, op: Product2[K, V] => Unit) = dep match {
-      case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
+      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
         rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
-      }
-      case ShuffleCoGroupSplitDep(shuffleId) => {
-        val iter = SparkEnv.get.shuffleFetcher.fetch[Product2[K, V]](shuffleId, partition.index,
-          context, serializer)
+
+      case ShuffleCoGroupSplitDep(handle) =>
+        val iter = SparkEnv.get.shuffleManager
+          .getReader(handle, partition.index, partition.index + 1, context)
+          .read()
         iter.foreach(op)
-      }
     }
     // the first dep is rdd1; add all values to the map
     integrate(partition.deps(0), t => getSeq(t._1) += t._2)

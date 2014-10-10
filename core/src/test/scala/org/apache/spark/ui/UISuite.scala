@@ -18,40 +18,140 @@
 package org.apache.spark.ui
 
 import java.net.ServerSocket
+import javax.servlet.http.HttpServletRequest
 
+import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
-import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.FunSuite
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.LocalSparkContext._
+import scala.xml.Node
 
 class UISuite extends FunSuite {
-  test("jetty port increases under contention") {
-    val startPort = 4040
-    val server = new Server(startPort)
 
-    Try { server.start() } match {
-      case Success(s) => 
-      case Failure(e) => 
-      // Either case server port is busy hence setup for test complete
+  /**
+   * Create a test SparkContext with the SparkUI enabled.
+   * It is safe to `get` the SparkUI directly from the SparkContext returned here.
+   */
+  private def newSparkContext(): SparkContext = {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set("spark.ui.enabled", "true")
+    val sc = new SparkContext(conf)
+    assert(sc.ui.isDefined)
+    sc
+  }
+
+  ignore("basic ui visibility") {
+    withSpark(newSparkContext()) { sc =>
+      // test if the ui is visible, and all the expected tabs are visible
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL(sc.ui.get.appUIAddress).mkString
+        assert(!html.contains("random data that should not be present"))
+        assert(html.toLowerCase.contains("stages"))
+        assert(html.toLowerCase.contains("storage"))
+        assert(html.toLowerCase.contains("environment"))
+        assert(html.toLowerCase.contains("executors"))
+      }
     }
-    val (jettyServer1, boundPort1) = JettyUtils.startJettyServer("0.0.0.0", startPort, Seq(),
-      new SparkConf)
-    val (jettyServer2, boundPort2) = JettyUtils.startJettyServer("0.0.0.0", startPort, Seq(),
-      new SparkConf)
+  }
+
+  ignore("visibility at localhost:4040") {
+    withSpark(newSparkContext()) { sc =>
+      // test if visible from http://localhost:4040
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL("http://localhost:4040").mkString
+        assert(html.toLowerCase.contains("stages"))
+      }
+    }
+  }
+
+  ignore("attaching a new tab") {
+    withSpark(newSparkContext()) { sc =>
+      val sparkUI = sc.ui.get
+
+      val newTab = new WebUITab(sparkUI, "foo") {
+        attachPage(new WebUIPage("") {
+          def render(request: HttpServletRequest): Seq[Node] = {
+            <b>"html magic"</b>
+          }
+        })
+      }
+      sparkUI.attachTab(newTab)
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL(sparkUI.appUIAddress).mkString
+        assert(!html.contains("random data that should not be present"))
+
+        // check whether new page exists
+        assert(html.toLowerCase.contains("foo"))
+
+        // check whether other pages still exist
+        assert(html.toLowerCase.contains("stages"))
+        assert(html.toLowerCase.contains("storage"))
+        assert(html.toLowerCase.contains("environment"))
+        assert(html.toLowerCase.contains("executors"))
+      }
+
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL(sparkUI.appUIAddress.stripSuffix("/") + "/foo").mkString
+        // check whether new page exists
+        assert(html.contains("magic"))
+      }
+    }
+  }
+
+  test("jetty selects different port under contention") {
+    val server = new ServerSocket(0)
+    val startPort = server.getLocalPort
+    val serverInfo1 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
+    val serverInfo2 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
     // Allow some wiggle room in case ports on the machine are under contention
-    assert(boundPort1 > startPort && boundPort1 < startPort + 10)
-    assert(boundPort2 > boundPort1 && boundPort2 < boundPort1 + 10)
+    val boundPort1 = serverInfo1.boundPort
+    val boundPort2 = serverInfo2.boundPort
+    assert(boundPort1 != startPort)
+    assert(boundPort2 != startPort)
+    assert(boundPort1 != boundPort2)
+    serverInfo1.server.stop()
+    serverInfo2.server.stop()
+    server.close()
   }
 
   test("jetty binds to port 0 correctly") {
-    val (jettyServer, boundPort) = JettyUtils.startJettyServer("0.0.0.0", 0, Seq(), new SparkConf)
-    assert(jettyServer.getState === "STARTED")
+    val serverInfo = JettyUtils.startJettyServer(
+      "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
+    val server = serverInfo.server
+    val boundPort = serverInfo.boundPort
+    assert(server.getState === "STARTED")
     assert(boundPort != 0)
-    Try {new ServerSocket(boundPort)} match {
+    Try { new ServerSocket(boundPort) } match {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
-      case Failure  (e) =>
+      case Failure(e) =>
+    }
+  }
+
+  test("verify appUIAddress contains the scheme") {
+    withSpark(newSparkContext()) { sc =>
+      val ui = sc.ui.get
+      val uiAddress = ui.appUIAddress
+      val uiHostPort = ui.appUIHostPort
+      assert(uiAddress.equals("http://" + uiHostPort))
+    }
+  }
+
+  test("verify appUIAddress contains the port") {
+    withSpark(newSparkContext()) { sc =>
+      val ui = sc.ui.get
+      val splitUIAddress = ui.appUIAddress.split(':')
+      val boundPort = ui.boundPort
+      assert(splitUIAddress(2).toInt == boundPort)
     }
   }
 }

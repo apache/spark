@@ -23,6 +23,7 @@ import java.util.{NoSuchElementException, Properties}
 import scala.xml.XML
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
  * An interface to build Schedulable tree
@@ -72,7 +73,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         schedulerAllocFile.map { f =>
           new FileInputStream(f)
         }.getOrElse {
-          getClass.getClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
+          Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
         }
       }
 

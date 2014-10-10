@@ -41,7 +41,6 @@ public class JavaLassoSuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    System.clearProperty("spark.driver.port");
   }
 
   int validatePrediction(List<LabeledPoint> validationData, LassoModel model) {
@@ -59,7 +58,7 @@ public class JavaLassoSuite implements Serializable {
   @Test
   public void runLassoUsingConstructor() {
     int nPoints = 10000;
-    double A = 2.0;
+    double A = 0.0;
     double[] weights = {-1.5, 1.0e-2};
 
     JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
@@ -80,7 +79,7 @@ public class JavaLassoSuite implements Serializable {
   @Test
   public void runLassoUsingStaticMethods() {
     int nPoints = 10000;
-    double A = 2.0;
+    double A = 0.0;
     double[] weights = {-1.5, 1.0e-2};
 
     JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,

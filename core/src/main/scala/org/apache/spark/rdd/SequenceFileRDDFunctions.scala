@@ -68,8 +68,8 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
 
     val keyClass = getWritableClass[K]
     val valueClass = getWritableClass[V]
-    val convertKey = !classOf[Writable].isAssignableFrom(self.getKeyClass)
-    val convertValue = !classOf[Writable].isAssignableFrom(self.getValueClass)
+    val convertKey = !classOf[Writable].isAssignableFrom(self.keyClass)
+    val convertValue = !classOf[Writable].isAssignableFrom(self.valueClass)
 
     logInfo("Saving as sequence file of type (" + keyClass.getSimpleName + "," +
       valueClass.getSimpleName + ")" )

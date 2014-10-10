@@ -24,11 +24,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
+import org.apache.spark.annotation.Experimental
 
 /**
+ * :: Experimental ::
  * A set of asynchronous RDD actions available through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
+@Experimental
 class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Logging {
 
   /**
@@ -109,7 +112,8 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Applies a function f to all elements of this RDD.
    */
   def foreachAsync(f: T => Unit): FutureAction[Unit] = {
-    self.context.submitJob[T, Unit, Unit](self, _.foreach(f), Range(0, self.partitions.size),
+    val cleanF = self.context.clean(f)
+    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.size),
       (index, data) => Unit, Unit)
   }
 

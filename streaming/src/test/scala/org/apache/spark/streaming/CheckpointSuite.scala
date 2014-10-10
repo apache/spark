@@ -18,10 +18,10 @@
 package org.apache.spark.streaming
 
 import java.io.File
+import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-import org.apache.commons.io.FileUtils
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
@@ -29,7 +29,6 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
-import org.apache.spark.SparkConf
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -46,13 +45,13 @@ class CheckpointSuite extends TestSuiteBase {
 
   override def beforeFunction() {
     super.beforeFunction()
-    FileUtils.deleteDirectory(new File(checkpointDir))
+    Utils.deleteRecursively(new File(checkpointDir))
   }
 
   override def afterFunction() {
     super.afterFunction()
     if (ssc != null) ssc.stop()
-    FileUtils.deleteDirectory(new File(checkpointDir))
+    Utils.deleteRecursively(new File(checkpointDir))
   }
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
@@ -71,7 +70,7 @@ class CheckpointSuite extends TestSuiteBase {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some((values.foldLeft(0)(_ + _) + state.getOrElse(0)))
+        Some((values.sum + state.getOrElse(0)))
       }
       st.map(x => (x, 1))
       .updateStateByKey(updateFunc)
@@ -215,7 +214,7 @@ class CheckpointSuite extends TestSuiteBase {
     val output = (1 to 10).map(x => Seq(("a", x))).toSeq
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some((values.foldLeft(0)(_ + _) + state.getOrElse(0)))
+        Some((values.sum + state.getOrElse(0)))
       }
       st.map(x => (x, 1))
         .updateStateByKey(updateFunc)
@@ -232,7 +231,7 @@ class CheckpointSuite extends TestSuiteBase {
   // failure, are re-processed or not.
   test("recovery with file input stream") {
     // Set up the streaming context and input streams
-    val testDir = Files.createTempDir()
+    val testDir = Utils.createTempDir()
     var ssc = new StreamingContext(master, framework, Seconds(1))
     ssc.checkpoint(checkpointDir)
     val fileStream = ssc.textFileStream(testDir.toString)
@@ -253,10 +252,10 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
 
     // Create files and advance manual clock to process them
-    //var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    // var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     Thread.sleep(1000)
     for (i <- Seq(1, 2, 3)) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
       // wait to make sure that the file is written such that it gets shown in the file listings
       Thread.sleep(1000)
     }
@@ -273,7 +272,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
       Thread.sleep(1000)
     }
 
@@ -289,7 +288,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Restart stream computation
     ssc.start()
     for (i <- Seq(7, 8, 9)) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
       Thread.sleep(1000)
     }
     Thread.sleep(1000)
@@ -327,6 +326,7 @@ class CheckpointSuite extends TestSuiteBase {
     )
     // To ensure that all the inputs were received correctly
     assert(expectedOutput.last === output.last)
+    Utils.deleteRecursively(testDir)
   }
 
 
@@ -369,7 +369,6 @@ class CheckpointSuite extends TestSuiteBase {
       "\n-------------------------------------------\n"
     )
     ssc = new StreamingContext(checkpointDir)
-    System.clearProperty("spark.driver.port")
     ssc.start()
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart

@@ -17,10 +17,11 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark._
-import SparkContext._
 import scala.util.Random
 import scala.collection.mutable
+
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
 
 /**
  * Transitive closure on a graph.
@@ -41,13 +42,9 @@ object SparkTC {
   }
 
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: SparkTC <master> [<slices>]")
-      System.exit(1)
-    }
-    val spark = new SparkContext(args(0), "SparkTC",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    val slices = if (args.length > 1) args(1).toInt else 2
+    val sparkConf = new SparkConf().setAppName("SparkTC")
+    val spark = new SparkContext(sparkConf)
+    val slices = if (args.length > 0) args(0).toInt else 2
     var tc = spark.parallelize(generateGraph, slices).cache()
 
     // Linear transitive closure: each round grows paths by one edge,
@@ -70,6 +67,6 @@ object SparkTC {
     } while (nextCount != oldCount)
 
     println("TC has " + tc.count() + " edges.")
-    System.exit(0)
+    spark.stop()
   }
 }

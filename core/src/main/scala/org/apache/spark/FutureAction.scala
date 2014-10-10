@@ -21,13 +21,16 @@ import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.util.Try
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
 
 /**
+ * :: Experimental ::
  * A future for the result of an action to support cancellation. This is an extension of the
  * Scala Future interface to support cancellation.
  */
+@Experimental
 trait FutureAction[T] extends Future[T] {
   // Note that we redefine methods of the Future trait here explicitly so we can specify a different
   // documentation (with reference to the word "action").
@@ -80,13 +83,24 @@ trait FutureAction[T] extends Future[T] {
    */
   @throws(classOf[Exception])
   def get(): T = Await.result(this, Duration.Inf)
+
+  /**
+   * Returns the job IDs run by the underlying async operation.
+   *
+   * This returns the current snapshot of the job list. Certain operations may run multiple
+   * jobs, so multiple calls to this method may return different lists.
+   */
+  def jobIds: Seq[Int]
+
 }
 
 
 /**
+ * :: Experimental ::
  * A [[FutureAction]] holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */
+@Experimental
 class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
   extends FutureAction[T] {
 
@@ -141,17 +155,21 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   private def awaitResult(): Try[T] = {
     jobWaiter.awaitResult() match {
       case JobSucceeded => scala.util.Success(resultFunc)
-      case JobFailed(e: Exception, _) => scala.util.Failure(e)
+      case JobFailed(e: Exception) => scala.util.Failure(e)
     }
   }
+
+  def jobIds = Seq(jobWaiter.jobId)
 }
 
 
 /**
+ * :: Experimental ::
  * A [[FutureAction]] for actions that could trigger multiple Spark jobs. Examples include take,
  * takeSample. Cancellation works by setting the cancelled flag to true and interrupting the
  * action thread if it is being blocked by a job.
  */
+@Experimental
 class ComplexFutureAction[T] extends FutureAction[T] {
 
   // Pointer to the thread that is executing the action. It is set when the action is run.
@@ -160,6 +178,8 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   // A flag indicating whether the future has been cancelled. This is used in case the future
   // is cancelled before the action was even run (and thus we have no thread to interrupt).
   @volatile private var _cancelled: Boolean = false
+
+  @volatile private var jobs: Seq[Int] = Nil
 
   // A promise used to signal the future.
   private val p = promise[T]()
@@ -209,6 +229,8 @@ class ComplexFutureAction[T] extends FutureAction[T] {
       }
     }
 
+    this.jobs = jobs ++ job.jobIds
+
     // Wait for the job to complete. If the action is cancelled (with an interrupt),
     // cancel the job and stop the execution. This is not in a synchronized block because
     // Await.ready eventually waits on the monitor in FutureJob.jobWaiter.
@@ -245,4 +267,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   override def isCompleted: Boolean = p.isCompleted
 
   override def value: Option[Try[T]] = p.future.value
+
+  def jobIds = jobs
+
 }

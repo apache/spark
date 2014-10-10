@@ -18,12 +18,16 @@
 package org.apache.spark.examples
 
 import scala.math.sqrt
-import cern.jet.math._
+
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
+import cern.jet.math._
 
 /**
  * Alternating least squares matrix factorization.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.recommendation.ALS
  */
 object LocalALS {
   // Parameters set through command line arguments
@@ -53,7 +57,6 @@ object LocalALS {
     for (i <- 0 until M; j <- 0 until U) {
       r.set(i, j, blas.ddot(ms(i), us(j)))
     }
-    //println("R: " + r)
     blas.daxpy(-1, targetR, r)
     val sumSqs = r.aggregate(Functions.plus, Functions.square)
     sqrt(sumSqs / (M * U))
@@ -107,7 +110,16 @@ object LocalALS {
     solved2D.viewColumn(0)
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of ALS and is given as an example!
+        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
+
     args match {
       case Array(m, u, f, iters) => {
         M = m.toInt
@@ -120,8 +132,11 @@ object LocalALS {
         System.exit(1)
       }
     }
+
+    showWarning()
+
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-    
+
     val R = generateR()
 
     // Initialize m and u randomly

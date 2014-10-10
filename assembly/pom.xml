@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -32,23 +32,23 @@
   <packaging>pom</packaging>
 
   <properties>
+    <sbt.project.name>assembly</sbt.project.name>
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
-    <spark.jar.basename>${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
+    <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
+    <deb.bin.filemode>744</deb.bin.filemode>
   </properties>
 
-  <repositories>
-    <!-- A repository in the local filesystem for the Py4J JAR, which is not in Maven central -->
-    <repository>
-      <id>lib</id>
-      <url>file://${project.basedir}/lib</url>
-    </repository>
-  </repositories>
-
   <dependencies>
+    <!-- Promote Guava to compile scope in this module so it's included while shading. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -80,14 +80,28 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>net.sf.py4j</groupId>
-      <artifactId>py4j</artifactId>
-      <version>0.8.1</version>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
+      </plugin>
       <!-- Use the shade plugin to create a big JAR with all the dependencies -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -104,6 +118,7 @@
             <filter>
               <artifact>*:*</artifact>
               <excludes>
+                <exclude>org/datanucleus/**</exclude>
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
@@ -118,6 +133,20 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+              <relocations>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>org.spark-project.guava</shadedPattern>
+                  <includes>
+                    <include>com.google.common.**</include>
+                  </includes>
+                  <excludes>
+                    <exclude>com/google/common/base/Absent*</exclude>
+                    <exclude>com/google/common/base/Optional*</exclude>
+                    <exclude>com/google/common/base/Present*</exclude>
+                  </excludes>
+                </relocation>
+              </relocations>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
@@ -129,6 +158,8 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
                   <resource>log4j.properties</resource>
                 </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
               </transformers>
             </configuration>
           </execution>
@@ -154,6 +185,21 @@
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-yarn_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hive</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -203,7 +249,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>buildnumber-maven-plugin</artifactId>
-            <version>1.1</version>
+            <version>1.2</version>
             <executions>
               <execution>
                 <phase>validate</phase>
@@ -270,7 +316,7 @@
                         <user>${deb.user}</user>
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/bin</prefix>
-                        <filemode>744</filemode>
+                        <filemode>${deb.bin.filemode}</filemode>
                       </mapper>
                     </data>
                     <data>
@@ -302,6 +348,16 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>kinesis-asl</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpclient</artifactId>
+          <version>${commons.httpclient.version}</version>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 </project>

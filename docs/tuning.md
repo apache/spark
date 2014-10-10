@@ -10,7 +10,7 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form](scala-programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](programming-guide.html#rdd-persistence), to
 decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
@@ -32,7 +32,7 @@ in your operations) and performance. It provides two serialization libraries:
   [`java.io.Externalizable`](http://docs.oracle.com/javase/6/docs/api/java/io/Externalizable.html).
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
-* [Kryo serialization](http://code.google.com/p/kryo/): Spark can also use
+* [Kryo serialization](https://github.com/EsotericSoftware/kryo): Spark can also use
   the Kryo library (version 2) to serialize objects more quickly. Kryo is significantly
   faster and more compact than Java serialization (often as much as 10x), but does not support all
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
@@ -48,7 +48,7 @@ Spark automatically includes Kryo serializers for the many commonly-used core Sc
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
 
 To register your own custom classes with Kryo, create a public class that extends
-[`org.apache.spark.serializer.KryoRegistrator`](api/core/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
+[`org.apache.spark.serializer.KryoRegistrator`](api/scala/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
 `spark.kryo.registrator` config property to point to it, as follows:
 
 {% highlight scala %}
@@ -68,7 +68,7 @@ conf.set("spark.kryo.registrator", "mypackage.MyRegistrator")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-The [Kryo documentation](http://code.google.com/p/kryo/) describes more advanced
+The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes more advanced
 registration options, such as adding custom serialization code.
 
 If your objects are large, you may also need to increase the `spark.kryoserializer.buffer.mb`
@@ -90,9 +90,10 @@ than the "raw" data inside their fields. This is due to several reasons:
 * Each distinct Java object has an "object header", which is about 16 bytes and contains information
   such as a pointer to its class. For an object with very little data in it (say one `Int` field), this
   can be bigger than the data.
-* Java Strings have about 40 bytes of overhead over the raw string data (since they store it in an
+* Java `String`s have about 40 bytes of overhead over the raw string data (since they store it in an
   array of `Char`s and keep extra data such as the length), and store each character
-  as *two* bytes due to Unicode. Thus a 10-character string can easily consume 60 bytes.
+  as *two* bytes due to `String`'s internal usage of UTF-16 encoding. Thus a 10-character string can
+  easily consume 60 bytes.
 * Common collection classes, such as `HashMap` and `LinkedList`, use linked data structures, where
   there is a "wrapper" object for each entry (e.g. `Map.Entry`). This object not only has a header,
   but also pointers (typically 8 bytes each) to the next object in the list.
@@ -129,7 +130,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](scala-programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
+the [RDD persistence API](programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -221,7 +222,7 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), and for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses the largest
 parent RDD's number of partitions. You can pass the level of parallelism as a second argument
-(see the [`spark.PairRDDFunctions`](api/core/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
+(see the [`spark.PairRDDFunctions`](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
 or set the config property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 
@@ -238,7 +239,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality](scala-programming-guide.html#broadcast-variables)
+Using the [broadcast functionality](programming-guide.html#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.
@@ -252,4 +253,4 @@ This has been a short guide to point out the main concerns you should know about
 Spark application -- most importantly, data serialization and memory tuning. For most programs,
 switching to Kryo serialization and persisting data in serialized form will solve most common
 performance issues. Feel free to ask on the
-[Spark mailing list](http://groups.google.com/group/spark-users) about other tuning best practices.
+[Spark mailing list](https://spark.apache.org/community.html) about other tuning best practices.

@@ -18,13 +18,16 @@
 package org.apache.spark.util
 
 import scala.collection.JavaConversions.mapAsJavaMap
+import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
+import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
+import akka.pattern.ask
+
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
 
 /**
  * Various utility classes for working with Akka.
@@ -41,15 +44,29 @@ private[spark] object AkkaUtils extends Logging {
    * If indestructible is set to true, the Actor System will continue running in the event
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
-  def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
-    conf: SparkConf, securityManager: SecurityManager): (ActorSystem, Int) = {
+  def createActorSystem(
+      name: String,
+      host: String,
+      port: Int,
+      conf: SparkConf,
+      securityManager: SecurityManager): (ActorSystem, Int) = {
+    val startService: Int => (ActorSystem, Int) = { actualPort =>
+      doCreateActorSystem(name, host, actualPort, conf, securityManager)
+    }
+    Utils.startServiceOnPort(port, startService, name)
+  }
+
+  private def doCreateActorSystem(
+      name: String,
+      host: String,
+      port: Int,
+      conf: SparkConf,
+      securityManager: SecurityManager): (ActorSystem, Int) = {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
-
     val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
-
-    val akkaFrameSize = conf.getInt("spark.akka.frameSize", 10)
+    val akkaFrameSize = maxFrameSizeBytes(conf)
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
     if (!akkaLogLifecycleEvents) {
@@ -92,7 +109,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.netty.tcp.port = $port
       |akka.remote.netty.tcp.tcp-nodelay = on
       |akka.remote.netty.tcp.connection-timeout = $akkaTimeout s
-      |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}MiB
+      |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}B
       |akka.remote.netty.tcp.execution-pool-size = $akkaThreads
       |akka.actor.default-dispatcher.throughput = $akkaBatchSize
       |akka.log-config-on-start = $logAkkaConfig
@@ -101,12 +118,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
       """.stripMargin))
 
-    val actorSystem = if (indestructible) {
-      IndestructibleActorSystem(name, akkaConf)
-    } else {
-      ActorSystem(name, akkaConf)
-    }
-
+    val actorSystem = ActorSystem(name, akkaConf)
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.getDefaultAddress.port.get
     (actorSystem, boundPort)
@@ -119,6 +131,74 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the default Spark timeout to use for Akka remote actor lookup. */
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.get("spark.akka.lookupTimeout", "30").toLong, "seconds")
+    Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
+  }
+
+  /** Returns the configured max frame size for Akka messages in bytes. */
+  def maxFrameSizeBytes(conf: SparkConf): Int = {
+    conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
+  }
+
+  /** Space reserved for extra data in an Akka message besides serialized task or task result. */
+  val reservedSizeBytes = 200 * 1024
+
+  /** Returns the configured number of times to retry connecting */
+  def numRetries(conf: SparkConf): Int = {
+    conf.getInt("spark.akka.num.retries", 3)
+  }
+
+  /** Returns the configured number of milliseconds to wait on each retry */
+  def retryWaitMs(conf: SparkConf): Int = {
+    conf.getInt("spark.akka.retry.wait", 3000)
+  }
+
+  /**
+   * Send a message to the given actor and get its result within a default timeout, or
+   * throw a SparkException if this fails.
+   */
+  def askWithReply[T](
+      message: Any,
+      actor: ActorRef,
+      retryAttempts: Int,
+      retryInterval: Int,
+      timeout: FiniteDuration): T = {
+    // TODO: Consider removing multiple attempts
+    if (actor == null) {
+      throw new SparkException("Error sending message as driverActor is null " +
+        "[message = " + message + "]")
+    }
+    var attempts = 0
+    var lastException: Exception = null
+    while (attempts < retryAttempts) {
+      attempts += 1
+      try {
+        val future = actor.ask(message)(timeout)
+        val result = Await.result(future, timeout)
+        if (result == null) {
+          throw new SparkException("Actor returned null")
+        }
+        return result.asInstanceOf[T]
+      } catch {
+        case ie: InterruptedException => throw ie
+        case e: Exception =>
+          lastException = e
+          logWarning("Error sending message in " + attempts + " attempts", e)
+      }
+      Thread.sleep(retryInterval)
+    }
+
+    throw new SparkException(
+      "Error sending message [message = " + message + "]", lastException)
+  }
+
+  def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
+    val driverActorSystemName = SparkEnv.driverActorSystemName
+    val driverHost: String = conf.get("spark.driver.host", "localhost")
+    val driverPort: Int = conf.getInt("spark.driver.port", 7077)
+    Utils.checkHost(driverHost, "Expected hostname")
+    val url = s"akka.tcp://$driverActorSystemName@$driverHost:$driverPort/user/$name"
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    logInfo(s"Connecting to $name: $url")
+    Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
 }

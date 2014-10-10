@@ -18,12 +18,12 @@
 package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.{Logging, SharedSparkContext}
 import org.apache.spark.SparkContext._
 
-class SortingSuite extends FunSuite with SharedSparkContext with ShouldMatchers with Logging {
+class SortingSuite extends FunSuite with SharedSparkContext with Matchers with Logging {
 
   test("sortByKey") {
     val pairs = sc.parallelize(Array((1, 0), (2, 0), (0, 0), (3, 0)), 2)

@@ -17,16 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
-import org.apache.spark.util.IntParam
-import org.apache.spark.util.MemoryParam
-
+import org.apache.spark.util.{Utils, IntParam, MemoryParam}
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
-class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
+private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
   var addJars: String = null
   var files: String = null
   var archives: String = null
@@ -36,21 +34,51 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var executorMemory = 1024 // MB
   var executorCores = 1
   var numExecutors = 2
-  var amQueue = sparkConf.get("QUEUE", "default")
+  var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
-  var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
-  // TODO
-  var inputFormatInfo: List[InputFormatInfo] = null
-  // TODO(harvey)
   var priority = 0
 
   parseArgs(args.toList)
+  loadEnvironmentArgs()
+
+  // Additional memory to allocate to containers
+  // For now, use driver's memory overhead as our AM container's memory overhead
+  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead", 
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead", 
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  validateArgs()
+
+  /** Load any default arguments provided through environment variables and Spark properties. */
+  private def loadEnvironmentArgs(): Unit = {
+    // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
+    // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
+    files = Option(files)
+      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
+      .orNull
+    archives = Option(archives)
+      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
+      .orNull
+  }
+
+  /**
+   * Fail fast if any arguments provided are invalid.
+   * This is intended to be called only after the provided arguments have been parsed.
+   */
+  private def validateArgs(): Unit = {
+    if (numExecutors <= 0) {
+      throw new IllegalArgumentException(
+        "You must specify at least 1 executor!\n" + getUsageMessage())
+    }
+  }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
-    val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
-    val inputFormatMap: HashMap[String, InputFormatInfo] = new HashMap[String, InputFormatInfo]()
-
+    val userArgsBuffer = new ArrayBuffer[String]()
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -63,15 +91,15 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           userClass = value
           args = tail
 
-        case ("--args") :: value :: tail =>
+        case ("--args" | "--arg") :: value :: tail =>
+          if (args(0) == "--args") {
+            println("--args is deprecated. Use --arg instead.")
+          }
           userArgsBuffer += value
           args = tail
 
         case ("--master-class" | "--am-class") :: value :: tail =>
-          if (args(0) == "--master-class") {
-            println("--master-class is deprecated. Use --am-class instead.")
-          }
-          amClass = value
+          println(s"${args(0)} is deprecated and is not used anymore.")
           args = tail
 
         case ("--master-memory" | "--driver-memory") :: MemoryParam(value) :: tail =>
@@ -123,31 +151,24 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case Nil =>
-          if (userClass == null) {
-            printUsageAndExit(1)
-          }
 
         case _ =>
-          printUsageAndExit(1, args)
+          throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
 
     userArgs = userArgsBuffer.readOnly
-    inputFormatInfo = inputFormatMap.values.toList
   }
 
-
-  def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
-    if (unknownParam != null) {
-      System.err.println("Unknown/unsupported param " + unknownParam)
-    }
-    System.err.println(
+  private def getUsageMessage(unknownParam: List[String] = null): String = {
+    val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
+    message +
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
       "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --args ARGS                Arguments to be passed to your application's main class.\n" +
-      "                             Mutliple invocations are possible, each will be passed in order.\n" +
+      "  --arg ARG                  Argument to be passed to your application's main class.\n" +
+      "                             Multiple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
       "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
@@ -157,8 +178,5 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
       "  --addJars jars             Comma separated list of local jars that want SparkContext.addJar to work with.\n" +
       "  --files files              Comma separated list of files to be distributed with the job.\n" +
       "  --archives archives        Comma separated list of archives to be distributed with the job."
-      )
-    System.exit(exitCode)
   }
-
 }

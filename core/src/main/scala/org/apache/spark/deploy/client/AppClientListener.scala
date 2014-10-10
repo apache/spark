@@ -30,8 +30,8 @@ private[spark] trait AppClientListener {
   /** Disconnection may be a temporary state, as we fail over to a new Master. */
   def disconnected(): Unit
 
-  /** Dead means that we couldn't find any Masters to connect to, and have given up. */
-  def dead(): Unit
+  /** An application death is an unrecoverable failure condition. */
+  def dead(reason: String): Unit
 
   def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int)
 

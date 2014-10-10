@@ -32,7 +32,7 @@ class WindowedDStream[T: ClassTag](
   extends DStream[T](parent.ssc) {
 
   if (!_windowDuration.isMultipleOf(parent.slideDuration)) {
-    throw new Exception("The window duration of windowed DStream (" + _slideDuration + ") " +
+    throw new Exception("The window duration of windowed DStream (" + _windowDuration + ") " +
     "must be a multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
   }
 

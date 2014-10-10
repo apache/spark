@@ -20,7 +20,7 @@ package org.apache.spark.deploy.worker
 import java.io._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.Map
+import scala.collection.Map
 
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
@@ -28,16 +28,18 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
-import org.apache.spark.Logging
-import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.{Command, DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
+ * This is currently only used in standalone cluster deploy mode.
  */
 private[spark] class DriverRunner(
+    val conf: SparkConf,
     val driverId: String,
     val workDir: File,
     val sparkHome: File,
@@ -74,22 +76,28 @@ private[spark] class DriverRunner(
 
           // Make sure user application jar is on the classpath
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val env = Map(driverDesc.command.environment.toSeq: _*)
-          env("SPARK_CLASSPATH") = env.getOrElse("SPARK_CLASSPATH", "") + s":$localJarFilename"
-          val newCommand = Command(driverDesc.command.mainClass,
-            driverDesc.command.arguments.map(substituteVariables), env)
+          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
+          val newCommand = Command(
+            driverDesc.command.mainClass,
+            driverDesc.command.arguments.map(substituteVariables),
+            driverDesc.command.environment,
+            classPath,
+            driverDesc.command.libraryPathEntries,
+            driverDesc.command.javaOpts)
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
-          launchDriver(command, env, driverDir, driverDesc.supervise)
+          launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)
         }
         catch {
           case e: Exception => finalException = Some(e)
         }
 
         val state =
-          if (killed) { DriverState.KILLED }
-          else if (finalException.isDefined) { DriverState.ERROR }
-          else {
+          if (killed) {
+            DriverState.KILLED
+          } else if (finalException.isDefined) {
+            DriverState.ERROR
+          } else {
             finalExitCode match {
               case Some(0) => DriverState.FINISHED
               case _ => DriverState.FAILED
@@ -137,8 +145,8 @@ private[spark] class DriverRunner(
 
     val jarPath = new Path(driverDesc.jarUrl)
 
-    val emptyConf = new Configuration()
-    val jarFileSystem = jarPath.getFileSystem(emptyConf)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val jarFileSystem = jarPath.getFileSystem(hadoopConf)
 
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
@@ -147,7 +155,7 @@ private[spark] class DriverRunner(
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
+      FileUtil.copy(jarFileSystem, jarPath, destPath, false, hadoopConf)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded

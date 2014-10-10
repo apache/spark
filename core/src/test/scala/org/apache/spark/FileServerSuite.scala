@@ -20,13 +20,14 @@ package org.apache.spark
 import java.io._
 import java.util.jar.{JarEntry, JarOutputStream}
 
-import com.google.common.io.Files
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
 
 class FileServerSuite extends FunSuite with LocalSparkContext {
 
+  @transient var tmpDir: File = _
   @transient var tmpFile: File = _
   @transient var tmpJarUrl: String = _
 
@@ -38,22 +39,24 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
   override def beforeAll() {
     super.beforeAll()
-    val tmpDir = new File(Files.createTempDir(), "test")
-    tmpDir.mkdir()
 
-    val textFile = new File(tmpDir, "FileServerSuite.txt")
+    tmpDir = Utils.createTempDir()
+    val testTempDir = new File(tmpDir, "test")
+    testTempDir.mkdir()
+
+    val textFile = new File(testTempDir, "FileServerSuite.txt")
     val pw = new PrintWriter(textFile)
     pw.println("100")
     pw.close()
-    
-    val jarFile = new File(tmpDir, "test.jar")
+
+    val jarFile = new File(testTempDir, "test.jar")
     val jarStream = new FileOutputStream(jarFile)
     val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
     System.setProperty("spark.authenticate", "false")
 
     val jarEntry = new JarEntry(textFile.getName)
     jar.putNextEntry(jarEntry)
-    
+
     val in = new FileInputStream(textFile)
     val buffer = new Array[Byte](10240)
     var nRead = 0
@@ -68,6 +71,11 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
     tmpFile = textFile
     tmpJarUrl = jarFile.toURI.toURL.toString
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    Utils.deleteRecursively(tmpDir)
   }
 
   test("Distributing files locally") {

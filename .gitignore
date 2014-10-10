@@ -1,12 +1,16 @@
 *~
+*.#*
+*#*#
 *.swp
 *.ipr
 *.iml
 *.iws
 .idea/
+.idea_modules/
 sbt/*.jar
 .settings
 .cache
+.generated-mima*
 /build/
 work/
 out/
@@ -14,9 +18,12 @@ out/
 third_party/libmesos.so
 third_party/libmesos.dylib
 conf/java-opts
-conf/spark-env.sh
-conf/streaming-env.sh
-conf/log4j.properties
+conf/*.sh
+conf/*.cmd
+conf/*.properties
+conf/*.conf
+conf/*.xml
+conf/slaves
 docs/_site
 docs/api
 target/
@@ -45,3 +52,13 @@ dist/
 spark-*-bin.tar.gz
 unit-tests.log
 /lib/
+rat-results.txt
+scalastyle.txt
+scalastyle-output.xml
+
+# For Hive
+metastore_db/
+metastore/
+warehouse/
+TempStatsStore/
+sql/hive-thriftserver/test_warehouses

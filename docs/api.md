@@ -1,13 +1,10 @@
 ---
 layout: global
-title: Spark API documentation (Scaladoc)
+title: Spark API Documentation
 ---
 
-Here you can find links to the Scaladoc generated for the Spark sbt subprojects.  If the following links don't work, try running `sbt/sbt doc` from the Spark project home directory.
+Here you can API docs for Spark and its submodules.
 
-- [Spark](api/core/index.html)
-- [Spark Examples](api/examples/index.html)
-- [Spark Streaming](api/streaming/index.html)
-- [Bagel](api/bagel/index.html)
-- [GraphX](api/graphx/index.html)
-- [PySpark](api/pyspark/index.html)
+- [Spark Scala API (Scaladoc)](api/scala/index.html)
+- [Spark Java API (Javadoc)](api/java/index.html)
+- [Spark Python API (Epydoc)](api/python/index.html)

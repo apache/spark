@@ -19,14 +19,14 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
-import com.google.protobuf.ByteString
+import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver, MesosNativeLibrary}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 
-import org.apache.spark.Logging
-import org.apache.spark.TaskState
+import org.apache.spark.{Logging, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.Utils
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.{SignalLogger, Utils}
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -52,7 +52,8 @@ private[spark] class MesosExecutorBackend
       slaveInfo: SlaveInfo) {
     logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
     this.driver = driver
-    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
+    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
+      Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     executor = new Executor(
       executorInfo.getExecutorId.getValue,
       slaveInfo.getHostname,
@@ -64,7 +65,7 @@ private[spark] class MesosExecutorBackend
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
-      executor.launchTask(this, taskId, taskInfo.getData.asReadOnlyByteBuffer)
+      executor.launchTask(this, taskId, taskInfo.getName, taskInfo.getData.asReadOnlyByteBuffer)
     }
   }
 
@@ -76,7 +77,8 @@ private[spark] class MesosExecutorBackend
     if (executor == null) {
       logError("Received KillTask but executor was null")
     } else {
-      executor.killTask(t.getValue.toLong)
+      // TODO: Determine the 'interruptOnCancel' property set for the given job.
+      executor.killTask(t.getValue.toLong, interruptThread = false)
     }
   }
 
@@ -92,11 +94,14 @@ private[spark] class MesosExecutorBackend
 /**
  * Entry point for Mesos executor.
  */
-private[spark] object MesosExecutorBackend {
+private[spark] object MesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
-    MesosNativeLibrary.load()
-    // Create a new Executor and start it running
-    val runner = new MesosExecutorBackend()
-    new MesosExecutorDriver(runner).run()
+    SignalLogger.register(log)
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+        MesosNativeLibrary.load()
+        // Create a new Executor and start it running
+        val runner = new MesosExecutorBackend()
+        new MesosExecutorDriver(runner).run()
+    }
   }
 }

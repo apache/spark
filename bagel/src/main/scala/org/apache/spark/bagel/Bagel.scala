@@ -72,6 +72,7 @@ object Bagel extends Logging {
     var verts = vertices
     var msgs = messages
     var noActivity = false
+    var lastRDD: RDD[(K, (V, Array[M]))] = null
     do {
       logInfo("Starting superstep " + superstep + ".")
       val startTime = System.currentTimeMillis
@@ -83,6 +84,10 @@ object Bagel extends Logging {
       val superstep_ = superstep  // Create a read-only copy of superstep for capture in closure
       val (processed, numMsgs, numActiveVerts) =
         comp[K, V, M, C](sc, grouped, compute(_, _, aggregated, superstep_), storageLevel)
+      if (lastRDD != null) {
+        lastRDD.unpersist(false)
+      }
+      lastRDD = processed
 
       val timeTaken = System.currentTimeMillis - startTime
       logInfo("Superstep %d took %d s".format(superstep, timeTaken / 1000))
@@ -220,20 +225,23 @@ object Bagel extends Logging {
    */
   private def comp[K: Manifest, V <: Vertex, M <: Message[K], C](
     sc: SparkContext,
-    grouped: RDD[(K, (Seq[C], Seq[V]))],
+    grouped: RDD[(K, (Iterable[C], Iterable[V]))],
     compute: (V, Option[C]) => (V, Array[M]),
     storageLevel: StorageLevel
   ): (RDD[(K, (V, Array[M]))], Int, Int) = {
     var numMsgs = sc.accumulator(0)
     var numActiveVerts = sc.accumulator(0)
-    val processed = grouped.flatMapValues {
-      case (_, vs) if vs.size == 0 => None
-      case (c, vs) =>
+    val processed = grouped.mapValues(x => (x._1.iterator, x._2.iterator))
+      .flatMapValues {
+      case (_, vs) if !vs.hasNext => None
+      case (c, vs) => {
         val (newVert, newMsgs) =
-          compute(vs(0), c match {
-            case Seq(comb) => Some(comb)
-            case Seq() => None
-          })
+          compute(vs.next,
+            c.hasNext match {
+              case true => Some(c.next)
+              case false => None
+            }
+          )
 
         numMsgs += newMsgs.size
         if (newVert.active) {
@@ -241,6 +249,7 @@ object Bagel extends Logging {
         }
 
         Some((newVert, newMsgs))
+      }
     }.persist(storageLevel)
 
     // Force evaluation of processed RDD for accurate performance measurements

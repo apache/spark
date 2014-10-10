@@ -23,14 +23,17 @@ import com.google.common.io.Files
 
 import org.apache.spark.util.Utils
 
-private[spark] class HttpFileServer(securityManager: SecurityManager) extends Logging {
-  
+private[spark] class HttpFileServer(
+    securityManager: SecurityManager,
+    requestedPort: Int = 0)
+  extends Logging {
+
   var baseDir : File = null
   var fileDir : File = null
   var jarDir : File = null
   var httpServer : HttpServer = null
   var serverUri : String = null
-  
+
   def initialize() {
     baseDir = Utils.createTempDir()
     fileDir = new File(baseDir, "files")
@@ -38,29 +41,36 @@ private[spark] class HttpFileServer(securityManager: SecurityManager) extends Lo
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(baseDir, securityManager)
+    httpServer = new HttpServer(baseDir, securityManager, requestedPort, "HTTP file server")
     httpServer.start()
     serverUri = httpServer.uri
     logDebug("HTTP file server started at: " + serverUri)
   }
-  
+
   def stop() {
     httpServer.stop()
   }
-  
+
   def addFile(file: File) : String = {
     addFileToDir(file, fileDir)
     serverUri + "/files/" + file.getName
   }
-  
+
   def addJar(file: File) : String = {
     addFileToDir(file, jarDir)
     serverUri + "/jars/" + file.getName
   }
-  
+
   def addFileToDir(file: File, dir: File) : String = {
+    // Check whether the file is a directory. If it is, throw a more meaningful exception.
+    // If we don't catch this, Guava throws a very confusing error message:
+    //   java.io.FileNotFoundException: [file] (No such file or directory)
+    // even though the directory ([file]) exists.
+    if (file.isDirectory) {
+      throw new IllegalArgumentException(s"$file cannot be a directory.")
+    }
     Files.copy(file, new File(dir, file.getName))
     dir + "/" + file.getName
   }
-  
+
 }

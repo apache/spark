@@ -27,9 +27,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
-import it.unimi.dsi.fastutil.ints.IntOpenHashSet
-
 import org.apache.spark.Logging
+import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
@@ -181,7 +180,7 @@ private[spark] object SizeEstimator extends Logging {
     }
   }
 
-  // Estimat the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
+  // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
   private val ARRAY_SIZE_FOR_SAMPLING = 200
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
@@ -207,7 +206,7 @@ private[spark] object SizeEstimator extends Logging {
         // Estimate the size of a large array by sampling elements without replacement.
         var size = 0.0
         val rand = new Random(42)
-        val drawn = new IntOpenHashSet(ARRAY_SAMPLE_SIZE)
+        val drawn = new OpenHashSet[Int](ARRAY_SAMPLE_SIZE)
         for (i <- 0 until ARRAY_SAMPLE_SIZE) {
           var index = 0
           do {

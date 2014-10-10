@@ -19,13 +19,18 @@ package main.scala
 
 import scala.util.Try
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 
 object SimpleApp {
   def main(args: Array[String]) {
+    val conf = sys.env.get("SPARK_AUDIT_MASTER") match {
+      case Some(master) => new SparkConf().setAppName("Simple Spark App").setMaster(master)
+      case None => new SparkConf().setAppName("Simple Spark App")
+    }
     val logFile = "input.txt"
-    val sc = new SparkContext("local", "Simple App")
+    val sc = new SparkContext(conf)
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
@@ -43,6 +48,13 @@ object SimpleApp {
     }
     if (foundGanglia) {
       println("Ganglia sink was loaded via spark-core")
+      System.exit(-1)
+    }
+
+    // Remove kinesis from default build due to ASL license issue
+    val foundKinesis = Try(Class.forName("org.apache.spark.streaming.kinesis.KinesisUtils")).isSuccess
+    if (foundKinesis) {
+      println("Kinesis was loaded via spark-core")
       System.exit(-1)
     }
   }

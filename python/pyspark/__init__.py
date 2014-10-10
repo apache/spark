@@ -20,34 +20,46 @@ PySpark is the Python API for Spark.
 
 Public classes:
 
-  - L{SparkContext<pyspark.context.SparkContext>}
+  - :class:`SparkContext`:
       Main entry point for Spark functionality.
-  - L{RDD<pyspark.rdd.RDD>}
+  - L{RDD}
       A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-  - L{Broadcast<pyspark.broadcast.Broadcast>}
+  - L{Broadcast}
       A broadcast variable that gets reused across tasks.
-  - L{Accumulator<pyspark.accumulators.Accumulator>}
+  - L{Accumulator}
       An "add-only" shared variable that tasks can only add values to.
-  - L{SparkConf<pyspark.conf.SparkConf>}
+  - L{SparkConf}
       For configuring Spark.
-  - L{SparkFiles<pyspark.files.SparkFiles>}
+  - L{SparkFiles}
       Access files shipped with jobs.
-  - L{StorageLevel<pyspark.storagelevel.StorageLevel>}
+  - L{StorageLevel}
       Finer-grained cache persistence levels.
+
 """
 
-
-
+# The following block allows us to import python's random instead of mllib.random for scripts in
+# mllib that depend on top level pyspark packages, which transitively depend on python's random.
+# Since Python's import logic looks for modules in the current package first, we eliminate
+# mllib.random as a candidate for C{import random} by removing the first search path, the script's
+# location, in order to force the loader to look in Python's top-level modules for C{random}.
 import sys
-import os
-sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j-0.8.1-src.zip"))
-
+s = sys.path.pop(0)
+import random
+sys.path.insert(0, s)
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
+from pyspark.accumulators import Accumulator, AccumulatorParam
+from pyspark.broadcast import Broadcast
+from pyspark.serializers import MarshalSerializer, PickleSerializer
 
+# for back compatibility
+from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 
-__all__ = ["SparkConf", "SparkContext", "RDD", "SparkFiles", "StorageLevel"]
+__all__ = [
+    "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
+    "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
+]

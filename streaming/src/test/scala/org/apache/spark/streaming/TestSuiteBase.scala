@@ -17,19 +17,19 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
-import org.apache.spark.streaming.util.ManualClock
+import java.io.{ObjectInputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
 import scala.reflect.ClassTag
 
-import java.io.{ObjectInputStream, IOException}
-
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{SparkContext, SparkConf, Logging}
+import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -119,7 +119,11 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def batchDuration = Seconds(1)
 
   // Directory where the checkpoint data will be saved
-  def checkpointDir = "checkpoint"
+  lazy val checkpointDir = {
+    val dir = Utils.createTempDir()
+    logDebug(s"checkpointDir: $dir")
+    dir.toString
+  }
 
   // Number of partitions of the input parallel collections created for testing
   def numInputPartitions = 2
@@ -137,7 +141,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
-    .set("spark.cleaner.ttl", StreamingContext.DEFAULT_CLEANER_TTL.toString)
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )
@@ -154,8 +157,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   // Default after function for any streaming test suite. Override this
   // if you want to add your stuff to "after" (i.e., don't call after { } )
   def afterFunction() {
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.streaming.clock")
   }
 
   before(beforeFunction)
@@ -244,7 +246,9 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     logInfo("numBatches = " + numBatches + ", numExpectedOutput = " + numExpectedOutput)
 
     // Get the output buffer
-    val outputStream = ssc.graph.getOutputStreams.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
+    val outputStream = ssc.graph.getOutputStreams.
+      filter(_.isInstanceOf[TestOutputStreamWithPartitions[_]]).
+      head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     val output = outputStream.output
 
     try {
@@ -277,7 +281,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
-      Thread.sleep(500) // Give some time for the forgetting old RDDs to complete
+      Thread.sleep(100) // Give some time for the forgetting old RDDs to complete
     } catch {
       case e: Exception => {e.printStackTrace(); throw e}
     } finally {

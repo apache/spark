@@ -23,10 +23,22 @@ package org.apache.spark.scheduler
  * machines become available and can launch tasks on them.
  */
 private[spark] trait SchedulerBackend {
+  private val appId = "spark-application-" + System.currentTimeMillis
+
   def start(): Unit
   def stop(): Unit
   def reviveOffers(): Unit
   def defaultParallelism(): Int
 
-  def killTask(taskId: Long, executorId: String): Unit = throw new UnsupportedOperationException
+  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
+    throw new UnsupportedOperationException
+  def isReady(): Boolean = true
+
+  /**
+   * Get an application ID associated with the job.
+   *
+   * @return An application ID
+   */
+  def applicationId(): String = appId
+
 }

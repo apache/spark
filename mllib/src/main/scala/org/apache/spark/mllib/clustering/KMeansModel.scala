@@ -17,26 +17,45 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable {
+class KMeansModel (val clusterCenters: Array[Vector]) extends Serializable {
+
   /** Total number of clusters. */
   def k: Int = clusterCenters.length
 
-  /** Return the cluster index that a given point belongs to. */
-  def predict(point: Array[Double]): Int = {
-    KMeans.findClosest(clusterCenters, point)._1
+  /** Returns the cluster index that a given point belongs to. */
+  def predict(point: Vector): Int = {
+    KMeans.findClosest(clusterCentersWithNorm, new BreezeVectorWithNorm(point))._1
   }
+
+  /** Maps given points to their cluster indices. */
+  def predict(points: RDD[Vector]): RDD[Int] = {
+    val centersWithNorm = clusterCentersWithNorm
+    val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
+    points.map(p => KMeans.findClosest(bcCentersWithNorm.value, new BreezeVectorWithNorm(p))._1)
+  }
+
+  /** Maps given points to their cluster indices. */
+  def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
+    predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
    * model on the given data.
    */
-  def computeCost(data: RDD[Array[Double]]): Double = {
-    data.map(p => KMeans.pointCost(clusterCenters, p)).sum()
+  def computeCost(data: RDD[Vector]): Double = {
+    val centersWithNorm = clusterCentersWithNorm
+    val bcCentersWithNorm = data.context.broadcast(centersWithNorm)
+    data.map(p => KMeans.pointCost(bcCentersWithNorm.value, new BreezeVectorWithNorm(p))).sum()
   }
+
+  private def clusterCentersWithNorm: Iterable[BreezeVectorWithNorm] =
+    clusterCenters.map(new BreezeVectorWithNorm(_))
 }

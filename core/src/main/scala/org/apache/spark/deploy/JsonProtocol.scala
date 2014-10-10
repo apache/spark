@@ -43,7 +43,6 @@ private[spark] object JsonProtocol {
     ("starttime" -> obj.startTime) ~
     ("id" -> obj.id) ~
     ("name" -> obj.desc.name) ~
-    ("appuiurl" -> obj.appUiUrl) ~
     ("cores" -> obj.desc.maxCores) ~
     ("user" ->  obj.desc.user) ~
     ("memoryperslave" -> obj.desc.memoryPerSlave) ~
@@ -57,7 +56,6 @@ private[spark] object JsonProtocol {
     ("cores" -> obj.maxCores) ~
     ("memoryperslave" -> obj.memoryPerSlave) ~
     ("user" -> obj.user) ~
-    ("sparkhome" -> obj.sparkHome) ~
     ("command" -> obj.command.toString)
   }
 

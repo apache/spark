@@ -22,7 +22,10 @@ import java.util.Random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * A pseudorandom sampler. It is possible to change the sampled item type. For example, we might
  * want to add weights for stratified sampling or importance sampling. Should only use
  * transformations that are tied to the sampler and cannot be applied after sampling.
@@ -30,6 +33,7 @@ import cern.jet.random.engine.DRand
  * @tparam T item type
  * @tparam U sampled item type
  */
+@DeveloperApi
 trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable {
 
   /** take a random sample */
@@ -40,6 +44,7 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 }
 
 /**
+ * :: DeveloperApi ::
  * A sampler based on Bernoulli trials.
  *
  * @param lb lower bound of the acceptance range
@@ -47,42 +52,50 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
  * @param complement whether to use the complement of the range specified, default to false
  * @tparam T item type
  */
+@DeveloperApi
 class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
-    (implicit random: Random = new XORShiftRandom)
   extends RandomSampler[T, T] {
 
-  def this(ratio: Double)(implicit random: Random = new XORShiftRandom)
-    = this(0.0d, ratio)(random)
+  private[random] var rng: Random = new XORShiftRandom
 
-  override def setSeed(seed: Long) = random.setSeed(seed)
+  def this(ratio: Double) = this(0.0d, ratio)
+
+  override def setSeed(seed: Long) = rng.setSeed(seed)
 
   override def sample(items: Iterator[T]): Iterator[T] = {
     items.filter { item =>
-      val x = random.nextDouble()
+      val x = rng.nextDouble()
       (x >= lb && x < ub) ^ complement
     }
   }
 
-  override def clone = new BernoulliSampler[T](lb, ub)
+  /**
+   *  Return a sampler that is the complement of the range specified of the current sampler.
+   */
+  def cloneComplement(): BernoulliSampler[T] = new BernoulliSampler[T](lb, ub, !complement)
+
+  override def clone = new BernoulliSampler[T](lb, ub, complement)
 }
 
 /**
+ * :: DeveloperApi ::
  * A sampler based on values drawn from Poisson distribution.
  *
- * @param poisson a Poisson random number generator
+ * @param mean Poisson mean
  * @tparam T item type
  */
-class PoissonSampler[T](mean: Double)
-    (implicit var poisson: Poisson = new Poisson(mean, new DRand))
-  extends RandomSampler[T, T] {
+@DeveloperApi
+class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
+
+  private[random] var rng = new Poisson(mean, new DRand)
 
   override def setSeed(seed: Long) {
-    poisson = new Poisson(mean, new DRand(seed.toInt))
+    rng = new Poisson(mean, new DRand(seed.toInt))
   }
 
   override def sample(items: Iterator[T]): Iterator[T] = {
     items.flatMap { item =>
-      val count = poisson.nextInt()
+      val count = rng.nextInt()
       if (count == 0) {
         Iterator.empty
       } else {

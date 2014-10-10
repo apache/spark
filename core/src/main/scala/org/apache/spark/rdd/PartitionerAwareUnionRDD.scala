@@ -33,7 +33,7 @@ class PartitionerAwareUnionRDDPartition(
     val idx: Int
   ) extends Partition {
   var parents = rdds.map(_.partitions(idx)).toArray
-  
+
   override val index = idx
   override def hashCode(): Int = idx
 

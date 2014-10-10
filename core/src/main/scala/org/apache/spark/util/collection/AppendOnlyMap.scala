@@ -19,7 +19,12 @@ package org.apache.spark.util.collection
 
 import java.util.{Arrays, Comparator}
 
+import com.google.common.hash.Hashing
+
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * A simple open hash table optimized for the append-only use case, where keys
  * are never removed, but the value for each key may be changed.
  *
@@ -29,11 +34,13 @@ import java.util.{Arrays, Comparator}
  *
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
-private[spark]
-class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
-  V)] with Serializable {
+@DeveloperApi
+class AppendOnlyMap[K, V](initialCapacity: Int = 64)
+  extends Iterable[(K, V)] with Serializable {
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
+
+  private val LOAD_FACTOR = 0.7
 
   private var capacity = nextPowerOf2(initialCapacity)
   private var mask = capacity - 1
@@ -51,8 +58,6 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
   // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
   private var destroyed = false
   private val destructionMessage = "Map state is invalid from destructive sorting!"
-
-  private val LOAD_FACTOR = 0.7
 
   /** Get the value for a given key */
   def apply(key: K): V = {
@@ -196,11 +201,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
 
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
-   * We use the Murmur Hash 3 finalization step that's also used in fastutil.
    */
-  private def rehash(h: Int): Int = {
-    it.unimi.dsi.fastutil.HashCommon.murmurHash3(h)
-  }
+  private def rehash(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   /** Double the table's size and re-hash everything */
   protected def growTable() {
@@ -252,26 +254,21 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
    * Return an iterator of the map in sorted order. This provides a way to sort the map without
    * using additional memory, at the expense of destroying the validity of the map.
    */
-  def destructiveSortedIterator(cmp: Comparator[(K, V)]): Iterator[(K, V)] = {
+  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)] = {
     destroyed = true
     // Pack KV pairs into the front of the underlying array
     var keyIndex, newIndex = 0
     while (keyIndex < capacity) {
       if (data(2 * keyIndex) != null) {
-        data(newIndex) = (data(2 * keyIndex), data(2 * keyIndex + 1))
+        data(2 * newIndex) = data(2 * keyIndex)
+        data(2 * newIndex + 1) = data(2 * keyIndex + 1)
         newIndex += 1
       }
       keyIndex += 1
     }
     assert(curSize == newIndex + (if (haveNullValue) 1 else 0))
 
-    // Sort by the given ordering
-    val rawOrdering = new Comparator[AnyRef] {
-      def compare(x: AnyRef, y: AnyRef): Int = {
-        cmp.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
-      }
-    }
-    Arrays.sort(data, 0, newIndex, rawOrdering)
+    new Sorter(new KVArraySortDataFormat[K, AnyRef]).sort(data, 0, newIndex, keyComparator)
 
     new Iterator[(K, V)] {
       var i = 0
@@ -282,7 +279,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
           nullValueReady = false
           (null.asInstanceOf[K], nullValue)
         } else {
-          val item = data(i).asInstanceOf[(K, V)]
+          val item = (data(2 * i).asInstanceOf[K], data(2 * i + 1).asInstanceOf[V])
           i += 1
           item
         }

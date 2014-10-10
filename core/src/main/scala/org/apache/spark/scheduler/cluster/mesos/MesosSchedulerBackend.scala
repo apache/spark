@@ -24,13 +24,13 @@ import java.util.Collections
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import com.google.protobuf.ByteString
+import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
 import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
-import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
 /**
@@ -41,8 +41,7 @@ import org.apache.spark.util.Utils
 private[spark] class MesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    master: String,
-    appName: String)
+    master: String)
   extends SchedulerBackend
   with MScheduler
   with Logging {
@@ -63,6 +62,8 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
+  @volatile var appId: String = _
+
   override def start() {
     synchronized {
       classLoader = Thread.currentThread.getContextClassLoader
@@ -71,7 +72,7 @@ private[spark] class MesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()
@@ -87,10 +88,26 @@ private[spark] class MesosSchedulerBackend(
   }
 
   def createExecutorInfo(execId: String): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-      "Spark home is not set; set it through the spark.home system " +
-      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+    val executorSparkHome = sc.conf.getOption("spark.mesos.executor.home")
+      .orElse(sc.getSparkHome()) // Fall back to driver Spark home for backward compatibility
+      .getOrElse {
+        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+      }
     val environment = Environment.newBuilder()
+    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val extraLibraryPath = sc.conf.getOption("spark.executor.extraLibraryPath").map { lp =>
+      s"-Djava.library.path=$lp"
+    }
+    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    environment.addVariables(
+      Environment.Variable.newBuilder()
+        .setName("SPARK_EXECUTOR_OPTS")
+        .setValue(extraOpts)
+        .build())
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
@@ -101,7 +118,7 @@ private[spark] class MesosSchedulerBackend(
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
+      command.setValue(new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath)
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
@@ -109,15 +126,24 @@ private[spark] class MesosSchedulerBackend(
       command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
+    val cpus = Resource.newBuilder()
+      .setName("cpus")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Value.Scalar.newBuilder()
+        .setValue(scheduler.CPUS_PER_TASK).build())
+      .build()
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(sc.executorMemory).build())
+      .setScalar(
+        Value.Scalar.newBuilder()
+          .setValue(MemoryUtils.calculateTotalMemory(sc)).build())
       .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
+      .addResources(cpus)
       .addResources(memory)
       .build()
   }
@@ -153,7 +179,8 @@ private[spark] class MesosSchedulerBackend(
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     val oldClassLoader = setClassLoader()
     try {
-      logInfo("Registered as framework ID " + frameworkId.getValue)
+      appId = frameworkId.getValue
+      logInfo("Registered as framework ID " + appId)
       registeredLock.synchronized {
         isRegistered = true
         registeredLock.notifyAll()
@@ -176,7 +203,7 @@ private[spark] class MesosSchedulerBackend(
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
 
   /**
-   * Method called by Mesos to offer resources on slaves. We resond by asking our active task sets
+   * Method called by Mesos to offer resources on slaves. We respond by asking our active task sets
    * for tasks in order of priority. We fill each node with tasks in a round-robin manner so that
    * tasks are balanced across the cluster.
    */
@@ -186,35 +213,47 @@ private[spark] class MesosSchedulerBackend(
       synchronized {
         // Build a big list of the offerable workers, and remember their indices so that we can
         // figure out which Offer to reply to for each worker
-        val offerableIndices = new ArrayBuffer[Int]
         val offerableWorkers = new ArrayBuffer[WorkerOffer]
+        val offerableIndices = new HashMap[String, Int]
 
-        def enoughMemory(o: Offer) = {
+        def sufficientOffer(o: Offer) = {
           val mem = getResource(o.getResourcesList, "mem")
+          val cpus = getResource(o.getResourcesList, "cpus")
           val slaveId = o.getSlaveId.getValue
-          mem >= sc.executorMemory || slaveIdsWithExecutors.contains(slaveId)
+          (mem >= MemoryUtils.calculateTotalMemory(sc) &&
+            // need at least 1 for executor, 1 for task
+            cpus >= 2 * scheduler.CPUS_PER_TASK) ||
+            (slaveIdsWithExecutors.contains(slaveId) &&
+              cpus >= scheduler.CPUS_PER_TASK)
         }
 
-        for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
-          offerableIndices += index
+        for ((offer, index) <- offers.zipWithIndex if sufficientOffer(offer)) {
+          val slaveId = offer.getSlaveId.getValue
+          offerableIndices.put(slaveId, index)
+          val cpus = if (slaveIdsWithExecutors.contains(slaveId)) {
+            getResource(offer.getResourcesList, "cpus").toInt
+          } else {
+            // If the executor doesn't exist yet, subtract CPU for executor
+            getResource(offer.getResourcesList, "cpus").toInt -
+              scheduler.CPUS_PER_TASK
+          }
           offerableWorkers += new WorkerOffer(
             offer.getSlaveId.getValue,
             offer.getHostname,
-            getResource(offer.getResourcesList, "cpus").toInt)
+            cpus)
         }
 
         // Call into the TaskSchedulerImpl
         val taskLists = scheduler.resourceOffers(offerableWorkers)
 
         // Build a list of Mesos tasks for each slave
-        val mesosTasks = offers.map(o => Collections.emptyList[MesosTaskInfo]())
+        val mesosTasks = offers.map(o => new JArrayList[MesosTaskInfo]())
         for ((taskList, index) <- taskLists.zipWithIndex) {
           if (!taskList.isEmpty) {
-            val offerNum = offerableIndices(index)
-            val slaveId = offers(offerNum).getSlaveId.getValue
-            slaveIdsWithExecutors += slaveId
-            mesosTasks(offerNum) = new JArrayList[MesosTaskInfo](taskList.size)
             for (taskDesc <- taskList) {
+              val slaveId = taskDesc.executorId
+              val offerNum = offerableIndices(slaveId)
+              slaveIdsWithExecutors += slaveId
               taskIdToSlaveId(taskDesc.taskId) = slaveId
               mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
             }
@@ -224,7 +263,7 @@ private[spark] class MesosSchedulerBackend(
         // Reply to the offers
         val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
         for (i <- 0 until offers.size) {
-          d.launchTasks(offers(i).getId, mesosTasks(i), filters)
+          d.launchTasks(Collections.singleton(offers(i).getId), mesosTasks(i), filters)
         }
       }
     } finally {
@@ -247,7 +286,7 @@ private[spark] class MesosSchedulerBackend(
     val cpuResource = Resource.newBuilder()
       .setName("cpus")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(1).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(scheduler.CPUS_PER_TASK).build())
       .build()
     MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
@@ -333,6 +372,20 @@ private[spark] class MesosSchedulerBackend(
     recordSlaveLost(d, slaveId, ExecutorExited(status))
   }
 
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+    driver.killTask(
+      TaskID.newBuilder()
+        .setValue(taskId.toString).build()
+    )
+  }
+
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+
+  override def applicationId(): String =
+    Option(appId).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
+
 }

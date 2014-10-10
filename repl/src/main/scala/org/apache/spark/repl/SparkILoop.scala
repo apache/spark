@@ -8,28 +8,32 @@
 package org.apache.spark.repl
 
 
+import java.net.URL
+
+import scala.reflect.io.AbstractFile
 import scala.tools.nsc._
+import scala.tools.nsc.backend.JavaPlatform
 import scala.tools.nsc.interpreter._
 
-import scala.tools.nsc.interpreter.{ Results => IR }
-import Predef.{ println => _, _ }
-import java.io.{ BufferedReader, FileReader }
+import scala.tools.nsc.interpreter.{Results => IR}
+import Predef.{println => _, _}
+import java.io.{BufferedReader, FileReader}
+import java.net.URI
 import java.util.concurrent.locks.ReentrantLock
 import scala.sys.process.Process
 import scala.tools.nsc.interpreter.session._
-import scala.util.Properties.{ jdkHome, javaVersion }
-import scala.tools.util.{ Javap }
+import scala.util.Properties.{jdkHome, javaVersion}
+import scala.tools.util.{Javap}
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ops
-import scala.tools.nsc.util.{ ClassPath, Exceptional, stringFromWriter, stringFromStream }
+import scala.tools.nsc.util._
 import scala.tools.nsc.interpreter._
-import scala.tools.nsc.io.{ File, Directory }
+import scala.tools.nsc.io.{File, Directory}
 import scala.reflect.NameTransformer._
-import scala.tools.nsc.util.ScalaClassLoader
 import scala.tools.nsc.util.ScalaClassLoader._
 import scala.tools.util._
-import scala.language.{implicitConversions, existentials}
+import scala.language.{implicitConversions, existentials, postfixOps}
 import scala.reflect.{ClassTag, classTag}
 import scala.tools.reflect.StdRuntimeTags._
 
@@ -39,6 +43,7 @@ import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
  *  around the Interpreter class.
@@ -130,7 +135,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   def history = in.history
 
   /** The context class loader at the time this object was created */
-  protected val originalClassLoader = Thread.currentThread.getContextClassLoader
+  protected val originalClassLoader = Utils.getContextOrSparkClassLoader
 
   // classpath entries added via :cp
   var addedClasspath: String = ""
@@ -177,7 +182,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     override lazy val formatting = new Formatting {
       def prompt = SparkILoop.this.prompt
     }
-    override protected def parentClassLoader =  SparkHelper.explicitParentLoader(settings).getOrElse(classOf[SparkILoop].getClassLoader)
+    override protected def parentClassLoader = SparkHelper.explicitParentLoader(settings).getOrElse(classOf[SparkILoop].getClassLoader)
   }
 
   /** Create a new interpreter. */
@@ -185,8 +190,16 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     require(settings != null)
 
     if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    val addedJars =
+      if (Utils.isWindows) {
+        // Strip any URI scheme prefix so we can add the correct path to the classpath
+        // e.g. file:/C:/my/path.jar -> C:/my/path.jar
+        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
+      } else {
+        SparkILoop.getAddedJars
+      }
     // work around for Scala bug
-    val totalClassPath = SparkILoop.getAddedJars.foldLeft(
+    val totalClassPath = addedJars.foldLeft(
       settings.classpath.value)((l, r) => ClassPath.join(l, r))
     this.settings.classpath.value = totalClassPath
 
@@ -228,6 +241,20 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       // exact match OK even if otherwise appears ambiguous
       case xs       => xs find (_.name == cmd)
     }
+  }
+  private var fallbackMode = false 
+
+  private def toggleFallbackMode() {
+    val old = fallbackMode
+    fallbackMode = !old
+    System.setProperty("spark.repl.fallback", fallbackMode.toString)
+    echo(s"""
+      |Switched ${if (old) "off" else "on"} fallback mode without restarting.
+      |       If you have defined classes in the repl, it would 
+      |be good to redefine them incase you plan to use them. If you still run
+      |into issues it would be good to restart the repl and turn on `:fallback` 
+      |mode as first command.
+      """.stripMargin)
   }
 
   /** Show the history */
@@ -298,6 +325,9 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     nullary("reset", "reset the repl to its initial state, forgetting all session entries", resetCommand),
     shCommand,
     nullary("silent", "disable/enable automatic printing of results", verbosity),
+    nullary("fallback", """
+                           |disable/enable advanced repl changes, these fix some issues but may introduce others. 
+                           |This mode will be removed once these fixes stablize""".stripMargin, toggleFallbackMode),
     cmd("type", "[-v] <expr>", "display the type of an expression without evaluating it", typeCommand),
     nullary("warnings", "show the suppressed warnings from the most recent line which had any", warningsCommand)
   )
@@ -556,29 +586,27 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     if (isReplPower) powerCommands else Nil
   )*/
 
-  val replayQuestionMessage =
+  private val replayQuestionMessage =
     """|That entry seems to have slain the compiler.  Shall I replay
        |your session? I can re-run each line except the last one.
        |[y/n]
     """.trim.stripMargin
 
-  private val crashRecovery: PartialFunction[Throwable, Boolean] = {
-    case ex: Throwable =>
-      echo(intp.global.throwableAsString(ex))
+  private def crashRecovery(ex: Throwable): Boolean = {
+    echo(ex.toString)
+    ex match {
+      case _: NoSuchMethodError | _: NoClassDefFoundError =>
+        echo("\nUnrecoverable error.")
+        throw ex
+      case _  =>
+        def fn(): Boolean =
+          try in.readYesOrNo(replayQuestionMessage, { echo("\nYou must enter y or n.") ; fn() })
+          catch { case _: RuntimeException => false }
 
-      ex match {
-        case _: NoSuchMethodError | _: NoClassDefFoundError =>
-          echo("\nUnrecoverable error.")
-          throw ex
-        case _  =>
-          def fn(): Boolean =
-            try in.readYesOrNo(replayQuestionMessage, { echo("\nYou must enter y or n.") ; fn() })
-            catch { case _: RuntimeException => false }
-
-          if (fn()) replay()
-          else echo("\nAbandoning crashed session.")
-      }
-      true
+        if (fn()) replay()
+        else echo("\nAbandoning crashed session.")
+    }
+    true
   }
 
   /** The main read-eval-print loop for the repl.  It calls
@@ -604,7 +632,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       }
     }
     def innerLoop() {
-      if ( try processLine(readOneLine()) catch crashRecovery )
+      val shouldContinue = try {
+        processLine(readOneLine())
+      } catch {case t: Throwable => crashRecovery(t)}
+      if (shouldContinue)
         innerLoop()
     }
     innerLoop()
@@ -692,21 +723,23 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
         added = true
         addedClasspath = ClassPath.join(addedClasspath, f.path)
         totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
+        intp.addUrlsToClassPath(f.toURI.toURL)
+        sparkContext.addJar(f.toURI.toURL.getPath)
       }
     }
-    if (added) replay()
   }
 
   def addClasspath(arg: String): Unit = {
     val f = File(arg).normalize
     if (f.exists) {
       addedClasspath = ClassPath.join(addedClasspath, f.path)
-      val totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
-      echo("Added '%s'.  Your new classpath is:\n\"%s\"".format(f.path, totalClasspath))
-      replay()
+      intp.addUrlsToClassPath(f.toURI.toURL)
+      sparkContext.addJar(f.toURI.toURL.getPath)
+      echo("Added '%s'.  Your new classpath is:\n\"%s\"".format(f.path, intp.global.classPath.asClasspathString))
     }
     else echo("The path '" + f + "' doesn't seem to exist.")
   }
+
 
   def powerCmd(): Result = {
     if (isReplPower) "Already in power mode."
@@ -871,7 +904,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   val u: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-  val m = u.runtimeMirror(getClass.getClassLoader)
+  val m = u.runtimeMirror(Utils.getSparkClassLoader)
   private def tagOfStaticClass[T: ClassTag]: u.TypeTag[T] =
     u.TypeTag[T](
       m,
@@ -941,7 +974,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
+    val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
       .setAppName("Spark shell")
@@ -949,9 +982,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       .set("spark.repl.class.uri", intp.classServer.uri)
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
-    }
-    if (System.getenv("SPARK_HOME") != null) {
-      conf.setSparkHome(System.getenv("SPARK_HOME"))
     }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
@@ -961,10 +991,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   private def getMaster(): String = {
     val master = this.master match {
       case Some(m) => m
-      case None => {
-        val prop = System.getenv("MASTER")
-        if (prop != null) prop else "local"
-      }
+      case None =>
+        val envMaster = sys.env.get("MASTER")
+        val propMaster = sys.props.get("spark.master")
+        propMaster.orElse(envMaster).getOrElse("local[*]")
     }
     master
   }
@@ -991,7 +1021,14 @@ object SparkILoop {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
-  def getAddedJars: Array[String] = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
+  def getAddedJars: Array[String] = {
+    val envJars = sys.env.get("ADD_JARS")
+    val propJars = sys.props.get("spark.jars").flatMap { p =>
+      if (p == "") None else Some(p)
+    }
+    val jars = propJars.orElse(envJars).getOrElse("")
+    Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
+  }
 
   // Designed primarily for use by test code: take a String with a
   // bunch of code, and prints out a transcript of what it would look

@@ -17,34 +17,67 @@
 
 package org.apache.spark.broadcast
 
-import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
+import java.io.{File, FileOutputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
+import java.io.{BufferedInputStream, BufferedOutputStream}
 import java.net.{URL, URLConnection, URI}
 import java.util.concurrent.TimeUnit
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
+import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, HttpServer, Logging, SecurityManager, SparkEnv}
+import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
 
-private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+/**
+ * A [[org.apache.spark.broadcast.Broadcast]] implementation that uses HTTP server
+ * as a broadcast mechanism. The first time a HTTP broadcast variable (sent as part of a
+ * task) is deserialized in the executor, the broadcasted data is fetched from the driver
+ * (through a HTTP server running at the driver) and stored in the BlockManager of the
+ * executor to speed up future accesses.
+ */
+private[spark] class HttpBroadcast[T: ClassTag](
+    @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def value = value_
+  override protected def getValue() = value_
 
-  def blockId = BroadcastBlockId(id)
+  private val blockId = BroadcastBlockId(id)
 
+  /*
+   * Broadcasted data is also stored in the BlockManager of the driver. The BlockManagerMaster
+   * does not need to be told about this block as not only need to know about this data block.
+   */
   HttpBroadcast.synchronized {
-    SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
+    SparkEnv.get.blockManager.putSingle(
+      blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
   }
 
   if (!isLocal) {
     HttpBroadcast.write(id, value_)
   }
 
-  // Called by JVM when deserializing an object
+  /**
+   * Remove all persisted state associated with this HTTP broadcast on the executors.
+   */
+  override protected def doUnpersist(blocking: Boolean) {
+    HttpBroadcast.unpersist(id, removeFromDriver = false, blocking)
+  }
+
+  /**
+   * Remove all persisted state associated with this HTTP broadcast on the executors and driver.
+   */
+  override protected def doDestroy(blocking: Boolean) {
+    HttpBroadcast.unpersist(id, removeFromDriver = true, blocking)
+  }
+
+  /** Used by the JVM when serializing this object. */
+  private def writeObject(out: ObjectOutputStream) {
+    assertValid()
+    out.defaultWriteObject()
+  }
+
+  /** Used by the JVM when deserializing this object. */
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
@@ -54,7 +87,13 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime
           value_ = HttpBroadcast.read[T](id)
-          SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
+          /*
+           * We cache broadcast data in the BlockManager so that subsequent tasks using it
+           * do not need to re-fetch. This data is only used locally and no other node
+           * needs to fetch this block, so we don't notify the master.
+           */
+          SparkEnv.get.blockManager.putSingle(
+            blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
           val time = (System.nanoTime - start) / 1e9
           logInfo("Reading broadcast variable " + id + " took " + time + " s")
         }
@@ -63,23 +102,8 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   }
 }
 
-/**
- * A [[BroadcastFactory]] implementation that uses a HTTP server as the broadcast medium.
- */
-class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
-    HttpBroadcast.initialize(isDriver, conf, securityMgr) 
-  }
-
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
-    new HttpBroadcast[T](value_, isLocal, id)
-
-  def stop() { HttpBroadcast.stop() }
-}
-
-private object HttpBroadcast extends Logging {
+private[broadcast] object HttpBroadcast extends Logging {
   private var initialized = false
-
   private var broadcastDir: File = null
   private var compress: Boolean = false
   private var bufferSize: Int = 65536
@@ -88,12 +112,10 @@ private object HttpBroadcast extends Logging {
   private var securityManager: SecurityManager = null
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
-  private val files = new TimeStampedHashSet[String]
-  private var cleaner: MetadataCleaner = null
-
+  private val files = new TimeStampedHashSet[File]
   private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
-
   private var compressionCodec: CompressionCodec = null
+  private var cleaner: MetadataCleaner = null
 
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     synchronized {
@@ -130,29 +152,37 @@ private object HttpBroadcast extends Logging {
 
   private def createServer(conf: SparkConf) {
     broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf))
-    server = new HttpServer(broadcastDir, securityManager)
+    val broadcastPort = conf.getInt("spark.broadcast.port", 0)
+    server = new HttpServer(broadcastDir, securityManager, broadcastPort, "HTTP broadcast server")
     server.start()
     serverUri = server.uri
     logInfo("Broadcast server started at " + serverUri)
   }
 
-  def write(id: Long, value: Any) {
-    val file = new File(broadcastDir, BroadcastBlockId(id).name)
-    val out: OutputStream = {
-      if (compress) {
-        compressionCodec.compressedOutputStream(new FileOutputStream(file))
-      } else {
-        new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
+  def getFile(id: Long) = new File(broadcastDir, BroadcastBlockId(id).name)
+
+  private def write(id: Long, value: Any) {
+    val file = getFile(id)
+    val fileOutputStream = new FileOutputStream(file)
+    try {
+      val out: OutputStream = {
+        if (compress) {
+          compressionCodec.compressedOutputStream(fileOutputStream)
+        } else {
+          new BufferedOutputStream(fileOutputStream, bufferSize)
+        }
       }
+      val ser = SparkEnv.get.serializer.newInstance()
+      val serOut = ser.serializeStream(out)
+      serOut.writeObject(value)
+      serOut.close()
+      files += file
+    } finally {
+      fileOutputStream.close()
     }
-    val ser = SparkEnv.get.serializer.newInstance()
-    val serOut = ser.serializeStream(out)
-    serOut.writeObject(value)
-    serOut.close()
-    files += file.getAbsolutePath
   }
 
-  def read[T](id: Long): T = {
+  private def read[T: ClassTag](id: Long): T = {
     logDebug("broadcast read server: " +  serverUri + " id: broadcast-" + id)
     val url = serverUri + "/" + BroadcastBlockId(id).name
 
@@ -160,7 +190,7 @@ private object HttpBroadcast extends Logging {
     if (securityManager.isAuthenticationEnabled()) {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
-      uc = newuri.toURL().openConnection()
+      uc = newuri.toURL.openConnection()
       uc.setAllowUserInteraction(false)
     } else {
       logDebug("broadcast not using security")
@@ -169,11 +199,11 @@ private object HttpBroadcast extends Logging {
 
     val in = {
       uc.setReadTimeout(httpReadTimeout)
-      val inputStream = uc.getInputStream();
+      val inputStream = uc.getInputStream
       if (compress) {
         compressionCodec.compressedInputStream(inputStream)
       } else {
-        new FastBufferedInputStream(inputStream, bufferSize)
+        new BufferedInputStream(inputStream, bufferSize)
       }
     }
     val ser = SparkEnv.get.serializer.newInstance()
@@ -183,20 +213,48 @@ private object HttpBroadcast extends Logging {
     obj
   }
 
-  def cleanup(cleanupTime: Long) {
+  /**
+   * Remove all persisted blocks associated with this HTTP broadcast on the executors.
+   * If removeFromDriver is true, also remove these persisted blocks on the driver
+   * and delete the associated broadcast file.
+   */
+  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = synchronized {
+    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
+    if (removeFromDriver) {
+      val file = getFile(id)
+      files.remove(file)
+      deleteBroadcastFile(file)
+    }
+  }
+
+  /**
+   * Periodically clean up old broadcasts by removing the associated map entries and
+   * deleting the associated files.
+   */
+  private def cleanup(cleanupTime: Long) {
     val iterator = files.internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
-        try {
-          iterator.remove()
-          new File(file.toString).delete()
-          logInfo("Deleted broadcast file '" + file + "'")
-        } catch {
-          case e: Exception => logWarning("Could not delete broadcast file '" + file + "'", e)
+        iterator.remove()
+        deleteBroadcastFile(file)
+      }
+    }
+  }
+
+  private def deleteBroadcastFile(file: File) {
+    try {
+      if (file.exists) {
+        if (file.delete()) {
+          logInfo("Deleted broadcast file: %s".format(file))
+        } else {
+          logWarning("Could not delete broadcast file: %s".format(file))
         }
       }
+    } catch {
+      case e: Exception =>
+        logError("Exception while deleting broadcast file: %s".format(file), e)
     }
   }
 }

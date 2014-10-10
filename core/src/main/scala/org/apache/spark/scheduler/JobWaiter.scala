@@ -23,7 +23,7 @@ package org.apache.spark.scheduler
  */
 private[spark] class JobWaiter[T](
     dagScheduler: DAGScheduler,
-    jobId: Int,
+    val jobId: Int,
     totalTasks: Int,
     resultHandler: (Int, T) => Unit)
   extends JobListener {
@@ -64,7 +64,7 @@ private[spark] class JobWaiter[T](
 
   override def jobFailed(exception: Exception): Unit = synchronized {
     _jobFinished = true
-    jobResult = JobFailed(exception, None)
+    jobResult = JobFailed(exception)
     this.notifyAll()
   }
 

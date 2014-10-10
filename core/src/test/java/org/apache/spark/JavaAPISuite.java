@@ -17,13 +17,18 @@
 
 package org.apache.spark;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
+import java.io.*;
+import java.net.URI;
 import java.util.*;
 
 import scala.Tuple2;
+import scala.Tuple3;
+import scala.Tuple4;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -43,6 +48,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
+import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.storage.StorageLevel;
@@ -53,28 +59,19 @@ import org.apache.spark.util.StatCounter;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaAPISuite implements Serializable {
   private transient JavaSparkContext sc;
+  private transient File tempDir;
 
   @Before
   public void setUp() {
     sc = new JavaSparkContext("local", "JavaAPISuite");
+    tempDir = Files.createTempDir();
+    tempDir.deleteOnExit();
   }
 
   @After
   public void tearDown() {
     sc.stop();
     sc = null;
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port");
-  }
-
-  static class ReverseIntComparator implements Comparator<Integer>, Serializable {
-
-    @Override
-    public int compare(Integer a, Integer b) {
-      if (a > b) return -1;
-      else if (a < b) return 1;
-      else return 0;
-    }
   }
 
   @SuppressWarnings("unchecked")
@@ -121,8 +118,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> intersections = s1.intersection(s2);
     Assert.assertEquals(3, intersections.count());
 
-    ArrayList<Integer> list = new ArrayList<Integer>();
-    JavaRDD<Integer> empty = sc.parallelize(list);
+    JavaRDD<Integer> empty = sc.emptyRDD();
     JavaRDD<Integer> emptyIntersection = empty.intersection(s2);
     Assert.assertEquals(0, emptyIntersection.count());
 
@@ -142,6 +138,28 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void sample() {
+    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    JavaRDD<Integer> rdd = sc.parallelize(ints);
+    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 11);
+    // expected 2 but of course result varies randomly a bit
+    Assert.assertEquals(3, sample20.count());
+    JavaRDD<Integer> sample20NoReplacement = rdd.sample(false, 0.2, 11);
+    Assert.assertEquals(2, sample20NoReplacement.count());
+  }
+
+  @Test
+  public void randomSplit() {
+    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    JavaRDD<Integer> rdd = sc.parallelize(ints);
+    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 11);
+    Assert.assertEquals(3, splits.length);
+    Assert.assertEquals(2, splits[0].count());
+    Assert.assertEquals(3, splits[1].count());
+    Assert.assertEquals(5, splits[2].count());
+  }
+
+  @Test
   public void sortByKey() {
     List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
     pairs.add(new Tuple2<Integer, Integer>(0, 4));
@@ -158,26 +176,118 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
 
     // Custom comparator
-    sortedRDD = rdd.sortByKey(new ReverseIntComparator(), false);
+    sortedRDD = rdd.sortByKey(Collections.<Integer>reverseOrder(), false);
     Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
     sortedPairs = sortedRDD.collect();
     Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
   }
 
-  static int foreachCalls = 0;
+  @Test
+  public void repartitionAndSortWithinPartitions() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(0, 5));
+    pairs.add(new Tuple2<Integer, Integer>(3, 8));
+    pairs.add(new Tuple2<Integer, Integer>(2, 6));
+    pairs.add(new Tuple2<Integer, Integer>(0, 8));
+    pairs.add(new Tuple2<Integer, Integer>(3, 8));
+    pairs.add(new Tuple2<Integer, Integer>(1, 3));
+
+    JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs);
+
+    Partitioner partitioner = new Partitioner() {
+      public int numPartitions() {
+        return 2;
+      }
+      public int getPartition(Object key) {
+        return ((Integer)key).intValue() % 2;
+      }
+    };
+
+    JavaPairRDD<Integer, Integer> repartitioned =
+        rdd.repartitionAndSortWithinPartitions(partitioner);
+    List<List<Tuple2<Integer, Integer>>> partitions = repartitioned.glom().collect();
+    Assert.assertEquals(partitions.get(0), Arrays.asList(new Tuple2<Integer, Integer>(0, 5),
+        new Tuple2<Integer, Integer>(0, 8), new Tuple2<Integer, Integer>(2, 6)));
+    Assert.assertEquals(partitions.get(1), Arrays.asList(new Tuple2<Integer, Integer>(1, 3),
+        new Tuple2<Integer, Integer>(3, 8), new Tuple2<Integer, Integer>(3, 8)));
+  }
+
+  @Test
+  public void emptyRDD() {
+    JavaRDD<String> rdd = sc.emptyRDD();
+    Assert.assertEquals("Empty RDD shouldn't have any values", 0, rdd.count());
+  }
+
+  @Test
+  public void sortBy() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(0, 4));
+    pairs.add(new Tuple2<Integer, Integer>(3, 2));
+    pairs.add(new Tuple2<Integer, Integer>(-1, 1));
+
+    JavaRDD<Tuple2<Integer, Integer>> rdd = sc.parallelize(pairs);
+
+    // compare on first value
+    JavaRDD<Tuple2<Integer, Integer>> sortedRDD = rdd.sortBy(new Function<Tuple2<Integer, Integer>, Integer>() {
+      public Integer call(Tuple2<Integer, Integer> t) throws Exception {
+        return t._1();
+      }
+    }, true, 2);
+
+    Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
+    List<Tuple2<Integer, Integer>> sortedPairs = sortedRDD.collect();
+    Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
+    Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+
+    // compare on second value
+    sortedRDD = rdd.sortBy(new Function<Tuple2<Integer, Integer>, Integer>() {
+      public Integer call(Tuple2<Integer, Integer> t) throws Exception {
+        return t._2();
+      }
+    }, true, 2);
+    Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
+    sortedPairs = sortedRDD.collect();
+    Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(1));
+    Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(2));
+  }
 
   @Test
   public void foreach() {
-    foreachCalls = 0;
+    final Accumulator<Integer> accum = sc.accumulator(0);
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
-      public void call(String s) {
-        foreachCalls++;
+      public void call(String s) throws IOException {
+        accum.add(1);
       }
     });
-    Assert.assertEquals(2, foreachCalls);
+    Assert.assertEquals(2, accum.value().intValue());
+  }
+
+  @Test
+  public void toLocalIterator() {
+    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
+    JavaRDD<Integer> rdd = sc.parallelize(correct);
+    List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
+    Assert.assertEquals(correct, result);
+  }
+
+  @Test
+  public void zipWithUniqueId() {
+    List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithUniqueId();
+    JavaRDD<Long> indexes = zip.values();
+    Assert.assertEquals(4, new HashSet<Long>(indexes.collect()).size());
+  }
+
+  @Test
+  public void zipWithIndex() {
+    List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithIndex();
+    JavaRDD<Long> indexes = zip.values();
+    List<Long> correctIndexes = Arrays.asList(0L, 1L, 2L, 3L);
+    Assert.assertEquals(correctIndexes, indexes.collect());
   }
 
   @SuppressWarnings("unchecked")
@@ -189,7 +299,7 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, String>("Oranges", "Citrus")
       ));
     Assert.assertEquals(2, categories.lookup("Oranges").size());
-    Assert.assertEquals(2, categories.groupByKey().lookup("Oranges").get(0).size());
+    Assert.assertEquals(2, Iterables.size(categories.groupByKey().lookup("Oranges").get(0)));
   }
 
   @Test
@@ -201,15 +311,15 @@ public class JavaAPISuite implements Serializable {
         return x % 2 == 0;
       }
     };
-    JavaPairRDD<Boolean, List<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
+    JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, oddsAndEvens.lookup(true).get(0).size());  // Evens
-    Assert.assertEquals(5, oddsAndEvens.lookup(false).get(0).size()); // Odds
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, oddsAndEvens.lookup(true).get(0).size());  // Evens
-    Assert.assertEquals(5, oddsAndEvens.lookup(false).get(0).size()); // Odds
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
   @SuppressWarnings("unchecked")
@@ -224,9 +334,71 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, Integer>("Oranges", 2),
       new Tuple2<String, Integer>("Apples", 3)
     ));
-    JavaPairRDD<String, Tuple2<List<String>, List<Integer>>> cogrouped = categories.cogroup(prices);
-    Assert.assertEquals("[Fruit, Citrus]", cogrouped.lookup("Oranges").get(0)._1().toString());
-    Assert.assertEquals("[2]", cogrouped.lookup("Oranges").get(0)._2().toString());
+    JavaPairRDD<String, Tuple2<Iterable<String>, Iterable<Integer>>> cogrouped =
+        categories.cogroup(prices);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+
+    cogrouped.collect();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void cogroup3() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    JavaPairRDD<String, Integer> prices = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 2),
+      new Tuple2<String, Integer>("Apples", 3)
+    ));
+    JavaPairRDD<String, Integer> quantities = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 21),
+      new Tuple2<String, Integer>("Apples", 42)
+    ));
+
+    JavaPairRDD<String, Tuple3<Iterable<String>, Iterable<Integer>, Iterable<Integer>>> cogrouped =
+        categories.cogroup(prices, quantities);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
+
+
+    cogrouped.collect();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void cogroup4() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    JavaPairRDD<String, Integer> prices = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 2),
+      new Tuple2<String, Integer>("Apples", 3)
+    ));
+    JavaPairRDD<String, Integer> quantities = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 21),
+      new Tuple2<String, Integer>("Apples", 42)
+    ));
+    JavaPairRDD<String, String> countries = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Oranges", "BR"),
+      new Tuple2<String, String>("Apples", "US")
+    ));
+
+    JavaPairRDD<String, Tuple4<Iterable<String>, Iterable<Integer>, Iterable<Integer>, Iterable<String>>> cogrouped =
+        categories.cogroup(prices, quantities, countries);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
+    Assert.assertEquals("[BR]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._4()));
 
     cogrouped.collect();
   }
@@ -253,8 +425,7 @@ public class JavaAPISuite implements Serializable {
       rdd1.leftOuterJoin(rdd2).filter(
         new Function<Tuple2<Integer, Tuple2<Integer, Optional<Character>>>, Boolean>() {
           @Override
-          public Boolean call(Tuple2<Integer, Tuple2<Integer, Optional<Character>>> tup)
-            throws Exception {
+          public Boolean call(Tuple2<Integer, Tuple2<Integer, Optional<Character>>> tup) {
             return !tup._2()._2().isPresent();
           }
       }).first();
@@ -276,6 +447,37 @@ public class JavaAPISuite implements Serializable {
 
     sum = rdd.reduce(add);
     Assert.assertEquals(33, sum);
+  }
+
+  @Test
+  public void aggregateByKey() {
+    JavaPairRDD<Integer, Integer> pairs = sc.parallelizePairs(
+      Arrays.asList(
+        new Tuple2<Integer, Integer>(1, 1),
+        new Tuple2<Integer, Integer>(1, 1),
+        new Tuple2<Integer, Integer>(3, 2),
+        new Tuple2<Integer, Integer>(5, 1),
+        new Tuple2<Integer, Integer>(5, 3)), 2);
+
+    Map<Integer, Set<Integer>> sets = pairs.aggregateByKey(new HashSet<Integer>(),
+      new Function2<Set<Integer>, Integer, Set<Integer>>() {
+        @Override
+        public Set<Integer> call(Set<Integer> a, Integer b) {
+          a.add(b);
+          return a;
+        }
+      },
+      new Function2<Set<Integer>, Set<Integer>, Set<Integer>>() {
+        @Override
+        public Set<Integer> call(Set<Integer> a, Set<Integer> b) {
+          a.addAll(b);
+          return a;
+        }
+      }).collectAsMap();
+    Assert.assertEquals(3, sets.size());
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(1)), sets.get(1));
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(2)), sets.get(3));
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(1, 3)), sets.get(5));
   }
 
   @SuppressWarnings("unchecked")
@@ -328,8 +530,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, localCounts.get(2).intValue());
     Assert.assertEquals(3, localCounts.get(3).intValue());
 
-   localCounts = rdd.reduceByKeyLocally(new Function2<Integer, Integer,
-      Integer>() {
+    localCounts = rdd.reduceByKeyLocally(new Function2<Integer, Integer, Integer>() {
       @Override
       public Integer call(Integer a, Integer b) {
         return a + b;
@@ -402,16 +603,16 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void javaDoubleRDDHistoGram() {
-   JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
-   // Test using generated buckets
-   Tuple2<double[], long[]> results = rdd.histogram(2);
-   double[] expected_buckets = {1.0, 2.5, 4.0};
-   long[] expected_counts = {2, 2};
-   Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
-   Assert.assertArrayEquals(expected_counts, results._2);
-   // Test with provided buckets
-   long[] histogram = rdd.histogram(expected_buckets);
-   Assert.assertArrayEquals(expected_counts, histogram);
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    // Test using generated buckets
+    Tuple2<double[], long[]> results = rdd.histogram(2);
+    double[] expected_buckets = {1.0, 2.5, 4.0};
+    long[] expected_counts = {2, 2};
+    Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
+    Assert.assertArrayEquals(expected_counts, results._2);
+    // Test with provided buckets
+    long[] histogram = rdd.histogram(expected_buckets);
+    Assert.assertArrayEquals(expected_counts, histogram);
   }
 
   @Test
@@ -420,16 +621,17 @@ public class JavaAPISuite implements Serializable {
     JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
       public double call(Integer x) {
-        return 1.0 * x;
+        return x.doubleValue();
       }
     }).cache();
     doubles.collect();
-    JavaPairRDD<Integer, Integer> pairs = rdd.mapToPair(new PairFunction<Integer, Integer, Integer>() {
-      @Override
-      public Tuple2<Integer, Integer> call(Integer x) {
-        return new Tuple2<Integer, Integer>(x, x);
-      }
-    }).cache();
+    JavaPairRDD<Integer, Integer> pairs = rdd.mapToPair(
+        new PairFunction<Integer, Integer, Integer>() {
+          @Override
+          public Tuple2<Integer, Integer> call(Integer x) {
+            return new Tuple2<Integer, Integer>(x, x);
+          }
+        }).cache();
     pairs.collect();
     JavaRDD<String> strings = rdd.map(new Function<Integer, String>() {
       @Override
@@ -459,7 +661,9 @@ public class JavaAPISuite implements Serializable {
         @Override
         public Iterable<Tuple2<String, String>> call(String s) {
           List<Tuple2<String, String>> pairs = new LinkedList<Tuple2<String, String>>();
-          for (String word : s.split(" ")) pairs.add(new Tuple2<String, String>(word, word));
+          for (String word : s.split(" ")) {
+            pairs.add(new Tuple2<String, String>(word, word));
+          }
           return pairs;
         }
       }
@@ -471,7 +675,9 @@ public class JavaAPISuite implements Serializable {
       @Override
       public Iterable<Double> call(String s) {
         List<Double> lengths = new LinkedList<Double>();
-        for (String word : s.split(" ")) lengths.add(word.length() * 1.0);
+        for (String word : s.split(" ")) {
+          lengths.add((double) word.length());
+        }
         return lengths;
       }
     });
@@ -493,7 +699,7 @@ public class JavaAPISuite implements Serializable {
       JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
           new PairFlatMapFunction<Tuple2<Integer, String>, String, Integer>() {
           @Override
-          public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) throws Exception {
+          public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
               return Collections.singletonList(item.swap());
           }
       });
@@ -502,7 +708,7 @@ public class JavaAPISuite implements Serializable {
       // There was never a bug here, but it's worth testing:
       pairRDD.mapToPair(new PairFunction<Tuple2<Integer, String>, String, Integer>() {
           @Override
-          public Tuple2<String, Integer> call(Tuple2<Integer, String> item) throws Exception {
+          public Tuple2<String, Integer> call(Tuple2<Integer, String> item) {
               return item.swap();
           }
       }).collect();
@@ -570,8 +776,8 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContext(0, 0, 0, false, false, null);
-    Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
+    TaskContext context = new TaskContext(0, 0, 0L, false, new TaskMetrics());
+    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
   @Test
@@ -584,7 +790,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void textFiles() throws IOException {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsTextFile(outputDir);
@@ -599,8 +804,28 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void wholeTextFiles() throws Exception {
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
+
+    String tempDirName = tempDir.getAbsolutePath();
+    Files.write(content1, new File(tempDirName + "/part-00000"));
+    Files.write(content2, new File(tempDirName + "/part-00001"));
+
+    Map<String, String> container = new HashMap<String, String>();
+    container.put(tempDirName+"/part-00000", new Text(content1).toString());
+    container.put(tempDirName+"/part-00001", new Text(content2).toString());
+
+    JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName, 3);
+    List<Tuple2<String, String>> result = readRDD.collect();
+
+    for (Tuple2<String, String> res : result) {
+      Assert.assertEquals(res._2(), container.get(new URI(res._1()).getPath()));
+    }
+  }
+
+  @Test
   public void textFilesCompressed() throws IOException {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsTextFile(outputDir, DefaultCodec.class);
@@ -614,7 +839,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void sequenceFile() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -644,7 +868,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void writeWithNewAPIHadoopFile() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -675,7 +898,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void readWithNewAPIHadoopFile() throws IOException {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -705,7 +927,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void objectFilesOfInts() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsObjectFile(outputDir);
@@ -718,7 +939,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void objectFilesOfComplexTypes() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -735,7 +955,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void hadoopFile() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -765,7 +984,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void hadoopFileCompressed() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output_compressed").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
         new Tuple2<Integer, String>(1, "a"),
@@ -800,7 +1018,7 @@ public class JavaAPISuite implements Serializable {
     JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
       public double call(Integer x) {
-        return 1.0 * x;
+        return x.doubleValue();
       }
     });
     JavaPairRDD<Integer, Double> zipped = rdd.zip(doubles);
@@ -815,17 +1033,7 @@ public class JavaAPISuite implements Serializable {
       new FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer>() {
         @Override
         public Iterable<Integer> call(Iterator<Integer> i, Iterator<String> s) {
-          int sizeI = 0;
-          int sizeS = 0;
-          while (i.hasNext()) {
-            sizeI += 1;
-            i.next();
-          }
-          while (s.hasNext()) {
-            sizeS += 1;
-            s.next();
-          }
-          return Arrays.asList(sizeI, sizeS);
+          return Arrays.asList(Iterators.size(i), Iterators.size(s));
         }
       };
 
@@ -839,6 +1047,7 @@ public class JavaAPISuite implements Serializable {
 
     final Accumulator<Integer> intAccum = sc.intAccumulator(10);
     rdd.foreach(new VoidFunction<Integer>() {
+      @Override
       public void call(Integer x) {
         intAccum.add(x);
       }
@@ -847,6 +1056,7 @@ public class JavaAPISuite implements Serializable {
 
     final Accumulator<Double> doubleAccum = sc.doubleAccumulator(10.0);
     rdd.foreach(new VoidFunction<Integer>() {
+      @Override
       public void call(Integer x) {
         doubleAccum.add((double) x);
       }
@@ -855,14 +1065,17 @@ public class JavaAPISuite implements Serializable {
 
     // Try a custom accumulator type
     AccumulatorParam<Float> floatAccumulatorParam = new AccumulatorParam<Float>() {
+      @Override
       public Float addInPlace(Float r, Float t) {
         return r + t;
       }
 
+      @Override
       public Float addAccumulator(Float r, Float t) {
         return r + t;
       }
 
+      @Override
       public Float zero(Float initialValue) {
         return 0.0f;
       }
@@ -870,6 +1083,7 @@ public class JavaAPISuite implements Serializable {
 
     final Accumulator<Float> floatAccum = sc.accumulator(10.0f, floatAccumulatorParam);
     rdd.foreach(new VoidFunction<Integer>() {
+      @Override
       public void call(Integer x) {
         floatAccum.add((float) x);
       }
@@ -885,7 +1099,8 @@ public class JavaAPISuite implements Serializable {
   public void keyBy() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2));
     List<Tuple2<String, Integer>> s = rdd.keyBy(new Function<Integer, String>() {
-      public String call(Integer t) throws Exception {
+      @Override
+      public String call(Integer t) {
         return t.toString();
       }
     }).collect();
@@ -895,25 +1110,23 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void checkpointAndComputation() {
-    File tempDir = Files.createTempDir();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());
-    Assert.assertEquals(false, rdd.isCheckpointed());
+    Assert.assertFalse(rdd.isCheckpointed());
     rdd.checkpoint();
     rdd.count(); // Forces the DAG to cause a checkpoint
-    Assert.assertEquals(true, rdd.isCheckpointed());
+    Assert.assertTrue(rdd.isCheckpointed());
     Assert.assertEquals(Arrays.asList(1, 2, 3, 4, 5), rdd.collect());
   }
 
   @Test
   public void checkpointAndRestore() {
-    File tempDir = Files.createTempDir();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());
-    Assert.assertEquals(false, rdd.isCheckpointed());
+    Assert.assertFalse(rdd.isCheckpointed());
     rdd.checkpoint();
     rdd.count(); // Forces the DAG to cause a checkpoint
-    Assert.assertEquals(true, rdd.isCheckpointed());
+    Assert.assertTrue(rdd.isCheckpointed());
 
     Assert.assertTrue(rdd.getCheckpointFile().isPresent());
     JavaRDD<Integer> recovered = sc.checkpointFile(rdd.getCheckpointFile().get());
@@ -924,16 +1137,17 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void mapOnPairRDD() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1,2,3,4));
-    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(new PairFunction<Integer, Integer, Integer>() {
-      @Override
-      public Tuple2<Integer, Integer> call(Integer i) throws Exception {
-        return new Tuple2<Integer, Integer>(i, i % 2);
-      }
-    });
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+        new PairFunction<Integer, Integer, Integer>() {
+          @Override
+          public Tuple2<Integer, Integer> call(Integer i) {
+            return new Tuple2<Integer, Integer>(i, i % 2);
+          }
+        });
     JavaPairRDD<Integer, Integer> rdd3 = rdd2.mapToPair(
         new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
       @Override
-      public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> in) throws Exception {
+      public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> in) {
         return new Tuple2<Integer, Integer>(in._2(), in._1());
       }
     });
@@ -950,14 +1164,15 @@ public class JavaAPISuite implements Serializable {
   public void collectPartitions() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7), 3);
 
-    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(new PairFunction<Integer, Integer, Integer>() {
-      @Override
-      public Tuple2<Integer, Integer> call(Integer i) throws Exception {
-        return new Tuple2<Integer, Integer>(i, i % 2);
-      }
-    });
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+        new PairFunction<Integer, Integer, Integer>() {
+          @Override
+          public Tuple2<Integer, Integer> call(Integer i) {
+            return new Tuple2<Integer, Integer>(i, i % 2);
+          }
+        });
 
-    List[] parts = rdd1.collectPartitions(new int[] {0});
+    List<Integer>[] parts = rdd1.collectPartitions(new int[] {0});
     Assert.assertEquals(Arrays.asList(1, 2), parts[0]);
 
     parts = rdd1.collectPartitions(new int[] {1, 2});
@@ -968,14 +1183,14 @@ public class JavaAPISuite implements Serializable {
                                       new Tuple2<Integer, Integer>(2, 0)),
                         rdd2.collectPartitions(new int[] {0})[0]);
 
-    parts = rdd2.collectPartitions(new int[] {1, 2});
+    List<Tuple2<Integer,Integer>>[] parts2 = rdd2.collectPartitions(new int[] {1, 2});
     Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(3, 1),
                                       new Tuple2<Integer, Integer>(4, 0)),
-                        parts[0]);
+                        parts2[0]);
     Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(5, 1),
                                       new Tuple2<Integer, Integer>(6, 0),
                                       new Tuple2<Integer, Integer>(7, 1)),
-                        parts[1]);
+                        parts2[1]);
   }
 
   @Test
@@ -986,27 +1201,25 @@ public class JavaAPISuite implements Serializable {
       arrayData.add(i % size);
     }
     JavaRDD<Integer> simpleRdd = sc.parallelize(arrayData, 10);
-    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.2) - size) / (size * 1.0)) < 0.2);
-    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.05) - size) / (size * 1.0)) <= 0.05);
-    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.01) - size) / (size * 1.0)) <= 0.01);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.05) - size) / (size * 1.0)) <= 0.1);
   }
 
   @Test
   public void countApproxDistinctByKey() {
-    double relativeSD = 0.001;
-
     List<Tuple2<Integer, Integer>> arrayData = new ArrayList<Tuple2<Integer, Integer>>();
-    for (int i = 10; i < 100; i++)
-      for (int j = 0; j < i; j++)
+    for (int i = 10; i < 100; i++) {
+      for (int j = 0; j < i; j++) {
         arrayData.add(new Tuple2<Integer, Integer>(i, j));
-
+      }
+    }
+    double relativeSD = 0.001;
     JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
-    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD).collect();
+    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(8, 0).collect();
     for (Tuple2<Integer, Object> resItem : res) {
       double count = (double)resItem._1();
       Long resCount = (Long)resItem._2();
       Double error = Math.abs((resCount - count) / count);
-      Assert.assertTrue(error < relativeSD);
+      Assert.assertTrue(error < 0.1);
     }
 
   }
@@ -1015,13 +1228,109 @@ public class JavaAPISuite implements Serializable {
   public void collectAsMapWithIntArrayValues() {
     // Regression test for SPARK-1040
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1));
-    JavaPairRDD<Integer, int[]> pairRDD = rdd.mapToPair(new PairFunction<Integer, Integer, int[]>() {
-      @Override
-      public Tuple2<Integer, int[]> call(Integer x) throws Exception {
-        return new Tuple2<Integer, int[]>(x, new int[] { x });
-      }
-    });
+    JavaPairRDD<Integer, int[]> pairRDD = rdd.mapToPair(
+        new PairFunction<Integer, Integer, int[]>() {
+          @Override
+          public Tuple2<Integer, int[]> call(Integer x) {
+            return new Tuple2<Integer, int[]>(x, new int[] { x });
+          }
+        });
     pairRDD.collect();  // Works fine
     pairRDD.collectAsMap();  // Used to crash with ClassCastException
   }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void sampleByKey() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+      new PairFunction<Integer, Integer, Integer>() {
+        @Override
+        public Tuple2<Integer, Integer> call(Integer i) {
+          return new Tuple2<Integer, Integer>(i % 2, 1);
+        }
+      });
+    Map<Integer, Object> fractions = Maps.newHashMap();
+    fractions.put(0, 0.5);
+    fractions.put(1, 1.0);
+    JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
+    Map<Integer, Long> wrCounts = (Map<Integer, Long>) (Object) wr.countByKey();
+    Assert.assertTrue(wrCounts.size() == 2);
+    Assert.assertTrue(wrCounts.get(0) > 0);
+    Assert.assertTrue(wrCounts.get(1) > 0);
+    JavaPairRDD<Integer, Integer> wor = rdd2.sampleByKey(false, fractions, 1L);
+    Map<Integer, Long> worCounts = (Map<Integer, Long>) (Object) wor.countByKey();
+    Assert.assertTrue(worCounts.size() == 2);
+    Assert.assertTrue(worCounts.get(0) > 0);
+    Assert.assertTrue(worCounts.get(1) > 0);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void sampleByKeyExact() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(
+      new PairFunction<Integer, Integer, Integer>() {
+          @Override
+          public Tuple2<Integer, Integer> call(Integer i) {
+              return new Tuple2<Integer, Integer>(i % 2, 1);
+          }
+      });
+    Map<Integer, Object> fractions = Maps.newHashMap();
+    fractions.put(0, 0.5);
+    fractions.put(1, 1.0);
+    JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
+    Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
+    Assert.assertTrue(wrExactCounts.size() == 2);
+    Assert.assertTrue(wrExactCounts.get(0) == 2);
+    Assert.assertTrue(wrExactCounts.get(1) == 4);
+    JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKeyExact(false, fractions, 1L);
+    Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
+    Assert.assertTrue(worExactCounts.size() == 2);
+    Assert.assertTrue(worExactCounts.get(0) == 2);
+    Assert.assertTrue(worExactCounts.get(1) == 4);
+  }
+
+  private static class SomeCustomClass implements Serializable {
+    public SomeCustomClass() {
+      // Intentionally left blank
+    }
+  }
+
+  @Test
+  public void collectUnderlyingScalaRDD() {
+    List<SomeCustomClass> data = new ArrayList<SomeCustomClass>();
+    for (int i = 0; i < 100; i++) {
+      data.add(new SomeCustomClass());
+    }
+    JavaRDD<SomeCustomClass> rdd = sc.parallelize(data);
+    SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
+    Assert.assertEquals(data.size(), collected.length);
+  }
+
+  /**
+   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
+   * since that's the only artifact where Guava classes have been relocated.
+   */
+  @Test
+  public void testGuavaOptional() {
+    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
+    // assembly.
+    sc.stop();
+    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,512]", "JavaAPISuite");
+    try {
+      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
+      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
+        new Function<Integer, Optional<Integer>>() {
+          @Override
+          public Optional<Integer> call(Integer i) {
+            return Optional.fromNullable(i);
+          }
+        });
+      rdd2.collect();
+    } finally {
+      localCluster.stop();
+    }
+  }
+
 }

@@ -21,43 +21,18 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming_2.10</artifactId>
+  <properties>
+    <sbt.project.name>streaming</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
   <url>http://spark.apache.org/</url>
-
-  <profiles>
-    <profile>
-      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
-           a Hadoop 0.23.X issue -->
-      <id>yarn-alpha</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
-
-  <repositories>
-    <repository>
-      <id>apache-repo</id>
-      <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
 
   <dependencies>
     <dependency>
@@ -84,13 +59,14 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.novocode</groupId>
-      <artifactId>junit-interface</artifactId>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>commons-io</groupId>
-      <artifactId>commons-io</artifactId>
+      <groupId>com.novocode</groupId>
+      <artifactId>junit-interface</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>
@@ -105,16 +81,15 @@
       <!-- 
            This plugin forces the generation of jar containing streaming test classes, 
            so that the tests classes of external modules can use them. The two execution profiles
-           are necessary - first one for 'mvn package', second one for 'mvn compile'. Ideally, 
+           are necessary - first one for 'mvn package', second one for 'mvn test-compile'. Ideally,
            'mvn compile' should not compile test classes and therefore should not need this. 
            However, an open Maven bug (http://jira.codehaus.org/browse/MNG-3559)
            causes the compilation to fail if streaming test-jar is not generated. Hence, the 
-           second execution profile for 'mvn compile'.
+           second execution profile for 'mvn test-compile'.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>2.2</version>
         <executions>
           <execution>
             <goals>
@@ -122,8 +97,8 @@
             </goals>
           </execution>
           <execution>
-            <id>test-jar-on-compile</id>
-            <phase>compile</phase>
+            <id>test-jar-on-test-compile</id>
+            <phase>test-compile</phase>
             <goals>
               <goal>test-jar</goal>
             </goals>

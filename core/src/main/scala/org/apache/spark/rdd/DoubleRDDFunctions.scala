@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
@@ -51,7 +52,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Compute the standard deviation of this RDD's elements. */
   def stdev(): Double = stats().stdev
 
-  /** 
+  /**
    * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
    * estimating the standard deviation by dividing by N-1 instead of N).
    */
@@ -63,14 +64,22 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    */
   def sampleVariance(): Double = stats().sampleVariance
 
-  /** (Experimental) Approximate operation to return the mean within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the mean within a timeout.
+   */
+  @Experimental
   def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
     val evaluator = new MeanEvaluator(self.partitions.size, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 
-  /** (Experimental) Approximate operation to return the sum within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the sum within a timeout.
+   */
+  @Experimental
   def sumApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
     val evaluator = new SumEvaluator(self.partitions.size, confidence)
@@ -86,7 +95,12 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
-    // Compute the minimum and the maxium
+    // Scala's built-in range has issues. See #SI-8782
+    def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
+      val span = max - min
+      Range.Int(0, steps, 1).map(s => min + (s * span) / steps) :+ max
+    }
+    // Compute the minimum and the maximum
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(Double.NegativeInfinity,
         Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
@@ -98,9 +112,11 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }
-    val increment = (max-min)/bucketCount.toDouble
-    val range = if (increment != 0) {
-      Range.Double.inclusive(min, max, increment)
+    val range = if (min != max) {
+      // Range.Double.inclusive(min, max, increment)
+      // The above code doesn't always work. See Scala bug #SI-8782.
+      // https://issues.scala-lang.org/browse/SI-8782
+      customRange(min, max, bucketCount)
     } else {
       List(min, min)
     }
@@ -110,17 +126,17 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
 
   /**
    * Compute a histogram using the provided buckets. The buckets are all open
-   * to the left except for the last which is closed
+   * to the right except for the last which is closed
    *  e.g. for the array
    *  [1, 10, 20, 50] the buckets are [1, 10) [10, 20) [20, 50]
-   *  e.g 1<=x<10 , 10<=x<20, 20<=x<50
-   *  And on the input of 1 and 50 we would have a histogram of 1, 0, 0 
-   * 
+   *  e.g 1<=x<10 , 10<=x<20, 20<=x<=50
+   *  And on the input of 1 and 50 we would have a histogram of 1, 0, 1
+   *
    * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
    * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.
-   * buckets array must be at least two elements 
+   * buckets array must be at least two elements
    * All NaN entries are treated the same. If you have a NaN bucket it must be
    * the maximum value of the last position and all NaN entries will be counted
    * in that bucket.

@@ -18,13 +18,18 @@
 package org.apache.spark.examples
 
 import scala.math.sqrt
-import cern.jet.math._
+
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
+import cern.jet.math._
+
 import org.apache.spark._
 
 /**
  * Alternating least squares matrix factorization.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.recommendation.ALS
  */
 object SparkALS {
   // Parameters set through command line arguments
@@ -54,7 +59,6 @@ object SparkALS {
     for (i <- 0 until M; j <- 0 until U) {
       r.set(i, j, blas.ddot(ms(i), us(j)))
     }
-    //println("R: " + r)
     blas.daxpy(-1, targetR, r)
     val sumSqs = r.aggregate(Functions.plus, Functions.square)
     sqrt(sumSqs / (M * U))
@@ -86,34 +90,39 @@ object SparkALS {
     solved2D.viewColumn(0)
   }
 
-  def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: SparkALS <master> [<M> <U> <F> <iters> <slices>]")
-      System.exit(1)
-    }
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of ALS and is given as an example!
+        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |for more conventional use.
+      """.stripMargin)
+  }
 
-    var host = ""
+  def main(args: Array[String]) {
+
     var slices = 0
 
-    val options = (0 to 5).map(i => if (i < args.length) Some(args(i)) else None)
+    val options = (0 to 4).map(i => if (i < args.length) Some(args(i)) else None)
 
     options.toArray match {
-      case Array(host_, m, u, f, iters, slices_) =>
-        host = host_.get
+      case Array(m, u, f, iters, slices_) =>
         M = m.getOrElse("100").toInt
         U = u.getOrElse("500").toInt
         F = f.getOrElse("10").toInt
         ITERATIONS = iters.getOrElse("5").toInt
         slices = slices_.getOrElse("2").toInt
       case _ =>
-        System.err.println("Usage: SparkALS <master> [<M> <U> <F> <iters> <slices>]")
+        System.err.println("Usage: SparkALS [M] [U] [F] [iters] [slices]")
         System.exit(1)
     }
+
+    showWarning()
+
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
 
-    val sc = new SparkContext(host, "SparkALS",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    
+    val sparkConf = new SparkConf().setAppName("SparkALS")
+    val sc = new SparkContext(sparkConf)
+
     val R = generateR()
 
     // Initialize m and u randomly
@@ -138,6 +147,6 @@ object SparkALS {
       println()
     }
 
-    System.exit(0)
+    sc.stop()
   }
 }

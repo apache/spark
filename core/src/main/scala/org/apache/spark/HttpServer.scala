@@ -23,7 +23,8 @@ import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
 
-import org.eclipse.jetty.server.{Server, ServerConnector}
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.bio.SocketConnector
 import org.eclipse.jetty.server.handler.{DefaultHandler, HandlerList, ResourceHandler}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
@@ -40,61 +41,81 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
  */
-private[spark] class HttpServer(resourceBase: File, securityManager: SecurityManager)
-    extends Logging {
-  private var server: Server = _
-  private var port: Int = -1
+private[spark] class HttpServer(
+    resourceBase: File,
+    securityManager: SecurityManager,
+    requestedPort: Int = 0,
+    serverName: String = "HTTP server")
+  extends Logging {
+
+  private var server: Server = null
+  private var port: Int = requestedPort
 
   def start() {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
-      val threadPool = new QueuedThreadPool
-      threadPool.setDaemon(true)
-
-      server = new Server(threadPool)
-      val connector = new ServerConnector(server)
-      connector.setIdleTimeout(60 * 1000)
-      connector.setSoLingerTime(-1)
-      connector.setPort(0)
-      server.addConnector(connector)
-
-      val resHandler = new ResourceHandler
-      resHandler.setResourceBase(resourceBase.getAbsolutePath)
-
-      val handlerList = new HandlerList
-      handlerList.setHandlers(Array(resHandler, new DefaultHandler))
-
-      if (securityManager.isAuthenticationEnabled()) {
-        logDebug("HttpServer is using security")
-        val sh = setupSecurityHandler(securityManager)
-        // make sure we go through security handler to get resources
-        sh.setHandler(handlerList)
-        server.setHandler(sh)
-      } else {
-        logDebug("HttpServer is not using security")
-        server.setHandler(handlerList)
-      }
-
-      server.start()
-      port = connector.getLocalPort
+      val (actualServer, actualPort) =
+        Utils.startServiceOnPort[Server](requestedPort, doStart, serverName)
+      server = actualServer
+      port = actualPort
     }
   }
 
-  /** 
+  /**
+   * Actually start the HTTP server on the given port.
+   *
+   * Note that this is only best effort in the sense that we may end up binding to a nearby port
+   * in the event of port collision. Return the bound server and the actual port used.
+   */
+  private def doStart(startPort: Int): (Server, Int) = {
+    val server = new Server()
+    val connector = new SocketConnector
+    connector.setMaxIdleTime(60 * 1000)
+    connector.setSoLingerTime(-1)
+    connector.setPort(startPort)
+    server.addConnector(connector)
+
+    val threadPool = new QueuedThreadPool
+    threadPool.setDaemon(true)
+    server.setThreadPool(threadPool)
+    val resHandler = new ResourceHandler
+    resHandler.setResourceBase(resourceBase.getAbsolutePath)
+
+    val handlerList = new HandlerList
+    handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+
+    if (securityManager.isAuthenticationEnabled()) {
+      logDebug("HttpServer is using security")
+      val sh = setupSecurityHandler(securityManager)
+      // make sure we go through security handler to get resources
+      sh.setHandler(handlerList)
+      server.setHandler(sh)
+    } else {
+      logDebug("HttpServer is not using security")
+      server.setHandler(handlerList)
+    }
+
+    server.start()
+    val actualPort = server.getConnectors()(0).getLocalPort
+
+    (server, actualPort)
+  }
+
+  /**
    * Setup Jetty to the HashLoginService using a single user with our
    * shared secret. Configure it to use DIGEST-MD5 authentication so that the password
    * isn't passed in plaintext.
    */
   private def setupSecurityHandler(securityMgr: SecurityManager): ConstraintSecurityHandler = {
     val constraint = new Constraint()
-    // use DIGEST-MD5 as the authentication mechanism 
+    // use DIGEST-MD5 as the authentication mechanism
     constraint.setName(Constraint.__DIGEST_AUTH)
     constraint.setRoles(Array("user"))
     constraint.setAuthenticate(true)
     constraint.setDataConstraint(Constraint.DC_NONE)
- 
+
     val cm = new ConstraintMapping()
     cm.setConstraint(constraint)
     cm.setPathSpec("/*")
@@ -133,7 +154,7 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {
-      return "http://" + Utils.localIpAddress + ":" + port
+      "http://" + Utils.localIpAddress + ":" + port
     }
   }
 }

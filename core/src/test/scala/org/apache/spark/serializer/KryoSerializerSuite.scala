@@ -18,12 +18,14 @@
 package org.apache.spark.serializer
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
 
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SparkConf, SharedSparkContext}
 import org.apache.spark.serializer.KryoTest._
+
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -31,7 +33,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(1)
@@ -61,7 +63,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("pairs") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 1))
@@ -85,7 +87,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("Scala data structures") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
@@ -108,7 +110,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("ranges") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
       assert(ser.serialize(t).limit < 100)
@@ -127,9 +129,24 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(1.0 until 1000000.0 by 2.0)
   }
 
+  test("asJavaIterable") {
+    // Serialize a collection wrapped by asJavaIterable
+    val ser = new KryoSerializer(conf).newInstance()
+    val a = ser.serialize(scala.collection.convert.WrapAsJava.asJavaIterable(Seq(12345)))
+    val b = ser.deserialize[java.lang.Iterable[Int]](a)
+    assert(b.iterator().next() === 12345)
+
+    // Serialize a normal Java collection
+    val col = new java.util.ArrayList[Int]
+    col.add(54321)
+    val c = ser.serialize(col)
+    val d = ser.deserialize[java.lang.Iterable[Int]](c)
+    assert(b.iterator().next() === 12345)
+  }
+
   test("custom registrator") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 
@@ -191,9 +208,43 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
         .fold(new ClassWithoutNoArgConstructor(10))((t1, t2) => new ClassWithoutNoArgConstructor(t1.x + t2.x)).x
     assert(10 + control.sum === result)
   }
+
+  test("kryo with nonexistent custom registrator should fail") {
+    import org.apache.spark.{SparkConf, SparkException}
+
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrator", "this.class.does.not.exist")
+    
+    val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance())
+    assert(thrown.getMessage.contains("Failed to invoke this.class.does.not.exist"))
+  }
+
+  test("default class loader can be set by a different thread") {
+    val ser = new KryoSerializer(new SparkConf)
+
+    // First serialize the object
+    val serInstance = ser.newInstance()
+    val bytes = serInstance.serialize(new ClassLoaderTestingObject)
+
+    // Deserialize the object to make sure normal deserialization works
+    serInstance.deserialize[ClassLoaderTestingObject](bytes)
+
+    // Set a special, broken ClassLoader and make sure we get an exception on deserialization
+    ser.setDefaultClassLoader(new ClassLoader() {
+      override def loadClass(name: String) = throw new UnsupportedOperationException
+    })
+    intercept[UnsupportedOperationException] {
+      ser.newInstance().deserialize[ClassLoaderTestingObject](bytes)
+    }
+  }
 }
 
+
+class ClassLoaderTestingObject
+
+
 object KryoTest {
+
   case class CaseClass(i: Int, s: String) {}
 
   class ClassWithNoArgConstructor {

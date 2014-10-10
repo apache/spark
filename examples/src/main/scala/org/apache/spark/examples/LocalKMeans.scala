@@ -18,13 +18,19 @@
 package org.apache.spark.examples
 
 import java.util.Random
-import org.apache.spark.util.Vector
-import org.apache.spark.SparkContext._
+
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
+import breeze.linalg.{Vector, DenseVector, squaredDistance}
+
+import org.apache.spark.SparkContext._
+
 /**
  * K-means clustering.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.clustering.KMeans
  */
 object LocalKMeans {
   val N = 1000
@@ -36,19 +42,19 @@ object LocalKMeans {
 
   def generateData = {
     def generatePoint(i: Int) = {
-      Vector(D, _ => rand.nextDouble * R)
+      DenseVector.fill(D){rand.nextDouble * R}
     }
     Array.tabulate(N)(generatePoint)
   }
 
-  def closestPoint(p: Vector, centers: HashMap[Int, Vector]): Int = {
+  def closestPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): Int = {
     var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
     for (i <- 1 to centers.size) {
       val vCurr = centers.get(i).get
-      val tempDist = p.squaredDist(vCurr)
+      val tempDist = squaredDistance(p, vCurr)
       if (tempDist < closest) {
         closest = tempDist
         bestIndex = i
@@ -58,10 +64,21 @@ object LocalKMeans {
     bestIndex
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
+        |Please use the KMeans method found in org.apache.spark.mllib.clustering
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
+
+    showWarning()
+
     val data = generateData
-    var points = new HashSet[Vector]
-    var kPoints = new HashMap[Int, Vector]
+    var points = new HashSet[Vector[Double]]
+    var kPoints = new HashMap[Int, Vector[Double]]
     var tempDist = 1.0
 
     while (points.size < K) {
@@ -81,16 +98,17 @@ object LocalKMeans {
       var mappings = closest.groupBy[Int] (x => x._1)
 
       var pointStats = mappings.map { pair =>
-        pair._2.reduceLeft [(Int, (Vector, Int))] {
+        pair._2.reduceLeft [(Int, (Vector[Double], Int))] {
           case ((id1, (x1, y1)), (id2, (x2, y2))) => (id1, (x1 + x2, y1 + y2))
         }
       }
 
-      var newPoints = pointStats.map {mapping => (mapping._1, mapping._2._1/mapping._2._2)}
+      var newPoints = pointStats.map {mapping =>
+        (mapping._1, mapping._2._1 * (1.0 / mapping._2._2))}
 
       tempDist = 0.0
       for (mapping <- newPoints) {
-        tempDist += kPoints.get(mapping._1).get.squaredDist(mapping._2)
+        tempDist += squaredDistance(kPoints.get(mapping._1).get, mapping._2)
       }
 
       for (newP <- newPoints) {

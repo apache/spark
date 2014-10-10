@@ -18,34 +18,52 @@
 package org.apache.spark.examples
 
 import java.util.Random
-import org.apache.spark.util.Vector
 
+import breeze.linalg.{Vector, DenseVector}
+
+/**
+ * Logistic regression based classification.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.classification.LogisticRegression
+ */
 object LocalFileLR {
   val D = 10   // Numer of dimensions
   val rand = new Random(42)
 
-  case class DataPoint(x: Vector, y: Double)
+  case class DataPoint(x: Vector[Double], y: Double)
 
   def parsePoint(line: String): DataPoint = {
     val nums = line.split(' ').map(_.toDouble)
-    DataPoint(new Vector(nums.slice(1, D + 1)), nums(0))
+    DataPoint(new DenseVector(nums.slice(1, D + 1)), nums(0))
+  }
+
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+        |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
+        |for more conventional use.
+      """.stripMargin)
   }
 
   def main(args: Array[String]) {
+
+    showWarning()
+
     val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
     val points = lines.map(parsePoint _)
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
-    var w = Vector(D, _ => 2 * rand.nextDouble - 1)
+    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
-      var gradient = Vector.zeros(D)
+      var gradient = DenseVector.zeros[Double](D)
       for (p <- points) {
-        val scale = (1 / (1 + math.exp(-p.y * (w dot p.x))) - 1) * p.y
-        gradient +=  scale * p.x
+        val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
+        gradient += p.x * scale
       }
       w -= gradient
     }

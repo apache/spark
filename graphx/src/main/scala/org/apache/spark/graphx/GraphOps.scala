@@ -18,11 +18,13 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
-import org.apache.spark.SparkContext._
-import org.apache.spark.SparkException
-import org.apache.spark.graphx.lib._
-import org.apache.spark.rdd.RDD
 import scala.util.Random
+
+import org.apache.spark.SparkException
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
+
+import org.apache.spark.graphx.lib._
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -34,28 +36,31 @@ import scala.util.Random
 class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Serializable {
 
   /** The number of edges in the graph. */
-  lazy val numEdges: Long = graph.edges.count()
+  @transient lazy val numEdges: Long = graph.edges.count()
 
   /** The number of vertices in the graph. */
-  lazy val numVertices: Long = graph.vertices.count()
+  @transient lazy val numVertices: Long = graph.vertices.count()
 
   /**
    * The in-degree of each vertex in the graph.
    * @note Vertices with no in-edges are not returned in the resulting RDD.
    */
-  lazy val inDegrees: VertexRDD[Int] = degreesRDD(EdgeDirection.In)
+  @transient lazy val inDegrees: VertexRDD[Int] =
+    degreesRDD(EdgeDirection.In).setName("GraphOps.inDegrees")
 
   /**
    * The out-degree of each vertex in the graph.
    * @note Vertices with no out-edges are not returned in the resulting RDD.
    */
-  lazy val outDegrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Out)
+  @transient lazy val outDegrees: VertexRDD[Int] =
+    degreesRDD(EdgeDirection.Out).setName("GraphOps.outDegrees")
 
   /**
    * The degree of each vertex in the graph.
    * @note Vertices with no edges are not returned in the resulting RDD.
    */
-  lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Either)
+  @transient lazy val degrees: VertexRDD[Int] =
+    degreesRDD(EdgeDirection.Either).setName("GraphOps.degrees")
 
   /**
    * Computes the neighboring vertex degrees.
@@ -172,7 +177,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
           "EdgeDirection.Either instead.")
     }
   }
- 
+
   /**
    * Join the vertices with an RDD and then apply a function from the
    * the vertex and RDD entry to a new vertex value.  The input table
@@ -193,10 +198,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * {{{
    * val rawGraph: Graph[Int, Int] = GraphLoader.edgeListFile(sc, "webgraph")
-   *   .mapVertices(v => 0)
-   * val outDeg: RDD[(Int, Int)] = rawGraph.outDegrees
-   * val graph = rawGraph.leftJoinVertices[Int,Int](outDeg,
-   *   (v, deg) => deg )
+   *   .mapVertices((_, _) => 0)
+   * val outDeg = rawGraph.outDegrees
+   * val graph = rawGraph.joinVertices[Int](outDeg)
+   *   ((_, _, outDeg) => outDeg)
    * }}}
    *
    */
@@ -249,7 +254,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Picks a random vertex from the graph and returns its ID.
    */
   def pickRandomVertex(): VertexId = {
-    val probability = 50 / graph.numVertices
+    val probability = 50.0 / graph.numVertices
     var found = false
     var retVal: VertexId = null.asInstanceOf[VertexId]
     while (!found) {

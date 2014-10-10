@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
@@ -26,7 +26,10 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
 
-class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
+abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
+
+  val conf = new SparkConf(loadDefaults = false)
+
   test("groupByKey without compression") {
     try {
       System.setProperty("spark.shuffle.compress", "false")
@@ -53,9 +56,11 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     }
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
-    val c = new ShuffledRDD[Int, NonJavaSerializableClass, (Int, NonJavaSerializableClass)](
-      b, new HashPartitioner(NUM_BLOCKS)).setSerializer(classOf[KryoSerializer].getName)
-    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
+    val c = new ShuffledRDD[Int,
+      NonJavaSerializableClass,
+      NonJavaSerializableClass](b, new HashPartitioner(NUM_BLOCKS))
+    c.setSerializer(new KryoSerializer(conf))
+    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
 
     assert(c.count === 10)
 
@@ -75,8 +80,10 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     }
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
-    val c = new ShuffledRDD[Int, NonJavaSerializableClass, (Int, NonJavaSerializableClass)](
-      b, new HashPartitioner(3)).setSerializer(classOf[KryoSerializer].getName)
+    val c = new ShuffledRDD[Int,
+      NonJavaSerializableClass,
+      NonJavaSerializableClass](b, new HashPartitioner(3))
+    c.setSerializer(new KryoSerializer(conf))
     assert(c.count === 10)
   }
 
@@ -91,10 +98,10 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
 
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD[Int, Int, (Int, Int)](b, new HashPartitioner(10))
-      .setSerializer(classOf[KryoSerializer].getName)
+    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(10))
+      .setSerializer(new KryoSerializer(conf))
 
-    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
+    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
@@ -117,9 +124,9 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val b = a.map(x => (x, x*2))
 
     // NOTE: The default Java serializer should create zero-sized blocks
-    val c = new ShuffledRDD[Int, Int, (Int, Int)](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(10))
 
-    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
+    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
@@ -132,19 +139,19 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     assert(nonEmptyBlocks.size <= 4)
   }
 
-  test("shuffle using mutable pairs") {
+  test("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
-    val results = new ShuffledRDD[Int, Int, MutablePair[Int, Int]](pairs, new HashPartitioner(2))
-      .collect()
+    val results = new ShuffledRDD[Int, Int, Int](pairs,
+      new HashPartitioner(2)).collect()
 
-    data.foreach { pair => results should contain (pair) }
+    data.foreach { pair => results should contain ((pair._1, pair._2)) }
   }
 
-  test("sorting using mutable pairs") {
+  test("sorting on mutable pairs") {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,512]", "test")
@@ -153,10 +160,10 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
       .sortByKey().collect()
-    results(0) should be (p(1, 11))
-    results(1) should be (p(2, 22))
-    results(2) should be (p(3, 33))
-    results(3) should be (p(100, 100))
+    results(0) should be ((1, 11))
+    results(1) should be ((2, 22))
+    results(2) should be ((3, 33))
+    results(3) should be ((100, 100))
   }
 
   test("cogroup using mutable pairs") {
@@ -167,7 +174,9 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
     val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
-    val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2)).collectAsMap()
+    val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2))
+      .map(p => (p._1, p._2.map(_.toArray)))
+      .collectAsMap()
 
     assert(results(1)(0).length === 3)
     assert(results(1)(0).contains(1))
@@ -197,6 +206,42 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     // substracted rdd return results as Tuple2
     results(0) should be ((3, 33))
   }
+
+  test("sort with Java non serializable class - Kryo") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .setAppName("test")
+      .setMaster("local-cluster[2,1,512]")
+    sc = new SparkContext(conf)
+    val a = sc.parallelize(1 to 10, 2)
+    val b = a.map { x =>
+      (new NonJavaSerializableClass(x), x)
+    }
+    // If the Kryo serializer is not used correctly, the shuffle would fail because the
+    // default Java serializer cannot handle the non serializable class.
+    val c = b.sortByKey().map(x => x._2)
+    assert(c.collect() === Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+  }
+
+  test("sort with Java non serializable class - Java") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local-cluster[2,1,512]")
+    sc = new SparkContext(conf)
+    val a = sc.parallelize(1 to 10, 2)
+    val b = a.map { x =>
+      (new NonJavaSerializableClass(x), x)
+    }
+    // default Java serializer cannot handle the non serializable class.
+    val thrown = intercept[SparkException] {
+      b.sortByKey().collect()
+    }
+
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getMessage.toLowerCase.contains("serializable"))
+  }
 }
 
 object ShuffleSuite {
@@ -206,5 +251,9 @@ object ShuffleSuite {
     x + y
   }
 
-  class NonJavaSerializableClass(val value: Int)
+  class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {
+    override def compareTo(o: NonJavaSerializableClass): Int = {
+      value - o.value
+    }
+  }
 }

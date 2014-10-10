@@ -14,6 +14,8 @@ import scala.reflect.internal.util.Position
 import scala.util.control.Exception.ignoring
 import scala.tools.nsc.util.stackTraceString
 
+import org.apache.spark.SPARK_VERSION
+
 /**
  *  Machinery for the asynchronous initialization of the repl.
  */
@@ -26,9 +28,9 @@ trait SparkILoopInit {
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 1.0.0-SNAPSHOT
+   /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
-""")
+""".format(SPARK_VERSION))
     import Properties._
     val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
       versionString, javaVmName, javaVersion)
@@ -116,14 +118,14 @@ trait SparkILoopInit {
     }
   }
 
- def initializeSpark() {
+  def initializeSpark() {
     intp.beQuietDuring {
       command("""
          @transient val sc = org.apache.spark.repl.Main.interp.createSparkContext();
         """)
       command("import org.apache.spark.SparkContext._")
     }
-   echo("Spark context available as sc.")
+    echo("Spark context available as sc.")
   }
 
   // code to be executed only after the interpreter is initialized

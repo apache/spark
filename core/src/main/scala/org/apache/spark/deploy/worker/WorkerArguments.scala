@@ -20,11 +20,12 @@ package org.apache.spark.deploy.worker
 import java.lang.management.ManagementFactory
 
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
+import org.apache.spark.SparkConf
 
 /**
- * Command-line parser for the master.
+ * Command-line parser for the worker.
  */
-private[spark] class WorkerArguments(args: Array[String]) {
+private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
@@ -32,8 +33,8 @@ private[spark] class WorkerArguments(args: Array[String]) {
   var memory = inferDefaultMemory()
   var masters: Array[String] = null
   var workDir: String = null
-  
-  // Check for settings in environment variables 
+
+  // Check for settings in environment variables
   if (System.getenv("SPARK_WORKER_PORT") != null) {
     port = System.getenv("SPARK_WORKER_PORT").toInt
   }
@@ -46,10 +47,13 @@ private[spark] class WorkerArguments(args: Array[String]) {
   if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
   }
+  if (conf.contains("spark.worker.ui.port")) {
+    webUiPort = conf.get("spark.worker.ui.port").toInt
+  }
   if (System.getenv("SPARK_WORKER_DIR") != null) {
     workDir = System.getenv("SPARK_WORKER_DIR")
   }
-  
+
   parse(args.toList)
 
   def parse(args: List[String]): Unit = args match {
@@ -78,7 +82,7 @@ private[spark] class WorkerArguments(args: Array[String]) {
     case ("--work-dir" | "-d") :: value :: tail =>
       workDir = value
       parse(tail)
-      
+
     case "--webui-port" :: IntParam(value) :: tail =>
       webUiPort = value
       parse(tail)

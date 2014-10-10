@@ -20,14 +20,23 @@ package org.apache.spark.io
 import java.io.{InputStream, OutputStream}
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
+ * :: DeveloperApi ::
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
+ *
+ * Note: The wire protocol for a codec is not guaranteed compatible across versions of Spark.
+ *       This is intended for use as an internal compression utility within a single
+ *       Spark application.
  */
+@DeveloperApi
 trait CompressionCodec {
 
   def compressedOutputStream(s: OutputStream): OutputStream
@@ -37,22 +46,58 @@ trait CompressionCodec {
 
 
 private[spark] object CompressionCodec {
+
+  private val shortCompressionCodecNames = Map(
+    "lz4" -> classOf[LZ4CompressionCodec].getName,
+    "lzf" -> classOf[LZFCompressionCodec].getName,
+    "snappy" -> classOf[SnappyCompressionCodec].getName)
+
   def createCodec(conf: SparkConf): CompressionCodec = {
-    createCodec(conf, conf.get(
-      "spark.io.compression.codec", classOf[LZFCompressionCodec].getName))
+    createCodec(conf, conf.get("spark.io.compression.codec", DEFAULT_COMPRESSION_CODEC))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val ctor = Class.forName(codecName, true, Thread.currentThread.getContextClassLoader)
+    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
+    val ctor = Class.forName(codecClass, true, Utils.getContextOrSparkClassLoader)
       .getConstructor(classOf[SparkConf])
     ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }
+
+  val DEFAULT_COMPRESSION_CODEC = "snappy"
+  val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
 
 /**
- * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
+ * :: DeveloperApi ::
+ * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
+ * Block size can be configured by `spark.io.compression.lz4.block.size`.
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
  */
+@DeveloperApi
+class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
+
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
+    val blockSize = conf.getInt("spark.io.compression.lz4.block.size", 32768)
+    new LZ4BlockOutputStream(s, blockSize)
+  }
+
+  override def compressedInputStream(s: InputStream): InputStream = new LZ4BlockInputStream(s)
+}
+
+
+/**
+ * :: DeveloperApi ::
+ * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
+ */
+@DeveloperApi
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
@@ -64,9 +109,15 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
+ * :: DeveloperApi ::
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by spark.io.compression.snappy.block.size.
+ * Block size can be configured by `spark.io.compression.snappy.block.size`.
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
  */
+@DeveloperApi
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {

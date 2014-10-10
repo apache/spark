@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 private[spark]
 object CommandUtils extends Logging {
   def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
+    val runner = sys.env.get("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
@@ -38,29 +38,40 @@ object CommandUtils extends Logging {
       command.arguments
   }
 
-  private def getEnv(key: String, command: Command): Option[String] =
-    command.environment.get(key).orElse(Option(System.getenv(key)))
-
   /**
    * Attention: this must always be aligned with the environment variables in the run scripts and
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val libraryOpts = getEnv("SPARK_LIBRARY_PATH", command)
-      .map(p => List("-Djava.library.path=" + p))
-      .getOrElse(Nil)
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS"))
-      .map(Utils.splitCommandString).getOrElse(Nil)
-    val userOpts = getEnv("SPARK_JAVA_OPTS", command).map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
+
+    // Exists for backwards compatibility with older Spark versions
+    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString)
+      .getOrElse(Nil)
+    if (workerLocalOpts.length > 0) {
+      logWarning("SPARK_JAVA_OPTS was set on the worker. It is deprecated in Spark 1.0.")
+      logWarning("Set SPARK_LOCAL_DIRS for node-specific storage locations.")
+    }
+
+    val libraryOpts =
+      if (command.libraryPathEntries.size > 0) {
+        val joined = command.libraryPathEntries.mkString(File.pathSeparator)
+        Seq(s"-Djava.library.path=$joined")
+      } else {
+        Seq()
+      }
 
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
-      extraEnvironment=command.environment)
+      extraEnvironment = command.environment)
+    val userClassPath = command.classPathEntries ++ Seq(classPath)
 
-    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    val javaVersion = System.getProperty("java.version")
+    val permGenOpt = if (!javaVersion.startsWith("1.8")) Some("-XX:MaxPermSize=128m") else None
+    Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
+      permGenOpt ++ libraryOpts ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

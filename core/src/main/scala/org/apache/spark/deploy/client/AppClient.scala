@@ -30,7 +30,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{ActorLogReceive, Utils, AkkaUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -56,10 +56,11 @@ private[spark] class AppClient(
   var registered = false
   var activeMasterUrl: String = null
 
-  class ClientActor extends Actor with Logging {
+  class ClientActor extends Actor with ActorLogReceive with Logging {
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
+    var registrationRetryTimer: Option[Cancellable] = None
 
     override def preStart() {
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -83,22 +84,22 @@ private[spark] class AppClient(
 
     def registerWithMaster() {
       tryRegisterAllMasters()
-
       import context.dispatcher
       var retries = 0
-      lazy val retryTimer: Cancellable =
+      registrationRetryTimer = Some {
         context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
-          retries += 1
-          if (registered) {
-            retryTimer.cancel()
-          } else if (retries >= REGISTRATION_RETRIES) {
-            logError("All masters are unresponsive! Giving up.")
-            markDead()
-          } else {
-            tryRegisterAllMasters()
+          Utils.tryOrExit {
+            retries += 1
+            if (registered) {
+              registrationRetryTimer.foreach(_.cancel())
+            } else if (retries >= REGISTRATION_RETRIES) {
+              markDead("All masters are unresponsive! Giving up.")
+            } else {
+              tryRegisterAllMasters()
+            }
           }
         }
-      retryTimer // start timer
+      }
     }
 
     def changeMaster(url: String) {
@@ -118,7 +119,7 @@ private[spark] class AppClient(
         .contains(remoteUrl.hostPort)
     }
 
-    override def receive = {
+    override def receiveWithLogging = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
         registered = true
@@ -126,8 +127,7 @@ private[spark] class AppClient(
         listener.connected(appId)
 
       case ApplicationRemoved(message) =>
-        logError("Master removed our application: %s; stopping client".format(message))
-        markDisconnected()
+        markDead("Master removed our application: %s".format(message))
         context.stop(self)
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
@@ -154,11 +154,11 @@ private[spark] class AppClient(
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
-      case AssociationErrorEvent(cause, _, address, _) if isPossibleMaster(address) =>
+      case AssociationErrorEvent(cause, _, address, _, _) if isPossibleMaster(address) =>
         logWarning(s"Could not connect to $address: $cause")
 
       case StopAppClient =>
-        markDead()
+        markDead("Application has been stopped.")
         sender ! true
         context.stop(self)
     }
@@ -173,12 +173,17 @@ private[spark] class AppClient(
       }
     }
 
-    def markDead() {
+    def markDead(reason: String) {
       if (!alreadyDead) {
-        listener.dead()
+        listener.dead(reason)
         alreadyDead = true
       }
     }
+
+    override def postStop() {
+      registrationRetryTimer.foreach(_.cancel())
+    }
+
   }
 
   def start() {

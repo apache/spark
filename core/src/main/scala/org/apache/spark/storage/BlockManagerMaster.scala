@@ -21,17 +21,19 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import akka.actor._
-import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
-class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Logging {
-
-  val AKKA_RETRY_ATTEMPTS: Int = conf.getInt("spark.akka.num.retries", 3)
-  val AKKA_RETRY_INTERVAL_MS: Int = conf.getInt("spark.akka.retry.wait", 3000)
+class BlockManagerMaster(
+    var driverActor: ActorRef,
+    conf: SparkConf,
+    isDriver: Boolean)
+  extends Logging {
+  private val AKKA_RETRY_ATTEMPTS: Int = AkkaUtils.numRetries(conf)
+  private val AKKA_RETRY_INTERVAL_MS: Int = AkkaUtils.retryWaitMs(conf)
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
@@ -43,18 +45,8 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
-  /**
-   * Send the driver actor a heart beat from the slave. Returns true if everything works out,
-   * false if the driver does not know about the given block manager, which means the block
-   * manager should re-register.
-   */
-  def sendHeartBeat(blockManagerId: BlockManagerId): Boolean = {
-    askDriverWithReply[Boolean](HeartBeat(blockManagerId))
-  }
-
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(
-      blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     logInfo("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
@@ -65,9 +57,10 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long): Boolean = {
+      diskSize: Long,
+      tachyonSize: Long): Boolean = {
     val res = askDriverWithReply[Boolean](
-      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
+      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize))
     logInfo("Updated info of block " + blockId)
     res
   }
@@ -82,14 +75,17 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
     askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
   }
 
+  /**
+   * Check if block manager master has a block. Note that this can be used to check for only
+   * those blocks that are reported to block manager master.
+   */
+  def contains(blockId: BlockId) = {
+    !getLocations(blockId).isEmpty
+  }
+
   /** Get ids of other nodes in the cluster from the driver */
-  def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
-    val result = askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
-    if (result.length != numPeers) {
-      throw new SparkException(
-        "Error getting peers, only got " + result.size + " instead of " + numPeers)
-    }
-    result
+  def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
+    askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId))
   }
 
   /**
@@ -100,13 +96,38 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
     askDriverWithReply(RemoveBlock(blockId))
   }
 
-  /**
-   * Remove all blocks belonging to the given RDD.
-   */
+  /** Remove all blocks belonging to the given RDD. */
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
-    future onFailure {
-      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
+    future.onFailure {
+      case e: Exception =>
+        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
+    }
+    if (blocking) {
+      Await.result(future, timeout)
+    }
+  }
+
+  /** Remove all blocks belonging to the given shuffle. */
+  def removeShuffle(shuffleId: Int, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
+    future.onFailure {
+      case e: Exception =>
+        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
+    }
+    if (blocking) {
+      Await.result(future, timeout)
+    }
+  }
+
+  /** Remove all blocks belonging to the given broadcast. */
+  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Int]]](
+      RemoveBroadcast(broadcastId, removeFromMaster))
+    future.onFailure {
+      case e: Exception =>
+        logWarning(s"Failed to remove broadcast $broadcastId" +
+          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -127,9 +148,54 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
     askDriverWithReply[Array[StorageStatus]](GetStorageStatus)
   }
 
+  /**
+   * Return the block's status on all block managers, if any. NOTE: This is a
+   * potentially expensive operation and should only be used for testing.
+   *
+   * If askSlaves is true, this invokes the master to query each block manager for the most
+   * updated block statuses. This is useful when the master is not informed of the given block
+   * by all block managers.
+   */
+  def getBlockStatus(
+      blockId: BlockId,
+      askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
+    val msg = GetBlockStatus(blockId, askSlaves)
+    /*
+     * To avoid potential deadlocks, the use of Futures is necessary, because the master actor
+     * should not block on waiting for a block manager, which can in turn be waiting for the
+     * master actor for a response to a prior message.
+     */
+    val response = askDriverWithReply[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
+    val (blockManagerIds, futures) = response.unzip
+    val result = Await.result(Future.sequence(futures), timeout)
+    if (result == null) {
+      throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
+    }
+    val blockStatus = result.asInstanceOf[Iterable[Option[BlockStatus]]]
+    blockManagerIds.zip(blockStatus).flatMap { case (blockManagerId, status) =>
+      status.map { s => (blockManagerId, s) }
+    }.toMap
+  }
+
+  /**
+   * Return a list of ids of existing blocks such that the ids match the given filter. NOTE: This
+   * is a potentially expensive operation and should only be used for testing.
+   *
+   * If askSlaves is true, this invokes the master to query each block manager for the most
+   * updated block statuses. This is useful when the master is not informed of the given block
+   * by all block managers.
+   */
+  def getMatchingBlockIds(
+      filter: BlockId => Boolean,
+      askSlaves: Boolean): Seq[BlockId] = {
+    val msg = GetMatchingBlockIds(filter, askSlaves)
+    val future = askDriverWithReply[Future[Seq[BlockId]]](msg)
+    Await.result(future, timeout)
+  }
+
   /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
-    if (driverActor != null) {
+    if (driverActor != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverActor = null
       logInfo("BlockManagerMaster stopped")
@@ -148,33 +214,8 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
    * throw a SparkException if this fails.
    */
   private def askDriverWithReply[T](message: Any): T = {
-    // TODO: Consider removing multiple attempts
-    if (driverActor == null) {
-      throw new SparkException("Error sending message to BlockManager as driverActor is null " +
-        "[message = " + message + "]")
-    }
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < AKKA_RETRY_ATTEMPTS) {
-      attempts += 1
-      try {
-        val future = driverActor.ask(message)(timeout)
-        val result = Await.result(future, timeout)
-        if (result == null) {
-          throw new SparkException("BlockManagerMaster returned null")
-        }
-        return result.asInstanceOf[T]
-      } catch {
-        case ie: InterruptedException => throw ie
-        case e: Exception =>
-          lastException = e
-          logWarning("Error sending message to BlockManagerMaster in " + attempts + " attempts", e)
-      }
-      Thread.sleep(AKKA_RETRY_INTERVAL_MS)
-    }
-
-    throw new SparkException(
-      "Error sending message to BlockManagerMaster [message = " + message + "]", lastException)
+    AkkaUtils.askWithReply(message, driverActor, AKKA_RETRY_ATTEMPTS, AKKA_RETRY_INTERVAL_MS,
+      timeout)
   }
 
 }

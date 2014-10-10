@@ -23,15 +23,16 @@ import sys
 import time
 import socket
 import traceback
-# CloudPickler needs to be imported so that depicklers are registered using the
-# copy_reg module.
+import cProfile
+import pstats
+
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
-from pyspark.cloudpickle import CloudPickler
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
-
+    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
+    CompressedSerializer
+from pyspark import shuffle
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -44,6 +45,13 @@ def report_times(outfile, boot, init, finish):
     write_long(1000 * finish, outfile)
 
 
+def add_path(path):
+    # worker can be used, so donot add path multiple times
+    if path not in sys.path:
+        # overwrite system packages
+        sys.path.insert(1, path)
+
+
 def main(infile, outfile):
     try:
         boot_time = time.time()
@@ -51,40 +59,72 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             return
 
+        # initialize global state
+        shuffle.MemoryBytesSpilled = 0
+        shuffle.DiskBytesSpilled = 0
+        _accumulatorRegistry.clear()
+
         # fetch name of workdir
         spark_files_dir = utf8_deserializer.loads(infile)
         SparkFiles._root_directory = spark_files_dir
         SparkFiles._is_running_on_worker = True
 
-        # fetch names and values of broadcast variables
-        num_broadcast_variables = read_int(infile)
-        for _ in range(num_broadcast_variables):
-            bid = read_long(infile)
-            value = pickleSer._read_with_length(infile)
-            _broadcastRegistry[bid] = Broadcast(bid, value)
-
         # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
-        sys.path.append(spark_files_dir) # *.py files that were added will be copied here
-        num_python_includes =  read_int(infile)
+        add_path(spark_files_dir)  # *.py files that were added will be copied here
+        num_python_includes = read_int(infile)
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
-            sys.path.append(os.path.join(spark_files_dir, filename))
+            add_path(os.path.join(spark_files_dir, filename))
 
+        # fetch names and values of broadcast variables
+        num_broadcast_variables = read_int(infile)
+        ser = CompressedSerializer(pickleSer)
+        for _ in range(num_broadcast_variables):
+            bid = read_long(infile)
+            if bid >= 0:
+                value = ser._read_with_length(infile)
+                _broadcastRegistry[bid] = Broadcast(bid, value)
+            else:
+                bid = - bid - 1
+                _broadcastRegistry.pop(bid)
+
+        _accumulatorRegistry.clear()
         command = pickleSer._read_with_length(infile)
-        (func, deserializer, serializer) = command
+        if isinstance(command, Broadcast):
+            command = pickleSer.loads(command.value)
+        (func, stats, deserializer, serializer) = command
         init_time = time.time()
-        iterator = deserializer.load_stream(infile)
-        serializer.dump_stream(func(split_index, iterator), outfile)
-    except Exception as e:
-        # Write the error to stderr in addition to trying to pass it back to
-        # Java, in case it happened while serializing a record
-        print >> sys.stderr, "PySpark worker failed with exception:"
-        print >> sys.stderr, traceback.format_exc()
-        write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(traceback.format_exc(), outfile)
-        sys.exit(-1)
+
+        def process():
+            iterator = deserializer.load_stream(infile)
+            serializer.dump_stream(func(split_index, iterator), outfile)
+
+        if stats:
+            p = cProfile.Profile()
+            p.runcall(process)
+            st = pstats.Stats(p)
+            st.stream = None  # make it picklable
+            stats.add(st.strip_dirs())
+        else:
+            process()
+    except Exception:
+        try:
+            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
+            write_with_length(traceback.format_exc(), outfile)
+            outfile.flush()
+        except IOError:
+            # JVM close the socket
+            pass
+        except Exception:
+            # Write the error to stderr if it happened while serializing
+            print >> sys.stderr, "PySpark worker failed with exception:"
+            print >> sys.stderr, traceback.format_exc()
+        exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
+    write_long(shuffle.MemoryBytesSpilled, outfile)
+    write_long(shuffle.DiskBytesSpilled, outfile)
+
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
     write_int(len(_accumulatorRegistry), outfile)

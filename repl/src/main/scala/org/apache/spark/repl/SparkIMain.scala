@@ -7,11 +7,14 @@
 
 package org.apache.spark.repl
 
+import java.io.File
+
 import scala.tools.nsc._
+import scala.tools.nsc.backend.JavaPlatform
 import scala.tools.nsc.interpreter._
 
 import Predef.{ println => _, _ }
-import util.stringFromWriter
+import scala.tools.nsc.util.{MergedClassPath, stringFromWriter, ScalaClassLoader, stackTraceString}
 import scala.reflect.internal.util._
 import java.net.URL
 import scala.sys.BooleanProp
@@ -21,7 +24,6 @@ import reporters._
 import symtab.Flags
 import scala.reflect.internal.Names
 import scala.tools.util.PathResolver
-import scala.tools.nsc.util.ScalaClassLoader
 import ScalaClassLoader.URLClassLoader
 import scala.tools.nsc.util.Exceptional.unwrap
 import scala.collection.{ mutable, immutable }
@@ -34,7 +36,6 @@ import scala.reflect.runtime.{ universe => ru }
 import scala.reflect.{ ClassTag, classTag }
 import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
-import util.stackTraceString
 
 import org.apache.spark.{Logging, HttpServer, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
@@ -83,26 +84,29 @@ import org.apache.spark.util.Utils
    *  @author Moez A. Abdel-Gawad
    *  @author Lex Spoon
    */
-  class SparkIMain(initialSettings: Settings, val out: JPrintWriter)
-      extends SparkImports with Logging {
-    imain =>
+  class SparkIMain(
+      initialSettings: Settings,
+      val out: JPrintWriter,
+      propagateExceptions: Boolean = false)
+    extends SparkImports with Logging { imain =>
 
     val conf = new SparkConf()
 
     val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
-      /** Local directory to save .class files too */
-      val outputDir = {
-        val tmp = System.getProperty("java.io.tmpdir")
-        val rootDir = conf.get("spark.repl.classdir",  tmp)
-        Utils.createTempDir(rootDir)
-      }
-      if (SPARK_DEBUG_REPL) {
-        echo("Output directory: " + outputDir)
-      }
+    /** Local directory to save .class files too */
+    lazy val outputDir = {
+      val tmp = System.getProperty("java.io.tmpdir")
+      val rootDir = conf.get("spark.repl.classdir",  tmp)
+      Utils.createTempDir(rootDir)
+    }
+    if (SPARK_DEBUG_REPL) {
+      echo("Output directory: " + outputDir)
+    }
 
     val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
-    val classServer                                   = new HttpServer(outputDir,
-      new SecurityManager(conf)) /** Jetty server that will serve our classes to worker nodes */
+    /** Jetty server that will serve our classes to worker nodes */
+    val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
+    val classServer                                   = new HttpServer(outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
     private var currentSettings: Settings             = initialSettings
     var printResults                                  = true      // whether to print result lines
     var totalSilence                                  = false     // whether to print anything
@@ -112,12 +116,12 @@ import org.apache.spark.util.Utils
     private var _executionWrapper                     = ""        // code to be wrapped around all lines
 
 
-        // Start the classServer and store its URI in a spark system property
+    // Start the classServer and store its URI in a spark system property
     // (which will be passed to executors so that they can connect to it)
-      classServer.start()
-      if (SPARK_DEBUG_REPL) {
-        echo("Class server started, URI = " + classServer.uri)
-      }
+    classServer.start()
+    if (SPARK_DEBUG_REPL) {
+      echo("Class server started, URI = " + classServer.uri)
+    }
 
     /** We're going to go to some trouble to initialize the compiler asynchronously.
      *  It's critical that nothing call into it until it's been initialized or we will
@@ -129,6 +133,9 @@ import org.apache.spark.util.Utils
     private var _classLoader: AbstractFileClassLoader = null                              // active classloader
     private val _compiler: Global                     = newCompiler(settings, reporter)   // our private compiler
 
+    private trait ExposeAddUrl extends URLClassLoader { def addNewUrl(url: URL) = this.addURL(url) }
+    private var _runtimeClassLoader: URLClassLoader with ExposeAddUrl = null              // wrapper exposing addURL
+
     private val nextReqId = {
       var counter = 0
       () => { counter += 1 ; counter }
@@ -138,7 +145,7 @@ import org.apache.spark.util.Utils
       if (isInitializeComplete) global.classPath.asURLs
       else new PathResolver(settings).result.asURLs  // the compiler's classpath
       )
-      def settings = currentSettings
+    def settings = currentSettings
     def mostRecentLine = prevRequestList match {
       case Nil      => ""
       case req :: _ => req.originalLine
@@ -307,6 +314,57 @@ import org.apache.spark.util.Utils
       }
     }
 
+    /**
+     * Adds any specified jars to the compile and runtime classpaths.
+     *
+     * @note Currently only supports jars, not directories
+     * @param urls The list of items to add to the compile and runtime classpaths
+     */
+    def addUrlsToClassPath(urls: URL*): Unit = {
+      new Run // Needed to force initialization of "something" to correctly load Scala classes from jars
+      urls.foreach(_runtimeClassLoader.addNewUrl) // Add jars/classes to runtime for execution
+      updateCompilerClassPath(urls: _*)           // Add jars/classes to compile time for compiling
+    }
+
+    protected def updateCompilerClassPath(urls: URL*): Unit = {
+      require(!global.forMSIL) // Only support JavaPlatform
+
+      val platform = global.platform.asInstanceOf[JavaPlatform]
+
+      val newClassPath = mergeUrlsIntoClassPath(platform, urls: _*)
+
+      // NOTE: Must use reflection until this is exposed/fixed upstream in Scala
+      val fieldSetter = platform.getClass.getMethods
+        .find(_.getName.endsWith("currentClassPath_$eq")).get
+      fieldSetter.invoke(platform, Some(newClassPath))
+
+      // Reload all jars specified into our compiler
+      global.invalidateClassPathEntries(urls.map(_.getPath): _*)
+    }
+
+    protected def mergeUrlsIntoClassPath(platform: JavaPlatform, urls: URL*): MergedClassPath[AbstractFile] = {
+      // Collect our new jars/directories and add them to the existing set of classpaths
+      val allClassPaths = (
+        platform.classPath.asInstanceOf[MergedClassPath[AbstractFile]].entries ++
+        urls.map(url => {
+          platform.classPath.context.newClassPath(
+            if (url.getProtocol == "file") {
+              val f = new File(url.getPath)
+              if (f.isDirectory)
+                io.AbstractFile.getDirectory(f)
+              else
+                io.AbstractFile.getFile(f)
+            } else {
+              io.AbstractFile.getURL(url)
+            }
+          )
+        })
+      ).distinct
+
+      // Combine all of our classpaths (old and new) into one merged classpath
+      new MergedClassPath(allClassPaths, platform.classPath.context)
+    }
+
     /** Parent classloader.  Overridable. */
     protected def parentClassLoader: ClassLoader =
       SparkHelper.explicitParentLoader(settings).getOrElse( this.getClass.getClassLoader() )
@@ -355,7 +413,9 @@ import org.apache.spark.util.Utils
     private def makeClassLoader(): AbstractFileClassLoader =
       new TranslatingClassLoader(parentClassLoader match {
         case null   => ScalaClassLoader fromURLs compilerClasspath
-        case p      => new URLClassLoader(compilerClasspath, p)
+        case p      =>
+          _runtimeClassLoader = new URLClassLoader(compilerClasspath, p) with ExposeAddUrl
+          _runtimeClassLoader
       })
 
     def getInterpreterClassLoader() = classLoader
@@ -725,6 +785,17 @@ import org.apache.spark.util.Utils
     classServer.stop()
   }
 
+  /**
+   * Captures the session names (which are set by system properties) once, instead of for each line.
+   */
+  object FixedSessionNames {
+    val lineName    = sessionNames.line
+    val readName    = sessionNames.read
+    val evalName    = sessionNames.eval
+    val printName   = sessionNames.print
+    val resultName  = sessionNames.result
+  }
+
   /** Here is where we:
    *
    *  1) Read some source code, and put it in the "read" object.
@@ -733,20 +804,24 @@ import org.apache.spark.util.Utils
    *
    *  Read! Eval! Print! Some of that not yet centralized here.
    */
-  class ReadEvalPrint(lineId: Int) {
+  class ReadEvalPrint(val lineId: Int) {
     def this() = this(freshLineId())
 
     private var lastRun: Run = _
     private var evalCaught: Option[Throwable] = None
     private var conditionalWarnings: List[ConditionalWarning] = Nil
 
-    val packageName = sessionNames.line + lineId
-    val readName    = sessionNames.read
-    val evalName    = sessionNames.eval
-    val printName   = sessionNames.print
-    val resultName  = sessionNames.result
+    val packageName = FixedSessionNames.lineName + lineId
+    val readName    = FixedSessionNames.readName
+    val evalName    = FixedSessionNames.evalName
+    val printName   = FixedSessionNames.printName
+    val resultName  = FixedSessionNames.resultName
 
     def bindError(t: Throwable) = {
+      // Immediately throw the exception if we are asked to propagate them
+      if (propagateExceptions) {
+        throw unwrap(t)
+      }
       if (!bindExceptions) // avoid looping if already binding
         throw t
 
@@ -834,7 +909,7 @@ import org.apache.spark.util.Utils
                                     }
         ((pos, msg)) :: loop(filtered)
       }
-     //PRASHANT: This leads to a NoSuchMethodError for _.warnings. Yet to figure out its purpose.
+     // PRASHANT: This leads to a NoSuchMethodError for _.warnings. Yet to figure out its purpose.
       // val warnings = loop(run.allConditionalWarnings flatMap (_.warnings))
       // if (warnings.nonEmpty)
       //   mostRecentWarnings = warnings
@@ -881,11 +956,16 @@ import org.apache.spark.util.Utils
     def definedTypeSymbol(name: String) = definedSymbols(newTypeName(name))
     def definedTermSymbol(name: String) = definedSymbols(newTermName(name))
 
+    val definedClasses = handlers.exists {
+      case _: ClassHandler => true
+      case _ => false
+    }
+
     /** Code to import bound names from previous lines - accessPath is code to
      * append to objectName to access anything bound by request.
      */
     val SparkComputedImports(importsPreamble, importsTrailer, accessPath) =
-      importsCode(referencedNames.toSet)
+      importsCode(referencedNames.toSet, definedClasses)
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = {
@@ -1230,7 +1310,10 @@ import org.apache.spark.util.Utils
     // old style
     beSilentDuring(parse(code)) foreach { ts =>
       ts foreach { t =>
-        withoutUnwrapping(logDebug(asCompactString(t)))
+        if (isShow || isShowRaw)
+          withoutUnwrapping(echo(asCompactString(t)))
+        else
+          withoutUnwrapping(logDebug(asCompactString(t)))
       }
     }
   }

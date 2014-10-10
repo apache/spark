@@ -21,34 +21,28 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-flume_2.10</artifactId>
+  <properties>
+    <sbt.project.name>streaming-flume</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project External Flume</name>
   <url>http://spark.apache.org/</url>
-
-  <profiles>
-    <profile>
-      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
-           a Hadoop 0.23.X issue -->
-      <id>yarn-alpha</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-flume-sink_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -61,11 +55,15 @@
     <dependency>
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-sdk</artifactId>
-      <version>1.2.0</version>
+      <version>${flume.version}</version>
       <exclusions>
         <exclusion>
-          <groupId>org.jboss.netty</groupId>
+          <groupId>io.netty</groupId>
           <artifactId>netty</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -77,6 +75,11 @@
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

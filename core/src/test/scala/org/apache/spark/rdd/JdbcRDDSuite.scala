@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import java.sql._
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.rdd.JdbcRDD
+import org.apache.spark.{LocalSparkContext, SparkContext}
 
 class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -35,18 +35,18 @@ class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
           ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
           DATA INTEGER
         )""")
-      create.close
+      create.close()
       val insert = conn.prepareStatement("INSERT INTO FOO(DATA) VALUES(?)")
       (1 to 100).foreach { i =>
         insert.setInt(1, i * 2)
         insert.executeUpdate
       }
-      insert.close
+      insert.close()
     } catch {
       case e: SQLException if e.getSQLState == "X0Y32" =>
         // table exists
     } finally {
-      conn.close
+      conn.close()
     }
   }
 
@@ -57,7 +57,7 @@ class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
       () => { DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb") },
       "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
       1, 100, 3,
-      (r: ResultSet) => { r.getInt(1) } ).cache
+      (r: ResultSet) => { r.getInt(1) } ).cache()
 
     assert(rdd.count === 100)
     assert(rdd.reduce(_+_) === 10100)

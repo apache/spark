@@ -20,17 +20,15 @@ package org.apache.spark.ui.jobs
 import scala.collection.mutable
 import scala.xml.Node
 
-import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.ui.{ToolTips, UIUtils}
+import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
-/** Page showing executor summary */
-private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {
+/** Stage summary grouped by executors. */
+private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobProgressTab) {
+  private val listener = parent.listener
 
-  val listener = parent.listener
-  val dateFmt = parent.dateFmt
-  val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
-
-  def toNodeSeq(): Seq[Node] = {
+  def toNodeSeq: Seq[Node] = {
     listener.synchronized {
       executorTable()
     }
@@ -38,7 +36,7 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
 
   /** Special table which merges two header cells. */
   private def executorTable[T](): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
+    <table class={UIUtils.TABLE_CLASS}>
       <thead>
         <th>Executor ID</th>
         <th>Address</th>
@@ -46,8 +44,9 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
         <th>Succeeded Tasks</th>
-        <th>Shuffle Read</th>
-        <th>Shuffle Write</th>
+        <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
         <th>Shuffle Spill (Memory)</th>
         <th>Shuffle Spill (Disk)</th>
       </thead>
@@ -58,37 +57,38 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
   }
 
   private def createExecutorTable() : Seq[Node] = {
-    // make a executor-id -> address map
+    // Make an executor-id -> address map
     val executorIdToAddress = mutable.HashMap[String, String]()
-    val storageStatusList = parent.sc.getExecutorStorageStatus
-    for (statusId <- 0 until storageStatusList.size) {
-      val blockManagerId = parent.sc.getExecutorStorageStatus(statusId).blockManagerId
+    listener.blockManagerIds.foreach { blockManagerId =>
       val address = blockManagerId.hostPort
       val executorId = blockManagerId.executorId
       executorIdToAddress.put(executorId, address)
     }
 
-    val executorIdToSummary = listener.stageIdToExecutorSummaries.get(stageId)
-    executorIdToSummary match {
-      case Some(x) => {
-        x.toSeq.sortBy(_._1).map{
-          case (k,v) => {
-            <tr>
-              <td>{k}</td>
-              <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
-              <td>{parent.formatDuration(v.taskTime)}</td>
-              <td>{v.failedTasks + v.succeededTasks}</td>
-              <td>{v.failedTasks}</td>
-              <td>{v.succeededTasks}</td>
-              <td>{Utils.bytesToString(v.shuffleRead)}</td>
-              <td>{Utils.bytesToString(v.shuffleWrite)}</td>
-              <td>{Utils.bytesToString(v.memoryBytesSpilled)}</td>
-              <td>{Utils.bytesToString(v.diskBytesSpilled)}</td>
-            </tr>
-          }
+    listener.stageIdToData.get((stageId, stageAttemptId)) match {
+      case Some(stageData: StageUIData) =>
+        stageData.executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
+          <tr>
+            <td>{k}</td>
+            <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
+            <td sorttable_customekey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
+            <td>{v.failedTasks + v.succeededTasks}</td>
+            <td>{v.failedTasks}</td>
+            <td>{v.succeededTasks}</td>
+            <td sorttable_customekey={v.inputBytes.toString}>
+              {Utils.bytesToString(v.inputBytes)}</td>
+            <td sorttable_customekey={v.shuffleRead.toString}>
+              {Utils.bytesToString(v.shuffleRead)}</td>
+            <td sorttable_customekey={v.shuffleWrite.toString}>
+              {Utils.bytesToString(v.shuffleWrite)}</td>
+            <td sorttable_customekey={v.memoryBytesSpilled.toString}>
+              {Utils.bytesToString(v.memoryBytesSpilled)}</td>
+            <td sorttable_customekey={v.diskBytesSpilled.toString}>
+              {Utils.bytesToString(v.diskBytesSpilled)}</td>
+          </tr>
         }
-      }
-      case _ => { Seq[Node]() }
+      case None =>
+        Seq.empty[Node]
     }
   }
 }

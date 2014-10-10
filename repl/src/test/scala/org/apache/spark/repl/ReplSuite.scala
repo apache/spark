@@ -22,14 +22,17 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
+import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.spark.util.Utils
 
 
 class ReplSuite extends FunSuite {
 
   def runInterpreter(master: String, input: String): String = {
+    val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
+
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
     val cl = getClass.getClassLoader
@@ -42,26 +45,35 @@ class ReplSuite extends FunSuite {
         }
       }
     }
+    val classpath = paths.mkString(File.pathSeparator)
+
+    val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
+    System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+
     val interp = new SparkILoop(in, new PrintWriter(out), master)
     org.apache.spark.repl.Main.interp = interp
-    val separator = System.getProperty("path.separator")
-    interp.process(Array("-classpath", paths.mkString(separator)))
+    interp.process(Array("-classpath", classpath))
     org.apache.spark.repl.Main.interp = null
     if (interp.sparkContext != null) {
       interp.sparkContext.stop()
     }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
+    if (oldExecutorClasspath != null) {
+      System.setProperty(CONF_EXECUTOR_CLASSPATH, oldExecutorClasspath)
+    } else {
+      System.clearProperty(CONF_EXECUTOR_CLASSPATH)
+    }
     return out.toString
   }
 
   def assertContains(message: String, output: String) {
-    assert(output.contains(message),
+    val isContain = output.contains(message)
+    assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
   def assertDoesNotContain(message: String, output: String) {
-    assert(!output.contains(message),
+    val isContain = output.contains(message)
+    assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
   }
 
@@ -177,7 +189,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("interacting with files") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
@@ -185,16 +197,18 @@ class ReplSuite extends FunSuite {
     out.close()
     val output = runInterpreter("local",
       """
-        |var file = sc.textFile("%s/input").cache()
+        |var file = sc.textFile("%s").cache()
         |file.count()
         |file.count()
         |file.count()
-      """.stripMargin.format(tempDir.getAbsolutePath))
+      """.stripMargin.format(StringEscapeUtils.escapeJava(
+        tempDir.getAbsolutePath + File.separator + "input")))
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Long = 3", output)
     assertContains("res1: Long = 3", output)
     assertContains("res2: Long = 3", output)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("local-cluster mode") {
@@ -219,6 +233,54 @@ class ReplSuite extends FunSuite {
     assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
   }
 
+  test("SPARK-1199 two instances of same class don't type check.") {
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |case class Sum(exp: String, exp2: String)
+        |val a = Sum("A", "B")
+        |def b(a: Sum): String = a match { case Sum(_, _) => "Found Sum" }
+        |b(a)
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-2452 compound statements.") {
+    val output = runInterpreter("local",
+      """
+        |val x = 4 ; def f() = x
+        |f()
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-2576 importing SQLContext.createSchemaRDD.") {
+    // We need to use local-cluster to test this case.
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+        |import sqlContext.createSchemaRDD
+        |case class TestCaseClass(value: Int)
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toSchemaRDD.collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-2632 importing a method from non serializable class and not using it.") {
+    val output = runInterpreter("local",
+    """
+      |class TestClass() { def testMethod = 3 }
+      |val t = new TestClass
+      |import t.testMethod
+      |case class TestCaseClass(value: Int)
+      |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect
+    """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",
@@ -241,5 +303,16 @@ class ReplSuite extends FunSuite {
       assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
       assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     }
+  }
+
+  test("collecting objects of class defined in repl") {
+    val output = runInterpreter("local[2]",
+      """
+        |case class Foo(i: Int)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
 }

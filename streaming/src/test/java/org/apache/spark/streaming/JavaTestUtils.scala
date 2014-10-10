@@ -26,6 +26,7 @@ import org.apache.spark.streaming._
 import java.util.ArrayList
 import collection.JavaConversions._
 import org.apache.spark.api.java.JavaRDDLike
+import org.apache.spark.streaming.dstream.DStream
 
 /** Exposes streaming test functionality in a Java-friendly way. */
 trait JavaTestBase extends TestSuiteBase {
@@ -51,8 +52,7 @@ trait JavaTestBase extends TestSuiteBase {
    * [[org.apache.spark.streaming.TestOutputStream]].
    **/
   def attachTestOutputStream[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]](
-      dstream: JavaDStreamLike[T, This, R]) =
-  {
+      dstream: JavaDStreamLike[T, This, R]) = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val ostream = new TestOutputStreamWithPartitions(dstream.dstream)
