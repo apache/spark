@@ -163,7 +163,7 @@ private[spark] class Worker(
       logInfo("Connecting to master " + masterUrl + "...")
       val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
       actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress,
-        new NodeStats().getAllStats)
+        new NodeStats(masterAddress.host.getOrElse("localhost")).getAllStats)
     }
   }
 
@@ -359,7 +359,8 @@ private[spark] class Worker(
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl, new NodeStats().getAllStats)
+        coresUsed, memoryUsed, activeMasterWebUiUrl,
+        new NodeStats(masterAddress.host.getOrElse("localhost")).getAllStats)
     }
   }
 

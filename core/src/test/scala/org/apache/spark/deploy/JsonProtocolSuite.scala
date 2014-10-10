@@ -82,7 +82,7 @@ class JsonProtocolSuite extends FunSuite {
     val finishedDrivers = List(createDriverRunner(), createDriverRunner())
     val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors,
       finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl",
-      new NodeStats().getAllStats)
+      new NodeStats("localhost").getAllStats)
     val output = JsonProtocol.writeWorkerState(stateResponse)
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
@@ -113,7 +113,7 @@ class JsonProtocolSuite extends FunSuite {
 
   def createWorkerInfo(): WorkerInfo = {
     val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress",
-      new NodeStats().getAllStats)
+      new NodeStats("localhost").getAllStats)
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }
