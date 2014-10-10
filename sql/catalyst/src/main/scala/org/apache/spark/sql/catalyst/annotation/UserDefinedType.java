@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.annotation;
 
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.types.UserDefinedTypeType;
 
 import java.lang.annotation.*;
@@ -25,6 +26,7 @@ import java.lang.annotation.*;
  * A user-defined type which can be automatically recognized by a SQLContext and registered.
  */
 // TODO: Should I used @Documented ?
+@DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface UserDefinedType {
