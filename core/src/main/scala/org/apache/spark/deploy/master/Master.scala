@@ -191,17 +191,24 @@ private[spark] class Master(
       System.exit(0)
     }
 
-    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress,
+      stats) =>
     {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      logInfo("Linux worker box statistics (based on procfs and JVM runtime)")
+      logInfo("=============================================================")
+      logInfo("CPU speeds: " + (stats.cpuspeed mkString " MHz,") + " MHz")
+      logInfo("Disk speeds: " + (stats.diskspeed mkString " ms/access, ") + " ms/access")
+      logInfo("Max memory: " + stats.maxMem + " B")
+      logInfo("Available memory: " + stats.availMem + " B")
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          sender, workerUiPort, publicAddress)
+          sender, workerUiPort, publicAddress, stats)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           sender ! RegisteredWorker(masterUrl, masterWebUiUrl)

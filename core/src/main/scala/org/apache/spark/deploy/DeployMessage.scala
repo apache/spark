@@ -23,7 +23,7 @@ import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
-import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.deploy.worker.{Statistics, DriverRunner, ExecutorRunner}
 import org.apache.spark.util.Utils
 
 private[deploy] sealed trait DeployMessage extends Serializable
@@ -40,7 +40,8 @@ private[deploy] object DeployMessages {
       cores: Int,
       memory: Int,
       webUiPort: Int,
-      publicAddress: String)
+      publicAddress: String,
+      stats: Statistics)
     extends DeployMessage {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
