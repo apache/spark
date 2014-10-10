@@ -92,7 +92,7 @@ private[nio] object Message {
    */
   def createErrorMessage(exception: Exception, ackId: Int): BufferMessage = {
     val exceptionString = Utils.exceptionString(exception)
-    val serializedExceptionString = ByteBuffer.wrap(exceptionString.getBytes)
+    val serializedExceptionString = ByteBuffer.wrap(exceptionString.getBytes("utf-8"))
     val errorMessage = createBufferMessage(serializedExceptionString, ackId)
     errorMessage.hasError = true
     errorMessage

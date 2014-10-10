@@ -914,7 +914,7 @@ private[nio] class ConnectionManager(
             val errorMsgByteBuf = ackMessage.asInstanceOf[BufferMessage].buffers.head
             val errorMsgBytes = new Array[Byte](errorMsgByteBuf.limit())
             errorMsgByteBuf.get(errorMsgBytes)
-            val errorMsg = new String(errorMsgBytes)
+            val errorMsg = new String(errorMsgBytes, "utf-8")
             val e = new IOException(
               s"sendMessageReliably failed with ACK that signalled a remote error: $errorMsg")
             if (!promise.tryFailure(e)) {
