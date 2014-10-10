@@ -38,7 +38,7 @@ private[sql] object InMemoryRelation {
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child)()
 }
 
-private[sql] case class CachedBatch(buffers: Array[ByteBuffer], stats: Row)
+private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
@@ -91,7 +91,7 @@ private[sql] case class InMemoryRelation(
           val stats = Row.fromSeq(
             columnBuilders.map(_.columnStats.collectedStatistics).foldLeft(Seq.empty[Any])(_ ++ _))
 
-          CachedBatch(columnBuilders.map(_.build()), stats)
+          CachedBatch(columnBuilders.map(_.build().array()), stats)
         }
 
         def hasNext = rowIterator.hasNext
@@ -238,8 +238,9 @@ private[sql] case class InMemoryColumnarTableScan(
       def cachedBatchesToRows(cacheBatches: Iterator[CachedBatch]) = {
         val rows = cacheBatches.flatMap { cachedBatch =>
           // Build column accessors
-          val columnAccessors =
-            requestedColumnIndices.map(cachedBatch.buffers(_)).map(ColumnAccessor(_))
+          val columnAccessors = requestedColumnIndices.map { batch =>
+            ColumnAccessor(ByteBuffer.wrap(cachedBatch.buffers(batch)))
+          }
 
           // Extract rows via column accessors
           new Iterator[Row] {
