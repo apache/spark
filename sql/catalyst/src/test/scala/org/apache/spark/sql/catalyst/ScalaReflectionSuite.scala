@@ -68,7 +68,7 @@ case class GenericData[A](
 
 class ScalaReflectionSuite extends FunSuite {
   import ScalaReflection._
-/*
+
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
     assert(schema === Schema(
@@ -234,14 +234,18 @@ class ScalaReflectionSuite extends FunSuite {
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
-    assert(convertToCatalyst(data) === convertedData)
+    val dataType = schemaFor[PrimitiveData].dataType
+    assert(convertToCatalyst(data, dataType) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true), Some(primitiveData))
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true, convertToCatalyst(primitiveData))
-    assert(convertToCatalyst(data) === convertedData)
+    val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true),
+      Some(primitiveData))
+    val dataType = schemaFor[PrimitiveData].dataType
+    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true,
+      convertToCatalyst(primitiveData, dataType))
+    assert(convertToCatalyst(data, dataType) === convertedData)
   }
-  */
+
 }
