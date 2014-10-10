@@ -396,7 +396,7 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
 }
 
 private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](10, 16) {
-  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]) {
+  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row(ordinal) = value
   }
 
@@ -407,7 +407,7 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](10, 16) 
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
 private[sql] object GENERIC extends ByteArrayColumnType[DataType](11, 16) {
-  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]) {
+  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
   }
 
