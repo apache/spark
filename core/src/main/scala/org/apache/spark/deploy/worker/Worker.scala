@@ -359,7 +359,7 @@ private[spark] class Worker(
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl)
+        coresUsed, memoryUsed, activeMasterWebUiUrl, new NodeStats().getAllStats)
     }
   }
 

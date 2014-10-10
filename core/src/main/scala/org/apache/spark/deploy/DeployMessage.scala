@@ -163,7 +163,8 @@ private[deploy] object DeployMessages {
   case class WorkerStateResponse(host: String, port: Int, workerId: String,
     executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner],
     drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
-    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
+    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String,
+    stats: Statistics) {
 
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)

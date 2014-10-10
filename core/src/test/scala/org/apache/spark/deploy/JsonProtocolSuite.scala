@@ -81,7 +81,8 @@ class JsonProtocolSuite extends FunSuite {
     val drivers = List(createDriverRunner())
     val finishedDrivers = List(createDriverRunner(), createDriverRunner())
     val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors,
-      finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl")
+      finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl",
+      new NodeStats().getAllStats)
     val output = JsonProtocol.writeWorkerState(stateResponse)
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
