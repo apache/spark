@@ -83,9 +83,9 @@ class SparkContext(object):
         :param environment: A dictionary of environment variables to set on
                worker nodes.
         :param batchSize: The number of Python objects represented as a single
-               Java object.  Set 1 to disable batching, or 0 to choose batch size
-               based on size of objects automaticly, or -1 to use an unlimited
-               batch size.
+               Java object. Set 1 to disable batching, 0 to automatically choose
+               the batch size based on object sizes, or -1 to use an unlimited
+               batch size
         :param serializer: The serializer for RDDs.
         :param conf: A L{SparkConf} object setting Spark properties.
         :param gateway: Use an existing gateway and JVM, otherwise a new JVM
