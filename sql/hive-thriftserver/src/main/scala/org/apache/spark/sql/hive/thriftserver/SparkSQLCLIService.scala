@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
+import scala.collection.JavaConversions._
+
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.ShimLoader
+import org.apache.hive.service.{AbstractService, Service, ServiceException}
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli.CLIService
-import org.apache.hive.service.{AbstractService, Service, ServiceException}
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._

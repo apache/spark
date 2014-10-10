@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.util.{ArrayList => JArrayList}
+
+import scala.collection.JavaConversions._
 
 import org.apache.commons.lang.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}

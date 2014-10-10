@@ -17,22 +17,22 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.io._
 import java.util.{ArrayList => JArrayList}
+
+import scala.collection.JavaConversions._
 
 import jline.{ConsoleReader, History}
 import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
-import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
+import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory, SetProcessor}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
