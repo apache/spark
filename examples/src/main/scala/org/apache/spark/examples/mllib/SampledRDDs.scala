@@ -17,11 +17,10 @@
 
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.mllib.util.MLUtils
-import scopt.OptionParser
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * An example app for randomly generated and sampled RDDs. Run with
@@ -45,10 +44,10 @@ object SampledRDDs {
         .action((x, c) => c.copy(input = x))
       note(
         """
-        |For example, the following command runs this app:
-        |
-        | bin/spark-submit --class org.apache.spark.examples.mllib.SampledRDDs \
-        |  examples/target/scala-*/spark-examples-*.jar
+          |For example, the following command runs this app:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.SampledRDDs \
+          |  examples/target/scala-*/spark-examples-*.jar
         """.stripMargin)
     }
 
@@ -83,7 +82,7 @@ object SampledRDDs {
     println()
 
     // Example: RDD.sampleByKey() and RDD.sampleByKeyExact()
-    val keyedRDD = examples.map { lp => (lp.label.toInt, lp.features) }
+    val keyedRDD = examples.map { lp => (lp.label.toInt, lp.features)}
     println(s"  Keyed data using label (Int) as key ==> Orig")
     //  Count examples per label in original data.
     val keyCounts = keyedRDD.countByKey()

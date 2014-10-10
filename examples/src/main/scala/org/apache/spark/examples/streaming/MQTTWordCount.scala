@@ -17,14 +17,13 @@
 
 package org.apache.spark.examples.streaming
 
-import org.eclipse.paho.client.mqttv3.{MqttClient, MqttClientPersistence, MqttException, MqttMessage, MqttTopic}
-import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
-
+import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.mqtt._
-import org.apache.spark.SparkConf
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+import org.eclipse.paho.client.mqttv3.{MqttClient, MqttClientPersistence, MqttException, MqttMessage, MqttTopic}
 
 /**
  * A simple Mqtt publisher for demonstration purposes, repeatedly publishes
@@ -45,7 +44,7 @@ object MQTTPublisher {
     val Seq(brokerUrl, topic) = args.toSeq
 
     try {
-      var peristance:MqttClientPersistence =new MqttDefaultFilePersistence("/tmp")
+      val peristance: MqttClientPersistence = new MqttDefaultFilePersistence("/tmp")
       client = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
@@ -59,9 +58,9 @@ object MQTTPublisher {
     while (true) {
       val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes("utf-8"))
       msgtopic.publish(message)
-      println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
+      println("Published data. topic: " + msgtopic.getName + " Message: " + message)
     }
-   client.disconnect()
+    client.disconnect()
   }
 }
 
@@ -75,14 +74,14 @@ object MQTTPublisher {
  * Example Java code for Mqtt Publisher and Subscriber can be found here
  * https://bitbucket.org/mkjinesh/mqttclient
  * Usage: MQTTWordCount <MqttbrokerUrl> <topic>
- *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
+ * <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
  *
  * To run this example locally, you may run publisher as
- *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
+ * `$ bin/run-example \
+ * org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
  * and run the example as
- *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.MQTTWordCount tcp://localhost:1883 foo`
+ * `$ bin/run-example \
+ * org.apache.spark.examples.streaming.MQTTWordCount tcp://localhost:1883 foo`
  */
 object MQTTWordCount {
 

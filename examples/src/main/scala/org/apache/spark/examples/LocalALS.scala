@@ -17,11 +17,11 @@
 
 package org.apache.spark.examples
 
-import scala.math.sqrt
-
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
 import cern.jet.math._
+
+import scala.math.sqrt
 
 /**
  * Alternating least squares matrix factorization.
@@ -31,9 +31,12 @@ import cern.jet.math._
  */
 object LocalALS {
   // Parameters set through command line arguments
-  var M = 0 // Number of movies
-  var U = 0 // Number of users
-  var F = 0 // Number of features
+  var M = 0
+  // Number of movies
+  var U = 0
+  // Number of users
+  var F = 0
+  // Number of features
   var ITERATIONS = 0
 
   val LAMBDA = 0.01 // Regularization coefficient
@@ -51,8 +54,7 @@ object LocalALS {
   }
 
   def rmse(targetR: DoubleMatrix2D, ms: Array[DoubleMatrix1D],
-    us: Array[DoubleMatrix1D]): Double =
-  {
+    us: Array[DoubleMatrix1D]): Double = {
     val r = factory2D.make(M, U)
     for (i <- 0 until M; j <- 0 until U) {
       r.set(i, j, blas.ddot(ms(i), us(j)))
@@ -63,8 +65,7 @@ object LocalALS {
   }
 
   def updateMovie(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],
-    R: DoubleMatrix2D) : DoubleMatrix1D =
-  {
+    R: DoubleMatrix2D): DoubleMatrix1D = {
     val XtX = factory2D.make(F, F)
     val Xty = factory1D.make(F)
     // For each user that rated the movie
@@ -87,8 +88,7 @@ object LocalALS {
   }
 
   def updateUser(j: Int, u: DoubleMatrix1D, ms: Array[DoubleMatrix1D],
-    R: DoubleMatrix2D) : DoubleMatrix1D =
-  {
+    R: DoubleMatrix2D): DoubleMatrix1D = {
     val XtX = factory2D.make(F, F)
     val Xty = factory1D.make(F)
     // For each movie that the user rated

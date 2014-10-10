@@ -19,13 +19,12 @@ package org.apache.spark.examples
 
 import java.util.Random
 
-import scala.math.exp
-
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark._
 import org.apache.spark.scheduler.InputFormatInfo
+
+import scala.math.exp
 
 
 /**
@@ -35,7 +34,8 @@ import org.apache.spark.scheduler.InputFormatInfo
  * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object SparkHdfsLR {
-  val D = 10   // Numer of dimensions
+  val D = 10
+  // Numer of dimensions
   val rand = new Random(42)
 
   case class DataPoint(x: Vector[Double], y: Double)
@@ -46,7 +46,8 @@ object SparkHdfsLR {
     var x = new Array[Double](D)
     var i = 0
     while (i < D) {
-      x(i) = tok.nextToken.toDouble; i += 1
+      x(i) = tok.nextToken.toDouble;
+      i += 1
     }
     DataPoint(new DenseVector(x), y)
   }
@@ -76,17 +77,17 @@ object SparkHdfsLR {
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))
     val lines = sc.textFile(inputPath)
-    val points = lines.map(parsePoint _).cache()
+    val points = lines.map(parsePoint).cache()
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
+    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
       val gradient = points.map { p =>
-        p.x * (1 / (1 + exp(-p.y * (w.dot(p.x)))) - 1) * p.y
+        p.x * (1 / (1 + exp(-p.y * w.dot(p.x))) - 1) * p.y
       }.reduce(_ + _)
       w -= gradient
     }

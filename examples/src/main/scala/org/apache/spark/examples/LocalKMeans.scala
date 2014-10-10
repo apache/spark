@@ -19,12 +19,9 @@ package org.apache.spark.examples
 
 import java.util.Random
 
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
+import breeze.linalg.{DenseVector, Vector, squaredDistance}
 
-import breeze.linalg.{Vector, DenseVector, squaredDistance}
-
-import org.apache.spark.SparkContext._
+import scala.collection.mutable
 
 /**
  * K-means clustering.
@@ -34,7 +31,8 @@ import org.apache.spark.SparkContext._
  */
 object LocalKMeans {
   val N = 1000
-  val R = 1000    // Scaling factor
+  val R = 1000
+  // Scaling factor
   val D = 10
   val K = 10
   val convergeDist = 0.001
@@ -42,12 +40,12 @@ object LocalKMeans {
 
   def generateData = {
     def generatePoint(i: Int) = {
-      DenseVector.fill(D){rand.nextDouble * R}
+      DenseVector.fill(D) {rand.nextDouble * R}
     }
     Array.tabulate(N)(generatePoint)
   }
 
-  def closestPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): Int = {
+  def closestPoint(p: Vector[Double], centers: mutable.HashMap[Int, Vector[Double]]): Int = {
     var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
@@ -77,8 +75,8 @@ object LocalKMeans {
     showWarning()
 
     val data = generateData
-    var points = new HashSet[Vector[Double]]
-    var kPoints = new HashMap[Int, Vector[Double]]
+    val points = new mutable.HashSet[Vector[Double]]
+    val kPoints = new mutable.HashMap[Int, Vector[Double]]
     var tempDist = 1.0
 
     while (points.size < K) {
@@ -92,19 +90,20 @@ object LocalKMeans {
 
     println("Initial centers: " + kPoints)
 
-    while(tempDist > convergeDist) {
-      var closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
+    while (tempDist > convergeDist) {
+      val closest = data.map(p => (closestPoint(p, kPoints), (p, 1)))
 
-      var mappings = closest.groupBy[Int] (x => x._1)
+      val mappings = closest.groupBy[Int](x => x._1)
 
-      var pointStats = mappings.map { pair =>
-        pair._2.reduceLeft [(Int, (Vector[Double], Int))] {
+      val pointStats = mappings.map { pair =>
+        pair._2.reduceLeft[(Int, (Vector[Double], Int))] {
           case ((id1, (x1, y1)), (id2, (x2, y2))) => (id1, (x1 + x2, y1 + y2))
         }
       }
 
-      var newPoints = pointStats.map {mapping =>
-        (mapping._1, mapping._2._1 * (1.0 / mapping._2._2))}
+      val newPoints = pointStats.map { mapping =>
+        (mapping._1, mapping._2._1 * (1.0 / mapping._2._2))
+      }
 
       tempDist = 0.0
       for (mapping <- newPoints) {

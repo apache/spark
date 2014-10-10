@@ -17,8 +17,8 @@
 
 package org.apache.spark.examples.sql
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
 // names and types.

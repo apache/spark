@@ -20,8 +20,8 @@ package org.apache.spark.examples
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Usage: BroadcastTest [slices] [numElem] [broadcastAlgo] [blockSize]
-  */
+ * Usage: BroadcastTest [slices] [numElem] [broadcastAlgo] [blockSize]
+ */
 object BroadcastTest {
   def main(args: Array[String]) {
 

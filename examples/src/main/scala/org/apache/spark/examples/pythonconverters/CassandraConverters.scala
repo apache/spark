@@ -17,10 +17,12 @@
 
 package org.apache.spark.examples.pythonconverters
 
-import org.apache.spark.api.python.Converter
 import java.nio.ByteBuffer
+
 import org.apache.cassandra.utils.ByteBufferUtil
-import collection.JavaConversions._
+import org.apache.spark.api.python.Converter
+
+import scala.collection.JavaConversions._
 
 
 /**

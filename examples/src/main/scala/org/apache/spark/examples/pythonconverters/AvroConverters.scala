@@ -19,15 +19,14 @@ package org.apache.spark.examples.pythonconverters
 
 import java.util.{Collection => JCollection, Map => JMap}
 
-import scala.collection.JavaConversions._
-
-import org.apache.avro.generic.{GenericFixed, IndexedRecord}
-import org.apache.avro.mapred.AvroWrapper
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type._
-
-import org.apache.spark.api.python.Converter
+import org.apache.avro.generic.{GenericFixed, IndexedRecord}
+import org.apache.avro.mapred.AvroWrapper
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.Converter
+
+import scala.collection.JavaConversions._
 
 
 object AvroConversionUtil extends Serializable {
@@ -36,21 +35,21 @@ object AvroConversionUtil extends Serializable {
       return null
     }
     schema.getType match {
-      case UNION   => unpackUnion(obj, schema)
-      case ARRAY   => unpackArray(obj, schema)
-      case FIXED   => unpackFixed(obj, schema)
-      case MAP     => unpackMap(obj, schema)
-      case BYTES   => unpackBytes(obj)
-      case RECORD  => unpackRecord(obj)
-      case STRING  => obj.toString
-      case ENUM    => obj.toString
-      case NULL    => obj
+      case UNION => unpackUnion(obj, schema)
+      case ARRAY => unpackArray(obj, schema)
+      case FIXED => unpackFixed(obj, schema)
+      case MAP => unpackMap(obj, schema)
+      case BYTES => unpackBytes(obj)
+      case RECORD => unpackRecord(obj)
+      case STRING => obj.toString
+      case ENUM => obj.toString
+      case NULL => obj
       case BOOLEAN => obj
-      case DOUBLE  => obj
-      case FLOAT   => obj
-      case INT     => obj
-      case LONG    => obj
-      case other   => throw new SparkException(
+      case DOUBLE => obj
+      case FLOAT => obj
+      case INT => obj
+      case LONG => obj
+      case other => throw new SparkException(
         s"Unknown Avro schema type ${other.getName}")
     }
   }
@@ -116,7 +115,7 @@ object AvroConversionUtil extends Serializable {
  * Implementation of [[org.apache.spark.api.python.Converter]] that converts
  * an Avro IndexedRecord (e.g., derived from AvroParquetInputFormat) to a Java Map.
  */
-class IndexedRecordToJavaConverter extends Converter[IndexedRecord, JMap[String, Any]]{
+class IndexedRecordToJavaConverter extends Converter[IndexedRecord, JMap[String, Any]] {
   override def convert(record: IndexedRecord): JMap[String, Any] = {
     if (record == null) {
       return null

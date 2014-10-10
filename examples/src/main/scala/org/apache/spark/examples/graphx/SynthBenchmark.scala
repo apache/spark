@@ -17,11 +17,12 @@
 
 package org.apache.spark.examples.graphx
 
+import java.io.{FileOutputStream, PrintWriter}
+
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx.PartitionStrategy
-import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.graphx.util.GraphGenerators
-import java.io.{PrintWriter, FileOutputStream}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * The SynthBenchmark application can be used to run various GraphX algorithms on
@@ -50,7 +51,7 @@ object SynthBenchmark {
     val options = args.map {
       arg =>
         arg.dropWhile(_ == '-').split('=') match {
-          case Array(opt, v) => (opt -> v)
+          case Array(opt, v) => opt -> v
           case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
         }
     }
@@ -116,15 +117,15 @@ object SynthBenchmark {
       println(s"Total PageRank = $totalPR")
     } else if (app == "cc") {
       println("Running Connected Components")
-      val numComponents = graph.connectedComponents.vertices.map(_._2).distinct().count()
+      val numComponents = graph.connectedComponents().vertices.map(_._2).distinct().count()
       println(s"Number of components = $numComponents")
     }
-    val runTime = System.currentTimeMillis() - startTime
 
+    val runTime = System.currentTimeMillis() - startTime
     println(s"Num Vertices = $numVertices")
     println(s"Num Edges = $numEdges")
-    println(s"Creation time = ${loadTime/1000.0} seconds")
-    println(s"Run time = ${runTime/1000.0} seconds")
+    println(s"Creation time = ${loadTime / 1000.0} seconds")
+    println(s"Run time = ${runTime / 1000.0} seconds")
 
     sc.stop()
   }

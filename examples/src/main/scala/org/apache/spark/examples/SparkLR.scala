@@ -19,11 +19,10 @@ package org.apache.spark.examples
 
 import java.util.Random
 
-import scala.math.exp
-
-import breeze.linalg.{Vector, DenseVector}
-
+import breeze.linalg.{DenseVector, Vector}
 import org.apache.spark._
+
+import scala.math.exp
 
 /**
  * Logistic regression based classification.
@@ -33,9 +32,12 @@ import org.apache.spark._
  * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object SparkLR {
-  val N = 10000  // Number of data points
-  val D = 10   // Numer of dimensions
-  val R = 0.7  // Scaling factor
+  val N = 10000
+  // Number of data points
+  val D = 10
+  // Numer of dimensions
+  val R = 0.7
+  // Scaling factor
   val ITERATIONS = 5
   val rand = new Random(42)
 
@@ -43,8 +45,8 @@ object SparkLR {
 
   def generateData = {
     def generatePoint(i: Int) = {
-      val y = if(i % 2 == 0) -1 else 1
-      val x = DenseVector.fill(D){rand.nextGaussian + y * R}
+      val y = if (i % 2 == 0) -1 else 1
+      val x = DenseVector.fill(D) {rand.nextGaussian + y * R}
       DataPoint(x, y)
     }
     Array.tabulate(N)(generatePoint)
@@ -68,7 +70,7 @@ object SparkLR {
     val points = sc.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
+    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {

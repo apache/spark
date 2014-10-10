@@ -17,12 +17,12 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: LogQuery [logFile]
  */
 object LogQuery {
@@ -55,6 +55,7 @@ object LogQuery {
     /** Tracks the total query count and number of aggregate bytes for a particular group. */
     class Stats(val count: Int, val numBytes: Int) extends Serializable {
       def merge(other: Stats) = new Stats(count + other.count, numBytes + other.numBytes)
+
       override def toString = "bytes=%s\tn=%s".format(numBytes, count)
     }
 
@@ -77,8 +78,9 @@ object LogQuery {
 
     dataSet.map(line => (extractKey(line), extractStats(line)))
       .reduceByKey((a, b) => a.merge(b))
-      .collect().foreach{
-        case (user, query) => println("%s\t%s".format(user, query))}
+      .collect().foreach {
+      case (user, query) => println("%s\t%s".format(user, query))
+    }
 
     sc.stop()
   }

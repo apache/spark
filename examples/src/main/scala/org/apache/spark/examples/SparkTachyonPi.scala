@@ -17,14 +17,14 @@
 
 package org.apache.spark.examples
 
-import scala.math.random
-
 import org.apache.spark._
 import org.apache.spark.storage.StorageLevel
 
+import scala.math.random
+
 /**
- *  Computes an approximation to pi
- *  This example uses Tachyon to persist rdds during computation.
+ * Computes an approximation to pi
+ * This example uses Tachyon to persist rdds during computation.
  */
 object SparkTachyonPi {
   def main(args: Array[String]) {

@@ -21,20 +21,19 @@ import java.io.File
 import java.nio.charset.Charset
 
 import com.google.common.io.Files
-
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
 import org.apache.spark.util.IntParam
 
 /**
  * Counts words in text encoded with UTF8 received from the network every second.
  *
  * Usage: NetworkWordCount <hostname> <port> <checkpoint-directory> <output-file>
- *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
- *   data. <checkpoint-directory> directory to HDFS-compatible file system which checkpoint data
- *   <output-file> file to which the word counts will be appended
+ * <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
+ * data. <checkpoint-directory> directory to HDFS-compatible file system which checkpoint data
+ * <output-file> file to which the word counts will be appended
  *
  * In local mode, <master> should be 'local[n]' with n > 1
  * <checkpoint-directory> and <output-file> must be absolute paths
@@ -42,12 +41,12 @@ import org.apache.spark.util.IntParam
  *
  * To run this on your local machine, you need to first run a Netcat server
  *
- *      `$ nc -lk 9999`
+ * `$ nc -lk 9999`
  *
  * and run the example as
  *
- *      `$ ./bin/run-example org.apache.spark.examples.streaming.RecoverableNetworkWordCount \
- *              localhost 9999 ~/checkpoint/ ~/out`
+ * `$ ./bin/run-example org.apache.spark.examples.streaming.RecoverableNetworkWordCount \
+ * localhost 9999 ~/checkpoint/ ~/out`
  *
  * If the directory ~/checkpoint/ does not exist (e.g. running for the first time), it will create
  * a new StreamingContext (will print "Creating new context" to the console). Otherwise, if
@@ -56,10 +55,10 @@ import org.apache.spark.util.IntParam
  *
  * To run this example in a local standalone cluster with automatic driver recovery,
  *
- *      `$ bin/spark-class org.apache.spark.deploy.Client -s launch <cluster-url> \
- *              <path-to-examples-jar> \
- *              org.apache.spark.examples.streaming.RecoverableNetworkWordCount <cluster-url> \
- *              localhost 9999 ~/checkpoint ~/out`
+ * `$ bin/spark-class org.apache.spark.deploy.Client -s launch <cluster-url> \
+ * <path-to-examples-jar> \
+ * org.apache.spark.examples.streaming.RecoverableNetworkWordCount <cluster-url> \
+ * localhost 9999 ~/checkpoint ~/out`
  *
  * <path-to-examples-jar> would typically be
  * <spark-dir>/examples/target/scala-XX/spark-examples....jar

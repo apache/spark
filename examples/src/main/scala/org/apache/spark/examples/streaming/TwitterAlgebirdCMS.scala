@@ -18,13 +18,12 @@
 package org.apache.spark.examples.streaming
 
 import com.twitter.algebird._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.twitter._
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 // scalastyle:off
 /**
@@ -99,7 +98,7 @@ object TwitterAlgebirdCMS {
       if (rdd.count() != 0) {
         val partialMap = rdd.collect().toMap
         val partialTopK = rdd.map(
-          {case (id, count) => (count, id)})
+        { case (id, count) => (count, id)})
           .sortByKey(ascending = false).take(TOPK)
         globalExact = mm.plus(globalExact.toMap, partialMap)
         val globalTopK = globalExact.toSeq.sortBy(_._2).reverse.slice(0, TOPK)

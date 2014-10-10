@@ -17,12 +17,13 @@
 
 package org.apache.spark.examples.graphx
 
-import scala.collection.mutable
 import org.apache.spark._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.lib._
-import org.apache.spark.graphx.PartitionStrategy._
+import org.apache.spark.storage.StorageLevel
+
+import scala.collection.mutable
 
 /**
  * Driver program for running graph algorithms.
@@ -40,7 +41,7 @@ object Analytics extends Logging {
     val fname = args(1)
     val optionsList = args.drop(2).map { arg =>
       arg.dropWhile(_ == '-').split('=') match {
-        case Array(opt, v) => (opt -> v)
+        case Array(opt, v) => opt -> v
         case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
       }
     }
@@ -67,11 +68,11 @@ object Analytics extends Logging {
       sys.exit(1)
     }
     val partitionStrategy: Option[PartitionStrategy] = options.remove("partStrategy")
-      .map(pickPartitioner(_))
+      .map(pickPartitioner)
     val edgeStorageLevel = options.remove("edgeStorageLevel")
-      .map(StorageLevel.fromString(_)).getOrElse(StorageLevel.MEMORY_ONLY)
+      .map(StorageLevel.fromString).getOrElse(StorageLevel.MEMORY_ONLY)
     val vertexStorageLevel = options.remove("vertexStorageLevel")
-      .map(StorageLevel.fromString(_)).getOrElse(StorageLevel.MEMORY_ONLY)
+      .map(StorageLevel.fromString).getOrElse(StorageLevel.MEMORY_ONLY)
 
     taskType match {
       case "pagerank" =>
@@ -107,7 +108,7 @@ object Analytics extends Logging {
 
         if (!outFname.isEmpty) {
           logWarning("Saving pageranks of pages to " + outFname)
-          pr.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
+          pr.map { case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
         }
 
         sc.stop()
@@ -129,7 +130,7 @@ object Analytics extends Logging {
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         val cc = ConnectedComponents.run(graph)
-        println("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct())
+        println("Components: " + cc.vertices.map { case (vid, data) => data}.distinct())
         sc.stop()
 
       case "triangles" =>
@@ -147,7 +148,7 @@ object Analytics extends Logging {
           minEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel)
-        // TriangleCount requires the graph to be partitioned
+          // TriangleCount requires the graph to be partitioned
           .partitionBy(partitionStrategy.getOrElse(RandomVertexCut)).cache()
         val triangles = TriangleCount.run(graph)
         println("Triangles: " + triangles.vertices.map {
