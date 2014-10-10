@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.{SparkPlan, Command, LeafNode}
+import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.execution.{Command, LeafNode, SparkPlan}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.MetastoreRelation
 

@@ -22,10 +22,10 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
-import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
-import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.util.{Distribution, Utils}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {

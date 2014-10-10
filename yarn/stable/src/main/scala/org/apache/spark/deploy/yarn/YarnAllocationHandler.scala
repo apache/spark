@@ -20,15 +20,15 @@ package org.apache.spark.deploy.yarn
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.spark.{SecurityManager, SparkConf} 
-import org.apache.spark.scheduler.SplitInfo
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.Records
+
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.scheduler.SplitInfo
 
 /**
  * Acquires resources for executors from a ResourceManager and launches executors in new containers.
@@ -39,7 +39,7 @@ private[yarn] class YarnAllocationHandler(
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[SplitInfo]], 
+    preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
     securityMgr: SecurityManager)
   extends YarnAllocator(conf, sparkConf, appAttemptId, args, preferredNodes, securityMgr) {
 

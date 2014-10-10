@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Expression
 import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {

@@ -22,11 +22,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.HashSet
 import scala.language.existentials
 
-import org.apache.spark.util.Utils
-
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
+import org.apache.spark.util.Utils
 
 /**
  * Includes an utility function to test whether a function accesses a specific attribute

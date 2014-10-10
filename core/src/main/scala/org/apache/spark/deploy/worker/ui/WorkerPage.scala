@@ -24,11 +24,11 @@ import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
-import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
+import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {

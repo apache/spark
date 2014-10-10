@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
-import scala.collection.{Map, mutable}
+import scala.collection.{mutable, Map}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag

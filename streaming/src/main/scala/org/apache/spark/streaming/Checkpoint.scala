@@ -21,13 +21,13 @@ import java.io._
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming.scheduler.JobGenerator
+import org.apache.spark.util.MetadataCleaner
 
 
 private[streaming]

@@ -20,8 +20,8 @@ package org.apache.spark.storage
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
 
-import tachyon.client.TachyonFS
 import tachyon.client.TachyonFile
+import tachyon.client.TachyonFS
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode

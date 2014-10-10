@@ -18,7 +18,6 @@
 package org.apache.spark.input
 
 import com.google.common.io.{ByteStreams, Closeables}
-
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit

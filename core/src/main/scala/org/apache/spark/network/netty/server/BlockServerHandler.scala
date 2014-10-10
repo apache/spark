@@ -25,7 +25,7 @@ import io.netty.buffer.Unpooled
 import io.netty.channel._
 
 import org.apache.spark.Logging
-import org.apache.spark.storage.{FileSegment, BlockDataProvider}
+import org.apache.spark.storage.{BlockDataProvider, FileSegment}
 
 
 /**

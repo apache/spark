@@ -20,9 +20,8 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-
 import org.apache.spark.graphx._
+import org.apache.spark.rdd.RDD
 
 /**
  * Manages shipping vertex attributes to the edge partitions of an

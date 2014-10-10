@@ -19,19 +19,19 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseVector => BDV,
+  SparseVector => BSV, Vector => BV }
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliSampler
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.random.BernoulliSampler
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.

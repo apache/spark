@@ -19,10 +19,11 @@ package org.apache.spark.examples.pythonconverters
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.api.python.Converter
 import org.apache.hadoop.hbase.client.{Put, Result}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
+
+import org.apache.spark.api.python.Converter
 
 /**
  * Implementation of [[org.apache.spark.api.python.Converter]] that converts an

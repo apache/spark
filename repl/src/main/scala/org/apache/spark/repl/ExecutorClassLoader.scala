@@ -21,15 +21,14 @@ import java.io.{ByteArrayOutputStream, InputStream}
 import java.net.{URI, URL, URLEncoder}
 import java.util.concurrent.{Executors, ExecutorService}
 
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
 import org.apache.spark.util.ParentClassLoader
-
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.spark.util.Utils
 
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value

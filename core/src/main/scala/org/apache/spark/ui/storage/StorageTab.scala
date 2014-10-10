@@ -20,9 +20,9 @@ package org.apache.spark.ui.storage
 import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ui._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
+import org.apache.spark.ui._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storage") {

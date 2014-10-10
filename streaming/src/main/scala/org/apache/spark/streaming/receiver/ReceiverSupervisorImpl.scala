@@ -25,16 +25,15 @@ import scala.concurrent.Await
 
 import akka.actor.{Actor, Props}
 import akka.pattern.ask
-
 import com.google.common.base.Throwables
 
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.scheduler.DeregisterReceiver
+import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.AddBlock
+import org.apache.spark.streaming.scheduler.DeregisterReceiver
 import org.apache.spark.streaming.scheduler.RegisterReceiver
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]

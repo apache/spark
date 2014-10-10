@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.catalyst.types.{BinaryType, DataType, NativeType}
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
 
 /**

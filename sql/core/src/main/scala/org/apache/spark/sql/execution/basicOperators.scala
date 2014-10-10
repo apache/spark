@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
+import org.apache.spark.{HashPartitioner, SparkConf, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager

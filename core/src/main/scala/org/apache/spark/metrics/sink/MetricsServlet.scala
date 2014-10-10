@@ -19,7 +19,6 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-
 import javax.servlet.http.HttpServletRequest
 
 import com.codahale.metrics.MetricRegistry

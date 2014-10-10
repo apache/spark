@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.scheduler
 
-import akka.actor.{ActorRef, ActorSystem, Props, Actor}
-import org.apache.spark.{SparkException, SparkEnv, Logging}
-import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
-import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
+
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+
+import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.util.{Clock, ManualClock, RecurringTimer}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent

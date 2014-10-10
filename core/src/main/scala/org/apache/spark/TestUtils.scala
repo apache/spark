@@ -20,10 +20,10 @@ package org.apache.spark
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.util.jar.{JarEntry, JarOutputStream}
+import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.collection.JavaConversions._
 
-import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 import com.google.common.io.Files
 
 import org.apache.spark.util.Utils

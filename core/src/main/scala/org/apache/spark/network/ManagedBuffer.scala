@@ -25,7 +25,7 @@ import java.nio.channels.FileChannel.MapMode
 import scala.util.Try
 
 import com.google.common.io.ByteStreams
-import io.netty.buffer.{ByteBufInputStream, ByteBuf}
+import io.netty.buffer.{ByteBuf, ByteBufInputStream}
 
 import org.apache.spark.util.{ByteBufferInputStream, Utils}
 

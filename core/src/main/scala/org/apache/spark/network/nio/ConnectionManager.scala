@@ -22,20 +22,19 @@ import java.net._
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{LinkedBlockingDeque, ThreadPoolExecutor, TimeUnit}
 import java.util.{Timer, TimerTask}
+import java.util.concurrent.{LinkedBlockingDeque, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, SynchronizedMap, SynchronizedQueue}
-import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.util.Utils
-
-import scala.util.Try
-import scala.util.control.NonFatal
 
 private[nio] class ConnectionManager(
     port: Int,

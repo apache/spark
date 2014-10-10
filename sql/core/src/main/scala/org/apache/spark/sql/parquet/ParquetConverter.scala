@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.parquet
 
-import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 
-import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
+import parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import parquet.schema.MessageType
 
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 
 /**

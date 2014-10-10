@@ -20,11 +20,10 @@ package org.apache.spark.graphx
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.{OneToOneDependency, Partition, Partitioner, TaskContext}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-
 import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.graphx.impl.EdgePartitionBuilder
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * `EdgeRDD[ED, VD]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each

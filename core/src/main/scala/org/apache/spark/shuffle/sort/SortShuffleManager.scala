@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.{SparkConf, TaskContext, ShuffleDependency}
+import org.apache.spark.{ShuffleDependency, SparkConf, TaskContext}
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.hash.HashShuffleReader
 

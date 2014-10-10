@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, SerDeInfo, StorageDescriptor, Partition => TPartition, Table => TTable}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition => TPartition, SerDeInfo, StorageDescriptor, Table => TTable}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.stats.StatsSetupConst
@@ -35,9 +37,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.util.Utils
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
   import org.apache.spark.sql.hive.HiveMetastoreTypes._

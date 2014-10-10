@@ -18,11 +18,11 @@
 package org.apache.spark.deploy.master
 
 import akka.actor.ActorRef
+import org.apache.curator.framework.CuratorFramework
+import org.apache.curator.framework.recipes.leader.{LeaderLatch, LeaderLatchListener}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.master.MasterMessages._
-import org.apache.curator.framework.CuratorFramework
-import org.apache.curator.framework.recipes.leader.{LeaderLatchListener, LeaderLatch}
 
 private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef,
     masterUrl: String, conf: SparkConf)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Long => JLong, Iterable => JIterable}
+import java.lang.{Iterable => JIterable, Long => JLong}
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
@@ -28,6 +28,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+
 import org.apache.spark.Partitioner
 import org.apache.spark.api.java.{JavaPairRDD, JavaUtils}
 import org.apache.spark.api.java.JavaPairRDD._

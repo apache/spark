@@ -17,14 +17,16 @@
 
 package org.apache.spark.api.python
 
+import scala.util.{Failure, Success, Try}
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.io._
+
+import org.apache.spark.{Logging, SerializableWritable, SparkException}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SerializableWritable, SparkException}
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.io._
-import scala.util.{Failure, Success, Try}
-import org.apache.spark.annotation.Experimental
 
 
 /**

@@ -21,6 +21,7 @@ import scala.collection.mutable.{HashMap, SynchronizedMap, SynchronizedQueue}
 import scala.language.existentials
 
 import akka.actor._
+
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StreamBlockId

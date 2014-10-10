@@ -35,7 +35,7 @@ import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
+import org.apache.spark.shuffle.{ShuffleManager, ShuffleMemoryManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 

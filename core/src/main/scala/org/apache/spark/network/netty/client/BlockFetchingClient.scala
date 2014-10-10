@@ -21,8 +21,8 @@ import java.util.concurrent.TimeoutException
 
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.PooledByteBufAllocator
+import io.netty.channel.{ChannelFuture, ChannelFutureListener, ChannelInitializer, ChannelOption}
 import io.netty.channel.socket.SocketChannel
-import io.netty.channel.{ChannelFutureListener, ChannelFuture, ChannelInitializer, ChannelOption}
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.string.StringEncoder
 import io.netty.util.CharsetUtil

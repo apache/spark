@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.types.util
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField}
-
-import scala.collection.JavaConverters._
 
 protected[sql] object DataTypeConversions {
 

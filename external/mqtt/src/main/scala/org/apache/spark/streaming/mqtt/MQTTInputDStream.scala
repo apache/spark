@@ -17,23 +17,23 @@
 
 package org.apache.spark.streaming.mqtt
 
-import scala.collection.Map
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
-import scala.reflect.ClassTag
-
+import java.io.IOException
 import java.util.Properties
 import java.util.concurrent.Executors
-import java.io.IOException
 
+import scala.collection.JavaConversions._
+import scala.collection.Map
+import scala.collection.mutable.HashMap
+import scala.reflect.ClassTag
+
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttClientPersistence
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttException
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.MqttTopic
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -56,13 +56,13 @@ class MQTTInputDStream(
     topic: String,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[String](ssc_) with Logging {
-  
+
   def getReceiver(): Receiver[String] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel)
   }
 }
 
-private[streaming] 
+private[streaming]
 class MQTTReceiver(
     brokerUrl: String,
     topic: String,
@@ -72,10 +72,10 @@ class MQTTReceiver(
   def onStop() {
 
   }
-  
+
   def onStart() {
 
-    // Set up persistence for messages 
+    // Set up persistence for messages
     val persistence = new MemoryPersistence()
 
     // Initializing Mqtt Client specifying brokerUrl, clientID and MqttClientPersistance

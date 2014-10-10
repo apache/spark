@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Random
-import org.apache.spark.sql.catalyst.types.DoubleType
 
+import org.apache.spark.sql.catalyst.types.DoubleType
 
 case object Rand extends LeafExpression {
   override def dataType = DoubleType

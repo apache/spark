@@ -19,9 +19,9 @@ package org.apache.spark.broadcast
 
 import java.io.Serializable
 
-import org.apache.spark.SparkException
-
 import scala.reflect.ClassTag
+
+import org.apache.spark.SparkException
 
 /**
  * A broadcast variable. Broadcast variables allow the programmer to keep a read-only variable

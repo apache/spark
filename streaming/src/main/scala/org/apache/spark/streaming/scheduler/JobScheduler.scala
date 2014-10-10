@@ -17,11 +17,14 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.util.{Failure, Success, Try}
+import java.util.concurrent.{ConcurrentHashMap, Executors, TimeUnit}
+
 import scala.collection.JavaConversions._
-import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
-import akka.actor.{ActorRef, Actor, Props}
-import org.apache.spark.{SparkException, Logging, SparkEnv}
+import scala.util.{Failure, Success, Try}
+
+import akka.actor.{Actor, ActorRef, Props}
+
+import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.streaming._
 
 

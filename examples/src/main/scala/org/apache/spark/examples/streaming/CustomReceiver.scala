@@ -17,10 +17,10 @@
 
 package org.apache.spark.examples.streaming
 
-import java.io.{InputStreamReader, BufferedReader, InputStream}
+import java.io.{BufferedReader, InputStream, InputStreamReader}
 import java.net.Socket
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._

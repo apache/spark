@@ -17,18 +17,18 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
-
 import java.lang.{Integer => JInt}
 import java.util.{Map => JMap}
+
+import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 import kafka.serializer.{Decoder, StringDecoder}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext, JavaPairDStream}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
+import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaPairReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.{DStream, ReceiverInputDStream}
 
 
 object KafkaUtils {

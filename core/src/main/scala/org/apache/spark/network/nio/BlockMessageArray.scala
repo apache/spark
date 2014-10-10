@@ -19,10 +19,10 @@ package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
 import org.apache.spark.storage.{StorageLevel, TestBlockId}
-
-import scala.collection.mutable.ArrayBuffer
 
 private[nio]
 class BlockMessageArray(var blockMessages: Seq[BlockMessage])

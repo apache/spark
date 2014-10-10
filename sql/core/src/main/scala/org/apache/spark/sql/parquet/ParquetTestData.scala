@@ -22,11 +22,9 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.sql.test.TestSQLContext
-
-import parquet.example.data.{GroupWriter, Group}
+import parquet.example.data.{Group, GroupWriter}
 import parquet.example.data.simple.SimpleGroup
-import parquet.hadoop.{ParquetReader, ParquetFileReader, ParquetWriter}
+import parquet.hadoop.{ParquetFileReader, ParquetReader, ParquetWriter}
 import parquet.hadoop.api.WriteSupport
 import parquet.hadoop.api.WriteSupport.WriteContext
 import parquet.hadoop.example.GroupReadSupport
@@ -34,6 +32,7 @@ import parquet.hadoop.util.ContextUtil
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.util.Utils
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport

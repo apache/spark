@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkException, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /**
  * Allocates a pool of memory to task threads for use in shuffle operations. Each disk-spilling

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.HashSet
+
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.BooleanType
@@ -99,7 +100,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression])
   extends Predicate {
 
   def children = child

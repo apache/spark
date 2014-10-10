@@ -22,8 +22,8 @@ import java.util.{HashMap => JHashMap}
 import org.apache.hadoop.conf.Configuration
 import parquet.column.ParquetProperties
 import parquet.hadoop.ParquetOutputFormat
-import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.hadoop.api.{ReadSupport, WriteSupport}
+import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.io.api._
 import parquet.schema.MessageType
 

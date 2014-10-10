@@ -17,18 +17,17 @@
 
 package org.apache.spark.rdd
 
-import scala.language.existentials
-
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleHandle
+import org.apache.spark.util.collection.{AppendOnlyMap, CompactBuffer, ExternalAppendOnlyMap}
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 

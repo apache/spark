@@ -17,8 +17,9 @@
 
 package org.apache.spark.streaming.receiver
 
-import org.apache.spark.{Logging, SparkConf}
 import java.util.concurrent.TimeUnit._
+
+import org.apache.spark.{Logging, SparkConf}
 
 /** Provides waitToPush() method to limit the rate at which receivers consume data.
   *

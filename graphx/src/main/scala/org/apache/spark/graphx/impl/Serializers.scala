@@ -17,17 +17,15 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.language.existentials
-
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
+import scala.language.existentials
 import scala.reflect.ClassTag
-
-import org.apache.spark.serializer._
 
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
+import org.apache.spark.serializer._
 
 private[graphx]
 class RoutingTableMessageSerializer extends Serializer with Serializable {

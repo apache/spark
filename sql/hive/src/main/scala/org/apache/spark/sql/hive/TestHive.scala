@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -36,9 +38,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPl
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive

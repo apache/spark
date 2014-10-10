@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.json
 
-import scala.collection.Map
-import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
-import scala.math.BigDecimal
 import java.sql.Timestamp
+
+import scala.collection.Map
+import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
+import scala.math.BigDecimal
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.Logging
 
 private[sql] object JsonRDD extends Logging {
 
@@ -378,7 +379,7 @@ private[sql] object JsonRDD extends Logging {
         case value: java.lang.Long => new Timestamp(value)
         case value: java.lang.String => Timestamp.valueOf(value)
       }
-    }  
+    }
 
   private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
     if (value == null) {

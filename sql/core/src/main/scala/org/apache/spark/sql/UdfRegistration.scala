@@ -19,13 +19,13 @@ package org.apache.spark.sql
 
 import java.util.{List => JList, Map => JMap}
 
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
+
 import org.apache.spark.Accumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUdf}
 import org.apache.spark.sql.execution.PythonUDF
-
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 /**
  * Functions for registering scala lambda functions as UDFs in a SQLContext.

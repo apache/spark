@@ -17,11 +17,10 @@
 
 package org.apache.spark.examples.streaming
 
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import StreamingContext._
-import org.apache.spark.SparkContext._
-import org.apache.spark.streaming.twitter._
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext._
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.twitter._
 
 /**
  * Calculates popular hashtags (topics) over sliding 10 and 60 second windows from a Twitter
@@ -32,6 +31,8 @@ import org.apache.spark.SparkConf
  *
  */
 object TwitterPopularTags {
+  import StreamingContext._
+
   def main(args: Array[String]) {
     if (args.length < 4) {
       System.err.println("Usage: TwitterPopularTags <consumer key> <consumer secret> " +

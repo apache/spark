@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, norm => breezeNorm}
+import breeze.linalg.{norm => breezeNorm, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.Logging
 

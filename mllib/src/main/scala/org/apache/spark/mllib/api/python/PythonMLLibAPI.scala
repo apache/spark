@@ -31,17 +31,17 @@ import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.feature.Word2Vec
 import org.apache.spark.mllib.feature.Word2VecModel
-import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
-import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
+import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -90,7 +90,7 @@ class PythonMLLibAPI extends Serializable {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeightsBA: Array[Byte], 
+      initialWeightsBA: Array[Byte],
       regParam: Double,
       regType: String,
       intercept: Boolean): java.util.List[java.lang.Object] = {

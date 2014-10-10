@@ -18,9 +18,9 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.

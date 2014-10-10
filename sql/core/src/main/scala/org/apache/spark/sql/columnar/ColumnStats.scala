@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar
 import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.types._
 
 private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {

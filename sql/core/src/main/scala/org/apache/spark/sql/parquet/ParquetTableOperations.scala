@@ -20,8 +20,8 @@ package org.apache.spark.sql.parquet
 import java.io.IOException
 import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
-import java.util.concurrent.{Callable, TimeUnit}
 import java.util.{ArrayList, Collections, Date, List => JList}
+import java.util.concurrent.{Callable, TimeUnit}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -34,7 +34,6 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
-
 import parquet.hadoop._
 import parquet.hadoop.api.{InitContext, ReadSupport}
 import parquet.hadoop.metadata.GlobalMetaData
@@ -42,12 +41,12 @@ import parquet.hadoop.util.ContextUtil
 import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
+import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
-import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
  * Parquet table scan operator. Imports the file that backs the given

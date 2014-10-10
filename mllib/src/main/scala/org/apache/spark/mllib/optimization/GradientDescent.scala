@@ -21,11 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
+import org.apache.spark.rdd.RDD
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.

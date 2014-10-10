@@ -17,24 +17,22 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
-
 import scala.collection.mutable.ArrayBuffer
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.ql.exec.{UDF, UDAF}
+import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {

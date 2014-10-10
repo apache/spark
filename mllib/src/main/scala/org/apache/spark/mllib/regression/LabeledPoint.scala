@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.SparkException
 

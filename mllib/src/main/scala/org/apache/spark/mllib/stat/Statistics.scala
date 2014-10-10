@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
 import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult}

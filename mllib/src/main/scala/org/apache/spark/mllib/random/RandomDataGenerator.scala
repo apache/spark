@@ -21,7 +21,7 @@ import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
+import org.apache.spark.util.random.{Pseudorandom, XORShiftRandom}
 
 /**
  * :: DeveloperApi ::

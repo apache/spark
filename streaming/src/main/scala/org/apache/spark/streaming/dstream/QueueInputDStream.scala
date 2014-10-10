@@ -17,12 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Queue
+import scala.reflect.ClassTag
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.UnionRDD
-import scala.collection.mutable.Queue
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.streaming.{Time, StreamingContext}
-import scala.reflect.ClassTag
+import org.apache.spark.streaming.{StreamingContext, Time}
 
 private[streaming]
 class QueueInputDStream[T: ClassTag](

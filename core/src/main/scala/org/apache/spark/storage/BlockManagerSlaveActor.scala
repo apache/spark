@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import scala.concurrent.Future
 
-import akka.actor.{ActorRef, Actor}
+import akka.actor.{Actor, ActorRef}
 
 import org.apache.spark.{Logging, MapOutputTracker, SparkEnv}
 import org.apache.spark.storage.BlockManagerMessages._

@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.classification
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import breeze.linalg.{argmax => brzArgmax, sum => brzSum, DenseMatrix => BDM, DenseVector => BDV}
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint

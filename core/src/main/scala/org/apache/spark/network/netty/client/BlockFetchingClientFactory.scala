@@ -17,12 +17,12 @@
 
 package org.apache.spark.network.netty.client
 
+import io.netty.channel.{Channel, EventLoopGroup}
 import io.netty.channel.epoll.{EpollEventLoopGroup, EpollSocketChannel}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.oio.OioEventLoopGroup
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.socket.oio.OioSocketChannel
-import io.netty.channel.{EventLoopGroup, Channel}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.network.netty.NettyConfig
