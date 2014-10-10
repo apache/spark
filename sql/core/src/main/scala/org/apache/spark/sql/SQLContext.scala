@@ -66,12 +66,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = true)
+
   @transient
   protected[sql] val optimizer = Optimizer
-  @transient
-  protected[sql] val parser = new catalyst.SqlParser
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = parser(sql)
+  @transient
+  protected[sql] val sqlParser = {
+    val fallback = new catalyst.SqlParser
+    new catalyst.SparkSQLParser(fallback(_))
+  }
+
+  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }

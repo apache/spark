@@ -39,9 +39,9 @@ case class NativeCommand(cmd: String) extends Command {
 }
 
 /**
- * Commands of the form "SET (key) (= value)".
+ * Commands of the form "SET [key [= value] ]".
  */
-case class SetCommand(key: Option[String], value: Option[String]) extends Command {
+case class SetCommand(kv: Option[(String, Option[String])]) extends Command {
   override def output = Seq(
     AttributeReference("", StringType, nullable = false)())
 }
@@ -81,3 +81,14 @@ case class DescribeCommand(
     AttributeReference("data_type", StringType, nullable = false)(),
     AttributeReference("comment", StringType, nullable = false)())
 }
+
+/**
+ * Returned for the "! shellCommand" command
+ */
+case class ShellCommand(cmd: String) extends Command
+
+
+/**
+ * Returned for the "SOURCE file" command
+ */
+case class SourceCommand(filePath: String) extends Command

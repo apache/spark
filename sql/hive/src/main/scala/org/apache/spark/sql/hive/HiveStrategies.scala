@@ -167,10 +167,10 @@ private[hive] trait HiveStrategies {
           database.get,
           tableName,
           query,
-          InsertIntoHiveTable(_: MetastoreRelation, 
-            Map(), 
-            query, 
-            true)(hiveContext)) :: Nil
+          InsertIntoHiveTable(_: MetastoreRelation,
+            Map(),
+            query,
+            overwrite = true)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
