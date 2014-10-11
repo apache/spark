@@ -19,14 +19,14 @@
 public classes of Spark SQL:
 
     - L{SQLContext}
-    Main entry point for SQL functionality.
+      Main entry point for SQL functionality.
     - L{SchemaRDD}
-    A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-    addition to normal RDD operations, SchemaRDDs also support SQL.
+      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
+      addition to normal RDD operations, SchemaRDDs also support SQL.
     - L{Row}
-    A Row of data returned by a Spark SQL query.
+      A Row of data returned by a Spark SQL query.
     - L{HiveContext}
-    Main entry point for accessing data stored in Apache Hive..
+      Main entry point for accessing data stored in Apache Hive..
 """
 
 import itertools

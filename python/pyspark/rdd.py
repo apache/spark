@@ -2009,7 +2009,7 @@ class RDD(object):
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
 
-        :param relativeSD Relative accuracy. Smaller values create
+        :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
                            It must be greater than 0.000017.
 
