@@ -113,6 +113,19 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
   private val executorIds = new mutable.HashSet[String]
 
+  // Scheduler backend through which requests to add/remove executors are made
+  // Note that this assumes the backend has already initialized when this is first used
+  // Otherwise, an appropriate exception is thrown
+  private lazy val backend = scheduler.backend match {
+    case b: CoarseGrainedSchedulerBackend => b
+    case null =>
+      throw new SparkException("Scheduler backend not initialized yet!")
+    case _ =>
+      throw new SparkException(
+        "Dynamic allocation of executors is not applicable to fine-grained schedulers. " +
+        "Please set spark.dynamicAllocation.enabled to false.")
+  }
+
   // Initialize with existing known executors
   scheduler.executorIdToHost.keys.foreach(executorAdded)
 
@@ -293,18 +306,16 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
     val newNumExecutors = numExistingExecutors + actualNumExecutorsToAdd
 
     if (actualNumExecutorsToAdd > 0) {
-      getCoarseGrainedBackend.foreach { backend =>
-        logInfo(s"Pending tasks are building up! " +
-          s"Adding $actualNumExecutorsToAdd new executor(s) (new total is $newNumExecutors).")
-        numExecutorsPendingToAdd += actualNumExecutorsToAdd
-        backend.requestExecutors(actualNumExecutorsToAdd)
-        return actualNumExecutorsToAdd
-      }
+      logInfo(s"Pending tasks are building up! " +
+        s"Adding $actualNumExecutorsToAdd new executor(s) (new total is $newNumExecutors).")
+      numExecutorsPendingToAdd += actualNumExecutorsToAdd
+      backend.requestExecutors(actualNumExecutorsToAdd)
+      actualNumExecutorsToAdd
     } else {
       logDebug(s"Not adding executors because there are already $maxNumExecutors executor(s), " +
         s"which is the limit.")
+      0
     }
-    0
   }
 
   /**
@@ -313,11 +324,9 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    */
   private def retryAddExecutors(): Unit = synchronized {
     if (numExecutorsPendingToAdd > 0) {
-      getCoarseGrainedBackend.foreach { backend =>
-        logInfo(s"Previously requested executors have not all registered yet. " +
-          s"Retrying to add $numExecutorsPendingToAdd executor(s).")
-        backend.requestExecutors(numExecutorsPendingToAdd)
-      }
+      logInfo(s"Previously requested executors have not all registered yet. " +
+        s"Retrying to add $numExecutorsPendingToAdd executor(s).")
+      backend.requestExecutors(numExecutorsPendingToAdd)
     }
   }
 
@@ -329,20 +338,18 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   private def removeExecutor(executorId: String): Boolean = synchronized {
     val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
     if (numExistingExecutors - 1 >= minNumExecutors) {
-      getCoarseGrainedBackend.foreach { backend =>
-        logInfo(s"Removing executor $executorId because it has been idle for " +
-          s"$removeExecutorThreshold seconds (new total is ${numExistingExecutors - 1}).")
-        executorsPendingToRemove.add(executorId)
-        backend.killExecutor(executorId)
-        return true
-      }
+      logInfo(s"Removing executor $executorId because it has been idle for " +
+        s"$removeExecutorThreshold seconds (new total is ${numExistingExecutors - 1}).")
+      executorsPendingToRemove.add(executorId)
+      backend.killExecutor(executorId)
+      true
     } else {
       logDebug(s"Not removing idle executor $executorId because there are only $minNumExecutors " +
         "executor(s) left, which is the limit.")
       // If the executor is not removed, do not forget that it's idle
       startRemoveExecutorTimer(executorId)
+      false
     }
-    false
   }
 
   /**
@@ -351,11 +358,9 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
    */
   private def retryRemoveExecutors(): Unit = synchronized {
     if (executorsPendingToRemove.nonEmpty) {
-      getCoarseGrainedBackend.foreach { backend =>
-        logInfo(s"Previous requests to remove executors have not been fulfilled yet. " +
-          s"Retrying to remove executor(s) ${executorsPendingToRemove.mkString(", ")}.")
-        executorsPendingToRemove.foreach(backend.killExecutor)
-      }
+      logInfo(s"Previous requests to remove executors have not been fulfilled yet. " +
+        s"Retrying to remove executor(s) ${executorsPendingToRemove.mkString(", ")}.")
+      executorsPendingToRemove.foreach(backend.killExecutor)
     }
   }
 
@@ -394,24 +399,6 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       }
     } else {
       logWarning(s"Not removing unknown executor $executorId")
-    }
-  }
-
-  /**
-   * Return the backend as a CoarseGrainedSchedulerBackend if possible.
-   * Otherwise, guard against the use of this feature either before the backend has initialized,
-   * or because the scheduler is running in fine-grained mode. In the latter case, the executors
-   * are already dynamically allocated by definition, so an appropriate exception is thrown.
-   */
-  private def getCoarseGrainedBackend: Option[CoarseGrainedSchedulerBackend] = {
-    scheduler.backend match {
-      case b: CoarseGrainedSchedulerBackend => Some(b)
-      case null =>
-        logWarning("Scheduler backend not initialized yet for dynamically scaling executors!")
-        None
-      case _ =>
-        throw new SparkException("Dynamic allocation of executors is not applicable to " +
-          "fine-grained schedulers. Please set spark.dynamicAllocation.enabled to false.")
     }
   }
 
