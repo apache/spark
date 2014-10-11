@@ -44,7 +44,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    */
   def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
       : IndexedSeq[Double] = {
-    probabilities.toIndexedSeq.map(data(closestIndex(_)))
+    probabilities.toIndexedSeq.map(q => data(closestIndex(q)))
   }
 
   private def closestIndex(p: Double) = {
