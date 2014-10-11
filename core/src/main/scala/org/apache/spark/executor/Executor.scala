@@ -32,6 +32,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.deploy.worker.NodeStats
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -374,7 +375,8 @@ private[spark] class Executor(
             }
           }
 
-          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId,
+            new NodeStats(env.conf.get("master", "localhost")).getAllStats)
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
               retryAttempts, retryIntervalMs, timeout)

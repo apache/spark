@@ -22,6 +22,7 @@ import scala.collection.mutable
 import akka.actor.ActorRef
 
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.worker.Statistics
 
 private[spark] class WorkerInfo(
     val id: String,
@@ -31,7 +32,8 @@ private[spark] class WorkerInfo(
     val memory: Int,
     val actor: ActorRef,
     val webUiPort: Int,
-    val publicAddress: String)
+    val publicAddress: String,
+    var stats: Statistics)
   extends Serializable {
 
   Utils.checkHost(host, "Expected hostname")

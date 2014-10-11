@@ -23,7 +23,7 @@ import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
-import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.deploy.worker.{Statistics, DriverRunner, ExecutorRunner}
 import org.apache.spark.util.Utils
 
 private[deploy] sealed trait DeployMessage extends Serializable
@@ -40,7 +40,8 @@ private[deploy] object DeployMessages {
       cores: Int,
       memory: Int,
       webUiPort: Int,
-      publicAddress: String)
+      publicAddress: String,
+      stats: Statistics)
     extends DeployMessage {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
@@ -63,7 +64,7 @@ private[deploy] object DeployMessages {
   case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
      driverIds: Seq[String])
 
-  case class Heartbeat(workerId: String) extends DeployMessage
+  case class Heartbeat(workerId: String, stats: Statistics) extends DeployMessage
 
   // Master to Worker
 
@@ -162,7 +163,8 @@ private[deploy] object DeployMessages {
   case class WorkerStateResponse(host: String, port: Int, workerId: String,
     executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner],
     drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
-    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
+    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String,
+    stats: Statistics) {
 
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)

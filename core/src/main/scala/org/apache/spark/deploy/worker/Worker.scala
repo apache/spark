@@ -162,7 +162,10 @@ private[spark] class Worker(
     for (masterUrl <- masterUrls) {
       logInfo("Connecting to master " + masterUrl + "...")
       val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      // Urls are in the form of spark://<HOST>:<PORT>
+      val allStats = new NodeStats(masterUrl.split("spark://")(1).split(":")(0)).getAllStats
+      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress,
+        allStats)
     }
   }
 
@@ -199,7 +202,8 @@ private[spark] class Worker(
       }
 
     case SendHeartbeat =>
-      if (connected) { master ! Heartbeat(workerId) }
+      if (connected) { master ! Heartbeat(workerId,
+        new NodeStats(masterAddress.host.getOrElse("localhost")).getAllStats) }
 
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
@@ -358,7 +362,8 @@ private[spark] class Worker(
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl)
+        coresUsed, memoryUsed, activeMasterWebUiUrl,
+        new NodeStats(masterAddress.host.getOrElse("localhost")).getAllStats)
     }
   }
 

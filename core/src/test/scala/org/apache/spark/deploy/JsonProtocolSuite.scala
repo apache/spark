@@ -27,7 +27,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
-import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.deploy.worker.{NodeStats, DriverRunner, ExecutorRunner}
 import org.apache.spark.SparkConf
 
 class JsonProtocolSuite extends FunSuite {
@@ -81,7 +81,8 @@ class JsonProtocolSuite extends FunSuite {
     val drivers = List(createDriverRunner())
     val finishedDrivers = List(createDriverRunner(), createDriverRunner())
     val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors,
-      finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl")
+      finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl",
+      new NodeStats("localhost").getAllStats)
     val output = JsonProtocol.writeWorkerState(stateResponse)
     assertValidJson(output)
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
@@ -111,7 +112,8 @@ class JsonProtocolSuite extends FunSuite {
     createDriverDesc(), new Date())
 
   def createWorkerInfo(): WorkerInfo = {
-    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress")
+    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress",
+      new NodeStats("localhost").getAllStats)
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }

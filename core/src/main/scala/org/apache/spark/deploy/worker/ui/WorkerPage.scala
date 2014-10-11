@@ -75,6 +75,16 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
           </ul>
+          <h3>Node Statistics</h3>
+          <ul class="unstyled">
+            <li><strong>CPU Speeds:</strong>
+              {(workerState.stats.cpuspeed mkString "MHz, ") + "MHz"}</li>
+            <li><strong>Disk Speeds:</strong>
+              {(workerState.stats.diskspeed mkString " accesses/ms, ") + " accesses/ms"}</li>
+            <li><strong>Max Memory (JVM):</strong> {workerState.stats.maxMem} bytes</li>
+            <li><strong>Available Memory (JVM):</strong> {workerState.stats.availMem} bytes</li>
+            <li><strong>Average Latency:</strong> {workerState.stats.latency} ms</li>
+          </ul>
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>
       </div>
