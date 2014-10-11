@@ -487,9 +487,8 @@ class CheckpointTests(PySparkStreamingTestCase):
         inputd = tempfile.mkdtemp()
         outputd = tempfile.mkdtemp() + "/"
 
-        def updater(it):
-            for k, vs, s in it:
-                yield (k, sum(vs, s or 0))
+        def updater(vs, s):
+            return sum(vs, s or 0)
 
         def setup():
             conf = SparkConf().set("spark.default.parallelism", 1)
