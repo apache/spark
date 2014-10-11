@@ -720,4 +720,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
     checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
   }
+
+  test("Multiple join") {
+    checkAnswer(
+      sql(
+        """SELECT a.key, b.key, c.key
+          |FROM testData a
+          |JOIN testData b ON a.key = b.key
+          |JOIN testData c ON a.key = c.key
+        """.stripMargin),
+      (1 to 100).map(i => Seq(i, i, i)))
+  }
 }
