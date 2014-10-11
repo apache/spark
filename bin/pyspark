@@ -50,21 +50,46 @@ fi
 
 . "$FWDIR"/bin/load-spark-env.sh
 
-# Figure out which Python executable to use
+# In Spark <= 1.1, setting IPYTHON=1 would cause the driver to be launched using the `ipython`
+# executable, while the worker would still be launched using PYSPARK_PYTHON.
+#
+# In Spark 1.2, we removed the documentation of the IPYTHON and IPYTHON_OPTS variables and added
+# PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS to allow IPython to be used for the driver.
+# Now, users can simply set PYSPARK_DRIVER_PYTHON=ipython to use IPython and set
+# PYSPARK_DRIVER_PYTHON_OPTS to pass options when starting the Python driver
+# (e.g. PYSPARK_DRIVER_PYTHON_OPTS='notebook').  This supports full customization of the IPython
+# and executor Python executables.
+#
+# For backwards-compatibility, we retain the old IPYTHON and IPYTHON_OPTS variables.
+
+# Determine the Python executable to use if PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON isn't set:
+if hash python2.7 2>/dev/null; then
+  # Attempt to use Python 2.7, if installed:
+  DEFAULT_PYTHON="python2.7"
+else
+  DEFAULT_PYTHON="python"
+fi
+
+# Determine the Python executable to use for the driver:
+if [[ -n "$IPYTHON_OPTS" || "$IPYTHON" == "1" ]]; then
+  # If IPython options are specified, assume user wants to run IPython
+  # (for backwards-compatibility)
+  PYSPARK_DRIVER_PYTHON_OPTS="$PYSPARK_DRIVER_PYTHON_OPTS $IPYTHON_OPTS"
+  PYSPARK_DRIVER_PYTHON="ipython"
+elif [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
+  PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
+fi
+
+# Determine the Python executable to use for the executors:
 if [[ -z "$PYSPARK_PYTHON" ]]; then
-  if [[ "$IPYTHON" = "1" || -n "$IPYTHON_OPTS" ]]; then
-    # for backward compatibility
-    PYSPARK_PYTHON="ipython"
+  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && $DEFAULT_PYTHON != "python2.7" ]]; then
+    echo "IPython requires Python 2.7+; please install python2.7 or set PYSPARK_PYTHON" 1>&2
+    exit 1
   else
-    PYSPARK_PYTHON="python"
+    PYSPARK_PYTHON="$DEFAULT_PYTHON"
   fi
 fi
 export PYSPARK_PYTHON
-
-if [[ -z "$PYSPARK_PYTHON_OPTS" && -n "$IPYTHON_OPTS" ]]; then
-  # for backward compatibility
-  PYSPARK_PYTHON_OPTS="$IPYTHON_OPTS"
-fi
 
 # Add the PySpark classes to the Python path:
 export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"
@@ -93,9 +118,9 @@ if [[ -n "$SPARK_TESTING" ]]; then
   unset YARN_CONF_DIR
   unset HADOOP_CONF_DIR
   if [[ -n "$PYSPARK_DOC_TEST" ]]; then
-    exec "$PYSPARK_PYTHON" -m doctest $1
+    exec "$PYSPARK_DRIVER_PYTHON" -m doctest $1
   else
-    exec "$PYSPARK_PYTHON" $1
+    exec "$PYSPARK_DRIVER_PYTHON" $1
   fi
   exit
 fi
@@ -111,5 +136,5 @@ if [[ "$1" =~ \.py$ ]]; then
 else
   # PySpark shell requires special handling downstream
   export PYSPARK_SHELL=1
-  exec "$PYSPARK_PYTHON" $PYSPARK_PYTHON_OPTS
+  exec "$PYSPARK_DRIVER_PYTHON" $PYSPARK_DRIVER_PYTHON_OPTS
 fi
