@@ -439,11 +439,14 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
         val numExecutorsAdded = addExecutors()
         val limitReached = numExecutorsAdded < numExecutorsToAdd
         numExecutorsToAdd = if (limitReached) 1 else { numExecutorsToAdd * 2 }
+        // Start a retry timer in case this addition fails
+        if (numExecutorsAdded > 0) {
+          startRetryAddExecutorTimer()
+        }
       } else {
         logInfo(s"Not adding new executors until all $numExecutorsPendingToAdd " +
           s"pending executor(s) have registered.")
         numExecutorsToAdd = 1
-        startRetryAddExecutorTimer()
       }
 
       // Restart the timer
