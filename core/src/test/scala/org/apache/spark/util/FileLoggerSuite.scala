@@ -74,13 +74,13 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
 
   test("Logging when directory already exists") {
     // Create the logging directory multiple times
-    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
-    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
-    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = true).start()
 
     // If overwrite is not enabled, an exception should be thrown
     intercept[IOException] {
-      new FileLogger(logDirPathString, new SparkConf, overwrite = false).start()
+      new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = false).start()
     }
   }
 
