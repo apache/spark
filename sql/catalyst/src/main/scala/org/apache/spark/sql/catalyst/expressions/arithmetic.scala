@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types._
-import scala.math.pow
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
@@ -43,8 +42,12 @@ case class Sqrt(child: Expression) extends UnaryExpression {
   override def toString = s"SQRT($child)"
 
   override def eval(input: Row): Any = {
-    n1(child, input, ((na,a) => math.sqrt(na.toDouble(a))))
+    n1(child, input, (na, a) => math.sqrt(na.toDouble(a)))
   }
+}
+
+object BinaryArithmetic {
+  def unapply(a: BinaryArithmetic): Option[(Expression, Expression)] = Some((a.left, a.right))
 }
 
 abstract class BinaryArithmetic extends BinaryExpression {

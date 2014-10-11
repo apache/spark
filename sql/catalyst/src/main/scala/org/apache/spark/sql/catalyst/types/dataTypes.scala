@@ -167,10 +167,7 @@ object DataType {
 
 abstract class DataType {
   /** Matches any expression that evaluates to this DataType */
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType == this => true
-    case _ => false
-  }
+  def unapply[T <: Expression](a: T): Option[T] = if (a.dataType == this) Some(a) else None
 
   def isPrimitive: Boolean = false
 
@@ -189,7 +186,7 @@ object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
-  def unapply(dt: DataType): Boolean = all.contains(dt)
+  def unapply[T <: DataType](dt: T): Option[T] = if (all.contains(dt)) Some(dt) else None
 
   val defaultSizeOf: Map[NativeType, Int] = Map(
     IntegerType -> 4,
@@ -288,15 +285,14 @@ abstract class NumericType extends NativeType with PrimitiveType {
 }
 
 object NumericType {
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
+  def unapply[T <: Expression](e: T): Option[T] =
+    if (e.dataType.isInstanceOf[NumericType]) Some(e) else None
 }
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */
 object IntegralType {
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
-    case _ => false
-  }
+  def unapply[T <: Expression](a: T): Option[T] =
+    if (a.dataType.isInstanceOf[IntegralType]) Some(a) else None
 }
 
 abstract class IntegralType extends NumericType {
@@ -337,10 +333,8 @@ case object ByteType extends IntegralType {
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
 object FractionalType {
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
-    case _ => false
-  }
+  def unapply[T <: Expression](a: T): Option[T] =
+    if (a.dataType.isInstanceOf[FractionalType]) Some(a) else None
 }
 abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
