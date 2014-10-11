@@ -47,6 +47,10 @@ class GradientBoosting (
     val algo = strategy.algo
     algo match {
       case Regression => GradientBoosting.regression(input, strategy, boostingStrategy)
+      case Classification =>
+        // TODO: Take care of remapping during predict
+        val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+        GradientBoosting.regression(remappedInput, strategy, boostingStrategy)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
