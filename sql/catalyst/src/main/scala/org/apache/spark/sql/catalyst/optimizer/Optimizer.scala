@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -38,7 +39,8 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      OptimizeIn) ::
     Batch("Filter Pushdown", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
@@ -269,6 +271,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
           case Literal(candidate, _) if candidate == v => true
           case _ => false
         } => Literal(true, BooleanType)
+    }
+  }
+}
+
+/**
+ * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
+ * which is much faster
+ */
+object OptimizeIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+          val hSet = list.map(e => e.eval(null))
+          InSet(v, HashSet() ++ hSet, v +: list)
     }
   }
 }
