@@ -260,8 +260,6 @@ trait HiveTypeCoercion {
         Sum(Cast(e, DoubleType))
       case Average(e) if e.dataType == StringType =>
         Average(Cast(e, DoubleType))
-      case Sqrt(e) if e.dataType == StringType =>
-        Sqrt(Cast(e, DoubleType))
     }
   }
 
@@ -365,10 +363,18 @@ trait HiveTypeCoercion {
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))
-
       // Hive lets you do aggregation of timestamps... for some reason
       case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
       case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
+      
+      case funcall: SignedFunction[_] if !funcall.actualsProperlyTyped => {
+        val coercedParams = funcall.actualParams.zip(funcall.formalTypes).map {
+          case (exp, tp) if tp != exp.dataType =>
+            Cast(exp, tp)
+          case (exp, _) => exp
+        }
+        funcall.create(coercedParams)
+      }
     }
   }
 

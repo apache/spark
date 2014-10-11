@@ -245,3 +245,29 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 
 
 }
+
+/**
+ * Trait representing a fixed-arity function whose arguments should be casted to particular types.
+ * Expression classes extending SignedFunction must provide `formalTypes`, a List of expected 
+ * types for formal parameters, `actualParams`, a list of Expressions corresponding to actual
+ * parameters, and create, which creates an instance of that expression class from a list of
+ * expressions corresponding to actuals.  The type parameter for SignedFunction should be the
+ * expression class extending it.
+ *
+ * See the Sqrt class for a concrete example.
+ *
+ * This trait (or abstract classes extending this trait) could be exposed to code outside `sql`
+ * in the future.
+ */
+private[sql] trait SignedFunction[E <: Expression] {
+  self: E =>
+  type exprType = E
+  def formalTypes: List[DataType]
+  def actualParams: List[Expression]
+  def actualsProperlyTyped = actualParams.map(_.dataType)
+    .zip(formalTypes)
+    .forall(x => x._1 == x._2)
+  
+  def create(actuals: List[Expression]): E
+
+}

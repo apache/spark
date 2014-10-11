@@ -34,7 +34,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
   }
 }
 
-case class Sqrt(child: Expression) extends UnaryExpression {
+case class Sqrt(child: Expression) extends UnaryExpression with SignedFunction[Sqrt] {
   type EvaluatedType = Any
   
   def dataType = DoubleType
@@ -44,6 +44,12 @@ case class Sqrt(child: Expression) extends UnaryExpression {
 
   override def eval(input: Row): Any = {
     n1(child, input, ((na,a) => math.sqrt(na.toDouble(a))))
+  }
+  
+  val formalTypes = List(DoubleType)
+  val actualParams = List(child)
+  def create(al: List[Expression]) = al match {
+    case exp::Nil => Sqrt(exp)
   }
 }
 
