@@ -4,7 +4,7 @@
 
 {% block head_css %}
 {{ super() }}
-<link rel="stylesheet" type="text/css" 
+<link rel="stylesheet" type="text/css"
     href="{{ url_for("static", filename="main.css") }}">
 {% endblock %}
 
@@ -15,7 +15,7 @@
       <i class="icon-plus-sign"></i>Tree View
     </a></li>
     <li><a href="{{ url_for("flux.graph", dag_id=dag.dag_id) }}">
-      <i class="icon-random"></i> 
+      <i class="icon-random"></i>
       Graph View</a></li>
     <li><a href="{{ url_for("flux.duration", dag_id=dag.dag_id) }}">
       <i class="icon-signal"></i>Task Duration
@@ -28,28 +28,28 @@
     </li>
     <li>
       <a href="{{ url_for("flux.gantt", dag_id=dag.dag_id) }}">
-        <i class="icon-align-left"></i> 
+        <i class="icon-align-left"></i>
         Gantt
       </a>
     </li>
     <li>
       <a href="{{ url_for("flux.code", dag_id=dag.dag_id) }}">
-      <i class="icon-barcode"></i> 
+      <i class="icon-barcode"></i>
         Code
       </a>
     </li>
   </ul>
   <hr>
   <!-- Modal -->
-  <div class="modal fade" id="myModal" 
-        tabindex="-1" role="dialog" 
+  <div class="modal fade" id="myModal"
+        tabindex="-1" role="dialog"
       aria-labelledby="myModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h4 class="modal-title" id="myModalLabel">
-            Task Instance: 
-            <span id='task_id'></span> on 
+            Task Instance:
+            <span id='task_id'></span> on
             <span id='execution_date'></span>
           </h4>
         </div>
@@ -63,9 +63,9 @@
             Clear
           </button>
           <span class="btn-group">
-            <button id="btn_past" 
+            <button id="btn_past"
               type="button" class="btn" data-toggle="button">Past</button>
-            <button id="btn_future" 
+            <button id="btn_future"
               type="button" class="btn" data-toggle="button">Future</button>
             <button id="btn_upstream"
               type="button" class="btn" data-toggle="button">Upstream</button>
@@ -123,7 +123,7 @@
     });
 
     $("#btn_clear").click(function(){
-      url = "{{ url_for('flux.tree') }}" +  
+      url = "{{ url_for('flux.tree') }}" +
         "?action=clear" +
         "&task_id=" + task_id +
         "&dag_id=" + dag_id +
@@ -136,14 +136,14 @@
     });
 
     $("#btn_gantt").click(function(){
-      url = "{{ url_for('flux.gantt') }}" +  
+      url = "{{ url_for('flux.gantt') }}" +
         "?dag_id=" + dag_id +
         "&execution_date=" + execution_date;
       window.location = url;
     });
 
     $("#btn_graph").click(function(){
-      url = "{{ url_for('flux.graph') }}" +  
+      url = "{{ url_for('flux.graph') }}" +
         "?dag_id=" + dag_id +
         "&execution_date=" + execution_date;
       window.location = url;

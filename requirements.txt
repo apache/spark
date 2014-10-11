@@ -10,4 +10,5 @@ mysql-python
 pygments
 python-dateutil
 sphinx
+sphinx_rtd_theme
 sqlalchemy

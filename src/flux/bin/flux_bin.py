@@ -7,7 +7,6 @@ import dateutil.parser
 from datetime import datetime
 import logging
 import os
-import pickle
 import signal
 import sys
 from time import sleep
@@ -33,8 +32,9 @@ def backfill(args):
         args.end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
 
     if args.task_regex:
-        dag = dag.sub_dag(task_regex=args.task_regex)
-
+        dag = dag.sub_dag(
+            task_regex=args.task_regex,
+            include_upstream=not args.ignore_dependencies)
     dag.run(
         start_date=args.start_date,
         end_date=args.end_date,
@@ -64,10 +64,10 @@ def run(args):
     else:
         session = settings.Session()
         dag_pickle, = session.query(
-            DagPickle).filter(DagPickle.id==args.pickle).all()
+            DagPickle).filter(DagPickle.id == args.pickle).all()
         dag = dag_pickle.get_object()
         task = dag.get_task(task_id=args.task_id)
-        
+
     ti = TaskInstance(task, args.execution_date)
 
     # This is enough to fail the task instance
@@ -98,7 +98,10 @@ def clear(args):
     if args.task_regex:
         dag = dag.sub_dag(task_regex=args.task_regex)
     dag.clear(
-        start_date=args.start_date, end_date=args.end_date)
+        start_date=args.start_date,
+        end_date=args.end_date,
+        upstream=args.upstream,
+        downstream=args.downstream)
 
 
 def webserver(args):
@@ -192,6 +195,12 @@ if __name__ == '__main__':
         "-m", "--mark_success",
         help=mark_success_help, action="store_true")
     parser_backfill.add_argument(
+        "-i", "--ignore_dependencies",
+        help=(
+            "Skip upstream tasks, run only the tasks "
+            "matching the regexp. Only works in conjunction with task_regex"),
+        action="store_true")
+    parser_backfill.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=settings.DAGS_FOLDER)
     parser_backfill.set_defaults(func=backfill)
@@ -206,6 +215,12 @@ if __name__ == '__main__':
         "-s", "--start_date", help="Overide start_date YYYY-MM-DD")
     parser_clear.add_argument(
         "-e", "--end_date", help="Overide end_date YYYY-MM-DD")
+    ht = "Include upstream tasks"
+    parser_clear.add_argument(
+        "-u", "--upstream", help=ht, action="store_true")
+    ht = "Include downstream tasks"
+    parser_clear.add_argument(
+        "-d", "--downstream", help=ht, action="store_true")
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=settings.DAGS_FOLDER)
@@ -221,16 +236,18 @@ if __name__ == '__main__':
         "-sd", "--subdir", help=subdir_help, default=settings.DAGS_FOLDER)
     parser_run.add_argument(
         "-m", "--mark_success", help=mark_success_help, action="store_true")
+    parser_run.add_argument(
+        "-f", "--force",
+        help="Force a run regardless or previous success",
+        action="store_true")
+    parser_run.add_argument(
+        "-i", "--ignore_dependencies",
+        help="Ignore upstream and depends_on_past dependencies",
+        action="store_true")
+    parser_run.add_argument(
+        "-p", "--pickle",
+        help="Serialized pickle object of the entire dag (used internally)")
     parser_run.set_defaults(func=run)
-    ht = "Force a run regardless or previous success"
-    parser_run.add_argument(
-        "-f", "--force", help=ht, action="store_true")
-    ht = "Ignore upstream and depends_on_past dependencies"
-    parser_run.add_argument(
-        "-i", "--ignore_dependencies", help=ht, action="store_true")
-    ht = "Serialized pickle object of the entire dag (used internally)"
-    parser_run.add_argument(
-        "-p", "--pickle", help=ht)
 
     ht = "Start a Flux webserver instance"
     parser_webserver = subparsers.add_parser('webserver', help=ht)

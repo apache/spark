@@ -6,6 +6,7 @@ from flux import settings
 from flux.models import BaseOperator, TaskInstance, State
 from flux.hooks import MySqlHook
 
+
 class BaseSensorOperator(BaseOperator):
 
     def __init__(self, poke_interval=5, timeout=60*60*24*7, *args, **kwargs):
@@ -50,6 +51,7 @@ class MySqlSensorOperator(BaseSensorOperator):
             else:
                 return True
             print(records[0][0])
+
 
 class ExternalTaskSensor(BaseSensorOperator):
     """

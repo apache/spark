@@ -2,3 +2,4 @@ env
 logs
 build
 *.pyc
+docs/_*

@@ -3,7 +3,7 @@
 
 {% block head_css %}
 {{ super() }}
-<link rel="stylesheet" type="text/css" 
+<link rel="stylesheet" type="text/css"
     href="{{ url_for('static', filename='tree.css') }}">
 {% endblock %}
 
@@ -70,7 +70,7 @@ var svg = d3.select("svg")
 
   d3.select("svg")
   .insert("g")
-  .attr("transform", 
+  .attr("transform",
     "translate("+ (square_x + margin.left) +", " + axisHeight + ")")
   .attr("class", "axis").call(
     d3.svg.axis()
@@ -95,12 +95,12 @@ var svg = d3.select("svg")
 
 update(root = data);
 function update(source) {
-  
+
   // Compute the flattened node list. TODO use d3.layout.hierarchy.
   var nodes = tree.nodes(root);
 
   var height = Math.min(500, nodes.length * barHeight + margin.top + margin.bottom);
-  var width = square_x + (num_square * (square_size + square_spacing)) + margin.left + margin.right + 50; 
+  var width = square_x + (num_square * (square_size + square_spacing)) + margin.left + margin.right + 50;
   d3.select("svg").transition()
       .duration(duration)
       .attr("height", height)
@@ -121,8 +121,8 @@ function update(source) {
 
   var nodeEnter = node.enter().append("g")
   .attr("class", node_class)
-  .attr("transform", function(d) { 
-    return "translate(" + source.y0 + "," + source.x0 + ")"; 
+  .attr("transform", function(d) {
+    return "translate(" + source.y0 + "," + source.x0 + ")";
   })
   .style("opacity", 1e-6);
 
@@ -151,7 +151,7 @@ function update(source) {
 
   nodeEnter.append('g')
       .attr("class", "stateboxes")
-      .attr("transform", 
+      .attr("transform",
         function(d, i) { return "translate(" + (square_x-d.y) + ",0)"; })
       .selectAll("rect").data(function(d) { return d.instances; })
       .enter()
@@ -178,13 +178,13 @@ function update(source) {
       .on('mouseover', function(d,i) {
         d3.select(this).transition()
           .style('stroke-width', 3)
-       }) 
+       })
       .on('mouseout', function(d,i) {
         d3.select(this).transition()
           .style('stroke', "black")
           .style('stroke-width', 1)
        }) ;
-  
+
 
   // Transition nodes to their new position.
   nodeEnter.transition()
@@ -239,7 +239,7 @@ function update(source) {
     d.x0 = d.x;
     d.y0 = d.y;
   });
-  
+
 }
 
 function set_tooltip(){

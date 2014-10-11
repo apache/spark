@@ -119,20 +119,20 @@ class DatabaseConnection(Base):
 
 class DagPickle(Base):
     """
-    Dags can originate from different places (user repos, master repo, ...) 
+    Dags can originate from different places (user repos, master repo, ...)
     and also get executed in different places (different executors). This
     object represents a version of a DAG and becomes a source of truth for
     a BackfillJob execution. A pickle is a native python serialized object,
     and in this case gets stored in the database for the duration of the job.
 
-    The executors pick up the DagPickle id and read the dag definition from 
+    The executors pick up the DagPickle id and read the dag definition from
     the database.
     """
     id = Column(Integer, primary_key=True)
     pickle = Column(Text())
 
     __tablename__ = "dag_pickle"
-    
+
     def __init__(self, dag, job):
         self.pickle = dag.pickle()
         self.dag_id = dag.dag_id
@@ -174,18 +174,27 @@ class TaskInstance(Base):
         self.task = task
         self.try_number = 1
 
-    def command(self, mark_success=False, pickle=None):
+    def command(
+            self,
+            mark_success=False,
+            ignore_dependencies=False,
+            force=False,
+            pickle=None):
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
-        pickle = "--pickle {0}".format(pickle.id)  if pickle else ""
+        pickle = "--pickle {0}".format(pickle.id) if pickle else ""
+        ignore_dependencies = "-i" if ignore_dependencies else ""
+        force = "--force" if force else ""
         subdir = ""
         if not pickle and self.dag and self.dag.filepath:
-            subdir = "-sd {self.task.dag.filepath}" 
+            subdir = "-sd {self.task.dag.filepath}"
         return (
             "./flux run "
             "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
             "{pickle} "
+            "{ignore_dependencies} "
+            "{force} "
             "{subdir} "
         ).format(**locals())
 
@@ -471,6 +480,7 @@ class BaseJob(Base):
     def run(self):
         raise NotImplemented("This method needs to be overriden")
 
+
 class BackfillJob(BaseJob):
 
     __mapper_args__ = {
@@ -479,16 +489,14 @@ class BackfillJob(BaseJob):
 
     def run(self, dag, start_date=None, end_date=None, mark_success=False):
         session = settings.Session()
-
-        # Build a list of all intances to run
-        task_instances = {}
+        executor = self.executor
         self.dag = dag
-
         pickle = DagPickle(dag, self)
         session.add(pickle)
         session.commit()
 
-        executor = self.executor
+        # Build a list of all intances to run
+        task_instances = {}
         for task in self.dag.tasks:
             start_date = start_date or task.start_date
             end_date = end_date or task.end_date or datetime.now()
@@ -499,7 +507,7 @@ class BackfillJob(BaseJob):
                 if ti.state != State.SUCCESS:
                     task_instances[ti.key] = ti
 
-        # Triggering what needs to get triggered
+        # Triggering what is ready to get triggered
         while task_instances:
             for key, ti in task_instances.items():
                 if ti.state == State.SUCCESS:
@@ -515,6 +523,7 @@ class BackfillJob(BaseJob):
                 self.heartbeat()
             executor.heartbeat()
 
+            # Reacting to events
             for key, state in executor.get_event_buffer().items():
                 dag_id, task_id, execution_date = key
                 ti = task_instances[key]
@@ -627,10 +636,12 @@ class BaseOperator(Base):
 
     @property
     def upstream_list(self):
+        """@property: list of tasks directly upstream"""
         return self._upstream_list
 
     @property
     def downstream_list(self):
+        """@property: list of tasks directly downstream"""
         return self._downstream_list
 
     def pickle(self):
@@ -639,6 +650,10 @@ class BaseOperator(Base):
     def clear(
             self, start_date=None, end_date=None,
             upstream=False, downstream=False):
+        """
+        Clears the state of task instances associated with the task, follwing
+        the parameters specified.
+        """
         session = settings.Session()
 
         TI = TaskInstance
@@ -669,6 +684,10 @@ class BaseOperator(Base):
         return count
 
     def get_task_instances(self, start_date=None, end_date=None):
+        """
+        Get a set of task instance related to this task for a specific date
+        range.
+        """
         session = settings.Session()
         TI = TaskInstance
         end_date = end_date or datetime.now()
@@ -680,6 +699,9 @@ class BaseOperator(Base):
         ).order_by(TI.execution_date).all()
 
     def get_flat_relatives(self, upstream=False):
+        """
+        Get a flat list of relatives, either upstream or downstream.
+        """
         l = []
         for t in self.get_direct_relatives(upstream):
             if t not in l:
@@ -688,6 +710,11 @@ class BaseOperator(Base):
         return l
 
     def detect_downstream_cycle(self, task=None):
+        """
+        When invoked, this routine will raise an exception if a cycle is 
+        detected downstream from self. It is invoked when tasks are added to
+        the DAG to detect cycles.
+        """
         if not task:
             task = self
         for t in self.get_direct_relatives():
@@ -701,6 +728,9 @@ class BaseOperator(Base):
     def run(
             self, start_date=None, end_date=None, ignore_dependencies=False,
             force=False, mark_success=False):
+        """
+        Run a set of task instances for a date range.
+        """
         start_date = start_date or self.start_date
         end_date = end_date or self.end_date or datetime.now()
 
@@ -712,6 +742,10 @@ class BaseOperator(Base):
                 force=force,)
 
     def get_direct_relatives(self, upstream=False):
+        """
+        Get the direct relatives to the current task, upstream or 
+        downstream.
+        """
         if upstream:
             return self.upstream_list
         else:
@@ -742,9 +776,17 @@ class BaseOperator(Base):
         self.detect_downstream_cycle()
 
     def set_downstream(self, task_or_task_list):
+        """
+        Set a task, or a task task to be directly downstream from the current
+        task.
+        """
         self._set_relatives(task_or_task_list, upstream=False)
 
     def set_upstream(self, task_or_task_list):
+        """
+        Set a task, or a task task to be directly upstream from the current
+        task.
+        """
         self._set_relatives(task_or_task_list, upstream=True)
 
 

@@ -6,9 +6,9 @@
 
 {% block head_css %}
 {{ super() }}
-<link rel="stylesheet" type="text/css" 
+<link rel="stylesheet" type="text/css"
     href="{{ url_for('static', filename='dagre.css') }}">
-<link rel="stylesheet" type="text/css" 
+<link rel="stylesheet" type="text/css"
     href="{{ url_for('static', filename='graph.css') }}">
 <link href="{{ admin_static.url(filename='datetimepicker/bootstrap-datetimepicker.css') }}" rel="stylesheet">
 {% endblock %}
@@ -18,7 +18,7 @@
     <form method="get">
         Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
         {{ form.execution_date | safe }}
-        <input type="submit" value="Go" class="btn btn-default" 
+        <input type="submit" value="Go" class="btn btn-default"
         action="" method="get">
     </form>
     <div id="svg_container">
@@ -31,7 +31,7 @@
 
 {% block tail %}
     {{ super() }}
-    
+
     <script src="{{ url_for('static', filename='d3.v3.min.js') }}"></script>
     <script src="{{ url_for('static', filename='dagre-d3.min.js') }}"></script>
     <script src="{{ admin_static.url(
