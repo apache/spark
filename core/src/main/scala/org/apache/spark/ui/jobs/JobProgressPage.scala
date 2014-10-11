@@ -109,9 +109,9 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
-        <h4 id="completed">Completed Stages(only showing {completedStages.size})</h4>++
+        <h4 id="completed">Completed Stages (only showing {completedStages.size})</h4>++
         completedStagesTable.toNodeSeq ++
-        <h4 id="failed">Failed Stages(only showing {failedStages.size})</h4>++
+        <h4 id="failed">Failed Stages (only showing {failedStages.size})</h4>++
         failedStagesTable.toNodeSeq
 
       UIUtils.headerSparkPage("Spark Stages", content, parent)
