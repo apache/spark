@@ -23,8 +23,6 @@ import java.io.FileOutputStream
 
 import scala.collection.immutable.IndexedSeq
 
-import com.google.common.io.Files
-
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
@@ -66,9 +64,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
    *   3) Does the contents be the same.
    */
   test("Correctness of WholeTextFileRecordReader.") {
-
-    val dir = Files.createTempDir()
-    dir.deleteOnExit()
+    val dir = Utils.createTempDir()
     println(s"Local disk address is ${dir.toString}.")
 
     WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>

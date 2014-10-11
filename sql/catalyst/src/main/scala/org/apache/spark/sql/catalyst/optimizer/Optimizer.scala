@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -38,7 +39,8 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      OptimizeIn) ::
     Batch("Filter Pushdown", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
@@ -274,6 +276,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
+ * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
+ * which is much faster
+ */
+object OptimizeIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+          val hSet = list.map(e => e.eval(null))
+          InSet(v, HashSet() ++ hSet, v +: list)
+    }
+  }
+}
+
+/**
  * Simplifies boolean expressions where the answer can be determined without evaluating both sides.
  * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
  * is only safe when evaluations of expressions does not result in side effects.
@@ -297,6 +313,18 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (Literal(false, BooleanType), r) => r
           case (l, Literal(false, BooleanType)) => l
           case (_, _) => or
+        }
+
+      case not @ Not(exp) =>
+        exp match {
+          case Literal(true, BooleanType) => Literal(false)
+          case Literal(false, BooleanType) => Literal(true)
+          case GreaterThan(l, r) => LessThanOrEqual(l, r)
+          case GreaterThanOrEqual(l, r) => LessThan(l, r)
+          case LessThan(l, r) => GreaterThanOrEqual(l, r)
+          case LessThanOrEqual(l, r) => GreaterThan(l, r)
+          case Not(e) => e
+          case _ => not
         }
 
       // Turn "if (true) a else b" into "a", and if (false) a else b" into "b".
