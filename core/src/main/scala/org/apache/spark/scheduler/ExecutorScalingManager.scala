@@ -111,10 +111,10 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
     conf.getInt("spark.dynamicAllocation.maxRetryRemoveExecutorAttempts", 10)
 
   // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
-  private val executorIds = new mutable.HashSet[String] ++= scheduler.executorIdToHost.keys
+  private val executorIds = new mutable.HashSet[String]
 
-  // Start idle timer for all new executors
-  synchronized { executorIds.foreach(startRemoveExecutorTimer) }
+  // Initialize with existing known executors
+  scheduler.executorIdToHost.keys.foreach(executorAdded)
 
   /**
    * Start the add executor timer if it does not already exist.
