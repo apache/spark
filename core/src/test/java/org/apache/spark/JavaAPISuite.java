@@ -22,7 +22,6 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
-import org.apache.spark.api.java.*;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -45,6 +44,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.partial.BoundedDouble;
