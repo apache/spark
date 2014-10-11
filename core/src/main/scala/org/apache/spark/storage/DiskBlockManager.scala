@@ -21,7 +21,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.Utils
 

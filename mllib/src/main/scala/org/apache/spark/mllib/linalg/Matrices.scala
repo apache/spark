@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import java.util.Arrays
 
-import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
+import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
 import org.apache.spark.util.random.XORShiftRandom
 

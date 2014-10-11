@@ -18,9 +18,10 @@
 package org.apache.spark
 
 import akka.actor.Actor
+
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ActorLogReceive
 
 /**

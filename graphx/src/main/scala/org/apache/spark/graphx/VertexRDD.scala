@@ -21,14 +21,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
-import org.apache.spark.storage.StorageLevel
-
+import org.apache.spark.graphx.impl.RoutingTableMessageRDDFunctions._
 import org.apache.spark.graphx.impl.RoutingTablePartition
 import org.apache.spark.graphx.impl.ShippableVertexPartition
 import org.apache.spark.graphx.impl.VertexAttributeBlock
-import org.apache.spark.graphx.impl.RoutingTableMessageRDDFunctions._
 import org.apache.spark.graphx.impl.VertexRDDFunctions._
+import org.apache.spark.rdd._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Extends `RDD[(VertexId, VD)]` by ensuring that there is only one entry for each vertex and by

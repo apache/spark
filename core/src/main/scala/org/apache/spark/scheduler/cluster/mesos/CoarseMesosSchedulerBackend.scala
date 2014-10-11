@@ -24,8 +24,8 @@ import java.util.Collections
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
-import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
+import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}

@@ -19,18 +19,16 @@ package org.apache.spark.sql.parquet
 
 import java.nio.ByteBuffer
 
+import com.google.common.io.BaseEncoding
 import org.apache.hadoop.conf.Configuration
-
+import parquet.column.ColumnReader
 import parquet.filter._
 import parquet.filter.ColumnPredicates._
-import parquet.column.ColumnReader
-
-import com.google.common.io.BaseEncoding
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.expressions.{Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 private[sql] object ParquetFilters {

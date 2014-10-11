@@ -16,14 +16,14 @@
  */
 package org.apache.spark.streaming.flume.sink
 
-import java.util.concurrent.{CountDownLatch, ConcurrentHashMap, Executors}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConversions._
 
-import org.apache.flume.Channel
-import org.apache.commons.lang.RandomStringUtils
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.commons.lang.RandomStringUtils
+import org.apache.flume.Channel
 
 /**
  * Class that implements the SparkFlumeProtocol, that is used by the Avro Netty Server to process

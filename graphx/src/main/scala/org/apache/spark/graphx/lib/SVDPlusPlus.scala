@@ -18,9 +18,11 @@
 package org.apache.spark.graphx.lib
 
 import scala.util.Random
+
 import org.jblas.DoubleMatrix
-import org.apache.spark.rdd._
+
 import org.apache.spark.graphx._
+import org.apache.spark.rdd._
 
 /** Implementation of SVD++ algorithm. */
 object SVDPlusPlus {

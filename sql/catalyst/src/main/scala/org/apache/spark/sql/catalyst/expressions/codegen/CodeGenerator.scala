@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import com.google.common.cache.{CacheLoader, CacheBuilder}
-
 import scala.language.existentials
+
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions

@@ -23,7 +23,6 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
-
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 

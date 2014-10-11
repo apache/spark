@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, SqlLexical}
+import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.

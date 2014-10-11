@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
+import breeze.linalg.{norm => breezeNorm, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
@@ -120,7 +120,7 @@ class KMeans private (
   private[spark] def disableUncachedWarning(): this.type = {
     warnOnUncachedInput = false
     this
-  }  
+  }
 
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high

@@ -31,8 +31,8 @@ import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
-import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+import org.apache.spark.sql.Row
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.

@@ -20,13 +20,12 @@ package org.apache.spark.sql.api.java
 import java.util.{List => JList}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
+import org.apache.spark.api.java.{JavaRDD, JavaRDDLike}
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.sql.types.util.DataTypeConversions
-import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import DataTypeConversions._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SchemaRDD, SchemaRDDLike, SQLContext}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -44,6 +43,8 @@ class JavaSchemaRDD(
      @transient val baseLogicalPlan: LogicalPlan)
   extends JavaRDDLike[Row, JavaRDD[Row]]
   with SchemaRDDLike {
+
+  import DataTypeConversions._
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
 

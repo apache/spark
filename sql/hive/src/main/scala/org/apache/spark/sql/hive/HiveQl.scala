@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+/* Implicit conversions */
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
@@ -28,9 +31,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command

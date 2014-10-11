@@ -20,23 +20,23 @@ package org.apache.spark.api.python
 import java.io._
 import java.net._
 import java.nio.charset.Charset
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
+import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 import net.razorvine.pickle.{Pickler, Unpickler}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.mapred.{InputFormat, OutputFormat, JobConf}
+import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -853,10 +853,10 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 
-  /** 
+  /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
    * by the DAGScheduler's single-threaded actor anyway.
-   */ 
+   */
   @transient var socket: Socket = _
 
   def openSocket(): Socket = synchronized {

@@ -22,8 +22,8 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::

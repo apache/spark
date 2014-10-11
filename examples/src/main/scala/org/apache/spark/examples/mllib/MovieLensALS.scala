@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
+import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).

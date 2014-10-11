@@ -17,7 +17,7 @@
 
 package org.apache.spark.repl
 
-import scala.tools.nsc.{Settings, CompilerCommand}
+import scala.tools.nsc.{CompilerCommand, Settings}
 import scala.Predef._
 
 /**

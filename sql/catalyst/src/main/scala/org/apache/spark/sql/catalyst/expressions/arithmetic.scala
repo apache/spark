@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.math.pow
+
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types._
-import scala.math.pow
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
@@ -36,7 +37,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 
 case class Sqrt(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
-  
+
   def dataType = DoubleType
   override def foldable = child.foldable
   def nullable = child.nullable

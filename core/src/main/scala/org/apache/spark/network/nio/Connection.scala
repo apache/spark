@@ -23,11 +23,11 @@ import java.nio.channels._
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.LinkedList
 
-import org.apache.spark._
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
+
+import org.apache.spark._
 
 private[nio]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,

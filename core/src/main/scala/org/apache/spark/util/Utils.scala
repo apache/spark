@@ -20,10 +20,8 @@ package org.apache.spark.util
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{Properties, Locale, Random, UUID}
-import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
-
-import org.eclipse.jetty.util.MultiException
+import java.util.{Locale, Properties, Random, UUID}
+import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -37,8 +35,9 @@ import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.util.MultiException
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
@@ -727,7 +726,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Determines if a directory contains any files newer than cutoff seconds.
-   * 
+   *
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
    * @param cutoff measured in seconds. Returns true if there are any files or directories in the
    *               given directory whose last modified time is later than this many seconds ago

@@ -17,16 +17,16 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.NextIterator
+import java.io._
+import java.net.{Socket, UnknownHostException}
 
 import scala.reflect.ClassTag
 
-import java.io._
-import java.net.{UnknownHostException, Socket}
 import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.NextIterator
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](

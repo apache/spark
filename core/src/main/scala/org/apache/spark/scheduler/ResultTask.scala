@@ -17,9 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import java.nio.ByteBuffer
-
 import java.io._
+import java.nio.ByteBuffer
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast

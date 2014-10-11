@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.scheduler
 
 import akka.actor.ActorRef
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**

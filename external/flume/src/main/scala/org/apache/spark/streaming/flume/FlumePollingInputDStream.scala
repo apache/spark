@@ -16,9 +16,8 @@
  */
 package org.apache.spark.streaming.flume
 
-
 import java.net.InetSocketAddress
-import java.util.concurrent.{LinkedBlockingQueue, Executors}
+import java.util.concurrent.{Executors, LinkedBlockingQueue}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -32,8 +31,8 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
@@ -110,7 +109,7 @@ private[streaming] class FlumePollingReceiver(
 }
 
 /**
- * A wrapper around the transceiver and the Avro IPC API. 
+ * A wrapper around the transceiver and the Avro IPC API.
  * @param transceiver The transceiver to use for communication with Flume
  * @param client The client that the callbacks are received on.
  */

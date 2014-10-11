@@ -17,20 +17,19 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext._
-
-import org.apache.spark.{Partitioner, HashPartitioner}
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.streaming.{Time, Duration}
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.OutputFormat
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+
+import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.streaming.StreamingContext._
 
 /**
  * Extra functions available on DStream of (key, value) pairs through an implicit conversion.

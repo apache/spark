@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.io.{PrintWriter, ByteArrayOutputStream, FileInputStream, File}
+import java.io.{ByteArrayOutputStream, File, FileInputStream, PrintWriter}
 
 import org.apache.spark.util.{Utils => SparkUtils}
 

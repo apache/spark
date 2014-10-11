@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst
 
 import scala.language.implicitConversions
+import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
 import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._

@@ -29,8 +29,9 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
+import org.apache.spark.sql.{Row => SparkRow, SchemaRDD, SQLConf}
 import org.apache.spark.sql.catalyst.plans.logical.SetCommand
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}

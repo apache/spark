@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.JavaConversions.{collectionAsScalaIterable, asJavaIterator}
+import scala.collection.JavaConversions.{asJavaIterator, collectionAsScalaIterable}
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 

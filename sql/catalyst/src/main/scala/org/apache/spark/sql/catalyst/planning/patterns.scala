@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.planning
 import scala.annotation.tailrec
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * A pattern that matches any number of filter operations on top of another relational operator.
@@ -188,7 +188,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) = 
+      val (joinPredicates, otherPredicates) =
         condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
           case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
             (canEvaluate(l, right) && canEvaluate(r, left)) => true

@@ -20,6 +20,8 @@ package org.apache.spark.serializer
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
+import scala.reflect.ClassTag
+
 import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
@@ -27,13 +29,11 @@ import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 
 import org.apache.spark._
 import org.apache.spark.broadcast.HttpBroadcast
-import org.apache.spark.network.nio.{PutBlock, GotBlock, GetBlock}
+import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.collection.CompactBuffer
-
-import scala.reflect.ClassTag
 
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].

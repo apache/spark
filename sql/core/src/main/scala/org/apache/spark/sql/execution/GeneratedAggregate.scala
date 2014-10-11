@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.types._
 
 case class AggregateEvaluation(
@@ -142,7 +142,7 @@ case class GeneratedAggregate(
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap: Map[TreeNodeRef, Expression] = 
+    val resultMap: Map[TreeNodeRef, Expression] =
       aggregatesToCompute.zip(computeFunctions).map {
         case (agg, func) => new TreeNodeRef(agg) -> func.result
       }.toMap

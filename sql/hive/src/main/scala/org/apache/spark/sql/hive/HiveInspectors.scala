@@ -17,18 +17,18 @@
 
 package org.apache.spark.sql.hive
 
+/* Implicit conversions */
+import scala.collection.JavaConversions._
+
+import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
-import org.apache.hadoop.hive.serde2.{io => hiveIo}
-import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.types._
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 private[hive] trait HiveInspectors {
 

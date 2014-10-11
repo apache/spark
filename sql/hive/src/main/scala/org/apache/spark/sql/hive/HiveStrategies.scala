@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.{SchemaRDD, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -29,9 +32,6 @@ import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
-
-import scala.collection.JavaConversions._
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.

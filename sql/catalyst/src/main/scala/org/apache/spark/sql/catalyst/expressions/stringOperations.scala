@@ -21,7 +21,6 @@ import java.util.regex.Pattern
 
 import scala.collection.IndexedSeqOptimized
 
-
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types.{BinaryType, BooleanType, DataType, StringType}
 
@@ -142,7 +141,7 @@ case class RLike(left: Expression, right: Expression)
  * A function that converts the characters of a string to uppercase.
  */
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
-  
+
   override def convert(v: String): String = v.toUpperCase()
 
   override def toString() = s"Upper($child)"
@@ -152,7 +151,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
  * A function that converts the characters of a string to lowercase.
  */
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
-  
+
   override def convert(v: String): String = v.toLowerCase()
 
   override def toString() = s"Lower($child)"
@@ -213,7 +212,7 @@ case class EndsWith(left: Expression, right: Expression)
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression) extends Expression {
-  
+
   type EvaluatedType = Any
 
   override def foldable = str.foldable && pos.foldable && len.foldable
@@ -233,7 +232,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
     val len = str.length
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
-    // negative indices for start positions. If a start index i is greater than 0, it 
+    // negative indices for start positions. If a start index i is greater than 0, it
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
@@ -249,7 +248,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       case x => start + x
     }
 
-    str.slice(start, end)    
+    str.slice(start, end)
   }
 
   override def eval(input: Row): Any = {
@@ -262,7 +261,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
       null
     } else {
       val start = po.asInstanceOf[Int]
-      val length = ln.asInstanceOf[Int] 
+      val length = ln.asInstanceOf[Int]
 
       string match {
         case ba: Array[Byte] => slice(ba, start, length)

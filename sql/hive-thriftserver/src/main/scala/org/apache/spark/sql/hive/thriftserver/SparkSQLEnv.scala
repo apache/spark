@@ -19,10 +19,9 @@ package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.ql.session.SessionState
 
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.scheduler.{SplitInfo, StatsReportListener}
-import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 /** A singleton object for the master program. The slaves should not access this. */
 private[hive] object SparkSQLEnv extends Logging {

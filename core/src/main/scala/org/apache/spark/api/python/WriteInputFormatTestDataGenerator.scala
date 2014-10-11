@@ -17,13 +17,14 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutput, DataInput}
+import java.io.{DataInput, DataOutput}
 import java.nio.charset.Charset
 
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
-import org.apache.spark.api.java.JavaSparkContext
+
 import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.api.java.JavaSparkContext
 
 /**
  * A class to test Pyrolite serialization on the Scala side, that will be deserialized

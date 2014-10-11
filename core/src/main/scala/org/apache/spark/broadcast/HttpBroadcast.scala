@@ -19,7 +19,7 @@ package org.apache.spark.broadcast
 
 import java.io.{File, FileOutputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
 import java.io.{BufferedInputStream, BufferedOutputStream}
-import java.net.{URL, URLConnection, URI}
+import java.net.{URI, URL, URLConnection}
 import java.util.concurrent.TimeUnit
 
 import scala.reflect.ClassTag

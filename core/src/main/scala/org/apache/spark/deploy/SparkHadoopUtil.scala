@@ -19,15 +19,15 @@ package org.apache.spark.deploy
 
 import java.security.PrivilegedExceptionAction
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.DeveloperApi
-
-import scala.collection.JavaConversions._
 
 /**
  * :: DeveloperApi ::

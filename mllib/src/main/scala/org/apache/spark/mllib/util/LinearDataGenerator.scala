@@ -22,11 +22,11 @@ import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::

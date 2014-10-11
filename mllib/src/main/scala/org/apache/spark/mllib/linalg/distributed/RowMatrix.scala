@@ -21,8 +21,8 @@ import java.util.Arrays
 
 import scala.collection.mutable.ListBuffer
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV, axpy => brzAxpy,
-  svd => brzSvd}
+import breeze.linalg.{axpy => brzAxpy, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
+  SparseVector => BSV}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -33,8 +33,8 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * :: Experimental ::

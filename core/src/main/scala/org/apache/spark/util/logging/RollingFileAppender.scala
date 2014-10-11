@@ -19,9 +19,10 @@ package org.apache.spark.util.logging
 
 import java.io.{File, FileFilter, InputStream}
 
-import com.google.common.io.Files
-import org.apache.spark.SparkConf
 import RollingFileAppender._
+import com.google.common.io.Files
+
+import org.apache.spark.SparkConf
 
 /**
  * Continuously appends data from input stream into the given file, and rolls

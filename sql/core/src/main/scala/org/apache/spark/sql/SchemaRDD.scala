@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList}
-
-import org.apache.spark.storage.StorageLevel
+import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -28,14 +26,15 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: AlphaComponent ::

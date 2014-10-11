@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.Logging
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import java.util.concurrent.LinkedBlockingQueue
+
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+
+import org.apache.spark.Logging
 
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
 private[spark] class StreamingListenerBus() extends Logging {

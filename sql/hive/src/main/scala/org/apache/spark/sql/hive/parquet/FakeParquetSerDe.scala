@@ -20,9 +20,9 @@ package org.apache.spark.sql.hive.parquet
 import java.util.Properties
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category
-import org.apache.hadoop.hive.serde2.{SerDeStats, SerDe}
+import org.apache.hadoop.hive.serde2.{SerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category
 import org.apache.hadoop.io.Writable
 
 /**

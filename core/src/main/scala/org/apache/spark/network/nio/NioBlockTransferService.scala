@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.concurrent.Future
 
-import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.network._
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils

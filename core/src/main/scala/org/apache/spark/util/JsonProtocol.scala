@@ -23,15 +23,14 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 
 import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
 
-
+import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, InputMetrics, ShuffleReadMetrics,
   ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
-import org.apache.spark._
 
 private[spark] object JsonProtocol {
   // TODO: Remove this file and put JSON serialization into each individual class.

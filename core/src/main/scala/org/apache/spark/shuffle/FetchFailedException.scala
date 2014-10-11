@@ -17,8 +17,8 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.{FetchFailed, TaskEndReason}
+import org.apache.spark.storage.BlockManagerId
 
 /**
  * Failed to fetch a shuffle block. The executor catches this exception and propagates it

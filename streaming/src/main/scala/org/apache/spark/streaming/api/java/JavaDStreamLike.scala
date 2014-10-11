@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.util
 import java.lang.{Long => JLong}
+import java.util
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._

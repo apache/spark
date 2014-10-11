@@ -20,7 +20,7 @@ package org.apache.spark.mllib.stat
 import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: DeveloperApi ::

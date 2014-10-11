@@ -17,16 +17,12 @@
 
 package org.apache.spark.streaming.ui
 
-import org.apache.spark.streaming.{Time, StreamingContext}
-import org.apache.spark.streaming.scheduler._
-import scala.collection.mutable.{Queue, HashMap}
-import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
-import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
-import org.apache.spark.streaming.scheduler.BatchInfo
-import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
-import org.apache.spark.util.Distribution
-import org.apache.spark.Logging
+import scala.collection.mutable.{HashMap, Queue}
 
+import org.apache.spark.Logging
+import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.Distribution
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   extends StreamingListener {

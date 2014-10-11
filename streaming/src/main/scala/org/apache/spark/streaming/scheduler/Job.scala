@@ -17,8 +17,9 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.streaming.Time
 import scala.util.Try
+
+import org.apache.spark.streaming.Time
 
 /**
  * Class representing a Spark computation. It may contain multiple Spark jobs.

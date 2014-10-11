@@ -18,14 +18,13 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent._
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import java.util.concurrent.CountDownLatch
-import scala.concurrent._
-import ExecutionContext.Implicits.global
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -35,6 +34,8 @@ private[streaming] abstract class ReceiverSupervisor(
     receiver: Receiver[_],
     conf: SparkConf
   ) extends Logging {
+
+  import ExecutionContext.Implicits.global
 
   /** Enumeration to identify current state of the StreamingContext */
   object ReceiverState extends Enumeration {

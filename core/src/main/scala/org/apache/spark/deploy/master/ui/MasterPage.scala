@@ -25,10 +25,10 @@ import scala.xml.Node
 import akka.pattern.ask
 import org.json4s.JValue
 
-import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
+import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {

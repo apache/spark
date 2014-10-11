@@ -17,18 +17,17 @@
 
 package org.apache.spark.examples.bagel
 
-import java.io.{InputStream, OutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.xml.{XML, NodeSeq}
+import scala.reflect.ClassTag
+import scala.xml.{NodeSeq, XML}
 
 import org.apache.spark._
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-
-import scala.reflect.ClassTag
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 object WikipediaPageRankStandalone {
   def main(args: Array[String]) {

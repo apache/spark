@@ -23,7 +23,7 @@ import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.util.logging.FileAppender
@@ -75,7 +75,7 @@ private[spark] class ExecutorRunner(
   /**
    * Kill executor process, wait for exit and notify worker to update resource status.
    *
-   * @param message the exception message which caused the executor's death 
+   * @param message the exception message which caused the executor's death
    */
   private def killProcess(message: Option[String]) {
     var exitCode: Option[Int] = None

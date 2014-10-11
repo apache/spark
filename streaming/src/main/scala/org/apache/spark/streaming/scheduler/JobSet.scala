@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
+
 import org.apache.spark.streaming.Time
 
 /** Class representing a set of Jobs

@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.feature
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => brzNorm}
+import breeze.linalg.{norm => brzNorm, DenseVector => BDV, SparseVector => BSV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}

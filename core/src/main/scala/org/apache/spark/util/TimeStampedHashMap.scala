@@ -17,11 +17,11 @@
 
 package org.apache.spark.util
 
-import java.util.Set
 import java.util.Map.Entry
+import java.util.Set
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.{JavaConversions, mutable}
+import scala.collection.{mutable, JavaConversions}
 
 import org.apache.spark.Logging
 

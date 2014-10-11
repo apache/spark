@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Time, Duration, StreamingContext}
-
 import scala.reflect.ClassTag
+
+import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 
 /**
  * This is the abstract base class for all input streams. This class provides methods

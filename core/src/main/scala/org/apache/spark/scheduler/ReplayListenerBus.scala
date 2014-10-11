@@ -21,7 +21,7 @@ import java.io.{BufferedInputStream, InputStream}
 
 import scala.io.Source
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging

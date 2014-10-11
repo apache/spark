@@ -18,7 +18,7 @@
 package org.apache.spark.ui
 
 import java.text.SimpleDateFormat
-import java.util.{Locale, Date}
+import java.util.{Date, Locale}
 
 import scala.xml.Node
 

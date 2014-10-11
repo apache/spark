@@ -18,23 +18,24 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{TimerTask, Timer}
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
+import akka.actor.Props
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
-import akka.actor.Props
+import org.apache.spark.util.Utils
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.

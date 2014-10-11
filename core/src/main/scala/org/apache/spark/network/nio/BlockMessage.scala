@@ -19,9 +19,9 @@ package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
-
 import scala.collection.mutable.{ArrayBuffer, StringBuilder}
+
+import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 
 // private[spark] because we need to register them in Kryo
 private[spark] case class GetBlock(id: BlockId)

@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
+import java.util.Date
+
 import scala.xml.Node
 import scala.xml.Text
-
-import java.util.Date
 
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{ToolTips, UIUtils}

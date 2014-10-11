@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.api.java
 
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.sql.api.java.{JavaSQLContext, JavaSchemaRDD}
+import org.apache.spark.sql.api.java.{JavaSchemaRDD, JavaSQLContext}
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.{HiveContext, HiveQl}
 

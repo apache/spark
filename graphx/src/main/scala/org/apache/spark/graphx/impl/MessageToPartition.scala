@@ -22,8 +22,7 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.Partitioner
 import org.apache.spark.graphx.{PartitionID, VertexId}
-import org.apache.spark.rdd.{ShuffledRDD, RDD}
-
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
 
 private[graphx]
 class VertexRDDFunctions[VD: ClassTag](self: RDD[(VertexId, VD)]) {

@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
+
 import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Time}
-
-import scala.reflect.ClassTag
 
 private[streaming]
 class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](

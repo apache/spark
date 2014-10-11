@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable
-import scala.collection.JavaConversions._
-
 import java.util.Properties
 
+import scala.collection.immutable
+import scala.collection.JavaConversions._
 
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"

@@ -17,7 +17,7 @@
 
 package org.apache.spark.examples
 
-import breeze.linalg.{Vector, DenseVector, squaredDistance}
+import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._

@@ -21,11 +21,11 @@ import java.sql.Timestamp
 
 import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
+import scala.reflect.runtime.universe.{runtimeMirror, typeTag, TypeTag}
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s.JsonAST.JValue
 import org.json4s._
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 

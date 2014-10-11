@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, GenericRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
 

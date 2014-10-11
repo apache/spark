@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.net.{URLClassLoader, URL}
+import java.net.{URL, URLClassLoader}
 
 import org.apache.spark.util.ParentClassLoader
 

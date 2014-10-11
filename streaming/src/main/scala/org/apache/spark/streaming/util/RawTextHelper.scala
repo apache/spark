@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming.util
 
+import scala.collection.JavaConversions.mapAsScalaMap
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.OpenHashMap
-import scala.collection.JavaConversions.mapAsScalaMap
 
 private[streaming]
 object RawTextHelper {
