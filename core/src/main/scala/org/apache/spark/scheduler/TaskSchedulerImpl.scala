@@ -216,8 +216,6 @@ private[spark] class TaskSchedulerImpl(
    * that tasks are balanced across the cluster.
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
-    SparkEnv.set(sc.env)
-
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
