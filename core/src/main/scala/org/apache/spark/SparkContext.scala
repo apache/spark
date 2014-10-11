@@ -1411,6 +1411,7 @@ object SparkContext extends Logging {
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
     simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+      // getBytes method returns array which is longer then data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
     )
   }

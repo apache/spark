@@ -22,7 +22,8 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.io.BytesWritable
 
 class SparkContextSuite extends FunSuite {
-  test("test of writing spark scala test") {
+  //Regression test for SPARK-3121
+  test("BytesWritable implicit conversion is correct") {
     val bytesWritable = new BytesWritable()
     val inputArray = (1 to 10).map(_.toByte).toArray
     bytesWritable.set(inputArray, 0, 10)
