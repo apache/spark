@@ -27,8 +27,8 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 /**
  * An agent that dynamically scales the number of executors based on the workload.
  *
- * The add policy depends on the number of pending tasks. If the queue of pending tasks has not
- * been drained for N seconds, then new executors are added. If the queue persists for another M
+ * The add policy depends on the number of pending tasks. If the queue of pending tasks is not
+ * drained in N seconds, then new executors are added. If the queue persists for another M
  * seconds, then more executors are added and so on. The number added in each round increases
  * exponentially from the previous round until an upper bound on the number of executors has
  * been reached.
@@ -39,9 +39,15 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  * quickly over time in case the maximum number of executors is very high. Otherwise, it will take
  * a long time to ramp up under heavy workloads.
  *
- * The remove policy is simpler: If an executor has been idle, meaning it has not been scheduled
- * to run any tasks, for K seconds, then it is removed. This requires starting a timer on each
+ * The remove policy is simpler: If an executor has been idle for K seconds (meaning it has not
+ * been scheduled to run any tasks), then it is removed. This requires starting a timer on each
  * executor instead of just starting a global one as in the add case.
+ *
+ * Both add and remove attempts are retried on failure up to a maximum number of times. In the
+ * remove case, executors are removed individually in the original attempt, but together in
+ * subsequent retry attempts to avoid maintaining a retry timer for each executor. Then, every
+ * time an executor is removed, any existing retry timer is refreshed. This delays existing retry
+ * attempts, but ensures that new removals are not retried too eagerly (i.e. without a timeout).
  *
  * The relevant Spark properties include the following:
  *
@@ -58,10 +64,11 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  *   spark.dynamicAllocation.maxRetryAddExecutorAttempts - Max retries in re-adding executors
  *   spark.dynamicAllocation.maxRetryRemoveExecutorAttempts - Max retries in re-removing executors
  *
- * Synchronization: Because the schedulers in Spark are single-threaded, contention only arises
- * if the application itself runs multiple jobs concurrently. Under normal circumstances, however,
- * synchronizing each method on this class should not be expensive assuming biased locking is
- * enabled in the JVM (on by default for Java 6+).
+ * Synchronization: Because the schedulers in Spark are single-threaded, contention should only
+ * arise when executors are added or removed, which are relatively rare events with respect to
+ * task scheduling. Thus, synchronizing each method on one lock should not be expensive assuming
+ * biased locking is enabled in the JVM (on by default for Java 6+). This may not be true, however,
+ * if the application itself runs multiple jobs concurrently.
  *
  * Note: This is part of a larger implementation (SPARK-3174) and currently does not actually
  * request to add or remove executors. The mechanism to actually do this will be added separately,
@@ -82,10 +89,10 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
     conf.getLong("spark.dynamicAllocation.addExecutorThreshold", 60)
   private val addExecutorInterval =
     conf.getLong("spark.dynamicAllocation.addExecutorInterval", addExecutorThreshold)
+  private val retryAddExecutorInterval =
+    conf.getLong("spark.dynamicAllocation.retryAddExecutorInterval", addExecutorInterval)
   private val removeExecutorThreshold =
     conf.getLong("spark.dynamicAllocation.removeExecutorThreshold", 600)
-  private val retryAddExecutorInterval =
-    conf.getLong("spark.dynamicAllocation.retryAddExecutorInterval", 300)
   private val retryRemoveExecutorInterval =
     conf.getLong("spark.dynamicAllocation.retryRemoveExecutorInterval", 300)
 
@@ -312,30 +319,36 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       backend.requestExecutors(actualNumExecutorsToAdd)
       actualNumExecutorsToAdd
     } else {
-      logDebug(s"Not adding executors because there are already $maxNumExecutors executor(s), " +
+      logInfo(s"Not adding executors because there are already $maxNumExecutors executor(s), " +
         s"which is the limit.")
       0
     }
   }
 
   /**
-   * Negotiate with the scheduler backend to retry adding any pending executors that have been
-   * requested previously but have not registered yet.
+   * Negotiate with the scheduler backend to retry adding executors
+   * that have been requested previously but have not registered yet.
    */
   private def retryAddExecutors(): Unit = synchronized {
     if (numExecutorsPendingToAdd > 0) {
       logInfo(s"Previously requested executors have not all registered yet. " +
         s"Retrying to add $numExecutorsPendingToAdd executor(s).")
       backend.requestExecutors(numExecutorsPendingToAdd)
+    } else {
+      logWarning("Attempted to retry adding executors when there are none pending to be added.")
     }
   }
 
   /**
-   * Negotiate with the scheduler backend to remove existing executors.
+   * Negotiate with the scheduler backend to remove the given executor.
    * This ensures the resulting number of executors is correctly constrained by the lower bound.
    * Return whether the request to remove the executor is actually sent.
    */
   private def removeExecutor(executorId: String): Boolean = synchronized {
+    if (!executorIds.contains(executorId)) {
+      logWarning(s"Attempted to remove unknown executor $executorId.")
+      return false
+    }
     val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
     if (numExistingExecutors - 1 >= minNumExecutors) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
@@ -344,7 +357,7 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       backend.killExecutor(executorId)
       true
     } else {
-      logDebug(s"Not removing idle executor $executorId because there are only $minNumExecutors " +
+      logInfo(s"Not removing idle executor $executorId because there are only $minNumExecutors " +
         "executor(s) left, which is the limit.")
       // If the executor is not removed, do not forget that it's idle
       startRemoveExecutorTimer(executorId)
@@ -354,13 +367,15 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
 
   /**
    * Negotiate with the scheduler backend to retry removing
-   * any executors pending to be removed but are still around.
+   * executors that are supposed to be removed but still remain.
    */
   private def retryRemoveExecutors(): Unit = synchronized {
     if (executorsPendingToRemove.nonEmpty) {
       logInfo(s"Previous requests to remove executors have not been fulfilled yet. " +
         s"Retrying to remove executor(s) ${executorsPendingToRemove.mkString(", ")}.")
       executorsPendingToRemove.foreach(backend.killExecutor)
+    } else {
+      logWarning("Attempted to retry removing executors when there are none pending to be removed.")
     }
   }
 
@@ -403,11 +418,13 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
   }
 
   /**
-   * A timer task that adds the given number of executors.
-   * This task does not request new executors until the ones pending from the previous round have
-   * all registered. Then, if the number of executors requested is as expected (i.e. the upper
-   * bound is not reached), the number to request next round increases exponentially. Finally,
-   * after requesting executors, this restarts the add executor timer unless the timer is canceled.
+   * A timer task that adds a given number of executors.
+   *
+   * This task does not request new executors until the ones pending from the previous round
+   * have all registered. Then, if the number requested is as expected (i.e. the upper bound
+   * is not reached), this also doubles the number of executors to be added next round.
+   * Finally, after requesting executors, the add executor timer is restarted to eventually
+   * trigger the next round. Additionally, a retry timer is started in case the addition fails.
    */
   private class AddExecutorTask extends TimerTask {
     override def run(): Unit = ExecutorScalingManager.this.synchronized {
@@ -437,6 +454,9 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
 
   /**
    * A timer task that removes the given executor.
+   *
+   * If the request to remove the given executor is successfully propagated to the backend
+   * (i.e. the lower bound is not reached), this starts a retry timer in case the removal fails.
    */
   private class RemoveExecutorTask(executorId: String) extends TimerTask {
     override def run(): Unit = ExecutorScalingManager.this.synchronized {
