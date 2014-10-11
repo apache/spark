@@ -75,8 +75,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   /**
    * A background thread that periodically do something about event log.
    */
-  private def getThread(name: String, operateFun: () => Unit): Thread =
-  {
+  private def getThread(name: String, operateFun: () => Unit): Thread = {
     val thread = new Thread(name) {
       override def run() = Utils.logUncaughtExceptions {
         operateFun()
