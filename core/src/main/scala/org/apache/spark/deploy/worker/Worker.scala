@@ -162,8 +162,10 @@ private[spark] class Worker(
     for (masterUrl <- masterUrls) {
       logInfo("Connecting to master " + masterUrl + "...")
       val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+      // Urls are in the form of spark://<HOST>:<PORT>
+      val allStats = new NodeStats(masterUrl.split("spark://")(1).split(":")(0)).getAllStats
       actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress,
-        new NodeStats(masterAddress.host.getOrElse("localhost")).getAllStats)
+        allStats)
     }
   }
 

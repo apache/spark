@@ -348,7 +348,7 @@ private[spark] class Master(
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
           workerInfo.stats = stats
-          logInfo("UPDATED!!!!")
+          logInfo("Updated node statistics")
         case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
       }

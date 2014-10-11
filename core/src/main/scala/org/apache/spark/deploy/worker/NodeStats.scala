@@ -47,6 +47,11 @@ case class LeanStatistics(latency: Float, diskspeed: List[Float], availMem: Long
 
 /**
  * Node stats
+ *
+ * TODO: This is probably better as an object rather than a class...
+ *  If any significant performance impacts arise, we can change.
+ *  Likewise, it may be better to calculate "average latency"
+ *  if this is an object (i.e. keep track of the last n pings, etc.)
  */
 class NodeStats(val masterNode: String) {
   /**
@@ -55,6 +60,7 @@ class NodeStats(val masterNode: String) {
    * @return  A statistics data type with current node information
    */
   def getAllStats: Statistics = {
+    println("Getting all stats 8)")
     val cpu = getCPUInfo
     val (maxMem, availMem) = getMemInfo
     val lean = getLeanStats
@@ -120,14 +126,19 @@ class NodeStats(val masterNode: String) {
   def getLatency: Option[Float] = {
     // Eh, this is probably not the right way to do this?
     // We just need a PoC though to provide some basic results.
-    val pingCmd = "ping -c 1 " + masterNode
-    println(pingCmd)
-    val pingRes = pingCmd.!!
-    val pattern = """mdev = \d+\.\d+\/(\d+\.\d+)/""".r
-    val res = pattern.findFirstMatchIn(pingRes)
-    res match {
-      case Some(m) => Some(m.group(1).toFloat)
-      case None => None
+    println("Pinging: " + masterNode)
+    if(masterNode.isEmpty()) {
+      None
+    } else {
+      val pingCmd = "ping -c 1 " + masterNode
+      println(pingCmd)
+      val pingRes = pingCmd.!!
+      val pattern = """mdev = \d+\.\d+\/(\d+\.\d+)/""".r
+      val res = pattern.findFirstMatchIn(pingRes)
+      res match {
+        case Some(m) => Some(m.group(1).toFloat)
+        case None => None
+      }
     }
   }
 
