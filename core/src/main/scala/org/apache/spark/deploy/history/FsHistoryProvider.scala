@@ -111,7 +111,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     // Start cleaner thread if spark.history.fs.cleaner.enable is true
     if (conf.getBoolean("spark.history.fs.cleaner.enable", false)) {
       logCleaningThread.setDaemon(true)
-      pool.scheduleAtFixedRate(logCheckingThread, 0, CLEAN_INTERVAL_MS, TimeUnit.MILLISECONDS)
+      pool.scheduleAtFixedRate(logCleaningThread, 0, CLEAN_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
   }
 
