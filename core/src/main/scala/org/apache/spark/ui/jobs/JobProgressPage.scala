@@ -56,49 +56,49 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         <div>
           <ul class="unstyled">
             {if (live) {
-            // Total duration is not meaningful unless the UI is live
+              // Total duration is not meaningful unless the UI is live
+              <li>
+                <strong>Total Duration: </strong>
+                {UIUtils.formatDuration(now - sc.startTime)}
+              </li>
+            }}
             <li>
-              <strong>Total Duration: </strong>
-              {UIUtils.formatDuration(now - sc.startTime)}
+              <strong>Scheduling Mode: </strong>
+              {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
             </li>
-          }}
-          <li>
-            <strong>Scheduling Mode: </strong>
-            {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
-          </li>
-          <li>
-            <a href="#active"><strong>Active Stages:</strong></a>
-            {activeStages.size}
-          </li>
-          {
-            if (totalCompletedStages != completedStages.size) {
-              <li>
-                <a href="#completed"><strong>
-                  Completed Stages: {totalCompletedStages} (only showing {completedStages.size})
-                </strong></a>
-              </li>
-            } else {
-              <li>
-                <a href="#completed"><strong>Completed Stages:</strong></a>
-                {completedStages.size}
-              </li>
+            <li>
+              <a href="#active"><strong>Active Stages:</strong></a>
+              {activeStages.size}
+            </li>
+            {
+              if (totalCompletedStages != completedStages.size) {
+                <li>
+                  <a href="#completed"><strong>
+                    Completed Stages: {totalCompletedStages} (only showing {completedStages.size})
+                  </strong></a>
+                </li>
+              } else {
+                <li>
+                  <a href="#completed"><strong>Completed Stages:</strong></a>
+                  {completedStages.size}
+                </li>
+              }
             }
-          }
-          {
-            if (totalFailedStages != failedStages.size) {
-              <li>
-                <a href="#failed"><strong>
-                  Failed Stages: {totalFailedStages} (only showing {failedStages.size})
-                </strong></a>
-              </li>
-            } else {
-              <li>
-                <a href="#failed"><strong>Failed Stages:</strong></a>
-                {failedStages.size}
-              </li>
+            {
+              if (totalFailedStages != failedStages.size) {
+                <li>
+                  <a href="#failed"><strong>
+                    Failed Stages: {totalFailedStages} (only showing {failedStages.size})
+                  </strong></a>
+                </li>
+              } else {
+                <li>
+                  <a href="#failed"><strong>Failed Stages:</strong></a>
+                  {failedStages.size}
+                </li>
+              }
             }
-          }
-        </ul>
+          </ul>
         </div>
 
       val content = summary ++
@@ -109,9 +109,9 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
-        <h4 id="completed">Completed Stages (only showing {completedStages.size})</h4>++
+        <h4 id="completed">Completed Stages(only showing {completedStages.size})</h4>++
         completedStagesTable.toNodeSeq ++
-        <h4 id="failed">Failed Stages (only showing {failedStages.size})</h4>++
+        <h4 id="failed">Failed Stages(only showing {failedStages.size})</h4>++
         failedStagesTable.toNodeSeq
 
       UIUtils.headerSparkPage("Spark Stages", content, parent)
