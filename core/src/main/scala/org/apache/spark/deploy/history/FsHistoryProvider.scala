@@ -18,8 +18,10 @@
 package org.apache.spark.deploy.history
 
 import java.io.{IOException, FileNotFoundException}
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration.Duration
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
@@ -28,8 +30,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
-import java.util.concurrent.TimeUnit
-import scala.concurrent.duration.Duration
 
 private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   with Logging {
@@ -58,16 +58,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val fs = Utils.getHadoopFileSystem(resolvedLogDir,
     SparkHadoopUtil.get.newConfiguration(conf))
 
-  // A timestamp of when the disk was last accessed to check for log updates
-  private var lastLogCheckTimeMs = -1L
+  // The schedule thread pool size must be one,otherwise it will have concurrent issues about fs
+  // and applications between check task and clean task..
+  private val pool = Executors.newScheduledThreadPool(1)
 
   // The modification time of the newest log detected during the last scan. This is used
   // to ignore logs that are older during subsequent scans, to avoid processing data that
   // is already known.
   private var lastModifiedTime = -1L
-
-  // A timestamp of when the disk was last accessed to check for event log to delete
-  private var lastLogCleanTimeMs = -1L
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -76,46 +74,22 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   /**
    * A background thread that periodically do something about event log.
-   *
-   * If operateFun is invoked manually in the middle of a period, this thread re-adjusts the
-   * time at which it does operateFun to maintain the same period as before.
    */
-  private def getThread(
-      name: String,
-      lastTimeMsFun: () => Long,
-      intervalMs: Long,
-      operateFun: () => Unit): Thread =
+  private def getThread(name: String, operateFun: () => Unit): Thread =
   {
     val thread = new Thread(name) {
       override def run() = Utils.logUncaughtExceptions {
-        while (true) {
-          val now = getMonotonicTimeMs()
-          val lastTime =  lastTimeMsFun()
-          if (now - lastTime > intervalMs) {
-            Thread.sleep(intervalMs)
-          } else {
-            // If the user has done operateFun recently, wait until
-            // intervalMs after the last time
-            Thread.sleep(lastTime + intervalMs - now)
-          }
-          operateFun()
-        }
+        operateFun()
       }
     }
     thread
   }
 
-  private def _lastLogCheckTimeMs() = lastLogCheckTimeMs
-
   // A background thread that periodically checks for event log updates on disk.
-  private val logCheckingThread =
-    getThread("LogCheckingThread", _lastLogCheckTimeMs, UPDATE_INTERVAL_MS, checkForLogs)
-
-  private def _lastLogCleanTimeMs() = lastLogCleanTimeMs
+  private val logCheckingThread = getThread("LogCheckingThread", checkForLogs)
 
   // A background thread that periodically cleans event logs on disk.
-  private val logCleaningThread =
-    getThread("LogCleaningThread", _lastLogCleanTimeMs, CLEAN_INTERVAL_MS, cleanLogs)
+  private val logCleaningThread = getThread("LogCleaningThread", cleanLogs)
 
   initialize()
 
@@ -131,15 +105,13 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         "Logging directory specified is not a directory: %s".format(resolvedLogDir))
     }
 
-    checkForLogs()
     logCheckingThread.setDaemon(true)
-    logCheckingThread.start()
+    pool.scheduleAtFixedRate(logCheckingThread, 0, UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS)
 
     // Start cleaner thread if spark.history.fs.cleaner.enable is true
-    if(conf.getBoolean("spark.history.fs.cleaner.enable", false)) {
-      cleanLogs()
+    if (conf.getBoolean("spark.history.fs.cleaner.enable", false)) {
       logCleaningThread.setDaemon(true)
-      logCleaningThread.start()
+      pool.scheduleAtFixedRate(logCheckingThread, 0, CLEAN_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
   }
 
@@ -184,50 +156,44 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    * applications that haven't been updated since last time the logs were checked.
    */
   private def checkForLogs() = {
-    lastLogCheckTimeMs = getMonotonicTimeMs()
-    logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
-    var logInfos: Seq[FsApplicationHistoryInfo] = null
-
-    // Load all new logs from the log directory. Only directories that have a modification time
-    // later than the last known log directory will be loaded.
-    var newLastModifiedTime = lastModifiedTime
-    
     try {
-      fs.synchronized {
-        val logStatus = fs.listStatus(new Path(resolvedLogDir))
-        val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
 
-        logInfos = logDirs
-          .filter { dir =>
-            if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
-              val modTime = getModificationTime(dir)
-              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-              modTime > lastModifiedTime
-            } else {
-              false
-            }
+      val logStatus = fs.listStatus(new Path(resolvedLogDir))
+      val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+
+      // Load all new logs from the log directory. Only directories that have a modification time
+      // later than the last known log directory will be loaded
+      var newLastModifiedTime = lastModifiedTime
+      val logInfos = logDirs
+        .filter { dir =>
+          if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
+            val modTime = getModificationTime(dir)
+            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+            modTime > lastModifiedTime
+          } else {
+            false
           }
-          .flatMap { dir =>
-            try {
-              val (replayBus, appListener) = createReplayBus(dir)
-              replayBus.replay()
-              Some(new FsApplicationHistoryInfo(
-                dir.getPath().getName(),
-                appListener.appId.getOrElse(dir.getPath().getName()),
-                appListener.appName.getOrElse(NOT_STARTED),
-                appListener.startTime.getOrElse(-1L),
-                appListener.endTime.getOrElse(-1L),
-                getModificationTime(dir),
-                appListener.sparkUser.getOrElse(NOT_STARTED)))
-            } catch {
-              case e: Exception =>
-                logInfo(s"Failed to load application log data from $dir.", e)
-                None
-            }
+        }
+        .flatMap { dir =>
+          try {
+            val (replayBus, appListener) = createReplayBus(dir)
+            replayBus.replay()
+            Some(new FsApplicationHistoryInfo(
+              dir.getPath().getName(),
+              appListener.appId.getOrElse(dir.getPath().getName()),
+              appListener.appName.getOrElse(NOT_STARTED),
+              appListener.startTime.getOrElse(-1L),
+              appListener.endTime.getOrElse(-1L),
+              getModificationTime(dir),
+              appListener.sparkUser.getOrElse(NOT_STARTED)))
+          } catch {
+            case e: Exception =>
+              logInfo(s"Failed to load application log data from $dir.", e)
+              None
           }
-          .sortBy { info => -info.endTime }
-      }
-        
+        }
+        .sortBy { info => -info.endTime }
+
       lastModifiedTime = newLastModifiedTime
 
       // When there are new logs, merge the new list with the existing one, maintaining
@@ -241,21 +207,19 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
           }
         }
 
-        applications.synchronized {
-          val newIterator = logInfos.iterator.buffered
-          val oldIterator = applications.values.iterator.buffered
-          while (newIterator.hasNext && oldIterator.hasNext) {
-            if (newIterator.head.endTime > oldIterator.head.endTime) {
-              addIfAbsent(newIterator.next)
-            } else {
-              addIfAbsent(oldIterator.next)
-            }
+        val newIterator = logInfos.iterator.buffered
+        val oldIterator = applications.values.iterator.buffered
+        while (newIterator.hasNext && oldIterator.hasNext) {
+          if (newIterator.head.endTime > oldIterator.head.endTime) {
+            addIfAbsent(newIterator.next)
+          } else {
+            addIfAbsent(oldIterator.next)
           }
-          newIterator.foreach(addIfAbsent)
-          oldIterator.foreach(addIfAbsent)
-
-          applications = newApps
         }
+        newIterator.foreach(addIfAbsent)
+        oldIterator.foreach(addIfAbsent)
+
+        applications = newApps
       }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
@@ -263,11 +227,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   }
 
   /**
-   *  Deleting apps if setting cleaner.
+   *  Delete event logs from the log directory according to the clean policy defined by the user.
    */
   private def cleanLogs() = {
-    lastLogCleanTimeMs = getMonotonicTimeMs()
-    logDebug("Cleaning logs. Time is now %d.".format(lastLogCleanTimeMs))
     try {
       val logStatus = fs.listStatus(new Path(resolvedLogDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
@@ -275,31 +237,26 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         DEFAULT_SPARK_HISTORY_FS_MAXAGE_S) * 1000
 
       val now = System.currentTimeMillis()
-      fs.synchronized {
-        // scan all logs from the log directory.
-        // Only directories older than this many seconds will be deleted .
-        logDirs.foreach { dir =>
-          // history file older than this many seconds will be deleted 
-          // when the history cleaner runs.
-          if (now - getModificationTime(dir) > maxAge) {
-            fs.delete(dir.getPath, true)
-          }
+
+      // Scan all logs from the log directory.
+      // Only directories older than now maxAge milliseconds mill will be deleted
+      logDirs.foreach { dir =>
+        if (now - getModificationTime(dir) > maxAge) {
+          fs.delete(dir.getPath, true)
         }
       }
-      
+
       val newApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
       def addIfNotExpire(info: FsApplicationHistoryInfo) = {
-        if(now - info.lastUpdated <= maxAge) {
+        if (now - info.lastUpdated <= maxAge) {
           newApps += (info.id -> info)
         }
       }
-      
-      applications.synchronized {
-        val oldIterator = applications.values.iterator.buffered
-        oldIterator.foreach(addIfNotExpire)
 
-        applications = newApps
-      }
+      val oldIterator = applications.values.iterator.buffered
+      oldIterator.foreach(addIfNotExpire)
+
+      applications = newApps
     } catch {
       case t: FileNotFoundException => logError("FileNotFoundException in cleaning logs", t)
       case t: IOException => logError("IOException in cleaning logs", t)
@@ -330,10 +287,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         -1L
     }
   }
-
-  /** Returns the system's mononotically increasing time. */
-  private def getMonotonicTimeMs() = System.nanoTime() / (1000 * 1000)
-
 }
 
 private class FsApplicationHistoryInfo(
