@@ -299,6 +299,18 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (_, _) => or
         }
 
+      case not @ Not(exp) =>
+        exp match {
+          case Literal(true, BooleanType) => Literal(false)
+          case Literal(false, BooleanType) => Literal(true)
+          case GreaterThan(l, r) => LessThanOrEqual(l, r)
+          case GreaterThanOrEqual(l, r) => LessThan(l, r)
+          case LessThan(l, r) => GreaterThanOrEqual(l, r)
+          case LessThanOrEqual(l, r) => GreaterThan(l, r)
+          case Not(e) => e
+          case _ => not
+        }
+
       // Turn "if (true) a else b" into "a", and if (false) a else b" into "b".
       case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
     }

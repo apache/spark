@@ -162,21 +162,12 @@ function check_valid_character() {
       echo "" >> "$LOG_FILE"
     fi
   done
-  
+
   if [ "$has_invalid_char_error" -eq 1 ]; then
     echo "Please remove invalid characters."
     echo "Alphabet, Number, White-Spaces and Punctual-Characters are allowed." >> "$LOG_FILE"
     echo "" >> "$LOG_FILE"
   fi
-}
-
-        HAS_ERROR=1
-      fi
-      echo "========================== $f ==========================" >> "$LOG_FILE"
-      echo "$line" >> "$LOG_FILE"
-      echo "" >> "$LOG_FILE"
-    fi
-  done
 }
 
 # if path represents a directory, we can check files in the directory.

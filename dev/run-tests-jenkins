@@ -176,6 +176,8 @@ function post_message () {
       failing_test="Scala style tests"
     elif [ "$test_result" -eq "$BLOCK_PYTHON_STYLE" ]; then
       failing_test="Python style tests"
+    elif [ "$test_result" -eq "$BLOCK_SCRIPT_STYLE" ]; then
+      failing_test="Script style tests"
     elif [ "$test_result" -eq "$BLOCK_BUILD" ]; then
       failing_test="to build"
     elif [ "$test_result" -eq "$BLOCK_SPARK_UNIT_TESTS" ]; then
