@@ -17,12 +17,11 @@
 
 package org.apache.spark
 
-import java.util.Arrays
-
 import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
+import java.util.Arrays
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
