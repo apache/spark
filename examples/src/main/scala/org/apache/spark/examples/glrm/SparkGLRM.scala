@@ -145,7 +145,7 @@ object SparkGLRM {
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
 
-    val stepSize = 5.0 / (maxU + maxM)
+    val stepSize = 1.0 / (maxU + maxM)
 
     val errs = Array.ofDim[Double](numIterations)
 
@@ -181,15 +181,15 @@ object SparkGLRM {
     val sc = new SparkContext(sparkConf)
 
     // Number of movies
-    val M = 1000
+    val M = 1000000
     // Number of users
-    val U = 1000
+    val U = 100
     // Number of non-zeros per row
-    val NNZ = 100
+    val NNZ = 10
     // Number of features
     val rank = 2
     // Number of iterations
-    val numIterations = 100
+    val numIterations = 10
     // regularization parameter
     val regPen = 0.1
 
@@ -201,7 +201,9 @@ object SparkGLRM {
       while (inds.size < NNZ) {
         inds += scala.util.Random.nextInt(U)
       }
-      inds.toArray.map(j => (i, j, scala.math.random))
+      //inds.toArray.map(j => (i, j, scala.math.random))
+      val vi = i.toDouble
+      inds.toArray.map(j => (i, j, i*j.toDouble + vi*vi + j*j.toDouble + vi*vi*vi + j.toDouble*j*j.toDouble))
     }.cache()
 
     printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, regPen=%f\n",
