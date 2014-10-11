@@ -17,29 +17,29 @@
 
 package org.apache.spark.examples.streaming
 
-import scala.collection.mutable.LinkedList
+import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
+import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
+import org.apache.spark.streaming.receiver.ActorHelper
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.util.AkkaUtils
+import org.apache.spark.{SecurityManager, SparkConf}
+
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
-
-import org.apache.spark.{SparkConf, SecurityManager}
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
-import org.apache.spark.util.AkkaUtils
-import org.apache.spark.streaming.receiver.ActorHelper
-
 case class SubscribeReceiver(receiverActor: ActorRef)
+
 case class UnsubscribeReceiver(receiverActor: ActorRef)
 
 /**
  * Sends the random content to every receiver subscribed with 1/2
- *  second delay.
+ * second delay.
  */
 class FeederActor extends Actor {
 
   val rand = new Random()
-  var receivers: LinkedList[ActorRef] = new LinkedList[ActorRef]()
+  var receivers: mutable.LinkedList[ActorRef] = new mutable.LinkedList[ActorRef]()
 
   val strings: Array[String] = Array("words ", "may ", "count ")
 
@@ -63,12 +63,12 @@ class FeederActor extends Actor {
   def receive: Receive = {
 
     case SubscribeReceiver(receiverActor: ActorRef) =>
-      println("received subscribe from %s".format(receiverActor.toString))
-    receivers = LinkedList(receiverActor) ++ receivers
+      println("received subscribe from %s".format(receiverActor.toString()))
+      receivers = mutable.LinkedList(receiverActor) ++ receivers
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
-      println("received unsubscribe from %s".format(receiverActor.toString))
-    receivers = receivers.dropWhile(x => x eq receiverActor)
+      println("received unsubscribe from %s".format(receiverActor.toString()))
+      receivers = receivers.dropWhile(x => x eq receiverActor)
 
   }
 }
@@ -81,11 +81,11 @@ class FeederActor extends Actor {
  * @see [[org.apache.spark.examples.streaming.FeederActor]]
  */
 class SampleActorReceiver[T: ClassTag](urlOfPublisher: String)
-extends Actor with ActorHelper {
+  extends Actor with ActorHelper {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
-  override def preStart = remotePublisher ! SubscribeReceiver(context.self)
+  override def preStart() = remotePublisher ! SubscribeReceiver(context.self)
 
   def receive = {
     case msg => store(msg.asInstanceOf[T])
@@ -99,12 +99,12 @@ extends Actor with ActorHelper {
  * A sample feeder actor
  *
  * Usage: FeederActor <hostname> <port>
- *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder would start on.
+ * <hostname> and <port> describe the AkkaSystem that Spark Sample feeder would start on.
  */
 object FeederActor {
 
   def main(args: Array[String]) {
-    if(args.length < 2){
+    if (args.length < 2) {
       System.err.println(
         "Usage: FeederActor <hostname> <port>\n"
       )
@@ -127,12 +127,12 @@ object FeederActor {
  * A sample word count program demonstrating the use of plugging in
  * Actor as Receiver
  * Usage: ActorWordCount <hostname> <port>
- *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
+ * <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
+ * `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
  * and then run the example
- *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.1.1 9999`
+ * `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {

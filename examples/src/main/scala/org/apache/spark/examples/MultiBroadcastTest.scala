@@ -21,8 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Usage: MultiBroadcastTest [slices] [numElem]
-  */
+ * Usage: MultiBroadcastTest [slices] [numElem]
+ */
 object MultiBroadcastTest {
   def main(args: Array[String]) {
 

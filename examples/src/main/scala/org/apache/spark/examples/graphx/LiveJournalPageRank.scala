@@ -14,13 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.examples.graphx
-
-import org.apache.spark.SparkContext._
-import org.apache.spark._
-import org.apache.spark.graphx._
-
 
 /**
  * Uses GraphX to run PageRank on a LiveJournal social network graph. Download the dataset from

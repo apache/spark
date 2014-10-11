@@ -17,20 +17,21 @@
 
 package org.apache.spark.examples.streaming.clickstream
 
-import java.net.ServerSocket
 import java.io.PrintWriter
-import util.Random
+import java.net.ServerSocket
+
+import scala.util.Random
 
 /** Represents a page view on a website with associated dimension data. */
-class PageView(val url : String, val status : Int, val zipCode : Int, val userID : Int)
-    extends Serializable {
-  override def toString() : String = {
+class PageView(val url: String, val status: Int, val zipCode: Int, val userID: Int)
+  extends Serializable {
+  override def toString: String = {
     "%s\t%s\t%s\t%s\n".format(url, status, zipCode, userID)
   }
 }
 
 object PageView extends Serializable {
-  def fromString(in : String) : PageView = {
+  def fromString(in: String): PageView = {
     val parts = in.split("\t")
     new PageView(parts(0), parts(1).toInt, parts(2).toInt, parts(3).toInt)
   }
@@ -45,22 +46,22 @@ object PageView extends Serializable {
   * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
   * To process the generated stream
   * `$ bin/run-example \
-  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+  * org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
   *
   */
 // scalastyle:on
 object PageViewGenerator {
-  val pages = Map("http://foo.com/"        -> .7,
-                  "http://foo.com/news"    -> 0.2,
-                  "http://foo.com/contact" -> .1)
+  val pages = Map("http://foo.com/" -> .7,
+    "http://foo.com/news" -> 0.2,
+    "http://foo.com/contact" -> .1)
   val httpStatus = Map(200 -> .95,
-                       404 -> .05)
+    404 -> .05)
   val userZipCode = Map(94709 -> .5,
-                        94117 -> .5)
-  val userID = Map((1 to 100).map(_ -> .01):_*)
+    94117 -> .5)
+  val userID = Map((1 to 100).map(_ -> .01): _*)
 
 
-  def pickFromDistribution[T](inputMap : Map[T, Double]) : T = {
+  def pickFromDistribution[T](inputMap: Map[T, Double]): T = {
     val rand = new Random().nextDouble()
     var total = 0.0
     for ((item, prob) <- inputMap) {
@@ -72,7 +73,7 @@ object PageViewGenerator {
     inputMap.take(1).head._1 // Shouldn't get here if probabilities add up to 1.0
   }
 
-  def getNextClickEvent() : String = {
+  def getNextClickEvent: String = {
     val id = pickFromDistribution(userID)
     val page = pickFromDistribution(pages)
     val status = pickFromDistribution(httpStatus)
@@ -80,7 +81,7 @@ object PageViewGenerator {
     new PageView(page, status, zipCode, id).toString()
   }
 
-  def main(args : Array[String]) {
+  def main(args: Array[String]) {
     if (args.length != 2) {
       System.err.println("Usage: PageViewGenerator <port> <viewsPerSecond>")
       System.exit(1)
@@ -94,9 +95,9 @@ object PageViewGenerator {
     while (true) {
       val socket = listener.accept()
       new Thread() {
-        override def run = {
+        override def run() = {
           println("Got client connected from: " + socket.getInetAddress)
-          val out = new PrintWriter(socket.getOutputStream(), true)
+          val out = new PrintWriter(socket.getOutputStream, true)
 
           while (true) {
             Thread.sleep(sleepDelayMs)

@@ -18,24 +18,22 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.flume._
 import org.apache.spark.util.IntParam
-import java.net.InetSocketAddress
 
 /**
- *  Produces a count of events received from Flume.
+ * Produces a count of events received from Flume.
  *
- *  This should be used in conjunction with the Spark Sink running in a Flume agent. See
- *  the Spark Streaming programming guide for more details.
+ * This should be used in conjunction with the Spark Sink running in a Flume agent. See
+ * the Spark Streaming programming guide for more details.
  *
- *  Usage: FlumePollingEventCount <host> <port>
- *    `host` is the host on which the Spark Sink is running.
- *    `port` is the port at which the Spark Sink is listening.
+ * Usage: FlumePollingEventCount <host> <port>
+ * `host` is the host on which the Spark Sink is running.
+ * `port` is the port at which the Spark Sink is listening.
  *
- *  To run this example:
- *    `$ bin/run-example org.apache.spark.examples.streaming.FlumePollingEventCount [host] [port] `
+ * To run this example:
+ * `$ bin/run-example org.apache.spark.examples.streaming.FlumePollingEventCount [host] [port] `
  */
 object FlumePollingEventCount {
   def main(args: Array[String]) {
@@ -59,7 +57,7 @@ object FlumePollingEventCount {
     val stream = FlumeUtils.createPollingStream(ssc, host, port)
 
     // Print out the count of events received from this server in each batch
-    stream.count().map(cnt => "Received " + cnt + " flume events." ).print()
+    stream.count().map(cnt => "Received " + cnt + " flume events.").print()
 
     ssc.start()
     ssc.awaitTermination()

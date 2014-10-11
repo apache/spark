@@ -19,7 +19,7 @@ package org.apache.spark.examples
 
 import java.util.Random
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 
 /**
  * Logistic regression based classification.
@@ -28,7 +28,8 @@ import breeze.linalg.{Vector, DenseVector}
  * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object LocalFileLR {
-  val D = 10   // Numer of dimensions
+  val D = 10
+  // Numer of dimensions
   val rand = new Random(42)
 
   case class DataPoint(x: Vector[Double], y: Double)
@@ -55,7 +56,7 @@ object LocalFileLR {
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
+    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {

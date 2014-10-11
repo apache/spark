@@ -17,11 +17,12 @@
 
 package org.apache.spark.examples.sql.hive
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.{SparkConf, SparkContext}
 
 object HiveFromSpark {
+
   case class Record(key: Int, value: String)
 
   def main(args: Array[String]) {

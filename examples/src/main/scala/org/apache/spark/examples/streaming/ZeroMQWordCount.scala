@@ -17,18 +17,15 @@
 
 package org.apache.spark.examples.streaming
 
-import akka.actor.ActorSystem
-import akka.actor.actorRef2Scala
-import akka.zeromq._
-import akka.zeromq.Subscribe
+import akka.actor.{ActorSystem, actorRef2Scala}
 import akka.util.ByteString
-
-import org.apache.spark.streaming.{Seconds, StreamingContext}
+import akka.zeromq._
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.zeromq._
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 import scala.language.implicitConversions
-import org.apache.spark.SparkConf
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
@@ -65,14 +62,14 @@ object SimpleZeroMQPublisher {
  * (http://www.zeromq.org/intro:get-the-software)
  *
  * Usage: ZeroMQWordCount <zeroMQurl> <topic>
- *   <zeroMQurl> and <topic> describe where zeroMq publisher is running.
+ * <zeroMQurl> and <topic> describe where zeroMq publisher is running.
  *
  * To run this example locally, you may run publisher as
- *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.1.1:1234 foo.bar`
+ * `$ bin/run-example \
+ * org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.1.1:1234 foo.bar`
  * and run the example as
- *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.1.1:1234 foo`
+ * `$ bin/run-example \
+ * org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.1.1:1234 foo`
  */
 // scalastyle:on
 object ZeroMQWordCount {
@@ -87,7 +84,7 @@ object ZeroMQWordCount {
     // Create the context and set the batch size
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 
-    def bytesToStringIterator(x: Seq[ByteString]) = (x.map(_.utf8String)).iterator
+    def bytesToStringIterator(x: Seq[ByteString]) = x.map(_.utf8String).iterator
 
     // For this stream, a zeroMQ publisher should be running.
     val lines = ZeroMQUtils.createStream(ssc, url, Subscribe(topic), bytesToStringIterator _)

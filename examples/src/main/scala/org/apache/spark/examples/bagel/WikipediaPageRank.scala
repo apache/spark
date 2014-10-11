@@ -17,12 +17,11 @@
 
 package org.apache.spark.examples.bagel
 
-import org.apache.spark._
 import org.apache.spark.SparkContext._
-
+import org.apache.spark._
 import org.apache.spark.bagel._
 
-import scala.xml.{XML,NodeSeq}
+import scala.xml.{NodeSeq, XML}
 
 /**
  * Run PageRank on XML Wikipedia dumps from http://wiki.freebase.com/wiki/WEX. Uses the "articles"
@@ -36,10 +35,11 @@ object WikipediaPageRank {
         "Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <usePartitioner>")
       System.exit(-1)
     }
+
     val sparkConf = new SparkConf()
     sparkConf.setAppName("WikipediaPageRank")
     sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    sparkConf.set("spark.kryo.registrator",  classOf[PRKryoRegistrator].getName)
+    sparkConf.set("spark.kryo.registrator", classOf[PRKryoRegistrator].getName)
 
     val inputFile = args(0)
     val threshold = args(1).toDouble
@@ -69,7 +69,7 @@ object WikipediaPageRank {
           } catch {
             case e: org.xml.sax.SAXParseException =>
               System.err.println("Article \"" + title + "\" has malformed XML in body:\n" + body)
-            NodeSeq.Empty
+              NodeSeq.Empty
           }
         }
       val outEdges = links.map(link => new String(link.text)).toArray
@@ -88,18 +88,17 @@ object WikipediaPageRank {
     val messages = sc.parallelize(Array[(String, PRMessage)]())
     val utils = new PageRankUtils
     val result =
-        Bagel.run(
-          sc, vertices, messages, combiner = new PRCombiner(),
-          numPartitions = numPartitions)(
+      Bagel.run(
+        sc, vertices, messages, combiner = new PRCombiner(),
+        numPartitions = numPartitions)(
           utils.computeWithCombiner(numVertices, epsilon))
 
     // Print the result
     System.err.println("Articles with PageRank >= " + threshold + ":")
-    val top =
-      (result
-       .filter { case (id, vertex) => vertex.value >= threshold }
-       .map { case (id, vertex) => "%s\t%s\n".format(id, vertex.value) }
-       .collect().mkString)
+    val top = result.filter { case (id, vertex) => vertex.value >= threshold}
+      .map { case (id, vertex) => "%s\t%s\n".format(id, vertex.value)}
+      .collect().mkString
+
     println(top)
 
     sc.stop()

@@ -17,13 +17,12 @@
 
 package org.apache.spark.examples.streaming
 
-import com.twitter.algebird.HyperLogLogMonoid
 import com.twitter.algebird.HyperLogLog._
-
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.twitter._
+import com.twitter.algebird.HyperLogLogMonoid
 import org.apache.spark.SparkConf
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.twitter._
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 // scalastyle:off
 /**

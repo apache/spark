@@ -17,12 +17,11 @@
 
 package org.apache.spark.examples.mllib
 
-import scopt.OptionParser
-
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, RowMatrix}
 import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * Compute the similar columns of a matrix, using cosine similarity.
@@ -42,6 +41,7 @@ import org.apache.spark.{SparkConf, SparkContext}
  * --threshold 0.1 data/mllib/sample_svm_data.txt
  */
 object CosineSimilarity {
+
   case class Params(inputFile: String = null, threshold: Double = 0.1)
     extends AbstractParams[Params]
 
@@ -92,8 +92,8 @@ object CosineSimilarity {
     // Compute similar columns with estimation using DIMSUM
     val approx = mat.columnSimilarities(params.threshold)
 
-    val exactEntries = exact.entries.map { case MatrixEntry(i, j, u) => ((i, j), u) }
-    val approxEntries = approx.entries.map { case MatrixEntry(i, j, v) => ((i, j), v) }
+    val exactEntries = exact.entries.map { case MatrixEntry(i, j, u) => ((i, j), u)}
+    val approxEntries = approx.entries.map { case MatrixEntry(i, j, v) => ((i, j), v)}
     val MAE = exactEntries.leftOuterJoin(approxEntries).values.map {
       case (u, Some(v)) =>
         math.abs(u - v)

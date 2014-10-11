@@ -17,13 +17,12 @@
 
 package org.apache.spark.examples
 
-import scala.math.sqrt
-
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
 import cern.jet.math._
-
 import org.apache.spark._
+
+import scala.math.sqrt
 
 /**
  * Alternating least squares matrix factorization.
@@ -33,9 +32,12 @@ import org.apache.spark._
  */
 object SparkALS {
   // Parameters set through command line arguments
-  var M = 0 // Number of movies
-  var U = 0 // Number of users
-  var F = 0 // Number of features
+  var M = 0
+  // Number of movies
+  var U = 0
+  // Number of users
+  var F = 0
+  // Number of features
   var ITERATIONS = 0
 
   val LAMBDA = 0.01 // Regularization coefficient
@@ -53,8 +55,7 @@ object SparkALS {
   }
 
   def rmse(targetR: DoubleMatrix2D, ms: Array[DoubleMatrix1D],
-    us: Array[DoubleMatrix1D]): Double =
-  {
+    us: Array[DoubleMatrix1D]): Double = {
     val r = factory2D.make(M, U)
     for (i <- 0 until M; j <- 0 until U) {
       r.set(i, j, blas.ddot(ms(i), us(j)))
@@ -65,8 +66,7 @@ object SparkALS {
   }
 
   def update(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],
-    R: DoubleMatrix2D) : DoubleMatrix1D =
-  {
+    R: DoubleMatrix2D): DoubleMatrix1D = {
     val U = us.size
     val F = us(0).size
     val XtX = factory2D.make(F, F)
@@ -130,18 +130,18 @@ object SparkALS {
     var us = Array.fill(U)(factory1D.random(F))
 
     // Iteratively update movies then users
-    val Rc  = sc.broadcast(R)
+    val Rc = sc.broadcast(R)
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
       ms = sc.parallelize(0 until M, slices)
-                .map(i => update(i, msb.value(i), usb.value, Rc.value))
-                .collect()
+        .map(i => update(i, msb.value(i), usb.value, Rc.value))
+        .collect()
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
       us = sc.parallelize(0 until U, slices)
-                .map(i => update(i, usb.value(i), msb.value, algebra.transpose(Rc.value)))
-                .collect()
+        .map(i => update(i, usb.value(i), msb.value, algebra.transpose(Rc.value)))
+        .collect()
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
       println("RMSE = " + rmse(R, ms, us))
       println()

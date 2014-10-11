@@ -18,20 +18,17 @@
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
-import java.util.SortedMap
-
-import scala.collection.JavaConversions._
+import java.util
 
 import org.apache.cassandra.db.IColumn
-import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat
-import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
+import org.apache.cassandra.hadoop.{ColumnFamilyInputFormat, ColumnFamilyOutputFormat, ConfigHelper}
 import org.apache.cassandra.thrift._
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.collection.JavaConversions._
 
 /*
  * This example demonstrates using Spark with Cassandra with the New Hadoop API and Cassandra
@@ -65,29 +62,31 @@ object CassandraTest {
     val host: String = args(1)
     val port: String = args(2)
 
-    ConfigHelper.setInputInitialAddress(job.getConfiguration(), host)
-    ConfigHelper.setInputRpcPort(job.getConfiguration(), port)
-    ConfigHelper.setOutputInitialAddress(job.getConfiguration(), host)
-    ConfigHelper.setOutputRpcPort(job.getConfiguration(), port)
-    ConfigHelper.setInputColumnFamily(job.getConfiguration(), "casDemo", "Words")
-    ConfigHelper.setOutputColumnFamily(job.getConfiguration(), "casDemo", "WordCount")
+    val config = job.getConfiguration
+
+    ConfigHelper.setInputInitialAddress(config, host)
+    ConfigHelper.setInputRpcPort(config, port)
+    ConfigHelper.setOutputInitialAddress(config, host)
+    ConfigHelper.setOutputRpcPort(config, port)
+    ConfigHelper.setInputColumnFamily(config, "casDemo", "Words")
+    ConfigHelper.setOutputColumnFamily(config, "casDemo", "WordCount")
 
     val predicate = new SlicePredicate()
     val sliceRange = new SliceRange()
     sliceRange.setStart(Array.empty[Byte])
     sliceRange.setFinish(Array.empty[Byte])
     predicate.setSlice_range(sliceRange)
-    ConfigHelper.setInputSlicePredicate(job.getConfiguration(), predicate)
+    ConfigHelper.setInputSlicePredicate(config, predicate)
 
-    ConfigHelper.setInputPartitioner(job.getConfiguration(), "Murmur3Partitioner")
-    ConfigHelper.setOutputPartitioner(job.getConfiguration(), "Murmur3Partitioner")
+    ConfigHelper.setInputPartitioner(config, "Murmur3Partitioner")
+    ConfigHelper.setOutputPartitioner(config, "Murmur3Partitioner")
 
     // Make a new Hadoop RDD
     val casRdd = sc.newAPIHadoopRDD(
-      job.getConfiguration(),
+      config,
       classOf[ColumnFamilyInputFormat],
       classOf[ByteBuffer],
-      classOf[SortedMap[ByteBuffer, IColumn]])
+      classOf[util.SortedMap[ByteBuffer, IColumn]])
 
     // Let us first get all the paragraphs from the retrieved rows
     val paraRdd = casRdd.map {
@@ -125,7 +124,7 @@ object CassandraTest {
         (outputkey, mutations)
       }
     }.saveAsNewAPIHadoopFile("casDemo", classOf[ByteBuffer], classOf[List[Mutation]],
-      classOf[ColumnFamilyOutputFormat], job.getConfiguration)
+        classOf[ColumnFamilyOutputFormat], job.getConfiguration)
 
     sc.stop()
   }

@@ -17,18 +17,17 @@
 
 package org.apache.spark.examples.bagel
 
-import java.io.{InputStream, OutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-import scala.xml.{XML, NodeSeq}
-
-import org.apache.spark._
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.SparkContext._
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.xml.{NodeSeq, XML}
 
 object WikipediaPageRankStandalone {
   def main(args: Array[String]) {
@@ -53,9 +52,9 @@ object WikipediaPageRankStandalone {
     val partitioner = new HashPartitioner(sc.defaultParallelism)
     val links =
       if (usePartitioner) {
-        input.map(parseArticle _).partitionBy(partitioner).cache()
+        input.map(parseArticle).partitionBy(partitioner).cache()
       } else {
-        input.map(parseArticle _).cache()
+        input.map(parseArticle).cache()
       }
     val n = links.count()
     val defaultRank = 1.0 / n
@@ -69,11 +68,9 @@ object WikipediaPageRankStandalone {
 
     // Print the result
     System.err.println("Articles with PageRank >= " + threshold + ":")
-    val top =
-      (ranks
-       .filter { case (id, rank) => rank >= threshold }
-       .map { case (id, rank) => "%s\t%s\n".format(id, rank) }
-       .collect().mkString)
+    val top = ranks.filter { case (id, rank) => rank >= threshold}
+      .map { case (id, rank) => "%s\t%s\n".format(id, rank)}.collect().mkString
+
     println(top)
 
     val time = (System.currentTimeMillis - startTime) / 1000.0
@@ -95,7 +92,7 @@ object WikipediaPageRankStandalone {
         } catch {
           case e: org.xml.sax.SAXParseException =>
             System.err.println("Article \"" + title + "\" has malformed XML in body:\n" + body)
-          NodeSeq.Empty
+            NodeSeq.Empty
         }
       }
     val outEdges = links.map(link => new String(link.text)).toArray
@@ -112,16 +109,16 @@ object WikipediaPageRankStandalone {
     usePartitioner: Boolean,
     numPartitions: Int
   ): RDD[(String, Double)] = {
-    var ranks = links.mapValues { edges => defaultRank }
+    var ranks = links.mapValues { edges => defaultRank}
     for (i <- 1 to numIterations) {
       val contribs = links.groupWith(ranks).flatMap {
         case (id, (linksWrapperIterable, rankWrapperIterable)) =>
           val linksWrapper = linksWrapperIterable.iterator
           val rankWrapper = rankWrapperIterable.iterator
           if (linksWrapper.hasNext) {
-            val linksWrapperHead = linksWrapper.next
+            val linksWrapperHead = linksWrapper.next()
             if (rankWrapper.hasNext) {
-              val rankWrapperHead = rankWrapper.next
+              val rankWrapperHead = rankWrapper.next()
               linksWrapperHead.map(dest => (dest, rankWrapperHead / linksWrapperHead.size))
             } else {
               linksWrapperHead.map(dest => (dest, defaultRank / linksWrapperHead.size))
@@ -130,11 +127,11 @@ object WikipediaPageRankStandalone {
             Array[(String, Double)]()
           }
       }
-      ranks = (contribs.combineByKey((x: Double) => x,
-                                     (x: Double, y: Double) => x + y,
-                                     (x: Double, y: Double) => x + y,
-                                     partitioner)
-               .mapValues(sum => a/n + (1-a)*sum))
+      ranks = contribs.combineByKey((x: Double) => x,
+        (x: Double, y: Double) => x + y,
+        (x: Double, y: Double) => x + y,
+        partitioner)
+        .mapValues(sum => a / n + (1 - a) * sum)
     }
     ranks
   }
@@ -195,8 +192,13 @@ class WPRSerializationStream(os: OutputStream) extends SerializationStream {
     }
   }
 
-  def flush() { dos.flush() }
-  def close() { dos.close() }
+  def flush() {
+    dos.flush()
+  }
+
+  def close() {
+    dos.close()
+  }
 }
 
 class WPRDeserializationStream(is: InputStream) extends DeserializationStream {
@@ -224,9 +226,11 @@ class WPRDeserializationStream(is: InputStream) extends DeserializationStream {
         val id = dis.readUTF()
         val rank = dis.readDouble()
         (id, rank).asInstanceOf[T]
-     }
+      }
     }
   }
 
-  def close() { dis.close() }
+  def close() {
+    dis.close()
+  }
 }

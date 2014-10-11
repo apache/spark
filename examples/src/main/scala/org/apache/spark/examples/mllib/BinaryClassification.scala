@@ -18,13 +18,12 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
-import scopt.OptionParser
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.optimization.{L1Updater, SquaredL2Updater}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
+import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * An example app for binary classification. Run with
@@ -46,8 +45,8 @@ object BinaryClassification {
     val L1, L2 = Value
   }
 
-  import Algorithm._
-  import RegType._
+  import org.apache.spark.examples.mllib.BinaryClassification.Algorithm._
+  import org.apache.spark.examples.mllib.BinaryClassification.RegType._
 
   case class Params(
       input: String = null,
@@ -67,7 +66,7 @@ object BinaryClassification {
         .action((x, c) => c.copy(numIterations = x))
       opt[Double]("stepSize")
         .text("initial step size (ignored by logistic regression), " +
-          s"default: ${defaultParams.stepSize}")
+        s"default: ${defaultParams.stepSize}")
         .action((x, c) => c.copy(stepSize = x))
       opt[String]("algorithm")
         .text(s"algorithm (${Algorithm.values.mkString(",")}), " +

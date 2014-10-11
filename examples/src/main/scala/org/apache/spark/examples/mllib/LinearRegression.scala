@@ -18,12 +18,11 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
-import scopt.OptionParser
-
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.mllib.optimization.{L1Updater, SimpleUpdater, SquaredL2Updater}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.optimization.{SimpleUpdater, SquaredL2Updater, L1Updater}
+import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 /**
  * An example app for linear regression. Run with
@@ -40,14 +39,14 @@ object LinearRegression extends App {
     val NONE, L1, L2 = Value
   }
 
-  import RegType._
+  import org.apache.spark.examples.mllib.LinearRegression.RegType._
 
   case class Params(
-      input: String = null,
-      numIterations: Int = 100,
-      stepSize: Double = 1.0,
-      regType: RegType = L2,
-      regParam: Double = 0.1) extends AbstractParams[Params]
+    input: String = null,
+    numIterations: Int = 100,
+    stepSize: Double = 1.0,
+    regType: RegType = L2,
+    regParam: Double = 0.1) extends AbstractParams[Params]
 
   val defaultParams = Params()
 

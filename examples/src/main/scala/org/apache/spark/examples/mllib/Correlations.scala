@@ -17,11 +17,10 @@
 
 package org.apache.spark.examples.mllib
 
-import scopt.OptionParser
-
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.{SparkConf, SparkContext}
+import scopt.OptionParser
 
 
 /**
@@ -48,18 +47,18 @@ object Correlations {
         .action((x, c) => c.copy(input = x))
       note(
         """
-        |For example, the following command runs this app on a synthetic dataset:
-        |
-        | bin/spark-submit --class org.apache.spark.examples.mllib.Correlations \
-        |  examples/target/scala-*/spark-examples-*.jar \
-        |  --input data/mllib/sample_linear_regression_data.txt
+          |For example, the following command runs this app on a synthetic dataset:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.Correlations \
+          |  examples/target/scala-*/spark-examples-*.jar \
+          |  --input data/mllib/sample_linear_regression_data.txt
         """.stripMargin)
     }
 
     parser.parse(args, defaultParams).map { params =>
       run(params)
     } getOrElse {
-        sys.exit(1)
+      sys.exit(1)
     }
   }
 
