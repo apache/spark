@@ -64,7 +64,7 @@ private[spark] object UIWorkloadGenerator {
       ("Single Shuffle", baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count),
       ("Entirely failed phase", baseData.map(x => throw new Exception).count),
       ("Partially failed phase", {
-        baseData.map{x =>
+        baseData.map {x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
             throw new Exception("This is a task failure")
@@ -73,7 +73,7 @@ private[spark] object UIWorkloadGenerator {
         }.count
       }),
       ("Partially failed phase (longer tasks)", {
-        baseData.map{x =>
+        baseData.map {x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
             Thread.sleep(100)

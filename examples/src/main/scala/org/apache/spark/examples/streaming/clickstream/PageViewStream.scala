@@ -67,7 +67,7 @@ object PageViewStream {
     val statusesPerZipCode = pageViews.window(Seconds(30), Seconds(2))
                                       .map(view => ((view.zipCode, view.status)))
                                       .groupByKey()
-    val errorRatePerZipCode = statusesPerZipCode.map{
+    val errorRatePerZipCode = statusesPerZipCode.map {
       case(zip, statuses) =>
         val normalCount = statuses.filter(_ == 200).size
         val errorCount = statuses.size - normalCount

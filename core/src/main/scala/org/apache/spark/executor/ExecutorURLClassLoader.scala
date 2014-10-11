@@ -34,7 +34,7 @@ private[spark] trait MutableURLClassLoader extends ClassLoader {
 private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
   extends MutableURLClassLoader {
 
-  private object userClassLoader extends URLClassLoader(urls, null){
+  private object userClassLoader extends URLClassLoader(urls, null) {
     override def addURL(url: URL) {
       super.addURL(url)
     }

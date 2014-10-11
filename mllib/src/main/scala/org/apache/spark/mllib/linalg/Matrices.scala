@@ -190,7 +190,7 @@ class SparseMatrix(
 
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
-    if (ind == -1){
+    if (ind == -1) {
       throw new NoSuchElementException("The given row and column indices correspond to a zero " +
         "value. Only non-zero elements in Sparse Matrices can be updated.")
     } else {
@@ -280,7 +280,7 @@ object Matrices {
   def eye(n: Int): Matrix = {
     val identity = Matrices.zeros(n, n)
     var i = 0
-    while (i < n){
+    while (i < n) {
       identity.update(i, i, 1.0)
       i += 1
     }

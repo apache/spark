@@ -30,7 +30,7 @@ class SparkSpaceBeforeLeftBraceChecker extends ScalariformChecker {
 
   // The list of disallowed tokens before left brace without single space.
   val disallowedTokensBeforeLBrace = Seq (
-    ARROW, ELSE, OP, RPAREN, TRY, MATCH, NEW, DO, FINALLY, PACKAGE, RETURN, THROW, YIELD, VARID
+    ARROW, DO, ELSE, FINALLY, MATCH, NEW, OP, RETURN, RPAREN, THROW, TRY, VARID, YIELD
   )
 
   override def verify(ast: CompilationUnit): List[ScalastyleError] = {

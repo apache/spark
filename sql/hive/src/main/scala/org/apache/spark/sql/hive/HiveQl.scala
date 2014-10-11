@@ -671,7 +671,7 @@ private[hive] object HiveQl {
       }
 
       val (db, tableName) =
-        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+        tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part)} match {
           case Seq(tableOnly) => (None, tableOnly)
           case Seq(databaseName, table) => (Some(databaseName), table)
       }

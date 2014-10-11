@@ -316,7 +316,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
         for(i <- 0 until maxPartitions) {
           val rangeStart = ((i.toLong * prev.partitions.length) / maxPartitions).toInt
           val rangeEnd = (((i.toLong + 1) * prev.partitions.length) / maxPartitions).toInt
-          (rangeStart until rangeEnd).foreach{ j => groupArr(i).arr += prev.partitions(j) }
+          (rangeStart until rangeEnd).foreach(j => groupArr(i).arr += prev.partitions(j))
         }
       }
     } else {

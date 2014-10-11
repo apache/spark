@@ -168,7 +168,7 @@ private[spark] class DriverRunner(
   private def launchDriver(command: Seq[String], envVars: Map[String, String], baseDir: File,
                            supervise: Boolean) {
     val builder = new ProcessBuilder(command: _*).directory(baseDir)
-    envVars.map{ case(k,v) => builder.environment().put(k, v) }
+    envVars.map { case(k,v) => builder.environment().put(k, v) }
 
     def initialize(process: Process) = {
       // Redirect stdout and stderr to files
