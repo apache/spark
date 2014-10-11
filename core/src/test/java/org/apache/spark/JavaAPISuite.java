@@ -20,7 +20,9 @@ package org.apache.spark;
 import java.io.*;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.*;
 
+import org.apache.spark.api.java.*;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -43,10 +45,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.partial.BoundedDouble;
@@ -1307,6 +1305,111 @@ public class JavaAPISuite implements Serializable {
     SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
     Assert.assertEquals(data.size(), collected.length);
   }
+
+  private static final class IdentityWithDelay<T> implements Function<T, T> {
+
+    final int delayMillis;
+
+    IdentityWithDelay(int delayMillis) {
+      this.delayMillis = delayMillis;
+    }
+
+    @Override
+    public T call(T x) throws Exception {
+      Thread.sleep(delayMillis);
+      return x;
+    }
+  }
+
+  private static final class BuggyMapFunction<T> implements Function<T, T> {
+
+    @Override
+    public T call(T x) throws Exception {
+      throw new IllegalStateException("Custom exception!");
+    }
+  }
+
+  @Test
+  public void collectAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<List<Integer>> future =
+        rdd.map(new IdentityWithDelay<Integer>(200)).collectAsync();
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertFalse(future.isDone());
+    List<Integer> result = future.get();
+    Assert.assertEquals(result, data);
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(future.jobIds().size(), 1);
+  }
+
+  @Test
+  public void foreachAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Void> future = rdd.map(new IdentityWithDelay<Integer>(200)).foreachAsync(
+        new VoidFunction<Integer>() {
+          @Override
+          public void call(Integer integer) throws Exception {
+            // intentionally left blank.
+          }
+        }
+    );
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertFalse(future.isDone());
+    future.get();
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(future.jobIds().size(), 1);
+  }
+
+  @Test
+  public void countAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Long> future = rdd.map(new IdentityWithDelay<Integer>(200)).countAsync();
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertFalse(future.isDone());
+    long count = future.get();
+    Assert.assertEquals(count, data.size());
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(future.jobIds().size(), 1);
+  }
+
+  @Test
+  public void testAsyncActionCancellation() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Long> future = rdd.map(new IdentityWithDelay<Integer>(200)).countAsync();
+    Thread.sleep(200);
+    future.cancel(true);
+    Assert.assertTrue(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    try {
+      long count = future.get(2000, TimeUnit.MILLISECONDS);
+      Assert.fail("Expected future.get() for cancelled job to throw CancellationException");
+    } catch (CancellationException ignored) {
+      // pass
+    }
+  }
+
+  @Test
+  public void testAsyncActionErrorWrapping() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<Integer>()).countAsync();
+    Thread.sleep(200);
+    try {
+      long count = future.get(2000, TimeUnit.MILLISECONDS);
+      Assert.fail("Expected future.get() for failed job to throw ExcecutionException");
+    } catch (ExecutionException ignored) {
+      // pass
+    }
+    Assert.assertTrue(future.isDone());
+  }
+
 
   /**
    * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
