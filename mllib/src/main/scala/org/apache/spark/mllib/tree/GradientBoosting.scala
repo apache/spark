@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.{GradientBoostingModel, DecisionTreeModel}
 import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
@@ -153,7 +154,8 @@ object GradientBoosting extends Logging {
       val checkpointingPeriod = boostingStrategy.checkpointPeriod
       // TODO: Need to find good defaults for checkpointPeriod
       if (m % checkpointingPeriod == 0) {
-        // data.checkpoint()
+        // TODO: Figure out whether there is a better way to checkpoint
+        data = data.persist(StorageLevel.MEMORY_AND_DISK)
       }
       m += 1
     }
