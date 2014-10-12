@@ -27,6 +27,8 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel
 object LeastAbsoluteError extends Loss {
 
   /**
+   * Method to calculate the loss gradients for the gradient boosting calculation for least
+   * absolute error calculation.
    * @param model Model of the weak learner
    * @param point Instance of the training dataset
    * @param learningRate Learning rate parameter for regularization
