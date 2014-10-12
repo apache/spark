@@ -21,6 +21,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.Logging
+import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.{GradientBoostingModel, DecisionTreeModel}
@@ -115,6 +116,12 @@ object GradientBoosting extends Logging {
       strategy: Strategy,
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {
 
+    val timer = new TimeTracker()
+
+    timer.start("total")
+    timer.start("init")
+
+
     // Initialize gradient boosting parameters
     val numEstimators = boostingStrategy.numEstimators
     val trees = new Array[DecisionTreeModel](numEstimators + 1)
@@ -126,16 +133,19 @@ object GradientBoosting extends Logging {
     // Cache input
     input.cache()
 
+    timer.stop("init")
+
     logDebug("##########")
     logDebug("Building tree 0")
     logDebug("##########")
     var data = input
 
     // 1. Initialize tree
+    timer.start("building tree 0")
     val firstModel = new DecisionTree(strategy).train(data)
+    timer.stop("building tree 0")
     trees(0) = firstModel
     logDebug("error of tree = " + meanSquaredError(firstModel, data))
-    logDebug(data.first.toString)
 
     // psuedo-residual for second iteration
     data = data.map(point => LabeledPoint(loss.lossGradient(firstModel, point,
@@ -144,10 +154,12 @@ object GradientBoosting extends Logging {
 
     var m = 1
     while (m <= numEstimators) {
+      timer.start(s"building tree $m")
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
       val model = new DecisionTree(strategy).train(data)
+      timer.stop(s"building tree $m")
       trees(m) = model
       logDebug("error of tree = " + meanSquaredError(model, data))
       // Update data with pseudo-residuals
@@ -162,6 +174,12 @@ object GradientBoosting extends Logging {
       }
       m += 1
     }
+
+    timer.stop("total")
+
+    logInfo("Internal timing for DecisionTree:")
+    logInfo(s"$timer")
+
 
     // 3. Output classifier
     new GradientBoostingModel(trees, strategy.algo)
