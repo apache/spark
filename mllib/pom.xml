@@ -98,6 +98,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+    	<groupId>org.jpmml</groupId>
+    	<artifactId>pmml-model</artifactId>
+    	<version>1.1.7</version>
+    </dependency>
   </dependencies>
   <profiles>
     <profile>
