@@ -748,9 +748,7 @@ private[nio] class ConnectionManager(
           } catch {
             case e: Exception => {
               logError(s"Exception was thrown while processing message", e)
-              val m = Message.createBufferMessage(bufferMessage.id)
-              m.hasError = true
-              ackMessage = Some(m)
+              ackMessage = Some(Message.createErrorMessage(e, bufferMessage.id))
             }
           } finally {
             sendMessage(connectionManagerId, ackMessage.getOrElse {
@@ -913,8 +911,12 @@ private[nio] class ConnectionManager(
           }
         case scala.util.Success(ackMessage) =>
           if (ackMessage.hasError) {
+            val errorMsgByteBuf = ackMessage.asInstanceOf[BufferMessage].buffers.head
+            val errorMsgBytes = new Array[Byte](errorMsgByteBuf.limit())
+            errorMsgByteBuf.get(errorMsgBytes)
+            val errorMsg = new String(errorMsgBytes, "utf-8")
             val e = new IOException(
-              "sendMessageReliably failed with ACK that signalled a remote error")
+              s"sendMessageReliably failed with ACK that signalled a remote error: $errorMsg")
             if (!promise.tryFailure(e)) {
               logWarning("Ignore error because promise is completed", e)
             }

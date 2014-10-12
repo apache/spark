@@ -151,17 +151,14 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
         } catch {
           case e: Exception => {
             logError("Exception handling buffer message", e)
-            val errorMessage = Message.createBufferMessage(msg.id)
-            errorMessage.hasError = true
-            Some(errorMessage)
+            Some(Message.createErrorMessage(e, msg.id))
           }
         }
 
       case otherMessage: Any =>
-        logError("Unknown type message received: " + otherMessage)
-        val errorMessage = Message.createBufferMessage(msg.id)
-        errorMessage.hasError = true
-        Some(errorMessage)
+        val errorMsg = s"Received unknown message type: ${otherMessage.getClass.getName}"
+        logError(errorMsg)
+        Some(Message.createErrorMessage(new UnsupportedOperationException(errorMsg), msg.id))
     }
   }
 
