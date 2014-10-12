@@ -129,6 +129,7 @@ object GradientBoosting extends Logging {
     val learningRate = boostingStrategy.learningRate
     // TODO: Implement Stochastic gradient boosting using BaggedPoint
     val subSample = boostingStrategy.subsample
+    val checkpointingPeriod = boostingStrategy.checkpointPeriod
 
     // Cache input
     input.persist(StorageLevel.MEMORY_AND_DISK)
@@ -166,11 +167,12 @@ object GradientBoosting extends Logging {
       // Update data with pseudo-residuals
       data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
         point.features))
+      if (m % checkpointingPeriod == 1 && m != 1) {
+        lastCachedData.unpersist()
+      }
       // Checkpoint
-      val checkpointingPeriod = boostingStrategy.checkpointPeriod
       if (m % checkpointingPeriod == 0) {
         data = data.persist(StorageLevel.MEMORY_AND_DISK)
-        lastCachedData.unpersist()
         lastCachedData = data
       }
       m += 1
