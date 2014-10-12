@@ -114,6 +114,9 @@ class Serializer(object):
     def __repr__(self):
         return "<%s object>" % self.__class__.__name__
 
+    def __hash__(self):
+        return hash(str(self))
+
 
 class FramedSerializer(Serializer):
 

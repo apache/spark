@@ -13,6 +13,7 @@ Contents:
 
    pyspark
    pyspark.sql
+   pyspark.streaming
    pyspark.mllib
 
 
