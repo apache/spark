@@ -19,6 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.hadoop.yarn.api.records.ApplicationId
 
 import scala.collection.JavaConversions._
 
@@ -49,6 +52,75 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private var tempDir: File = _
   private var fakeSparkJar: File = _
   private var oldConf: Map[String, String] = _
+
+
+  class KillYarnAppListener(client: Client) extends YarnApplicationListener {
+    val init     = new AtomicBoolean(false)
+    val start    = new AtomicBoolean(false)
+    val prog     = new AtomicBoolean(false)
+    val finished = new AtomicBoolean(false)
+    val killed   = new AtomicBoolean(false)
+    val failed   = new AtomicBoolean(false)
+
+    val assertionFailed = new AtomicBoolean(false)
+
+    override def onApplicationInit(time: Long, appId: ApplicationId): Unit = {
+      init.set(true)
+    }
+    override def onApplicationStart(time: Long, info: YarnAppInfo): Unit = {
+      start.set(true)
+    }
+    override def onApplicationProgress(time: Long, progress: YarnAppProgress): Unit = {
+      prog.set(true)
+      client.killApplication(progress.appId)
+    }
+    override def onApplicationKilled(time: Long, progress: YarnAppProgress): Unit = {
+      killed.set(true)
+    }
+    override def onApplicationEnd(time: Long, progress: YarnAppProgress): Unit = {
+      finished.set(true)
+      //application shouldn't finish normally
+      assertionFailed.set(true)
+    }
+    override def onApplicationFailed(time: Long, progress: YarnAppProgress): Unit = {
+      failed.set(true)
+    }
+  }
+
+  class YarnAppListener extends YarnApplicationListener {
+
+    val init     = new AtomicBoolean(false)
+    val start    = new AtomicBoolean(false)
+    val prog     = new AtomicBoolean(false)
+    val finished = new AtomicBoolean(false)
+    val killed   = new AtomicBoolean(false)
+    val failed   = new AtomicBoolean(false)
+
+    val assertionFailed = new AtomicBoolean(false)
+
+    override def onApplicationInit(time: Long, appId: ApplicationId): Unit = {
+      init.set(true)
+    }
+
+    override def onApplicationStart(time: Long, info: YarnAppInfo): Unit = {
+      start.set(true)
+      if (info.name != "Spark") assertionFailed.set(true)
+      if (info.state != "ACCEPTED") assertionFailed.set(true)
+    }
+
+    override def onApplicationProgress(time: Long, progress: YarnAppProgress): Unit = {
+      prog.set(true)
+    }
+
+    override def onApplicationKilled(time: Long, progress: YarnAppProgress): Unit = {
+    }
+
+    override def onApplicationEnd(time: Long, progress: YarnAppProgress): Unit = {
+      finished.set(true)
+    }
+    override def onApplicationFailed(time: Long, progress: YarnAppProgress): Unit = {
+    }
+  }
 
   override def beforeAll() {
     tempDir = Utils.createTempDir()
@@ -133,10 +205,83 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       "--num-executors", "1")
     val sparkConf = new SparkConf()
     val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val clientArgs = new ClientArguments(args, sparkConf)
-    new Client(clientArgs, yarnConf, sparkConf).run()
+    //val clientArgs = new ClientArguments(args, sparkConf)
+    def toArgs(capacity: YarnResourceCapacity) : ClientArguments = new ClientArguments(args, sparkConf)
+    new Client(toArgs, yarnConf, sparkConf).run()
     checkResult(result)
   }
+
+
+  test("run Spark in yarn-cluster mode with listeners") {
+    val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
+    var result = File.createTempFile("result", null, tempDir)
+
+    // The Client object will call System.exit() after the job is done, and we don't want
+    // that because it messes up the scalatest monitoring. So replicate some of what main()
+    // does here.
+    val args = Array("--class", main,
+      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
+      "--arg", "yarn-cluster",
+      "--arg", result.getAbsolutePath(),
+      "--num-executors", "1")
+    val sparkConf = new SparkConf()
+    val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    //val clientArgs = new ClientArguments(args, sparkConf)
+    def toArgs(capacity: YarnResourceCapacity) : ClientArguments = new ClientArguments(args, sparkConf)
+    val client =  new Client(toArgs, yarnConf, sparkConf)
+
+    val listener = new YarnAppListener
+    client.addApplicationListener(listener)
+    client.run()
+    checkResult(result)
+
+    assert(listener.init.get() &&
+           listener.prog.get() &&
+           listener.start.get() &&
+           listener.finished.get() &&
+           !listener.killed.get() &&
+           !listener.failed.get() &&
+           !listener.assertionFailed.get())
+  }
+
+
+
+  test("run Spark in yarn-cluster mode and then kill it") {
+    val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
+    var result = File.createTempFile("result", null, tempDir)
+
+    // The Client object will call System.exit() after the job is done, and we don't want
+    // that because it messes up the scalatest monitoring. So replicate some of what main()
+    // does here.
+    val args = Array("--class", main,
+      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
+      "--arg", "yarn-cluster",
+      "--arg", result.getAbsolutePath(),
+      "--num-executors", "1")
+    val sparkConf = new SparkConf()
+    val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    //val clientArgs = new ClientArguments(args, sparkConf)
+    def toArgs(capacity: YarnResourceCapacity) : ClientArguments = new ClientArguments(args, sparkConf)
+    val client =  new Client(toArgs, yarnConf, sparkConf)
+
+    val listener = new KillYarnAppListener(client)
+    client.addApplicationListener(listener)
+    client.run()
+
+    //make sure we have enough time to set the callback value
+    TimeUnit.MILLISECONDS.sleep(50)
+
+    assert(listener.init.get())
+    assert(listener.prog.get())
+    assert(listener.start.get())
+    assert(! listener.finished.get())
+    assert(listener.killed.get())
+    assert(!listener.failed.get())
+    assert(!listener.assertionFailed.get())
+
+  }
+
+
 
   /**
    * This is a workaround for an issue with yarn-cluster mode: the Client class will not provide

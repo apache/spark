@@ -28,6 +28,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.YarnClientImpl
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
+import org.apache.spark.deploy.yarn.{YarnAppProgress, ClientArguments, YarnResourceCapacity}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -36,15 +37,15 @@ import org.apache.spark.deploy.SparkHadoopUtil
  * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's alpha API.
  */
 private[spark] class Client(
-    val args: ClientArguments,
+    toArgs: YarnResourceCapacity => ClientArguments,
     val hadoopConf: Configuration,
     val sparkConf: SparkConf)
   extends YarnClientImpl with ClientBase with Logging {
 
-  def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
+  def this(to: YarnResourceCapacity => ClientArguments, spConf: SparkConf) =
+    this(to, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
-  def this(clientArgs: ClientArguments) = this(clientArgs, new SparkConf())
+  def this(toa: YarnResourceCapacity => ClientArguments) = this(toa, new SparkConf())
 
   val yarnConf: YarnConfiguration = new YarnConfiguration(hadoopConf)
 
@@ -55,28 +56,35 @@ private[spark] class Client(
    * ------------------------------------------------------------------------------------- */
 
   /** Submit an application running our ApplicationMaster to the ResourceManager. */
-  override def submitApplication(): ApplicationId = {
+  override def submitApplication(): (ApplicationId, ClientArguments) = {
+    val newAppResponse = createYarnApplication
+    val args = toArgs(getClusterResourceCapacity(newAppResponse))
+    val appId = newAppResponse.getApplicationId()
+
+    notifyAppInit(appId)
+
+    // Verify whether the cluster has enough resources for our AM
+    verifyClusterResources(args,newAppResponse)
+
+    // Set up the appropriate contexts to launch our AM
+    val containerContext = createContainerLaunchContext(args,newAppResponse)
+    val appContext = createApplicationSubmissionContext(args,appId, containerContext)
+
+    // Finally, submit and monitor the application
+    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+    submitApplication(appContext)
+    (appId, args)
+  }
+
+
+  def createYarnApplication() : GetNewApplicationResponse = {
     init(yarnConf)
     start()
 
     logInfo("Requesting a new application from cluster with %d NodeManagers"
       .format(getYarnClusterMetrics.getNumNodeManagers))
 
-    // Get a new application from our RM
-    val newAppResponse = getNewApplication()
-    val appId = newAppResponse.getApplicationId()
-
-    // Verify whether the cluster has enough resources for our AM
-    verifyClusterResources(newAppResponse)
-
-    // Set up the appropriate contexts to launch our AM
-    val containerContext = createContainerLaunchContext(newAppResponse)
-    val appContext = createApplicationSubmissionContext(appId, containerContext)
-
-    // Finally, submit and monitor the application
-    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
-    submitApplication(appContext)
-    appId
+    super.getNewApplication
   }
 
   /**
@@ -84,19 +92,20 @@ private[spark] class Client(
    * In the Yarn alpha API, the memory requirements of this container must be set in
    * the ContainerLaunchContext instead of the ApplicationSubmissionContext.
    */
-  override def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
-      : ContainerLaunchContext = {
-    val containerContext = super.createContainerLaunchContext(newAppResponse)
+  override def createContainerLaunchContext(args:ClientArguments,
+                                            newAppResponse:GetNewApplicationResponse)
+                                            : ContainerLaunchContext = {
+    val containerContext = super.createContainerLaunchContext(args,newAppResponse)
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(args.amMemory + amMemoryOverhead)
+    capability.setMemory(args.amMemory + args.amMemoryOverhead)
     containerContext.setResource(capability)
     containerContext
   }
 
   /** Set up the context for submitting our ApplicationMaster. */
-  def createApplicationSubmissionContext(
-      appId: ApplicationId,
-      containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
+  def createApplicationSubmissionContext(args:ClientArguments,
+                                         appId: ApplicationId,
+                                         containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     appContext.setApplicationId(appId)
     appContext.setApplicationName(args.appName)
@@ -123,6 +132,17 @@ private[spark] class Client(
    */
   override def getClientToken(report: ApplicationReport): String =
     Option(report.getClientToken).map(_.toString).getOrElse("")
+
+
+  override
+  protected def getAppProgress(report: ApplicationReport): YarnAppProgress = {
+
+    val appUsageReport = report.getApplicationResourceUsageReport
+    YarnAppProgress(report.getApplicationId,
+                    report.getTrackingUrl,
+                    getResourceUsage(appUsageReport))
+  }
+
 }
 
 object Client {
@@ -138,8 +158,9 @@ object Client {
     val sparkConf = new SparkConf
 
     try {
-      val args = new ClientArguments(argStrings, sparkConf)
-      new Client(args, sparkConf).run()
+      //val args = new ClientArguments(argStrings, sparkConf)
+      def toArgs(capacity: YarnResourceCapacity) = new ClientArguments(argStrings, sparkConf)
+      new Client(toArgs, sparkConf).run()
     } catch {
       case e: Exception =>
         Console.err.println(e.getMessage)
