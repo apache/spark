@@ -127,7 +127,7 @@
     <hbase.version>0.94.6</hbase.version>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
-    <hive.version>0.12.0-protobuf</hive.version>
+    <hive.version>0.12.0-protobuf-2.5</hive.version>
     <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
@@ -216,6 +216,18 @@
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
       <url>https://repo.spring.io/libs-release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!-- This is temporarily included to fix issues with Hive 0.12 -->
+      <id>spark-staging</id>
+      <name>Spring Staging Repository</name>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
       <releases>
         <enabled>true</enabled>
       </releases>
