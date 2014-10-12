@@ -21,7 +21,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
 import org.apache.hadoop.hive.ql.exec.{UDF, UDAF}
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
@@ -97,7 +97,7 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
     function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
 
   @transient
-  protected lazy val arguments = children.map(c => toInspector(c.dataType)).toArray
+  protected lazy val arguments = children.map(toInspector).toArray
 
   @transient
   protected lazy val isUDFDeterministic = {
@@ -116,12 +116,13 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
   @transient
   lazy val dataType = javaClassToDataType(method.getReturnType)
 
+  @transient
+  protected lazy val cached = new Array[AnyRef](children.length)
+
   // TODO: Finish input output types.
   override def eval(input: Row): Any = {
-    val evaluatedChildren = children.map(c => wrap(c.eval(input)))
-
     unwrap(FunctionRegistry.invoke(method, function, conversionHelper
-      .convertIfNecessary(evaluatedChildren: _*): _*))
+      .convertIfNecessary(wrap(children.map(c => c.eval(input)), arguments, cached): _*): _*))
   }
 }
 
@@ -133,7 +134,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
   type UDFType = GenericUDF
 
   @transient
-  protected lazy val argumentInspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val argumentInspectors = children.map(toInspector)
 
   @transient
   protected lazy val returnInspector = function.initialize(argumentInspectors.toArray)
@@ -155,11 +156,13 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
   // Adapter from Catalyst ExpressionResult to Hive DeferredObject
   class DeferredObjectAdapter extends DeferredObject {
     private var func: () => Any = _
-    def set(func: () => Any) {
+    private var oi: ObjectInspector = _
+    def set(func: () => Any, oi: ObjectInspector) {
       this.func = func
+      this.oi = oi
     }
     override def prepare(i: Int) = {}
-    override def get(): AnyRef = wrap(func())
+    override def get(): AnyRef = wrap(func(), oi)
   }
 
   lazy val dataType: DataType = inspectorToDataType(returnInspector)
@@ -169,7 +172,10 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
     var i = 0
     while (i < children.length) {
       val idx = i
-      deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(() => {children(idx).eval(input)})
+      deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(
+        () => {
+          children(idx).eval(input)
+        }, argumentInspectors(i))
       i += 1
     }
     unwrap(function.evaluate(deferedObjects))
@@ -265,6 +271,9 @@ private[hive] case class HiveGenericUdtf(
     structInspector.getAllStructFieldRefs.map(_.getFieldObjectInspector)
   }
 
+  @transient
+  protected lazy val udtInput = new Array[AnyRef](children.length)
+
   protected lazy val outputDataTypes = outputInspectors.map(inspectorToDataType)
 
   override protected def makeOutput() = {
@@ -288,9 +297,7 @@ private[hive] case class HiveGenericUdtf(
     val inputProjection = new InterpretedProjection(children)
     val collector = new UDTFCollector
     function.setCollector(collector)
-
-    val udtInput = inputProjection(input).map(wrap).toArray
-    function.process(udtInput)
+    function.process(wrap(inputProjection(input), inputInspectors, udtInput))
     collector.collectRows()
   }
 
