@@ -292,7 +292,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         </td>
         <td>
           {Unparsed(
-            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
+            info.accumulables.map(acc => s"${acc.name}: ${acc.update.get}").mkString("<br/>")
           )}
         </td>
         <!--

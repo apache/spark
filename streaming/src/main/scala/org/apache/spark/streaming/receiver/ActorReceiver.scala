@@ -68,7 +68,7 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-trait ActorHelper extends Logging{
+trait ActorHelper extends Logging {
 
   self: Actor => // to ensure that this can be added to Actor classes only
 

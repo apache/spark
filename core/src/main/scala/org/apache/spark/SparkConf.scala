@@ -187,8 +187,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."
-    getAll.filter{case (k, v) => k.startsWith(prefix)}
-          .map{case (k, v) => (k.substring(prefix.length), v)}
+    getAll.filter {case (k, v) => k.startsWith(prefix)}
+          .map {case (k, v) => (k.substring(prefix.length), v)}
   }
 
   /** Get all akka conf variables set on this SparkConf */
@@ -311,7 +311,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * configuration out for debugging.
    */
   def toDebugString: String = {
-    settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+    settings.toArray.sorted.map {case (k, v) => k + "=" + v}.mkString("\n")
   }
 }
 

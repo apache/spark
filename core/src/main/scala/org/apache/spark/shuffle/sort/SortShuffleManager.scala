@@ -65,7 +65,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     if (shuffleMapNumber.containsKey(shuffleId)) {
       val numMaps = shuffleMapNumber.remove(shuffleId)
-      (0 until numMaps).map{ mapId =>
+      (0 until numMaps).map { mapId =>
         shuffleBlockManager.removeDataByMap(shuffleId, mapId)
       }
     }

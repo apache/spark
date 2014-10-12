@@ -42,7 +42,7 @@ object LocalKMeans {
 
   def generateData = {
     def generatePoint(i: Int) = {
-      DenseVector.fill(D){rand.nextDouble * R}
+      DenseVector.fill(D)(rand.nextDouble * R)
     }
     Array.tabulate(N)(generatePoint)
   }

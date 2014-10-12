@@ -498,12 +498,12 @@ class ALS private (
             toSend(userBlock) += factors(p)
           }
         }
-        toSend.zipWithIndex.map{ case (buf, idx) => (idx, (bid, buf.toArray)) }
+        toSend.zipWithIndex.map { case (buf, idx) => (idx, (bid, buf.toArray)) }
     }.groupByKey(new HashPartitioner(numUserBlocks))
      .join(userInLinks)
-     .mapValues{ case (messages, inLinkBlock) =>
-        updateBlock(messages, inLinkBlock, rank, lambda, alpha, YtY)
-      }
+     .mapValues {
+      case (messages, inLinkBlock) => updateBlock(messages, inLinkBlock, rank, lambda, alpha, YtY)
+    }
   }
 
   /**

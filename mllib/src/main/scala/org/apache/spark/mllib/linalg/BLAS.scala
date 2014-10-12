@@ -315,7 +315,7 @@ private[mllib] object BLAS extends Serializable with Logging {
     val Acols = if (!transA) A.colPtrs else A.rowIndices
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (transA){
+    if (transA) {
       var colCounterForB = 0
       if (!transB) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {
@@ -357,7 +357,7 @@ private[mllib] object BLAS extends Serializable with Logging {
       }
     } else {
       // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      if (beta != 0.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
@@ -372,7 +372,7 @@ private[mllib] object BLAS extends Serializable with Logging {
             var i = Acols(colCounterForA)
             val indEnd = Acols(colCounterForA + 1)
             val Bval = B.values(Bstart + colCounterForA) * alpha
-            while (i < indEnd){
+            while (i < indEnd) {
               C.values(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
@@ -384,11 +384,11 @@ private[mllib] object BLAS extends Serializable with Logging {
         while (colCounterForB < nB) {
           var colCounterForA = 0 // The column of A to multiply with the row of B
           val Cstart = colCounterForB * mA
-          while (colCounterForA < kA){
+          while (colCounterForA < kA) {
             var i = Acols(colCounterForA)
             val indEnd = Acols(colCounterForA + 1)
             val Bval = B(colCounterForB, colCounterForA) * alpha
-            while (i < indEnd){
+            while (i < indEnd) {
               C.values(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
@@ -492,13 +492,13 @@ private[mllib] object BLAS extends Serializable with Logging {
     val Acols = if (!trans) A.colPtrs else A.rowIndices
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (trans){
+    if (trans) {
       var rowCounter = 0
-      while (rowCounter < mA){
+      while (rowCounter < mA) {
         var i = Arows(rowCounter)
         val indEnd = Arows(rowCounter + 1)
         var sum = 0.0
-        while(i < indEnd){
+        while(i < indEnd) {
           sum += Avals(i) * x.values(Acols(i))
           i += 1
         }
@@ -507,16 +507,16 @@ private[mllib] object BLAS extends Serializable with Logging {
       }
     } else {
       // Scale vector first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      if (beta != 0.0) {
         scal(beta, y)
       }
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
-      while (colCounterForA < nA){
+      while (colCounterForA < nA) {
         var i = Acols(colCounterForA)
         val indEnd = Acols(colCounterForA + 1)
         val xVal = x.values(colCounterForA) * alpha
-        while (i < indEnd){
+        while (i < indEnd) {
           val rowIndex = Arows(i)
           y.values(rowIndex) += Avals(i) * xVal
           i += 1

@@ -160,7 +160,7 @@ private[python] object PythonHadoopUtil {
   def mapToConf(map: java.util.Map[String, String]): Configuration = {
     import collection.JavaConversions._
     val conf = new Configuration()
-    map.foreach{ case (k, v) => conf.set(k, v) }
+    map.foreach { case (k, v) => conf.set(k, v) }
     conf
   }
 

@@ -54,7 +54,7 @@ class MatrixFactorizationModel private[mllib] (
     * @return RDD of Ratings.
     */
   def predict(usersProducts: RDD[(Int, Int)]): RDD[Rating] = {
-    val users = userFeatures.join(usersProducts).map{
+    val users = userFeatures.join(usersProducts).map {
       case (user, (uFeatures, product)) => (product, (user, uFeatures))
     }
     users.join(productFeatures).map {

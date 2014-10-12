@@ -1357,7 +1357,7 @@ abstract class RDD[T: ClassTag](
       val leftOffset = (partitionStr.length - 1) / 2
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
 
-      debugSelf(rdd).zipWithIndex.map{
+      debugSelf(rdd).zipWithIndex.map {
         case (desc: String, 0) => s"$partitionStr $desc"
         case (desc: String, _) => s"$nextPrefix $desc"
       } ++ debugChildren(rdd, nextPrefix)
@@ -1371,7 +1371,7 @@ abstract class RDD[T: ClassTag](
         + (if (isLastChild) "  " else "| ")
         + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
 
-      debugSelf(rdd).zipWithIndex.map{
+      debugSelf(rdd).zipWithIndex.map {
         case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
         case (desc: String, _) => s"$nextPrefix$desc"
       } ++ debugChildren(rdd, nextPrefix)

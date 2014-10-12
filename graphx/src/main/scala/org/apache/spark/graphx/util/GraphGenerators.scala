@@ -146,7 +146,7 @@ object GraphGenerators {
   private def outDegreeFromEdges[ED: ClassTag](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
     val vertices = edges.flatMap { edge => List((edge.srcId, 1)) }
       .reduceByKey(_ + _)
-      .map{ case (vid, degree) => (vid, degree) }
+      .map { case (vid, degree) => (vid, degree) }
     Graph(vertices, edges, 0)
   }
 
@@ -244,10 +244,11 @@ object GraphGenerators {
     val vertices: RDD[(VertexId, (Int,Int))] =
       sc.parallelize(0 until rows).flatMap( r => (0 until cols).map( c => (sub2ind(r,c), (r,c)) ) )
     val edges: RDD[Edge[Double]] =
-      vertices.flatMap{ case (vid, (r,c)) =>
-        (if (r + 1 < rows) { Seq( (sub2ind(r, c), sub2ind(r + 1, c))) } else { Seq.empty }) ++
-        (if (c + 1 < cols) { Seq( (sub2ind(r, c), sub2ind(r, c + 1))) } else { Seq.empty })
-      }.map{ case (src, dst) => Edge(src, dst, 1.0) }
+      vertices.flatMap {
+        case (vid, (r,c)) =>
+          (if (r + 1 < rows) { Seq( (sub2ind(r, c), sub2ind(r + 1, c))) } else { Seq.empty }) ++
+          (if (c + 1 < cols) { Seq( (sub2ind(r, c), sub2ind(r, c + 1))) } else { Seq.empty })
+      }.map { case (src, dst) => Edge(src, dst, 1.0) }
     Graph(vertices, edges)
   } // end of gridGraph
 

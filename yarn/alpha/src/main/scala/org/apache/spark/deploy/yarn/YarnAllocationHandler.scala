@@ -146,7 +146,7 @@ private[yarn] class YarnAllocationHandler(
 
     val requestedContainers: ArrayBuffer[ResourceRequest] =
       new ArrayBuffer[ResourceRequest](rackToCounts.size)
-    for ((rack, count) <- rackToCounts){
+    for ((rack, count) <- rackToCounts) {
       requestedContainers +=
         createResourceRequest(AllocationType.RACK, rack, count,
           YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
@@ -209,7 +209,7 @@ private[yarn] class YarnAllocationHandler(
   private def createReleasedContainerList(): ArrayBuffer[ContainerId] = {
     val retval = new ArrayBuffer[ContainerId](1)
     // Iterator on COW list ...
-    for (container <- releaseList.iterator()){
+    for (container <- releaseList.iterator()) {
       retval += container
     }
     // Remove from the original list.
