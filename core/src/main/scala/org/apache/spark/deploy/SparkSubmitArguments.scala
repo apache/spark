@@ -19,28 +19,23 @@ package org.apache.spark.deploy
 
 import java.io._
 import java.util.jar.JarFile
-import java.util.Properties
 
 import scala.collection._
-import scala.collection.JavaConverters._
-import scala.collection.JavaConversions._
-import org.apache.commons.lang3.CharEncoding
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.ConfigConstants._
 import org.apache.spark.util.Utils
-
-
+import org.apache.spark.deploy.SparkSubmitArguments._
 
 /**
- * Pulls configuration information together in order of priority
+ * Pulls and validates configuration information together in order of priority
  *
  * Entries in the conf Map will be filled in the following priority order
  * 1. entries specified on the command line (except from --conf entries)
  * 2. Entries specified on the command line with --conf
- * 3. Environment variables (including legacy variable mappings)
- * 4. System config properties (eg by using -Dspark.var.name)
- * 5  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
- * 6. hard coded defaults
+ * 3. Legacy environment variables
+ * 4  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf if either exist
+ * 5. hard coded defaults
  *
 */
 private[spark] class SparkSubmitArguments(args: Seq[String]) {
@@ -52,9 +47,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   def master  = conf(SPARK_MASTER)
   def master_= (value: String):Unit = conf.put(SPARK_MASTER, value)
-
-  def deployMode = conf(SPARK_DEPLOY_MODE)
-  def deployMode_= (value: String):Unit = conf.put(SPARK_DEPLOY_MODE, value)
 
   def executorMemory = conf(SPARK_EXECUTOR_MEMORY)
   def executorMemory_= (value: String):Unit = conf.put(SPARK_EXECUTOR_MEMORY, value)
@@ -80,7 +72,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def driverCores = conf(SPARK_DRIVER_CORES)
   def driverCores_= (value: String):Unit = conf.put(SPARK_DRIVER_CORES, value)
 
-  def supervise = conf(SPARK_DRIVER_SUPERVISE) == true.toString
+  def supervise = conf(SPARK_DRIVER_SUPERVISE).toBoolean
   def supervise_= (value: String):Unit = conf.put(SPARK_DRIVER_SUPERVISE, value)
 
   def queue = conf(SPARK_YARN_QUEUE)
@@ -95,7 +87,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def archives = conf.get(SPARK_YARN_DIST_ARCHIVES)
   def archives_= (value: String):Unit = conf.put(SPARK_YARN_DIST_ARCHIVES, value)
 
-  def mainClass = conf.get(SPARK_APP_CLASS)
+  def mainClass = conf(SPARK_APP_CLASS)
   def mainClass_= (value: String):Unit = conf.put(SPARK_APP_CLASS, value)
 
   def primaryResource = conf(SPARK_APP_PRIMARY_RESOURCE)
@@ -110,11 +102,36 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   def pyFiles = conf.get(SPARK_SUBMIT_PYFILES)
   def pyFiles_= (value: String):Unit = conf.put(SPARK_SUBMIT_PYFILES, value)
 
-  lazy val verbose = conf(SPARK_VERBOSE) == true.toString
-  lazy val isPython = primaryResource != null && SparkSubmit.isPython(primaryResource)
+  def deployMode = conf.get(SPARK_DEPLOY_MODE)
+  def deployMode_= (value: String):Unit = conf.put(SPARK_DEPLOY_MODE, value)
 
   var childArgs = new mutable.ArrayBuffer[String]
-  
+
+  lazy val verbose = conf(SPARK_VERBOSE).toBoolean
+  lazy val isPython = conf.contains(SPARK_APP_PRIMARY_RESOURCE) &&
+    SparkSubmit.isPython(primaryResource)
+  lazy val isYarnCluster = clusterManagerFlag == CM_YARN && deployModeFlag == DM_CLUSTER
+
+  /**
+   * Deploy mode - flags are defined in ConfigConstants module (DM_*)
+   */
+  lazy val deployModeFlag = deployMode match {
+    case Some("client")  => DM_CLIENT
+    case Some("cluster") => DM_CLUSTER
+    case _ => throw new SparkException("Deploy mode must be either client or cluster")
+  }
+
+  /**
+   * Cluster manager - flags are defined in ConfigConstants module (CM_*)
+   */
+  lazy val clusterManagerFlag = master match {
+    case m if m.startsWith("yarn") => CM_YARN
+    case m if m.startsWith("spark") => CM_STANDALONE
+    case m if m.startsWith("mesos") => CM_MESOS
+    case m if m.startsWith("local") => CM_LOCAL
+    case _ => throw new SparkException("Master must start with yarn, spark, mesos, or local")
+  }
+
   /**
    * Used to store parameters parsed from command line (except for --conf and child arguments)
    */
@@ -131,7 +148,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   private val cmdLinePropertyFileValues = new mutable.HashMap[String,String]
 
   try {
-    // parse command line options
     parseOpts(args.toList)
 
     // if property file exists then update the command line arguments, but don't override
@@ -141,34 +157,68 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
 
     // See comments at start of class definition for the location and priority of configuration sources.
-    conf ++= SparkSubmitArguments.mergeSparkProperties(Seq(cmdLineConfig, cmdLineConfConfig))
+    conf ++= mergeSparkProperties(Seq(cmdLineConfig, cmdLineConfConfig), CMD_LINE_ONLY_KEYS)
 
-    // Some configuration items can be derived here if they are not yet present.
-    deriveConfigurations()
+    // Some configuration items can be derived if they are not yet present.
+    deriveConfigsPreDefaults()
+    DEFAULTS.foreach{ case (k,v) =>
+      conf.getOrElseUpdate(k,v)
+    }
+    deriveConfigsPostDefaults()
 
     checkRequiredArguments()
   } catch {
-    // ApplicationExitExceptions should only occur during debugging.
-    case e: SparkSubmit.ApplicationExitException =>
-    // IOException are possible when we are attempting to read property files.
-    case e: IOException => SparkSubmit.printErrorAndExit(e.getLocalizedMessage)
+    // IOException are possible when we are attempting to read property files from the file system.
+    case e @ (_: SparkException | _: IOException) => SparkSubmit.printErrorAndExit(e.getLocalizedMessage)
   }
 
-  private def deriveConfigurations() = {
-    // These config items point to file paths, but may need to be converted to absolute file uris.
-    val configFileUris = List(SPARK_FILES, SPARK_SUBMIT_PYFILES, SPARK_YARN_DIST_ARCHIVES,
-      SPARK_JARS, SPARK_APP_PRIMARY_RESOURCE)
-
-    // Process configFileUris with resolvedURIs function if they are present.
-    configFileUris
-      .filter { key => conf.contains(key) &&
-        ((key != SPARK_APP_PRIMARY_RESOURCE) || (!SparkSubmit.isInternalOrShell(conf(key))))}
-      .foreach { key =>
-        conf.put(key, Utils.resolveURIs(conf(key), testWindows=false))
+  /**
+   * Some deriviations are only valid before we apply default values
+   */
+  private def deriveConfigsPreDefaults() = {
+    // Because "yarn-cluster" and "yarn-client" encapsulate both the master
+    // and deploy mode, we have some logic to infer the master and deploy mode
+    // from each other if only one is specified
+    if (conf.contains(SPARK_MASTER) && (clusterManagerFlag == CM_YARN)) {
+      if (master == "yarn-standalone") {
+        SparkSubmit.printWarning("\"yarn-standalone\" is deprecated. Use \"yarn-cluster\" instead.")
+        master = "yarn-cluster"
       }
 
+      (master, deployMode) match {
+        case ("yarn-cluster", None) => deployMode = "cluster"
+        case ("yarn-cluster", Some("client")) => // invalid and caught in checkRequirements
+        case ("yarn-client",  Some("cluster")) => // invalid and caught in checkRequirements
+        case (_, Some(mode))  =>
+          val newMaster = "yarn-" + mode
+          if (master != newMaster) {
+            SparkSubmit.printWarning(s"master is being changed to $newMaster")
+            master = newMaster
+          }
+        case _ => // we cannot figure out deploymode - checkRequiredArguments will pick this up
+      }
+    }
+  }
+
+  private def deriveConfigsPostDefaults() = {
+    // These config items point to file paths, but may need to be converted to absolute file uris.
+    val configFileUris = Seq(
+      SPARK_FILES,
+      SPARK_SUBMIT_PYFILES,
+      SPARK_YARN_DIST_ARCHIVES,
+      SPARK_JARS,
+      SPARK_APP_PRIMARY_RESOURCE)
+
+    // Process configFileUris with resolvedURIs function if they are present.
+    def resolvableFileUri(key: String) = conf.contains(key) &&
+      ((key != SPARK_APP_PRIMARY_RESOURCE) || (!SparkSubmit.isInternalOrShell(conf(key))))
+
+    configFileUris
+      .filter( resolvableFileUri )
+      .foreach( key => conf.put(key, Utils.resolveURIs(conf(key), testWindows=false)) )
+
     // Try to set main class from JAR if no --class argument is given.
-    if (mainClass == null && !isPython && primaryResource != null) {
+    if (!conf.contains(SPARK_APP_CLASS) && !isPython && primaryResource != null) {
       try {
         val jar = new JarFile(primaryResource)
         // Note that this might still return null if no main-class is set; we catch that later.
@@ -181,37 +231,21 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
           SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
       }
     }
-    conf.get(SPARK_MASTER) match {
-       case Some("yarn-standalone") =>
-          SparkSubmit.printWarning("'yarn-standalone' is deprecated. Use 'yarn-cluster' instead.")
-          master = "yarn-cluster"
-       case _ =>
-    }
 
     // Set name from main class if not given.
-    // Todo: test main spark app name alternatives
     name = conf.get(SPARK_APP_NAME)
-      .orElse( conf.get(SPARK_APP_CLASS))
+      .orElse( conf.get(SPARK_APP_CLASS) )
       .orElse( conf.get(SPARK_APP_PRIMARY_RESOURCE).map(x => Utils.stripDirectory(x)) )
       .orNull
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def checkRequiredArguments() = {
-    if (!conf.isDefinedAt(SPARK_APP_PRIMARY_RESOURCE)) {
+    // accessing the lazy deployModeFlag val invokes validation on deployMode
+    deployModeFlag
+
+    if (!conf.contains(SPARK_APP_PRIMARY_RESOURCE)) {
       SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
-    }
-    if (!conf.isDefinedAt(SPARK_APP_CLASS)) {
-      SparkSubmit.printErrorAndExit("No main class")
-    }
-    if (deployMode != "client" && deployMode != "cluster") {
-      SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
-    }
-    if (!conf.isDefinedAt(SPARK_APP_CLASS) && !isPython) {
-      SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
-    }
-    if (conf.isDefinedAt(SPARK_SUBMIT_PYFILES) && !isPython) {
-      SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH.
@@ -219,25 +253,50 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
         SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
       }
+
       val nonLocalPyFiles = Utils.nonLocalPaths(pyFiles.getOrElse("")).mkString(",")
       if (nonLocalPyFiles.nonEmpty) {
         SparkSubmit.printErrorAndExit(
           s"Only local additional python files are supported: $nonLocalPyFiles")
       }
-    }
+    } else {
+      // Java primary resource
+      if (!conf.contains(SPARK_APP_CLASS)) {
+        SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
+      }
 
-    if (master.startsWith("yarn")) {
-      val hasHadoopEnv = sys.env.contains("HADOOP_CONF_DIR") || sys.env.contains("YARN_CONF_DIR")
-      if (!hasHadoopEnv && !Utils.isTesting) {
-        throw new Exception(s"When running with master '$master' " +
-          "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
+      if (conf.contains(SPARK_SUBMIT_PYFILES)) {
+        SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
       }
     }
 
+    (master, deployModeFlag) match {
+      case ("yarn-cluster", DM_CLIENT) =>
+        SparkSubmit.printErrorAndExit("Client deploy mode is not compatible with master \"yarn-cluster\"")
+      case ("yarn-client", DM_CLUSTER) =>
+        SparkSubmit.printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
+      case _ =>
+    }
+
+    // The following modes are not supported or applicable
+    (clusterManagerFlag, deployModeFlag) match {
+      case (CM_MESOS, DM_CLUSTER) =>
+        SparkSubmit.printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+      case (_, DM_CLUSTER) if isPython =>
+        SparkSubmit.printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
+      case (_, DM_CLUSTER) if SparkSubmit.isShell(primaryResource) =>
+        SparkSubmit.printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+      case _ =>
+    }
   }
 
   override def toString =  {
-    conf.mkString("\n")
+    val sb = new StringBuilder
+    sb.append("Spark Configuration:\n")
+    conf.foreach{ case (k,v) => sb.append(s"$k: $v\n") }
+    sb.append("Child args: \n")
+    Option(childArgs).foreach{ sb.append }
+    sb.toString()
   }
 
   /** Fill in values by parsing user options. */
@@ -419,7 +478,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   }
 }
 
-
 private[spark] object SparkSubmitArguments {
   /**
    * Default property values - string literals are defined in ConfigConstants.scala
@@ -439,6 +497,25 @@ private[spark] object SparkSubmitArguments {
   )
 
   /**
+   * Config items that should only be set from the command line
+   */
+  val CMD_LINE_ONLY_KEYS = Set (
+    SPARK_VERBOSE,
+    SPARK_APP_CLASS,
+    SPARK_APP_PRIMARY_RESOURCE
+  )
+
+  /**
+   * Used to support legacy environment variable mappings
+   */
+  val LEGACY_ENV_VARS = Map (
+    "MASTER" -> SPARK_MASTER,
+    "DEPLOY_MODE" -> SPARK_DEPLOY_MODE,
+    "SPARK_DRIVER_MEMORY" -> SPARK_DRIVER_MEMORY,
+    "SPARK_EXECUTOR_MEMORY" -> SPARK_EXECUTOR_MEMORY
+  )
+
+  /**
    * Function returns the spark submit default config map (Map[configName->ConfigValue])
    * Function is over-writable to allow for easier debugging
    */
@@ -451,7 +528,7 @@ private[spark] object SparkSubmitArguments {
    * Function is over-writable to allow for easier debugging
    */
   private[spark] var genEnvVars: () => Map[String, String] = () =>
-    sys.env.filterKeys(x=>x.toLowerCase.startsWith("spark"))
+    sys.env.filterKeys( x => x.toLowerCase.startsWith("spark") )
 
   /**
    * Gets configuration from reading SPARK_CONF_DIR/spark-defaults.conf if it exists
@@ -479,37 +556,38 @@ private[spark] object SparkSubmitArguments {
 
   /**
    * Resolves Configuration sources in order of highest to lowest
-   * 1. Each map passed in as additionalConfig from first to last
-   * 2. Environment variables (including legacy variable mappings)
-   * 3. System config properties (eg by using -Dspark.var.name)
-   * 4  SPARK_DEFAULT_CONF/spark-defaults.conf or SPARK_HOME/conf/spark-defaults.conf
-   * 5. hard coded defaults
+   * See comments at start of file for the sources of config information
    *
-   * @param additionalConfigs Seq of additional Map[ConfigName->ConfigValue] in order of highest
+   * @param priorityConfigs Seq of additional Map[ConfigName->ConfigValue] in order of highest
    *                          priority to lowest this will have priority over internal sources.
+   * @param priorityKeys Config items that are only allowed to be set via the priorityConfigs parameter,
+   *                         and not via ancillary environment/default properties.
    * @return Map[propName->propFile] containing values merged from all sources in order of priority.
    */
-  def mergeSparkProperties(additionalConfigs: Seq [Map[String,String]]) = {
+  def mergeSparkProperties(priorityConfigs: Seq [Map[String,String]],
+                           priorityKeys: Set[String] = Set.empty) = {
     val hardCodedDefaultConfig: Map[String,String] = getHardCodedDefaultValues()
 
     // Read in configuration from the spark defaults conf file if it exists.
     val sparkDefaultConfig = getSparkDefaultFileConfig()
+    sparkDefaultConfig.keySet.intersect(priorityKeys).foreach ( x =>
+      SparkSubmit.printWarning(s"The following key '$x' was detected in spark-defaults.conf but" +
+        " should only be passed on the command line")
+    )
 
     // Map legacy variables to their equivalent full name config variable
-    val legacyEnvVars = Seq(
-      "MASTER" -> SPARK_MASTER,
-      "DEPLOY_MODE" -> SPARK_DEPLOY_MODE,
-      "SPARK_DRIVER_MEMORY" -> SPARK_DRIVER_MEMORY,
-      "SPARK_EXECUTOR_MEMORY" -> SPARK_EXECUTOR_MEMORY)
-
-    val envVarConfig = genEnvVars() ++ legacyEnvVars
+    val envVarConfig = genEnvVars() ++ LEGACY_ENV_VARS
       .filter { case (k, _) => sys.env.contains(k) }
       .map { case (k, v) => (v, sys.env(k)) }
 
-    Utils.mergePropertyMaps( additionalConfigs ++ Seq(
+    envVarConfig.keySet.intersect(priorityKeys).foreach ( x =>
+      SparkSubmit.printWarning(s"The following key '$x' was detected in an environment variable" +
+        " but should only be passed on the command line")
+    )
+
+    Utils.mergePropertyMaps( priorityConfigs ++ Seq(
       envVarConfig,
-      sparkDefaultConfig,
-      hardCodedDefaultConfig
+      sparkDefaultConfig
     ))
   }
 

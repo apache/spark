@@ -165,4 +165,17 @@ private[spark] object ConfigConstants {
    * will be used
    */
   val FILENAME_SPARK_DEFAULTS_CONF: String = "spark-defaults.conf"
+
+  // Cluster managers flags
+  val CM_YARN = 1
+  val CM_STANDALONE = 2
+  val CM_MESOS = 4
+  val CM_LOCAL = 8
+  val ALL_CLUSTER_MGRS = CM_YARN | CM_STANDALONE | CM_MESOS | CM_LOCAL
+
+  // Deploy modes flags
+  val DM_CLIENT = 1
+  val DM_CLUSTER = 2
+  val ALL_DEPLOY_MODES = DM_CLIENT | DM_CLUSTER
+
 }
