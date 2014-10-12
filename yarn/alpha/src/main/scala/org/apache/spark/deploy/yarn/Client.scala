@@ -122,7 +122,7 @@ private[spark] class Client(
    * ApplicationReport#getClientToken is renamed `getClientToAMToken` in the stable API.
    */
   override def getClientToken(report: ApplicationReport): String =
-    Option(report.getClientToken).getOrElse("")
+    Option(report.getClientToken).map(_.toString).getOrElse("")
 }
 
 object Client {
