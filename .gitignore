@@ -1,5 +1,6 @@
 env
 logs
 build
+dist
 *.pyc
 docs/_*

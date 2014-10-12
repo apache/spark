@@ -1,0 +1,3 @@
+#!/bin/bash
+source $FLUX_HOME/init.sh
+python $FLUX_HOME/flux/bin/flux_bin.py $*

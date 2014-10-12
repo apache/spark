@@ -4,11 +4,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
 if 'FLUX_HOME' not in os.environ:
-    raise Exception(
-        "Looks like someone forgot to set their FLUX_HOME env variable.")
+    os.environ['FLUX_HOME'] = os.path.join(os.path.dirname(__file__), "..")
 FLUX_HOME = os.environ['FLUX_HOME']
 
-BASE_FOLDER = FLUX_HOME + '/src/flux'
+BASE_FOLDER = FLUX_HOME + '/flux'
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 DAGS_FOLDER = FLUX_HOME + '/dags'
