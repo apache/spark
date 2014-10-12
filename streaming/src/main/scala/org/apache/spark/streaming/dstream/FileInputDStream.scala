@@ -137,7 +137,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
    * Finds the files that were modified since the last time this method was called and makes
    * a union RDD out of them. Note that this maintains the list of files that were processed
    * in the latest modification time in the previous call to this method. This is because the
-   * modification time returned by the FileStatus API seems to return times only at the
+   * modification time ed by the FileStatus API seems to  times only at the
    * granularity of seconds. And new files may have the same modification time as the
    * latest modification time in the previous call to this method yet was not reported in
    * the previous call.
