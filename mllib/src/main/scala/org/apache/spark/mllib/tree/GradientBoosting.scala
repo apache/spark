@@ -131,7 +131,8 @@ object GradientBoosting extends Logging {
     val subSample = boostingStrategy.subsample
 
     // Cache input
-    input.cache()
+    input.persist(StorageLevel.MEMORY_AND_DISK)
+    var lastCachedData = input
 
     timer.stop("init")
 
@@ -167,10 +168,10 @@ object GradientBoosting extends Logging {
         point.features))
       // Checkpoint
       val checkpointingPeriod = boostingStrategy.checkpointPeriod
-      // TODO: Need to find good defaults for checkpointPeriod
       if (m % checkpointingPeriod == 0) {
-        // TODO: Figure out whether there is a better way to checkpoint
         data = data.persist(StorageLevel.MEMORY_AND_DISK)
+        lastCachedData.unpersist()
+        lastCachedData = data
       }
       m += 1
     }
