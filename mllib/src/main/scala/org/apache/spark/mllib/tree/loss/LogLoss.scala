@@ -39,7 +39,7 @@ object LogLoss extends Loss {
                              point: LabeledPoint,
                              learningRate: Double): Double = {
     val prediction = model.predict(point.features)
-    val logLoss = 1.0 / (1.0 + math.exp(prediction))
+    val logLoss = 1.0 / (1.0 + math.exp(-prediction))
     point.label - logLoss * learningRate
   }
 
