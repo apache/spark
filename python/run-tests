@@ -81,6 +81,11 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/tests.py"
 }
 
+function run_streaming_tests() {
+    run_test "pyspark/streaming/util.py"
+    run_test "pyspark/streaming/tests.py"
+}
+
 echo "Running PySpark tests. Output is in python/unit-tests.log."
 
 export PYSPARK_PYTHON="python"
@@ -96,6 +101,7 @@ $PYSPARK_PYTHON --version
 run_core_tests
 run_sql_tests
 run_mllib_tests
+run_streaming_tests
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then
@@ -105,6 +111,7 @@ if [ $(which pypy) ]; then
 
     run_core_tests
     run_sql_tests
+    run_streaming_tests
 fi
 
 if [[ $FAILED == 0 ]]; then
