@@ -55,7 +55,7 @@ object MovieLensALS {
       rank: Int = 10,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false)
+      implicitPrefs: Boolean = false) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()

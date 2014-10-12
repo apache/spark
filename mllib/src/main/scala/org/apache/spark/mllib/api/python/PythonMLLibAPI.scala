@@ -29,6 +29,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
+import org.apache.spark.mllib.feature.Word2Vec
+import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -42,8 +44,8 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
-
 
 /**
  * :: DeveloperApi ::
@@ -67,11 +69,13 @@ class PythonMLLibAPI extends Serializable {
     MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions)
 
   private def trainRegressionModel(
-      trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
+      learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
     val initialWeights = SerDe.loads(initialWeightsBA).asInstanceOf[Vector]
-    val model = trainFunc(data.rdd, initialWeights)
+    // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
+    learner.disableUncachedWarning()
+    val model = learner.run(data.rdd, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(SerDe.dumps(model.weights))
     ret.add(model.intercept: java.lang.Double)
@@ -106,8 +110,7 @@ class PythonMLLibAPI extends Serializable {
         + " Can only be initialized using the following string values: [l1, l2, none].")
     }
     trainRegressionModel(
-      (data, initialWeights) =>
-        lrAlg.run(data, initialWeights),
+      lrAlg,
       data,
       initialWeightsBA)
   }
@@ -122,15 +125,14 @@ class PythonMLLibAPI extends Serializable {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+    val lassoAlg = new LassoWithSGD()
+    lassoAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     trainRegressionModel(
-      (data, initialWeights) =>
-        LassoWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          regParam,
-          miniBatchFraction,
-          initialWeights),
+      lassoAlg,
       data,
       initialWeightsBA)
   }
@@ -145,15 +147,14 @@ class PythonMLLibAPI extends Serializable {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
+    val ridgeAlg = new RidgeRegressionWithSGD()
+    ridgeAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setStepSize(stepSize)
+      .setMiniBatchFraction(miniBatchFraction)
     trainRegressionModel(
-      (data, initialWeights) =>
-        RidgeRegressionWithSGD.train(
-          data,
-          numIterations,
-          stepSize,
-          regParam,
-          miniBatchFraction,
-          initialWeights),
+      ridgeAlg,
       data,
       initialWeightsBA)
   }
@@ -186,8 +187,7 @@ class PythonMLLibAPI extends Serializable {
         + " Can only be initialized using the following string values: [l1, l2, none].")
     }
     trainRegressionModel(
-      (data, initialWeights) =>
-        SVMAlg.run(data, initialWeights),
+      SVMAlg,
       data,
       initialWeightsBA)
   }
@@ -220,8 +220,7 @@ class PythonMLLibAPI extends Serializable {
         + " Can only be initialized using the following string values: [l1, l2, none].")
     }
     trainRegressionModel(
-      (data, initialWeights) =>
-        LogRegAlg.run(data, initialWeights),
+      LogRegAlg,
       data,
       initialWeightsBA)
   }
@@ -249,7 +248,14 @@ class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String): KMeansModel = {
-    KMeans.train(data.rdd, k, maxIterations, runs, initializationMode)
+    val kMeansAlg = new KMeans()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
+      .disableUncachedWarning()
+    return kMeansAlg.run(data.rdd)
   }
 
   /**
@@ -281,6 +287,59 @@ class PythonMLLibAPI extends Serializable {
       blocks: Int,
       alpha: Double): MatrixFactorizationModel = {
     ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha)
+  }
+
+  /**
+   * Java stub for Python mllib Word2Vec fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   * @param dataJRDD input JavaRDD
+   * @param vectorSize size of vector
+   * @param learningRate initial learning rate
+   * @param numPartitions number of partitions
+   * @param numIterations number of iterations
+   * @param seed initial seed for random generator
+   * @return A handle to java Word2VecModelWrapper instance at python side
+   */
+  def trainWord2Vec(
+      dataJRDD: JavaRDD[java.util.ArrayList[String]],
+      vectorSize: Int,
+      learningRate: Double,
+      numPartitions: Int,
+      numIterations: Int,
+      seed: Long): Word2VecModelWrapper = {
+    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
+    val word2vec = new Word2Vec()
+      .setVectorSize(vectorSize)
+      .setLearningRate(learningRate)
+      .setNumPartitions(numPartitions)
+      .setNumIterations(numIterations)
+      .setSeed(seed)
+    val model = word2vec.fit(data)
+    data.unpersist()
+    new Word2VecModelWrapper(model)
+  }
+
+  private[python] class Word2VecModelWrapper(model: Word2VecModel) {
+    def transform(word: String): Vector = {
+      model.transform(word)
+    }
+
+    def findSynonyms(word: String, num: Int): java.util.List[java.lang.Object] = {
+      val vec = transform(word)
+      findSynonyms(vec, num)
+    }
+
+    def findSynonyms(vector: Vector, num: Int): java.util.List[java.lang.Object] = {
+      val result = model.findSynonyms(vector, num)
+      val similarity = Vectors.dense(result.map(_._2))
+      val words = result.map(_._1)
+      val ret = new java.util.LinkedList[java.lang.Object]()
+      ret.add(words)
+      ret.add(similarity)
+      ret
+    }
   }
 
   /**

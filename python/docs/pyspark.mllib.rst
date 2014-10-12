@@ -20,6 +20,14 @@ pyspark.mllib.clustering module
     :undoc-members:
     :show-inheritance:
 
+pyspark.mllib.feature module
+-------------------------------
+
+.. automodule:: pyspark.mllib.feature
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 pyspark.mllib.linalg module
 ---------------------------
 

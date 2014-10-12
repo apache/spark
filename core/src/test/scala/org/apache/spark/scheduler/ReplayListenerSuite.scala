@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
 
-import com.google.common.io.Files
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -39,8 +38,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   private var testDir: File = _
 
   before {
-    testDir = Files.createTempDir()
-    testDir.deleteOnExit()
+    testDir = Utils.createTempDir()
   }
 
   after {
@@ -155,7 +153,8 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * This child listener inherits only the event buffering functionality, but does not actually
    * log the events.
    */
-  private class EventMonster(conf: SparkConf) extends EventLoggingListener("test", conf) {
+  private class EventMonster(conf: SparkConf)
+    extends EventLoggingListener("test", "testdir", conf) {
     logger.close()
   }
 

@@ -143,4 +143,13 @@ object TestJsonData {
       """[{"a":"str_a_2"}, {"b":"str_b_3"}]""" ::
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """[]""" :: Nil)
+
+  val corruptRecords =
+    TestSQLContext.sparkContext.parallelize(
+      """{""" ::
+      """""" ::
+      """{"a":1, b:2}""" ::
+      """{"a":{, b:3}""" ::
+      """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
+      """]""" :: Nil)
 }

@@ -63,4 +63,24 @@ public class JavaTfIdfSuite implements Serializable {
       Assert.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
     }
   }
+
+  @Test
+  public void tfIdfMinimumDocumentFrequency() {
+    // The tests are to check Java compatibility.
+    HashingTF tf = new HashingTF();
+    JavaRDD<ArrayList<String>> documents = sc.parallelize(Lists.newArrayList(
+      Lists.newArrayList("this is a sentence".split(" ")),
+      Lists.newArrayList("this is another sentence".split(" ")),
+      Lists.newArrayList("this is still a sentence".split(" "))), 2);
+    JavaRDD<Vector> termFreqs = tf.transform(documents);
+    termFreqs.collect();
+    IDF idf = new IDF(2);
+    JavaRDD<Vector> tfIdfs = idf.fit(termFreqs).transform(termFreqs);
+    List<Vector> localTfIdfs = tfIdfs.collect();
+    int indexOfThis = tf.indexOf("this");
+    for (Vector v: localTfIdfs) {
+      Assert.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
+    }
+  }
+
 }

@@ -21,6 +21,7 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 
+import org.apache.spark.sql.catalyst.SparkSQLParser
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -37,10 +38,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-private[hive] case class ShellCommand(cmd: String) extends Command
-
-private[hive] case class SourceCommand(filePath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
@@ -126,6 +123,11 @@ private[hive] object HiveQl {
     "TOK_CREATETABLE",
     "TOK_DESCTABLE"
   ) ++ nativeCommands
+
+  protected val hqlParser = {
+    val fallback = new ExtendedHiveQlParser
+    new SparkSQLParser(fallback(_))
+  }
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
@@ -215,40 +217,19 @@ private[hive] object HiveQl {
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
+  def parseSql(sql: String): LogicalPlan = hqlParser(sql)
+
+  /** Creates LogicalPlan for a given HiveQL string. */
+  def createPlan(sql: String) = {
     try {
-      if (sql.trim.toLowerCase.startsWith("set")) {
-        // Split in two parts since we treat the part before the first "="
-        // as key, and the part after as value, which may contain other "=" signs.
-        sql.trim.drop(3).split("=", 2).map(_.trim) match {
-          case Array("") => // "set"
-            SetCommand(None, None)
-          case Array(key) => // "set key"
-            SetCommand(Some(key), None)
-          case Array(key, value) => // "set key=value"
-            SetCommand(Some(key), Some(value))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        sql.trim.drop(12).trim.split(" ").toSeq match {
-          case Seq(tableName) => 
-            CacheCommand(tableName, true)
-          case Seq(tableName, _, select @ _*) => 
-            CacheTableAsSelectCommand(tableName, createPlan(select.mkString(" ").trim))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
-        CacheCommand(sql.trim.drop(14).trim, false)
-      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8).trim)
-      } else if (sql.trim.toLowerCase.startsWith("add file")) {
-        AddFile(sql.trim.drop(9))
-      } else if (sql.trim.toLowerCase.startsWith("dfs")) {
+      val tree = getAst(sql)
+      if (nativeCommands contains tree.getText) {
         NativeCommand(sql)
-      } else if (sql.trim.startsWith("source")) {
-        SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.trim.startsWith("!")) {
-        ShellCommand(sql.drop(1))
       } else {
-        createPlan(sql)
+        nodeToPlan(tree) match {
+          case NativePlaceholder => NativeCommand(sql)
+          case other => other
+        }
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
@@ -257,19 +238,6 @@ private[hive] object HiveQl {
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
         """.stripMargin)
-    }
-  }
-  
-  /** Creates LogicalPlan for a given HiveQL string. */
-  def createPlan(sql: String) = {
-    val tree = getAst(sql)
-    if (nativeCommands contains tree.getText) {
-      NativeCommand(sql)
-    } else {
-      nodeToPlan(tree) match {
-        case NativePlaceholder => NativeCommand(sql)
-        case other => other
-      }
     }
   }
 
@@ -670,7 +638,7 @@ private[hive] object HiveQl {
   def nodeToRelation(node: Node): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
-      Subquery(alias, nodeToPlan(query))
+      Subquery(cleanIdentifier(alias), nodeToPlan(query))
 
     case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
       val Token("TOK_SELECT",
@@ -837,11 +805,6 @@ private[hive] object HiveQl {
           cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
-      if (partitionKeys.values.exists(p => p.isEmpty)) {
-        throw new NotImplementedError(s"Do not support INSERT INTO/OVERWRITE with" +
-          s"dynamic partitioning.")
-      }
-
       InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query, overwrite)
 
     case a: ASTNode =>
@@ -855,7 +818,7 @@ private[hive] object HiveQl {
 
     case Token("TOK_SELEXPR",
            e :: Token(alias, Nil) :: Nil) =>
-      Some(Alias(nodeToExpr(e), alias)())
+      Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None

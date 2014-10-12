@@ -32,8 +32,10 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
 import org.apache.spark._
-import org.apache.spark.util.{SystemClock, Utils}
+import org.apache.spark.util.Utils
 
+import scala.util.Try
+import scala.util.control.NonFatal
 
 private[nio] class ConnectionManager(
     port: Int,
@@ -51,22 +53,29 @@ private[nio] class ConnectionManager(
   class MessageStatus(
       val message: Message,
       val connectionManagerId: ConnectionManagerId,
-      completionHandler: MessageStatus => Unit) {
+      completionHandler: Try[Message] => Unit) {
 
-    /** This is non-None if message has been ack'd */
-    var ackMessage: Option[Message] = None
+    def success(ackMessage: Message) {
+      if (ackMessage == null) {
+        failure(new NullPointerException)
+      }
+      else {
+        completionHandler(scala.util.Success(ackMessage))
+      }
+    }
 
-    def markDone(ackMessage: Option[Message]) {
-      this.ackMessage = ackMessage
-      completionHandler(this)
+    def failWithoutAck() {
+      completionHandler(scala.util.Failure(new IOException("Failed without being ACK'd")))
+    }
+
+    def failure(e: Throwable) {
+      completionHandler(scala.util.Failure(e))
     }
   }
 
   private val selector = SelectorProvider.provider.openSelector()
   private val ackTimeoutMonitor = new Timer("AckTimeoutMonitor", true)
 
-  // default to 30 second timeout waiting for authentication
-  private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
   private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
@@ -74,14 +83,32 @@ private[nio] class ConnectionManager(
     conf.getInt("spark.core.connection.handler.threads.max", 60),
     conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-message-executor"))
+    Utils.namedThreadFactory("handle-message-executor")) {
+
+    override def afterExecute(r: Runnable, t: Throwable): Unit = {
+      super.afterExecute(r, t)
+      if (t != null && NonFatal(t)) {
+        logError("Error in handleMessageExecutor is not handled properly", t)
+      }
+    }
+
+  }
 
   private val handleReadWriteExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.io.threads.min", 4),
     conf.getInt("spark.core.connection.io.threads.max", 32),
     conf.getInt("spark.core.connection.io.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-read-write-executor"))
+    Utils.namedThreadFactory("handle-read-write-executor")) {
+
+    override def afterExecute(r: Runnable, t: Throwable): Unit = {
+      super.afterExecute(r, t)
+      if (t != null && NonFatal(t)) {
+        logError("Error in handleReadWriteExecutor is not handled properly", t)
+      }
+    }
+
+  }
 
   // Use a different, yet smaller, thread pool - infrequently used with very short lived tasks :
   // which should be executed asap
@@ -155,16 +182,23 @@ private[nio] class ConnectionManager(
     }
     handleReadWriteExecutor.execute(new Runnable {
       override def run() {
-        var register: Boolean = false
         try {
-          register = conn.write()
-        } finally {
-          writeRunnableStarted.synchronized {
-            writeRunnableStarted -= key
-            val needReregister = register || conn.resetForceReregister()
-            if (needReregister && conn.changeInterestForWrite()) {
-              conn.registerInterest()
+          var register: Boolean = false
+          try {
+            register = conn.write()
+          } finally {
+            writeRunnableStarted.synchronized {
+              writeRunnableStarted -= key
+              val needReregister = register || conn.resetForceReregister()
+              if (needReregister && conn.changeInterestForWrite()) {
+                conn.registerInterest()
+              }
             }
+          }
+        } catch {
+          case NonFatal(e) => {
+            logError("Error when writing to " + conn.getRemoteConnectionManagerId(), e)
+            conn.callOnExceptionCallbacks(e)
           }
         }
       }
@@ -189,15 +223,22 @@ private[nio] class ConnectionManager(
     }
     handleReadWriteExecutor.execute(new Runnable {
       override def run() {
-        var register: Boolean = false
         try {
-          register = conn.read()
-        } finally {
-          readRunnableStarted.synchronized {
-            readRunnableStarted -= key
-            if (register && conn.changeInterestForRead()) {
-              conn.registerInterest()
+          var register: Boolean = false
+          try {
+            register = conn.read()
+          } finally {
+            readRunnableStarted.synchronized {
+              readRunnableStarted -= key
+              if (register && conn.changeInterestForRead()) {
+                conn.registerInterest()
+              }
             }
+          }
+        } catch {
+          case NonFatal(e) => {
+            logError("Error when reading from " + conn.getRemoteConnectionManagerId(), e)
+            conn.callOnExceptionCallbacks(e)
           }
         }
       }
@@ -215,19 +256,25 @@ private[nio] class ConnectionManager(
 
     handleConnectExecutor.execute(new Runnable {
       override def run() {
+        try {
+          var tries: Int = 10
+          while (tries >= 0) {
+            if (conn.finishConnect(false)) return
+            // Sleep ?
+            Thread.sleep(1)
+            tries -= 1
+          }
 
-        var tries: Int = 10
-        while (tries >= 0) {
-          if (conn.finishConnect(false)) return
-          // Sleep ?
-          Thread.sleep(1)
-          tries -= 1
+          // fallback to previous behavior : we should not really come here since this method was
+          // triggered since channel became connectable : but at times, the first finishConnect need
+          // not succeed : hence the loop to retry a few 'times'.
+          conn.finishConnect(true)
+        } catch {
+          case NonFatal(e) => {
+            logError("Error when finishConnect for " + conn.getRemoteConnectionManagerId(), e)
+            conn.callOnExceptionCallbacks(e)
+          }
         }
-
-        // fallback to previous behavior : we should not really come here since this method was
-        // triggered since channel became connectable : but at times, the first finishConnect need
-        // not succeed : hence the loop to retry a few 'times'.
-        conn.finishConnect(true)
       }
     } )
   }
@@ -248,16 +295,16 @@ private[nio] class ConnectionManager(
     handleConnectExecutor.execute(new Runnable {
       override def run() {
         try {
-          conn.callOnExceptionCallback(e)
+          conn.callOnExceptionCallbacks(e)
         } catch {
           // ignore exceptions
-          case e: Exception => logDebug("Ignoring exception", e)
+          case NonFatal(e) => logDebug("Ignoring exception", e)
         }
         try {
           conn.close()
         } catch {
           // ignore exceptions
-          case e: Exception => logDebug("Ignoring exception", e)
+          case NonFatal(e) => logDebug("Ignoring exception", e)
         }
       }
     })
@@ -409,7 +456,8 @@ private[nio] class ConnectionManager(
     while (newChannel != null) {
       try {
         val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
-        val newConnection = new ReceivingConnection(newChannel, selector, newConnectionId)
+        val newConnection = new ReceivingConnection(newChannel, selector, newConnectionId,
+          securityManager)
         newConnection.onReceive(receiveMessage)
         addListeners(newConnection)
         addConnection(newConnection)
@@ -449,7 +497,7 @@ private[nio] class ConnectionManager(
             messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
               .foreach(status => {
                 logInfo("Notifying " + status)
-                status.markDone(None)
+                status.failWithoutAck()
               })
 
             messageStatuses.retain((i, status) => {
@@ -478,7 +526,7 @@ private[nio] class ConnectionManager(
             for (s <- messageStatuses.values
                  if s.connectionManagerId == sendingConnectionManagerId) {
               logInfo("Notifying " + s)
-              s.markDone(None)
+              s.failWithoutAck()
             }
 
             messageStatuses.retain((i, status) => {
@@ -493,7 +541,7 @@ private[nio] class ConnectionManager(
     }
   }
 
-  def handleConnectionError(connection: Connection, e: Exception) {
+  def handleConnectionError(connection: Connection, e: Throwable) {
     logInfo("Handling connection error on connection to " +
       connection.getRemoteConnectionManagerId())
     removeConnection(connection)
@@ -511,9 +559,17 @@ private[nio] class ConnectionManager(
     val runnable = new Runnable() {
       val creationTime = System.currentTimeMillis
       def run() {
-        logDebug("Handler thread delay is " + (System.currentTimeMillis - creationTime) + " ms")
-        handleMessage(connectionManagerId, message, connection)
-        logDebug("Handling delay is " + (System.currentTimeMillis - creationTime) + " ms")
+        try {
+          logDebug("Handler thread delay is " + (System.currentTimeMillis - creationTime) + " ms")
+          handleMessage(connectionManagerId, message, connection)
+          logDebug("Handling delay is " + (System.currentTimeMillis - creationTime) + " ms")
+        } catch {
+          case NonFatal(e) => {
+            logError("Error when handling messages from " +
+              connection.getRemoteConnectionManagerId(), e)
+            connection.callOnExceptionCallbacks(e)
+          }
+        }
       }
     }
     handleMessageExecutor.execute(runnable)
@@ -527,9 +583,8 @@ private[nio] class ConnectionManager(
     if (waitingConn.isSaslComplete()) {
       logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
       connectionsAwaitingSasl -= waitingConn.connectionId
-      waitingConn.getAuthenticated().synchronized {
-        waitingConn.getAuthenticated().notifyAll()
-      }
+      waitingConn.registerAfterAuth()
+      wakeupSelector()
       return
     } else {
       var replyToken : Array[Byte] = null
@@ -538,9 +593,8 @@ private[nio] class ConnectionManager(
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
-          waitingConn.getAuthenticated().synchronized {
-            waitingConn.getAuthenticated().notifyAll()
-          }
+          waitingConn.registerAfterAuth()
+          wakeupSelector()
           return
         }
         val securityMsgResp = SecurityMessage.fromResponse(replyToken,
@@ -574,9 +628,11 @@ private[nio] class ConnectionManager(
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
         if (connection.isSaslComplete()) {
-          logDebug("Server sasl completed: " + connection.connectionId)
+          logDebug("Server sasl completed: " + connection.connectionId +
+            " for: " + connectionId)
         } else {
-          logDebug("Server sasl not completed: " + connection.connectionId)
+          logDebug("Server sasl not completed: " + connection.connectionId +
+            " for: " + connectionId)
         }
         if (replyToken != null) {
           val securityMsgResp = SecurityMessage.fromResponse(replyToken,
@@ -652,7 +708,7 @@ private[nio] class ConnectionManager(
             messageStatuses.get(bufferMessage.ackId) match {
               case Some(status) => {
                 messageStatuses -= bufferMessage.ackId
-                status.markDone(Some(message))
+                status.success(message)
               }
               case None => {
                 /**
@@ -723,7 +779,8 @@ private[nio] class ConnectionManager(
             if (message == null) throw new Exception("Error creating security message")
             connectionsAwaitingSasl += ((conn.connectionId, conn))
             sendSecurityMessage(connManagerId, message)
-            logDebug("adding connectionsAwaitingSasl id: " + conn.connectionId)
+            logDebug("adding connectionsAwaitingSasl id: " + conn.connectionId +
+              " to: " + connManagerId)
           } catch {
             case e: Exception => {
               logError("Error getting first response from the SaslClient.", e)
@@ -744,7 +801,7 @@ private[nio] class ConnectionManager(
       val inetSocketAddress = new InetSocketAddress(connManagerId.host, connManagerId.port)
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
       val newConnection = new SendingConnection(inetSocketAddress, selector, connManagerId,
-        newConnectionId)
+        newConnectionId, securityManager)
       logInfo("creating new sending connection for security! " + newConnectionId )
       registerRequests.enqueue(newConnection)
 
@@ -769,62 +826,53 @@ private[nio] class ConnectionManager(
         connectionManagerId.port)
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
       val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId,
-        newConnectionId)
+        newConnectionId, securityManager)
+      newConnection.onException {
+        case (conn, e) => {
+          logError("Exception while sending message.", e)
+          reportSendingMessageFailure(message.id, e)
+        }
+      }
       logTrace("creating new sending connection: " + newConnectionId)
       registerRequests.enqueue(newConnection)
 
       newConnection
     }
     val connection = connectionsById.getOrElseUpdate(connectionManagerId, startNewConnection())
-    if (authEnabled) {
-      checkSendAuthFirst(connectionManagerId, connection)
-    }
+
     message.senderAddress = id.toSocketAddress()
     logDebug("Before Sending [" + message + "] to [" + connectionManagerId + "]" + " " +
       "connectionid: "  + connection.connectionId)
 
     if (authEnabled) {
-      // if we aren't authenticated yet lets block the senders until authentication completes
       try {
-        connection.getAuthenticated().synchronized {
-          val clock = SystemClock
-          val startTime = clock.getTime()
-
-          while (!connection.isSaslComplete()) {
-            logDebug("getAuthenticated wait connectionid: " + connection.connectionId)
-            // have timeout in case remote side never responds
-            connection.getAuthenticated().wait(500)
-            if (((clock.getTime() - startTime) >= (authTimeout * 1000))
-              && (!connection.isSaslComplete())) {
-              // took to long to authenticate the connection, something probably went wrong
-              throw new Exception("Took to long for authentication to " + connectionManagerId +
-                ", waited " + authTimeout + "seconds, failing.")
-            }
-          }
-        }
+        checkSendAuthFirst(connectionManagerId, connection)
       } catch {
-        case e: Exception => logError("Exception while waiting for authentication.", e)
-
-        // need to tell sender it failed
-        messageStatuses.synchronized {
-          val s = messageStatuses.get(message.id)
-          s match {
-            case Some(msgStatus) => {
-              messageStatuses -= message.id
-              logInfo("Notifying " + msgStatus.connectionManagerId)
-              msgStatus.markDone(None)
-            }
-            case None => {
-              logError("no messageStatus for failed message id: " + message.id)
-            }
-          }
+        case NonFatal(e) => {
+          reportSendingMessageFailure(message.id, e)
         }
       }
     }
     logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     connection.send(message)
-
     wakeupSelector()
+  }
+
+  private def reportSendingMessageFailure(messageId: Int, e: Throwable): Unit = {
+    // need to tell sender it failed
+    messageStatuses.synchronized {
+      val s = messageStatuses.get(messageId)
+      s match {
+        case Some(msgStatus) => {
+          messageStatuses -= messageId
+          logInfo("Notifying " + msgStatus.connectionManagerId)
+          msgStatus.failure(e)
+        }
+        case None => {
+          logError("no messageStatus for failed message id: " + messageId)
+        }
+      }
+    }
   }
 
   private def wakeupSelector() {
@@ -845,9 +893,11 @@ private[nio] class ConnectionManager(
       override def run(): Unit = {
         messageStatuses.synchronized {
           messageStatuses.remove(message.id).foreach ( s => {
-            promise.failure(
-              new IOException("sendMessageReliably failed because ack " +
-                s"was not received within $ackTimeout sec"))
+            val e = new IOException("sendMessageReliably failed because ack " +
+              s"was not received within $ackTimeout sec")
+            if (!promise.tryFailure(e)) {
+              logWarning("Ignore error because promise is completed", e)
+            }
           })
         }
       }
@@ -855,15 +905,23 @@ private[nio] class ConnectionManager(
 
     val status = new MessageStatus(message, connectionManagerId, s => {
       timeoutTask.cancel()
-      s.ackMessage match {
-        case None => // Indicates a failure where we either never sent or never got ACK'd
-          promise.failure(new IOException("sendMessageReliably failed without being ACK'd"))
-        case Some(ackMessage) =>
+      s match {
+        case scala.util.Failure(e) =>
+          // Indicates a failure where we either never sent or never got ACK'd
+          if (!promise.tryFailure(e)) {
+            logWarning("Ignore error because promise is completed", e)
+          }
+        case scala.util.Success(ackMessage) =>
           if (ackMessage.hasError) {
-            promise.failure(
-              new IOException("sendMessageReliably failed with ACK that signalled a remote error"))
+            val e = new IOException(
+              "sendMessageReliably failed with ACK that signalled a remote error")
+            if (!promise.tryFailure(e)) {
+              logWarning("Ignore error because promise is completed", e)
+            }
           } else {
-            promise.success(ackMessage)
+            if (!promise.trySuccess(ackMessage)) {
+              logWarning("Drop ackMessage because promise is completed")
+            }
           }
       }
     })

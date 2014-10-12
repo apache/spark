@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{Utils, IntParam, MemoryParam}
-
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
@@ -39,15 +39,17 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var appName: String = "Spark"
   var priority = 0
 
-  // Additional memory to allocate to containers
-  // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt(
-    "spark.yarn.driver.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
-  val executorMemoryOverhead = sparkConf.getInt(
-    "spark.yarn.executor.memoryOverhead", YarnSparkHadoopUtil.DEFAULT_MEMORY_OVERHEAD)
-
   parseArgs(args.toList)
   loadEnvironmentArgs()
+
+  // Additional memory to allocate to containers
+  // For now, use driver's memory overhead as our AM container's memory overhead
+  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead", 
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead", 
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+
   validateArgs()
 
   /** Load any default arguments provided through environment variables and Spark properties. */
@@ -69,16 +71,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
    * This is intended to be called only after the provided arguments have been parsed.
    */
   private def validateArgs(): Unit = {
-    // TODO: memory checks are outdated (SPARK-3476)
-    Map[Boolean, String](
-      (numExecutors <= 0) -> "You must specify at least 1 executor!",
-      (amMemory <= amMemoryOverhead) -> s"AM memory must be > $amMemoryOverhead MB",
-      (executorMemory <= executorMemoryOverhead) ->
-        s"Executor memory must be > $executorMemoryOverhead MB"
-    ).foreach { case (errorCondition, errorMessage) =>
-      if (errorCondition) {
-        throw new IllegalArgumentException(errorMessage + "\n" + getUsageMessage())
-      }
+    if (numExecutors <= 0) {
+      throw new IllegalArgumentException(
+        "You must specify at least 1 executor!\n" + getUsageMessage())
     }
   }
 
