@@ -1,2 +1,3 @@
 recursive-include flux/www/static *
 recursive-include flux/www/templates *
+include requirements.txt
