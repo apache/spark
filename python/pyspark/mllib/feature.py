@@ -44,6 +44,7 @@ class Word2VecModel(object):
         """
         :param word: a word
         :return: vector representation of word
+
         Transforms a word to its vector representation
 
         Note: local use only
@@ -57,6 +58,7 @@ class Word2VecModel(object):
         :param x: a word or a vector representation of word
         :param num: number of synonyms to find
         :return: array of (word, cosineSimilarity)
+
         Find synonyms of a word
 
         Note: local use only
