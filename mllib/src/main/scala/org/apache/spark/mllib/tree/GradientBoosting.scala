@@ -46,11 +46,10 @@ class GradientBoosting (
   def train(input: RDD[LabeledPoint]): GradientBoostingModel = {
     val algo = strategy.algo
     algo match {
-      case Regression => GradientBoosting.regression(input, strategy, boostingStrategy)
+      case Regression => GradientBoosting.boost(input, strategy, boostingStrategy)
       case Classification =>
-        // TODO: Take care of remapping during predict
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoosting.regression(remappedInput, strategy, boostingStrategy)
+        GradientBoosting.boost(remappedInput, strategy, boostingStrategy)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -111,7 +110,7 @@ object GradientBoosting extends Logging {
    * @param boostingStrategy boosting parameters
    * @return
    */
-  private def regression(
+  private def boost(
       input: RDD[LabeledPoint],
       strategy: Strategy,
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {

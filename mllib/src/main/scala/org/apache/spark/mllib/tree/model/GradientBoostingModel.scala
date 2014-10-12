@@ -41,7 +41,12 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], algo: Algo) extends
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
   def predict(features: RDD[Vector]): RDD[Double] = {
-    features.map(x => predict(x))
+    algo match {
+      case Regression => features.map(x => predict(x))
+      case Classification => features.map(predict).map(x => if (x > 0) 1.0 else 0.0)
+      case _ => throw new IllegalArgumentException(
+        s"GradientBoostingModel given unknown algo parameter: $algo.")
+    }
   }
 
   /**
