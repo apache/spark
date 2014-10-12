@@ -26,17 +26,25 @@ import io.netty.handler.codec.MessageToMessageEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.protocol.Message;
+
 /**
  * Encoder used by the server side to encode server-to-client responses.
  * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @ChannelHandler.Sharable
-public final class ServerResponseEncoder extends MessageToMessageEncoder<ServerResponse> {
+public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private final Logger logger = LoggerFactory.getLogger(ServerResponseEncoder.class);
+  private final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
 
+  /***
+   * Encodes a Message by invoking its encode() method. For non-data messages, we will add one
+   * ByteBuf to 'out' containing the total frame length, the message type, and the message itself.
+   * In the case of a ChunkFetchSuccess, we will also add the ManagedBuffer corresponding to the
+   * data to 'out', in order to enable zero-copy transfer.
+   */
   @Override
-  public void encode(ChannelHandlerContext ctx, ServerResponse in, List<Object> out) {
+  public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) {
     Object body = null;
     long bodyLength = 0;
 
@@ -56,7 +64,7 @@ public final class ServerResponseEncoder extends MessageToMessageEncoder<ServerR
       }
     }
 
-    ServerResponse.Type msgType = in.type();
+    Message.Type msgType = in.type();
     // All messages have the frame length, message type, and message itself.
     int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
     long frameLength = headerLength + bodyLength;

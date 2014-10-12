@@ -19,6 +19,7 @@ package org.apache.spark.network.server;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
+import java.util.concurrent.TimeUnit;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -30,8 +31,7 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.protocol.request.ClientRequestDecoder;
-import org.apache.spark.network.protocol.response.ServerResponseEncoder;
+import org.apache.spark.network.SluiceContext;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.SluiceConfig;
@@ -42,18 +42,16 @@ import org.apache.spark.network.util.SluiceConfig;
 public class SluiceServer implements Closeable {
   private final Logger logger = LoggerFactory.getLogger(SluiceServer.class);
 
+  private final SluiceContext context;
   private final SluiceConfig conf;
-  private final StreamManager streamManager;
-  private final RpcHandler rpcHandler;
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port;
 
-  public SluiceServer(SluiceConfig conf, StreamManager streamManager, RpcHandler rpcHandler) {
-    this.conf = conf;
-    this.streamManager = streamManager;
-    this.rpcHandler = rpcHandler;
+  public SluiceServer(SluiceContext context) {
+    this.context = context;
+    this.conf = context.getConf();
 
     init();
   }
@@ -86,16 +84,9 @@ public class SluiceServer implements Closeable {
     }
 
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
-
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {
-        ch.pipeline()
-          .addLast("frameDecoder", NettyUtils.createFrameDecoder())
-          .addLast("clientRequestDecoder", new ClientRequestDecoder())
-          .addLast("serverResponseEncoder", new ServerResponseEncoder())
-          // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
-          // would require more logic to guarantee if this were not part of the same event loop.
-          .addLast("handler", new SluiceServerHandler(streamManager, rpcHandler));
+        context.initializePipeline(ch);
       }
     });
 
@@ -109,7 +100,8 @@ public class SluiceServer implements Closeable {
   @Override
   public void close() {
     if (channelFuture != null) {
-      channelFuture.channel().close().awaitUninterruptibly();
+      // close is a local operation and should finish with milliseconds; timeout just to be safe
+      channelFuture.channel().close().awaitUninterruptibly(10, TimeUnit.SECONDS);
       channelFuture = null;
     }
     if (bootstrap != null && bootstrap.group() != null) {

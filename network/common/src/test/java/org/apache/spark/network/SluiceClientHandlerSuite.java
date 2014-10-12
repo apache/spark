@@ -18,17 +18,17 @@
 package org.apache.spark.network;
 
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.channel.local.LocalChannel;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
-import org.apache.spark.network.client.SluiceClientHandler;
+import org.apache.spark.network.client.SluiceResponseHandler;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.response.ChunkFetchFailure;
 import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
@@ -38,53 +38,45 @@ public class SluiceClientHandlerSuite {
   public void handleSuccessfulFetch() {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
 
-    SluiceClientHandler handler = new SluiceClientHandler();
+    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(streamChunkId, callback);
     assertEquals(1, handler.numOutstandingRequests());
 
-    EmbeddedChannel channel = new EmbeddedChannel(handler);
-
-    channel.writeInbound(new ChunkFetchSuccess(streamChunkId, new TestManagedBuffer(123)));
+    handler.handle(new ChunkFetchSuccess(streamChunkId, new TestManagedBuffer(123)));
     verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
     assertEquals(0, handler.numOutstandingRequests());
-    assertFalse(channel.finish());
   }
 
   @Test
   public void handleFailedFetch() {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
-    SluiceClientHandler handler = new SluiceClientHandler();
+    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(streamChunkId, callback);
     assertEquals(1, handler.numOutstandingRequests());
 
-    EmbeddedChannel channel = new EmbeddedChannel(handler);
-    channel.writeInbound(new ChunkFetchFailure(streamChunkId, "some error msg"));
+    handler.handle(new ChunkFetchFailure(streamChunkId, "some error msg"));
     verify(callback, times(1)).onFailure(eq(0), (Throwable) any());
     assertEquals(0, handler.numOutstandingRequests());
-    assertFalse(channel.finish());
   }
 
   @Test
   public void clearAllOutstandingRequests() {
-    SluiceClientHandler handler = new SluiceClientHandler();
+    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(new StreamChunkId(1, 0), callback);
     handler.addFetchRequest(new StreamChunkId(1, 1), callback);
     handler.addFetchRequest(new StreamChunkId(1, 2), callback);
     assertEquals(3, handler.numOutstandingRequests());
 
-    EmbeddedChannel channel = new EmbeddedChannel(handler);
-
-    channel.writeInbound(new ChunkFetchSuccess(new StreamChunkId(1, 0), new TestManagedBuffer(12)));
-    channel.pipeline().fireExceptionCaught(new Exception("duh duh duhhhh"));
+    handler.handle(new ChunkFetchSuccess(new StreamChunkId(1, 0), new TestManagedBuffer(12)));
+    handler.exceptionCaught(new Exception("duh duh duhhhh"));
 
     // should fail both b2 and b3
     verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
     verify(callback, times(1)).onFailure(eq(1), (Throwable) any());
     verify(callback, times(1)).onFailure(eq(2), (Throwable) any());
     assertEquals(0, handler.numOutstandingRequests());
-    assertFalse(channel.finish());
   }
 }

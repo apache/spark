@@ -18,14 +18,14 @@
 package org.apache.spark.network
 
 import java.io.Closeable
-
-import org.apache.spark.network.buffer.ManagedBuffer
+import java.nio.ByteBuffer
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.Logging
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.network.buffer.{NioManagedBuffer, ManagedBuffer}
+import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -72,7 +72,7 @@ abstract class BlockTransferService extends Closeable with Logging {
   def uploadBlock(
       hostname: String,
       port: Int,
-      blockId: String,
+      blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel): Future[Unit]
 
@@ -94,7 +94,10 @@ abstract class BlockTransferService extends Closeable with Logging {
       }
       override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
         lock.synchronized {
-          result = Left(data)
+          val ret = ByteBuffer.allocate(data.size.toInt)
+          ret.put(data.nioByteBuffer())
+          ret.flip()
+          result = Left(new NioManagedBuffer(ret))
           lock.notify()
         }
       }
@@ -126,7 +129,7 @@ abstract class BlockTransferService extends Closeable with Logging {
   def uploadBlockSync(
       hostname: String,
       port: Int,
-      blockId: String,
+      blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel): Unit = {
     Await.result(uploadBlock(hostname, port, blockId, blockData, level), Duration.Inf)

@@ -17,11 +17,12 @@
 
 package org.apache.spark.network.protocol.response;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 /** Response to {@link org.apache.spark.network.protocol.request.RpcRequest} for a failed RPC. */
-public final class RpcFailure implements ServerResponse {
+public final class RpcFailure implements ResponseMessage {
   public final long tag;
   public final String errorString;
 
@@ -35,13 +36,13 @@ public final class RpcFailure implements ServerResponse {
 
   @Override
   public int encodedLength() {
-    return 8 + 4 + errorString.getBytes().length;
+    return 8 + 4 + errorString.getBytes(Charsets.UTF_8).length;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(tag);
-    byte[] errorBytes = errorString.getBytes();
+    byte[] errorBytes = errorString.getBytes(Charsets.UTF_8);
     buf.writeInt(errorBytes.length);
     buf.writeBytes(errorBytes);
   }

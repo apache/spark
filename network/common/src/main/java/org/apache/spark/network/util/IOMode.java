@@ -19,7 +19,7 @@ package org.apache.spark.network.util;
 
 /**
  * Selector for which form of low-level IO we should use.
- * NIO is always available, while EPOLL is only available on certain machines.
+ * NIO is always available, while EPOLL is only available on Linux.
  * AUTO is used to select EPOLL if it's available, or NIO otherwise.
  */
 public enum IOMode {

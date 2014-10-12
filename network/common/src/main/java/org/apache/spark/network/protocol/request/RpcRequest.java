@@ -24,10 +24,10 @@ import io.netty.buffer.ByteBuf;
 
 /**
  * A generic RPC which is handled by a remote {@link org.apache.spark.network.server.RpcHandler}.
- * This will correspond to a single {@link org.apache.spark.network.protocol.response.ServerResponse}
- * (either success or failure).
+ * This will correspond to a single
+ * {@link org.apache.spark.network.protocol.response.ResponseMessage} (either success or failure).
  */
-public final class RpcRequest implements ClientRequest {
+public final class RpcRequest implements RequestMessage {
   /** Tag is used to link an RPC request with its response. */
   public final long tag;
 

@@ -17,37 +17,43 @@
 
 package org.apache.spark.network.client;
 
-import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.protocol.response.ResponseMessage;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.response.ChunkFetchFailure;
 import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.response.RpcFailure;
 import org.apache.spark.network.protocol.response.RpcResponse;
-import org.apache.spark.network.protocol.response.ServerResponse;
+import org.apache.spark.network.server.MessageHandler;
+import org.apache.spark.network.util.NettyUtils;
 
 /**
- * Handler that processes server responses, in response to requests issued from [[SluiceClient]].
+ * Handler that processes server responses, in response to requests issued from a [[SluiceClient]].
  * It works by tracking the list of outstanding requests (and their callbacks).
  *
  * Concurrency: thread safe and can be called from multiple threads.
  */
-public class SluiceClientHandler extends SimpleChannelInboundHandler<ServerResponse> {
-  private final Logger logger = LoggerFactory.getLogger(SluiceClientHandler.class);
+public class SluiceResponseHandler extends MessageHandler<ResponseMessage> {
+  private final Logger logger = LoggerFactory.getLogger(SluiceResponseHandler.class);
 
-  private final Map<StreamChunkId, ChunkReceivedCallback> outstandingFetches =
-      new ConcurrentHashMap<StreamChunkId, ChunkReceivedCallback>();
+  private final Channel channel;
 
-  private final Map<Long, RpcResponseCallback> outstandingRpcs =
-      new ConcurrentHashMap<Long, RpcResponseCallback>();
+  private final Map<StreamChunkId, ChunkReceivedCallback> outstandingFetches;
+
+  private final Map<Long, RpcResponseCallback> outstandingRpcs;
+
+  public SluiceResponseHandler(Channel channel) {
+    this.channel = channel;
+    this.outstandingFetches = new ConcurrentHashMap<StreamChunkId, ChunkReceivedCallback>();
+    this.outstandingRpcs = new ConcurrentHashMap<Long, RpcResponseCallback>();
+  }
 
   public void addFetchRequest(StreamChunkId streamChunkId, ChunkReceivedCallback callback) {
     outstandingFetches.put(streamChunkId, callback);
@@ -73,41 +79,36 @@ public class SluiceClientHandler extends SimpleChannelInboundHandler<ServerRespo
     for (Map.Entry<StreamChunkId, ChunkReceivedCallback> entry : outstandingFetches.entrySet()) {
       entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
     }
-    // TODO(rxin): Maybe we need to synchronize the access? Otherwise we could clear new requests
-    // as well. But I guess that is ok given the caller will fail as soon as any requests fail.
+    // It's OK if new fetches appear, as they will fail immediately.
     outstandingFetches.clear();
   }
 
   @Override
-  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+  public void channelUnregistered() {
     if (outstandingFetches.size() > 0) {
-      SocketAddress remoteAddress = ctx.channel().remoteAddress();
+      String remoteAddress = NettyUtils.getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when contention from {} is closed",
         outstandingFetches.size(), remoteAddress);
       failOutstandingRequests(new RuntimeException("Connection from " + remoteAddress + " closed"));
     }
-    super.channelUnregistered(ctx);
   }
 
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+  public void exceptionCaught(Throwable cause) {
     if (outstandingFetches.size() > 0) {
-      logger.error(String.format("Exception in connection from %s: %s",
-        ctx.channel().remoteAddress(), cause.getMessage()), cause);
       failOutstandingRequests(cause);
     }
-    ctx.close();
   }
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, ServerResponse message) {
-    String server = ctx.channel().remoteAddress().toString();
+  public void handle(ResponseMessage message) {
+    String remoteAddress = NettyUtils.getRemoteAddress(channel);
     if (message instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) message;
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Got a response for block {} from {} but it is not outstanding",
-          resp.streamChunkId, server);
+          resp.streamChunkId, remoteAddress);
         resp.buffer.release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
@@ -119,7 +120,7 @@ public class SluiceClientHandler extends SimpleChannelInboundHandler<ServerRespo
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Got a response for block {} from {} ({}) but it is not outstanding",
-          resp.streamChunkId, server, resp.errorString);
+          resp.streamChunkId, remoteAddress, resp.errorString);
       } else {
         outstandingFetches.remove(resp.streamChunkId);
         listener.onFailure(resp.streamChunkId.chunkIndex,
@@ -130,7 +131,7 @@ public class SluiceClientHandler extends SimpleChannelInboundHandler<ServerRespo
       RpcResponseCallback listener = outstandingRpcs.get(resp.tag);
       if (listener == null) {
         logger.warn("Got a response for RPC {} from {} ({} bytes) but it is not outstanding",
-          resp.tag, server, resp.response.length);
+          resp.tag, remoteAddress, resp.response.length);
       } else {
         outstandingRpcs.remove(resp.tag);
         listener.onSuccess(resp.response);
@@ -140,11 +141,13 @@ public class SluiceClientHandler extends SimpleChannelInboundHandler<ServerRespo
       RpcResponseCallback listener = outstandingRpcs.get(resp.tag);
       if (listener == null) {
         logger.warn("Got a response for RPC {} from {} ({}) but it is not outstanding",
-          resp.tag, server, resp.errorString);
+          resp.tag, remoteAddress, resp.errorString);
       } else {
         outstandingRpcs.remove(resp.tag);
         listener.onFailure(new RuntimeException(resp.errorString));
       }
+    } else {
+      throw new IllegalStateException("Unknown response type: " + message.type());
     }
   }
 

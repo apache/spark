@@ -20,9 +20,10 @@ package org.apache.spark.network.netty
 import java.nio.ByteBuffer
 import java.util
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.network.BlockFetchingListener
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.network.netty.NettyMessages._
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, ChunkReceivedCallback, SluiceClient}
 import org.apache.spark.storage.BlockId
@@ -52,7 +53,6 @@ class NettyBlockFetcher(
   val chunkCallback = new ChunkReceivedCallback {
     // On receipt of a chunk, pass it upwards as a block.
     def onSuccess(chunkIndex: Int, buffer: ManagedBuffer): Unit = Utils.logUncaughtExceptions {
-      buffer.retain()
       listener.onBlockFetchSuccess(blockIds(chunkIndex), buffer)
     }
 

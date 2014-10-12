@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.util;
+package org.apache.spark.network.server;
 
-import java.io.Closeable;
-import java.io.IOException;
+import org.apache.spark.network.protocol.Message;
 
-import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+/**
+ * Handles either request or response messages coming off of Netty. A MessageHandler instance
+ * is associated with a single Netty Channel (though it may have multiple clients on the same
+ * Channel.)
+ */
+public abstract class MessageHandler<T extends Message> {
+  /** Handles the receipt of a single message. */
+  public abstract void handle(T message);
 
-public class JavaUtils {
-  private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
+  /** Invoked when an exception was caught on the Channel. */
+  public abstract void exceptionCaught(Throwable cause);
 
-  /** Closes the given object, ignoring IOExceptions. */
-  public static void closeQuietly(Closeable closeable) {
-    try {
-      closeable.close();
-    } catch (IOException e) {
-      logger.error("IOException should not have been thrown.", e);
-    }
-  }
+  /** Invoked when the channel this MessageHandler is on has been unregistered. */
+  public abstract void channelUnregistered();
 }

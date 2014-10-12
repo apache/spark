@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.protocol.response;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
@@ -26,7 +27,7 @@ import org.apache.spark.network.protocol.StreamChunkId;
  * Response to {@link org.apache.spark.network.protocol.request.ChunkFetchRequest} when there is an
  * error fetching the chunk.
  */
-public final class ChunkFetchFailure implements ServerResponse {
+public final class ChunkFetchFailure implements ResponseMessage {
   public final StreamChunkId streamChunkId;
   public final String errorString;
 
@@ -40,13 +41,13 @@ public final class ChunkFetchFailure implements ServerResponse {
 
   @Override
   public int encodedLength() {
-    return streamChunkId.encodedLength() + 4 + errorString.getBytes().length;
+    return streamChunkId.encodedLength() + 4 + errorString.getBytes(Charsets.UTF_8).length;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
-    byte[] errorBytes = errorString.getBytes();
+    byte[] errorBytes = errorString.getBytes(Charsets.UTF_8);
     buf.writeInt(errorBytes.length);
     buf.writeBytes(errorBytes);
   }

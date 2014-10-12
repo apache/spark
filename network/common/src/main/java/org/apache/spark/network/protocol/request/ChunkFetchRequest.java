@@ -24,9 +24,9 @@ import org.apache.spark.network.protocol.StreamChunkId;
 
 /**
  * Request to fetch a sequence of a single chunk of a stream. This will correspond to a single
- * {@link org.apache.spark.network.protocol.response.ServerResponse} (either success or failure).
+ * {@link org.apache.spark.network.protocol.response.ResponseMessage} (either success or failure).
  */
-public final class ChunkFetchRequest implements ClientRequest {
+public final class ChunkFetchRequest implements RequestMessage {
   public final StreamChunkId streamChunkId;
 
   public ChunkFetchRequest(StreamChunkId streamChunkId) {

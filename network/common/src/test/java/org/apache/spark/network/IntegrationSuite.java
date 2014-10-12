@@ -94,8 +94,9 @@ public class IntegrationSuite {
         }
       }
     };
-    server = new SluiceServer(conf, streamManager, new NoOpRpcHandler());
-    clientFactory = new SluiceClientFactory(conf);
+    SluiceContext context = new SluiceContext(conf, streamManager, new NoOpRpcHandler());
+    server = context.createServer();
+    clientFactory = context.createClientFactory();
   }
 
   @AfterClass
@@ -118,6 +119,7 @@ public class IntegrationSuite {
   }
 
   private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
+    System.out.println("----------------------------------------------------------------");
     SluiceClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
 
@@ -171,20 +173,20 @@ public class IntegrationSuite {
   }
 
   @Test
+  public void fetchNonExistentChunk() throws Exception {
+    FetchResult res = fetchChunks(Lists.newArrayList(12345));
+    assertTrue(res.successChunks.isEmpty());
+    assertEquals(res.failedChunks, Sets.newHashSet(12345));
+    assertTrue(res.buffers.isEmpty());
+  }
+
+  @Test
   public void fetchBothChunks() throws Exception {
     FetchResult res = fetchChunks(Lists.newArrayList(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
     assertEquals(res.successChunks, Sets.newHashSet(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(res.buffers, Lists.newArrayList(bufferChunk, fileChunk));
     res.releaseBuffers();
-  }
-
-  @Test
-  public void fetchNonExistentChunk() throws Exception {
-    FetchResult res = fetchChunks(Lists.newArrayList(12345));
-    assertTrue(res.successChunks.isEmpty());
-    assertEquals(res.failedChunks, Sets.newHashSet(12345));
-    assertTrue(res.buffers.isEmpty());
   }
 
   @Test

@@ -22,25 +22,22 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
+import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.request.ChunkFetchRequest;
-import org.apache.spark.network.protocol.request.ClientRequest;
-import org.apache.spark.network.protocol.request.ClientRequestDecoder;
-import org.apache.spark.network.protocol.request.ClientRequestEncoder;
 import org.apache.spark.network.protocol.response.ChunkFetchFailure;
 import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.response.ServerResponse;
-import org.apache.spark.network.protocol.response.ServerResponseDecoder;
-import org.apache.spark.network.protocol.response.ServerResponseEncoder;
+import org.apache.spark.network.protocol.response.MessageDecoder;
+import org.apache.spark.network.protocol.response.MessageEncoder;
 import org.apache.spark.network.util.NettyUtils;
 
 public class ProtocolSuite {
-  private void testServerToClient(ServerResponse msg) {
-    EmbeddedChannel serverChannel = new EmbeddedChannel(new ServerResponseEncoder());
+  private void testServerToClient(Message msg) {
+    EmbeddedChannel serverChannel = new EmbeddedChannel(new MessageEncoder());
     serverChannel.writeOutbound(msg);
 
     EmbeddedChannel clientChannel = new EmbeddedChannel(
-        NettyUtils.createFrameDecoder(), new ServerResponseDecoder());
+        NettyUtils.createFrameDecoder(), new MessageDecoder());
 
     while (!serverChannel.outboundMessages().isEmpty()) {
       clientChannel.writeInbound(serverChannel.readOutbound());
@@ -50,12 +47,12 @@ public class ProtocolSuite {
     assertEquals(msg, clientChannel.readInbound());
   }
 
-  private void testClientToServer(ClientRequest msg) {
-    EmbeddedChannel clientChannel = new EmbeddedChannel(new ClientRequestEncoder());
+  private void testClientToServer(Message msg) {
+    EmbeddedChannel clientChannel = new EmbeddedChannel(new MessageEncoder());
     clientChannel.writeOutbound(msg);
 
     EmbeddedChannel serverChannel = new EmbeddedChannel(
-        NettyUtils.createFrameDecoder(), new ClientRequestDecoder());
+        NettyUtils.createFrameDecoder(), new MessageDecoder());
 
     while (!clientChannel.outboundMessages().isEmpty()) {
       serverChannel.writeInbound(clientChannel.readOutbound());

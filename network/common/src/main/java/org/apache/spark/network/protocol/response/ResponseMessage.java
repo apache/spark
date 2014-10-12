@@ -15,24 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.util;
+package org.apache.spark.network.protocol.response;
 
-import java.io.Closeable;
-import java.io.IOException;
+import org.apache.spark.network.protocol.Message;
 
-import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-public class JavaUtils {
-  private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
-
-  /** Closes the given object, ignoring IOExceptions. */
-  public static void closeQuietly(Closeable closeable) {
-    try {
-      closeable.close();
-    } catch (IOException e) {
-      logger.error("IOException should not have been thrown.", e);
-    }
-  }
+/** Messages from the server to the client. */
+public interface ResponseMessage extends Message {
+  // token interface
 }

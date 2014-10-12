@@ -23,7 +23,7 @@ import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 /** Response to {@link org.apache.spark.network.protocol.request.RpcRequest} for a successful RPC. */
-public final class RpcResponse implements ServerResponse {
+public final class RpcResponse implements ResponseMessage {
   public final long tag;
   public final byte[] response;
 

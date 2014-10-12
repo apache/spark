@@ -23,6 +23,9 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
@@ -30,6 +33,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  * fetched as chunks by the client.
  */
 public class DefaultStreamManager extends StreamManager {
+  private final Logger logger = LoggerFactory.getLogger(DefaultStreamManager.class);
+
   private final AtomicLong nextStreamId;
   private final Map<Long, StreamState> streams;
 
@@ -61,7 +66,14 @@ public class DefaultStreamManager extends StreamManager {
         "Requested chunk index beyond end %s", chunkIndex));
     }
     state.curChunk += 1;
-    return state.buffers.next();
+    ManagedBuffer nextChunk = state.buffers.next();
+
+    if (!state.buffers.hasNext()) {
+      logger.trace("Removing stream id {}", streamId);
+      streams.remove(streamId);
+    }
+
+    return nextChunk;
   }
 
   @Override

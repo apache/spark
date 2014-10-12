@@ -18,6 +18,7 @@
 package org.apache.spark.network.server;
 
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.SluiceClient;
 
 /**
  * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.SluiceClient}s.
@@ -26,6 +27,12 @@ public interface RpcHandler {
   /**
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
    * the client in string form as a standard RPC failure.
+   *
+   * @param client A channel client which enables the handler to make requests back to the sender
+   *               of this RPC.
+   * @param message The serialized bytes of the RPC.
+   * @param callback Callback which should be invoked exactly once upon success or failure of the
+   *                 RPC.
    */
-  void receive(byte[] message, RpcResponseCallback callback);
+  void receive(SluiceClient client, byte[] message, RpcResponseCallback callback);
 }

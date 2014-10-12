@@ -44,11 +44,11 @@ public class NettyUtils {
     }
 
     ThreadFactory threadFactory = new ThreadFactoryBuilder()
-        .setDaemon(true)
-        .setNameFormat(threadPrefix + "-%d")
-        .build();
+      .setDaemon(true)
+      .setNameFormat(threadPrefix + "-%d")
+      .build();
 
-    switch(mode) {
+    switch (mode) {
       case NIO:
         return new NioEventLoopGroup(numThreads, threadFactory);
       case EPOLL:
@@ -63,7 +63,7 @@ public class NettyUtils {
     if (mode == IOMode.AUTO) {
       mode = autoselectMode();
     }
-    switch(mode) {
+    switch (mode) {
       case NIO:
         return NioSocketChannel.class;
       case EPOLL:
@@ -78,7 +78,7 @@ public class NettyUtils {
     if (mode == IOMode.AUTO) {
       mode = autoselectMode();
     }
-    switch(mode) {
+    switch (mode) {
       case NIO:
         return NioServerSocketChannel.class;
       case EPOLL:
@@ -101,9 +101,16 @@ public class NettyUtils {
     return new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 8, -8, 8);
   }
 
+  /** Returns the remote address on the channel or "<remote address>" if none exists. */
+  public static String getRemoteAddress(Channel channel) {
+    if (channel != null && channel.remoteAddress() != null) {
+      return channel.remoteAddress().toString();
+    }
+    return "<unknown remote>";
+  }
+
   /** Returns EPOLL if it's available on this system, NIO otherwise. */
   private static IOMode autoselectMode() {
     return Epoll.isAvailable() ? IOMode.EPOLL : IOMode.NIO;
   }
 }
-

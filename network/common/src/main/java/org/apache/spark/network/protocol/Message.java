@@ -15,31 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
+package org.apache.spark.network.protocol;
 
 import io.netty.buffer.ByteBuf;
 
-import org.apache.spark.network.protocol.Encodable;
-
-/**
- * Messages from server to client (usually in response to some
- * {@link org.apache.spark.network.protocol.request.ClientRequest}.
- */
-public interface ServerResponse extends Encodable {
-  /** Used to identify this response type. */
+/** Messages from the client to the server. */
+public interface Message extends Encodable {
+  /** Used to identify this request type. */
   Type type();
 
-  /**
-   * Preceding every serialized ServerResponse is the type, which allows us to deserialize
-   * the response.
-   */
+  /** Preceding every serialized Message is its type, which allows us to deserialize it. */
   public static enum Type implements Encodable {
-    ChunkFetchSuccess(0), ChunkFetchFailure(1), RpcResponse(2), RpcFailure(3);
+    ChunkFetchRequest(0), ChunkFetchSuccess(1), ChunkFetchFailure(2),
+    RpcRequest(3), RpcResponse(4), RpcFailure(5);
 
     private final byte id;
 
     private Type(int id) {
-      assert id < 128 : "Cannot have more than 128 response types";
+      assert id < 128 : "Cannot have more than 128 message types";
       this.id = (byte) id;
     }
 
@@ -51,12 +44,14 @@ public interface ServerResponse extends Encodable {
 
     public static Type decode(ByteBuf buf) {
       byte id = buf.readByte();
-      switch(id) {
-        case 0: return ChunkFetchSuccess;
-        case 1: return ChunkFetchFailure;
-        case 2: return RpcResponse;
-        case 3: return RpcFailure;
-        default: throw new IllegalArgumentException("Unknown response type: " + id);
+      switch (id) {
+        case 0: return ChunkFetchRequest;
+        case 1: return ChunkFetchSuccess;
+        case 2: return ChunkFetchFailure;
+        case 3: return RpcRequest;
+        case 4: return RpcResponse;
+        case 5: return RpcFailure;
+        default: throw new IllegalArgumentException("Unknown message type: " + id);
       }
     }
   }

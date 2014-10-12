@@ -38,6 +38,7 @@ import org.apache.spark.network.util.SluiceConfig;
 
 public class SluiceClientFactorySuite {
   private SluiceConfig conf;
+  private SluiceContext context;
   private SluiceServer server1;
   private SluiceServer server2;
 
@@ -46,8 +47,9 @@ public class SluiceClientFactorySuite {
     conf = new SluiceConfig(new DefaultConfigProvider());
     StreamManager streamManager = new DefaultStreamManager();
     RpcHandler rpcHandler = new NoOpRpcHandler();
-    server1 = new SluiceServer(conf, streamManager, rpcHandler);
-    server2 = new SluiceServer(conf, streamManager, rpcHandler);
+    context = new SluiceContext(conf, streamManager, rpcHandler);
+    server1 = context.createServer();
+    server2 = context.createServer();
   }
 
   @After
@@ -58,7 +60,7 @@ public class SluiceClientFactorySuite {
 
   @Test
   public void createAndReuseBlockClients() throws TimeoutException {
-    SluiceClientFactory factory = new SluiceClientFactory(conf);
+    SluiceClientFactory factory = context.createClientFactory();
     SluiceClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     SluiceClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     SluiceClient c3 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
@@ -71,7 +73,7 @@ public class SluiceClientFactorySuite {
 
   @Test
   public void neverReturnInactiveClients() throws Exception {
-    SluiceClientFactory factory = new SluiceClientFactory(conf);
+    SluiceClientFactory factory = context.createClientFactory();
     SluiceClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     c1.close();
 
@@ -89,7 +91,7 @@ public class SluiceClientFactorySuite {
 
   @Test
   public void closeBlockClientsWithFactory() throws TimeoutException {
-    SluiceClientFactory factory = new SluiceClientFactory(conf);
+    SluiceClientFactory factory = context.createClientFactory();
     SluiceClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     SluiceClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
     assertTrue(c1.isActive());

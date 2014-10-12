@@ -127,12 +127,12 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   override def uploadBlock(
       hostname: String,
       port: Int,
-      blockId: String,
+      blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel)
     : Future[Unit] = {
     checkInit()
-    val msg = PutBlock(BlockId(blockId), blockData.nioByteBuffer(), level)
+    val msg = PutBlock(blockId, blockData.nioByteBuffer(), level)
     val blockMessageArray = new BlockMessageArray(BlockMessage.fromPutBlock(msg))
     val remoteCmId = new ConnectionManagerId(hostName, port)
     val reply = cm.sendMessageReliably(remoteCmId, blockMessageArray.toBufferMessage)

@@ -17,14 +17,14 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayOutputStream, EOFException, InputStream, OutputStream}
+import java.io._
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
 
 /**
  * :: DeveloperApi ::
@@ -141,4 +141,49 @@ abstract class DeserializationStream {
       DeserializationStream.this.close()
     }
   }
+}
+
+
+class NoOpReadSerializer(conf: SparkConf) extends Serializer with Serializable {
+  override def newInstance(): SerializerInstance = {
+    new NoOpReadSerializerInstance()
+  }
+}
+
+private[spark] class NoOpReadSerializerInstance()
+  extends SerializerInstance {
+
+  override def serialize[T: ClassTag](t: T): ByteBuffer = {
+    val bos = new ByteArrayOutputStream()
+    val out = serializeStream(bos)
+    out.writeObject(t)
+    out.close()
+    ByteBuffer.wrap(bos.toByteArray)
+  }
+
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
+    null.asInstanceOf[T]
+  }
+
+  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
+    null.asInstanceOf[T]
+  }
+
+  override def serializeStream(s: OutputStream): SerializationStream = {
+    new JavaSerializationStream(s, 100)
+  }
+
+  override def deserializeStream(s: InputStream): DeserializationStream = {
+    new NoOpDeserializationStream(s, Utils.getContextOrSparkClassLoader)
+  }
+
+  def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {
+    new NoOpDeserializationStream(s, loader)
+  }
+}
+
+private[spark] class NoOpDeserializationStream(in: InputStream, loader: ClassLoader)
+  extends DeserializationStream {
+  def readObject[T: ClassTag](): T = throw new EOFException()
+  def close() { }
 }

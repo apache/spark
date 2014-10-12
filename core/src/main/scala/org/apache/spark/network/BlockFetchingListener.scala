@@ -29,7 +29,9 @@ private[spark]
 trait BlockFetchingListener extends EventListener {
 
   /**
-   * Called once per successfully fetched block.
+   * Called once per successfully fetched block. After this call returns, data will be released
+   * automatically. If the data will be passed to another thread, the receiver should retain()
+   * and release() the buffer on their own, or copy the data to a new buffer.
    */
   def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit
 

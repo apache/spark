@@ -32,7 +32,7 @@ import org.apache.spark.network.protocol.StreamChunkId;
  * may be written by Netty in a more efficient manner (i.e., zero-copy write).
  * Similarly, the client-side decoding will reuse the Netty ByteBuf as the buffer.
  */
-public final class ChunkFetchSuccess implements ServerResponse {
+public final class ChunkFetchSuccess implements ResponseMessage {
   public final StreamChunkId streamChunkId;
   public final ManagedBuffer buffer;
 
@@ -49,7 +49,7 @@ public final class ChunkFetchSuccess implements ServerResponse {
     return streamChunkId.encodedLength();
   }
 
-  /** Encoding does NOT include buffer itself. See {@link ServerResponseEncoder}. */
+  /** Encoding does NOT include buffer itself. See {@link MessageEncoder}. */
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
