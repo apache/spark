@@ -236,8 +236,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(manager) =>
-          // A block manager of the same executor already exists.
-          // This should never happen. Let's just quit.
+          // A block manager of the same executor already exists so remove it (assumed dead).
           logError("Got two different block manager registrations on same executor - will remove, new Id " + id+", orig id - "+manager)
           removeExecutor(id.executorId)
         case None =>
