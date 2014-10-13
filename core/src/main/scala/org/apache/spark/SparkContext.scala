@@ -52,6 +52,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
+import org.apache.spark.autoscale.AutoscaleClient
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -290,7 +291,17 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkContext.SPARK_UNKNOWN_USER
   }
   executorEnvs("SPARK_USER") = sparkUser
-
+  //start Autoscale client
+  private[spark] var autoscaleClient = new AutoscaleClient(env.actorSystem)
+  
+  def addExecutors(count: Int) {
+    autoscaleClient.addExecutors(count)
+  }
+  
+  def deleteExecutors(execIds: List[String]) {
+    autoscaleClient.deleteExecutors(execIds)
+  }
+  
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
