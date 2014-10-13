@@ -913,14 +913,12 @@ object DecisionTree extends Serializable with Logging {
           val numSplits = metadata.numSplits(featureIndex)
           val numBins = metadata.numBins(featureIndex)
           if (metadata.isContinuous(featureIndex)) {
+            val featureSamples = sampledInput.map(lp => lp.features(featureIndex))
+            val featureSplits = findSplitsForContinuousFeature(featureSamples, metadata, featureIndex)
 
-            val featureSamples = sampledInput.map(lp => lp.features(featureIndex)).sorted
-            val featureSplits = findSplits(featureSamples, metadata.numSplits(featureIndex))
             val numSplits = featureSplits.length
+            val numBins = numSplits + 1
             logDebug("numSplits= " + numSplits)
-            metadata.setNumBinForFeature(featureIndex, numSplits + 1)
-            val numBins = metadata.numBins(featureIndex)
-
             splits(featureIndex) = new Array[Split](numSplits)
             bins(featureIndex) = new Array[Bin](numBins)
 
@@ -1017,12 +1015,23 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Find splits for a continuous feature
-   * @param featureSamples
-   * @param numSplits
-   * @return
+   * NOTE: Returned number of splits is set based on `featureSamples` and
+   *       may be different with `numSplits`.
+   *       MetaData's number of splits will be set accordingly.
+   * @param featureSamples feature values of each sample
+   * @param metadata decision tree metadata
+   * @param featureIndex feature index to find splits
+   * @return array of splits
    */
-  private def findSplits(featureSamples: Array[Double], numSplits: Int): Array[Double] = {
-    /*
+  private[tree] def findSplitsForContinuousFeature(
+      featureSamples: Array[Double],
+      metadata: DecisionTreeMetadata,
+      featureIndex: Int): Array[Double] = {
+    require(metadata.isContinuous(featureIndex),
+      s"findSplitsForContinuousFeature can only be used " +
+        s"to find splits for a continuous feature.")
+
+    /**
      * Get count for each distinct value
      */
     def getValueCount(arr: Array[Double]): Array[(Double, Int)] = {
@@ -1040,24 +1049,41 @@ object DecisionTree extends Serializable with Logging {
         }
         index += 1
       }
-      valueCount.append((currentValue, currentCount))
+      // last value is not put into valueCount
+      // because we should not use it as a split threshold
 
       valueCount.toArray
     }
 
-    val valueCount = getValueCount(featureSamples)
+    val numSplits = metadata.numSplits(featureIndex)
+
+    // sort feature samples first
+    val sortedFeatureSamples = featureSamples.sorted
+
+    // get count for each distinct value
+    val valueCount = getValueCount(sortedFeatureSamples)
     if (valueCount.length <= numSplits) {
       return valueCount.map(_._1)
     }
 
+    // stride between splits
     val stride: Double = featureSamples.length.toDouble / (numSplits + 1)
     logDebug("stride = " + stride)
 
+    // iterate `valueCount` to find splits
     val splits = new ArrayBuffer[Double]
     var index = 1
+    // currentCount: sum of counts of values that have been visited
     var currentCount = valueCount(0)._2
+    // expectedCount: expected value for `currentCount`.
+    // If `currentCount` is closest value to `expectedCount`,
+    // then current value is a split threshold.
+    // After finding a split threshold, `expectedCount` is added by stride.
     var expectedCount = stride
     while (index < valueCount.length) {
+      // If adding count of current value to currentCount
+      // makes currentCount less close to expectedCount,
+      // previous value is a split threshold.
       if (math.abs(currentCount - expectedCount) <
         math.abs(currentCount + valueCount(index)._2 - expectedCount)) {
         splits.append(valueCount(index-1)._1)
@@ -1066,6 +1092,9 @@ object DecisionTree extends Serializable with Logging {
       currentCount += valueCount(index)._2
       index += 1
     }
+
+    // set number of splits accordingly
+    metadata.setNumSplits(featureIndex, splits.length)
 
     splits.toArray
   }

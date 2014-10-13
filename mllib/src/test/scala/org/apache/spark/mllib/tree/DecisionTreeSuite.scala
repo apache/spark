@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
-import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.{InformationGainStats, DecisionTreeModel, Node}
@@ -100,6 +100,37 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val l = DecisionTree.extractMultiClassCategories(13, 10)
     assert(l.length === 3)
     assert(List(3.0, 2.0, 0.0).toSeq === l.toSeq)
+  }
+
+  test("find splits for a continuous feature") {
+    // find splits for normal case
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(5), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array.fill(200000)(math.random)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 5)
+      assert(fakeMetadata.numSplits(0) === 5)
+      assert(fakeMetadata.numBins(0) === 6)
+    }
+
+    // find splits should not return identical splits
+    // when there are not enough split candidates, reduce the number of splits in metadata
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 2)
+      assert(fakeMetadata.numSplits(0) === 2)
+      assert(fakeMetadata.numBins(0) === 3)
+    }
   }
 
   test("Multiclass classification with unordered categorical features:" +
