@@ -19,8 +19,8 @@
 
 # Starts the master on the machine this script is executed on.
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 START_TACHYON=false
 

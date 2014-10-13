@@ -22,6 +22,8 @@ import org.apache.spark.sql.test._
 /* Implicits */
 import TestSQLContext._
 
+case class FunctionResult(f1: String, f2: String)
+
 class UDFSuite extends QueryTest {
 
   test("Simple UDF") {
@@ -32,5 +34,15 @@ class UDFSuite extends QueryTest {
   test("TwoArgument UDF") {
     registerFunction("strLenScala", (_: String).length + (_:Int))
     assert(sql("SELECT strLenScala('test', 1)").first().getInt(0) === 5)
+  }
+
+
+  test("struct UDF") {
+    registerFunction("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
+
+    val result=
+      sql("SELECT returnStruct('test', 'test2') as ret")
+        .select("ret.f1".attr).first().getString(0)
+    assert(result == "test")
   }
 }

@@ -103,10 +103,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
  *            and a Server, so for a particular connection is has to determine what to do.
  *            A ConnectionId was added to be able to track connections and is used to
  *            match up incoming messages with connections waiting for authentication.
- *            If its acting as a client and trying to send a message to another ConnectionManager,
- *            it blocks the thread calling sendMessage until the SASL negotiation has occurred.
  *            The ConnectionManager tracks all the sendingConnections using the ConnectionId
- *            and waits for the response from the server and does the handshake.
+ *            and waits for the response from the server and does the handshake before sending
+ *            the real message.
  *
  *  - HTTP for the Spark UI -> the UI was changed to use servlets so that javax servlet filters
  *            can be used. Yarn requires a specific AmIpFilter be installed for security to work
@@ -162,7 +161,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
 
   // always add the current user and SPARK_USER to the viewAcls
   private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
-    Option(System.getenv("SPARK_USER")).getOrElse(""))
+    Option(System.getenv("SPARK_USER")).getOrElse("")).filter(!_.isEmpty)
 
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
@@ -294,7 +293,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    if (aclsEnabled() && (user != null) && (!viewAcls.contains(user))) false else true
+    !aclsEnabled || user == null || viewAcls.contains(user)
   }
 
   /**
@@ -309,7 +308,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    if (aclsEnabled() && (user != null) && (!modifyAcls.contains(user))) false else true
+    !aclsEnabled || user == null || modifyAcls.contains(user)
   }
 
 

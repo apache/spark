@@ -23,6 +23,7 @@ import java.io.EOFException
 
 import scala.collection.immutable.Map
 import scala.reflect.ClassTag
+import scala.collection.mutable.ListBuffer
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapred.FileSplit
@@ -42,7 +43,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.NextIterator
+import org.apache.spark.util.{NextIterator, Utils}
+import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
+
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -193,7 +196,7 @@ class HadoopRDD[K, V](
       val jobConf = getJobConf()
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
-        context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
+        context.getStageId, theSplit.index, context.getAttemptId.toInt, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.
@@ -228,7 +231,11 @@ class HadoopRDD[K, V](
         try {
           reader.close()
         } catch {
-          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+          case e: Exception => {
+            if (!Utils.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+          }
         }
       }
     }
@@ -244,9 +251,21 @@ class HadoopRDD[K, V](
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    // TODO: Filtering out "localhost" in case of file:// URLs
-    val hadoopSplit = split.asInstanceOf[HadoopPartition]
-    hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
+    val hsplit = split.asInstanceOf[HadoopPartition].inputSplit.value
+    val locs: Option[Seq[String]] = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
+      case Some(c) =>
+        try {
+          val lsplit = c.inputSplitWithLocationInfo.cast(hsplit)
+          val infos = c.getLocationInfo.invoke(lsplit).asInstanceOf[Array[AnyRef]]
+          Some(HadoopRDD.convertSplitLocationInfo(infos))
+        } catch {
+          case e: Exception =>
+            logDebug("Failed to use InputSplitWithLocations.", e)
+            None
+        }
+      case None => None
+    }
+    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
 
   override def checkpoint() {
@@ -256,7 +275,7 @@ class HadoopRDD[K, V](
   def getConf: Configuration = getJobConf()
 }
 
-private[spark] object HadoopRDD {
+private[spark] object HadoopRDD extends Logging {
   /** Constructing Configuration objects is not threadsafe, use this lock to serialize. */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
 
@@ -303,5 +322,43 @@ private[spark] object HadoopRDD {
       val inputSplit = partition.inputSplit.value
       f(inputSplit, firstParent[T].iterator(split, context))
     }
+  }
+
+  private[spark] class SplitInfoReflections {
+    val inputSplitWithLocationInfo =
+      Class.forName("org.apache.hadoop.mapred.InputSplitWithLocationInfo")
+    val getLocationInfo = inputSplitWithLocationInfo.getMethod("getLocationInfo")
+    val newInputSplit = Class.forName("org.apache.hadoop.mapreduce.InputSplit")
+    val newGetLocationInfo = newInputSplit.getMethod("getLocationInfo")
+    val splitLocationInfo = Class.forName("org.apache.hadoop.mapred.SplitLocationInfo")
+    val isInMemory = splitLocationInfo.getMethod("isInMemory")
+    val getLocation = splitLocationInfo.getMethod("getLocation")
+  }
+
+  private[spark] val SPLIT_INFO_REFLECTIONS: Option[SplitInfoReflections] = try {
+    Some(new SplitInfoReflections)
+  } catch {
+    case e: Exception =>
+      logDebug("SplitLocationInfo and other new Hadoop classes are " +
+          "unavailable. Using the older Hadoop location info code.", e)
+      None
+  }
+
+  private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Seq[String] = {
+    val out = ListBuffer[String]()
+    infos.foreach { loc => {
+      val locationStr = HadoopRDD.SPLIT_INFO_REFLECTIONS.get.
+        getLocation.invoke(loc).asInstanceOf[String]
+      if (locationStr != "localhost") {
+        if (HadoopRDD.SPLIT_INFO_REFLECTIONS.get.isInMemory.
+                invoke(loc).asInstanceOf[Boolean]) {
+          logDebug("Partition " + locationStr + " is cached by Hadoop.")
+          out += new HDFSCacheTaskLocation(locationStr).toString
+        } else {
+          out += new HostTaskLocation(locationStr).toString
+        }
+      }
+    }}
+    out.seq
   }
 }

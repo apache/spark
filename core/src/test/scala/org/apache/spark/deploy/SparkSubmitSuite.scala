@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -154,6 +154,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.shuffle.spill") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
+    sysProps.keys should not contain ("spark.jars")
   }
 
   test("handles YARN client mode") {
@@ -305,6 +306,21 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     runSparkSubmit(args)
   }
 
+  test("SPARK_CONF_DIR overrides spark-defaults.conf") {
+    forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local",
+        unusedJar.toString)
+      val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
+      assert(appArgs.propertiesFile != null)
+      assert(appArgs.propertiesFile.startsWith(path))
+      appArgs.executorMemory should  be ("2.3g")
+    }
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   def runSparkSubmit(args: Seq[String]): String = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -313,10 +329,27 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
   }
+
+  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
+    val tmpDir = Utils.createTempDir()
+
+    val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
+    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
+    for ((key, value) <- defaults) writer.write(s"$key $value\n")
+
+    writer.close()
+
+    try {
+      f(tmpDir.getAbsolutePath)
+    } finally {
+      Utils.deleteRecursively(tmpDir)
+    }
+  }
 }
 
 object JarCreationTest {
   def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
@@ -338,6 +371,7 @@ object JarCreationTest {
 
 object SimpleApplicationTest {
   def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val configs = Seq("spark.master", "spark.app.name")

@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{SQLConf, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
-import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
@@ -150,7 +150,8 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       val sizes = rdd.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold,
+      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold
+        && sizes(1) <= autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be

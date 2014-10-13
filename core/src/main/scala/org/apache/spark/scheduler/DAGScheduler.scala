@@ -241,9 +241,9 @@ class DAGScheduler(
       callSite: CallSite)
     : Stage =
   {
+    val parentStages = getParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage =
-      new Stage(id, rdd, numTasks, shuffleDep, getParentStages(rdd, jobId), jobId, callSite)
+    val stage = new Stage(id, rdd, numTasks, shuffleDep, parentStages, jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -507,11 +507,16 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties = null)
   {
+    val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
-      case JobSucceeded => {}
+      case JobSucceeded => {
+        logInfo("Job %d finished: %s, took %f s".format
+          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
+      }
       case JobFailed(exception: Exception) =>
-        logInfo("Failed to run " + callSite.shortForm)
+        logInfo("Job %d failed: %s, took %f s".format
+          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
         throw exception
     }
   }
@@ -625,16 +630,17 @@ class DAGScheduler(
   protected def runLocallyWithinThread(job: ActiveJob) {
     var jobResult: JobResult = JobSucceeded
     try {
-      SparkEnv.set(env)
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
       val taskContext =
-        new TaskContext(job.finalStage.id, job.partitions(0), 0, runningLocally = true)
+        new TaskContext(job.finalStage.id, job.partitions(0), 0, true)
+      TaskContext.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
         job.listener.taskSucceeded(0, result)
       } finally {
         taskContext.markTaskCompleted()
+        TaskContext.unset()
       }
     } catch {
       case e: Exception =>
@@ -1045,31 +1051,39 @@ class DAGScheduler(
         stage.pendingTasks += task
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
-        // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        markStageAsFinished(failedStage, Some("Fetch failure"))
-        runningStages -= failedStage
-        // TODO: Cancel running tasks in the stage
-        logInfo("Marking " + failedStage + " (" + failedStage.name +
-          ") for resubmision due to a fetch failure")
-        // Mark the map whose fetch failed as broken in the map stage
         val mapStage = shuffleToMapStage(shuffleId)
-        if (mapId != -1) {
-          mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+
+        // It is likely that we receive multiple FetchFailed for a single stage (because we have
+        // multiple tasks running concurrently on different executors). In that case, it is possible
+        // the fetch failure has already been handled by the scheduler.
+        if (runningStages.contains(failedStage)) {
+          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+            s"due to a fetch failure from $mapStage (${mapStage.name})")
+          markStageAsFinished(failedStage, Some("Fetch failure"))
+          runningStages -= failedStage
         }
-        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
-          "); marking it for resubmission")
+
         if (failedStages.isEmpty && eventProcessActor != null) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
           // in that case the event will already have been scheduled. eventProcessActor may be
           // null during unit tests.
+          // TODO: Cancel running tasks in the stage
           import env.actorSystem.dispatcher
+          logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+            s"$failedStage (${failedStage.name}) due to fetch failure")
           env.actorSystem.scheduler.scheduleOnce(
             RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
         }
         failedStages += failedStage
         failedStages += mapStage
+
+        // Mark the map whose fetch failed as broken in the map stage
+        if (mapId != -1) {
+          mapStage.removeOutputLoc(mapId, bmAddress)
+          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        }
+
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
@@ -1194,7 +1208,7 @@ class DAGScheduler(
             .format(job.jobId, stageId))
       } else if (jobsForStage.get.size == 1) {
         if (!stageIdToStage.contains(stageId)) {
-          logError("Missing Stage for stage with id $stageId")
+          logError(s"Missing Stage for stage with id $stageId")
         } else {
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
@@ -1288,7 +1302,7 @@ class DAGScheduler(
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
     val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
     if (!rddPrefs.isEmpty) {
-      return rddPrefs.map(host => TaskLocation(host))
+      return rddPrefs.map(TaskLocation(_))
     }
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
     // that has any placement preferences. Ideally we would choose based on transfer sizes,

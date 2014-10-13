@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     sc = SparkContext(appName="PythonSampledRDDs")
 
-    fraction = 0.1 # fraction of data to sample
+    fraction = 0.1  # fraction of data to sample
 
     examples = MLUtils.loadLibSVMFile(sc, datapath)
     numExamples = examples.count()
@@ -49,9 +49,9 @@ if __name__ == "__main__":
     expectedSampleSize = int(numExamples * fraction)
     print 'Sampling RDD using fraction %g.  Expected sample size = %d.' \
         % (fraction, expectedSampleSize)
-    sampledRDD = examples.sample(withReplacement = True, fraction = fraction)
+    sampledRDD = examples.sample(withReplacement=True, fraction=fraction)
     print '  RDD.sample(): sample has %d examples' % sampledRDD.count()
-    sampledArray = examples.takeSample(withReplacement = True, num = expectedSampleSize)
+    sampledArray = examples.takeSample(withReplacement=True, num=expectedSampleSize)
     print '  RDD.takeSample(): sample has %d examples' % len(sampledArray)
 
     print
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     fractions = {}
     for k in keyCountsA.keys():
         fractions[k] = fraction
-    sampledByKeyRDD = keyedRDD.sampleByKey(withReplacement = True, fractions = fractions)
+    sampledByKeyRDD = keyedRDD.sampleByKey(withReplacement=True, fractions=fractions)
     keyCountsB = sampledByKeyRDD.countByKey()
     sizeB = sum(keyCountsB.values())
     print '  Sampled %d examples using approximate stratified sampling (by label). ==> Sample' \

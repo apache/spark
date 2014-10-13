@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types._
+import scala.math.pow
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
@@ -30,6 +31,19 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 
   override def eval(input: Row): Any = {
     n1(child, input, _.negate(_))
+  }
+}
+
+case class Sqrt(child: Expression) extends UnaryExpression {
+  type EvaluatedType = Any
+  
+  def dataType = DoubleType
+  override def foldable = child.foldable
+  def nullable = child.nullable
+  override def toString = s"SQRT($child)"
+
+  override def eval(input: Row): Any = {
+    n1(child, input, ((na,a) => math.sqrt(na.toDouble(a))))
   }
 }
 
@@ -89,11 +103,11 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 case class MaxOf(left: Expression, right: Expression) extends Expression {
   type EvaluatedType = Any
 
+  override def foldable = left.foldable && right.foldable
+
   override def nullable = left.nullable && right.nullable
 
   override def children = left :: right :: Nil
-
-  override def references = left.references ++ right.references
 
   override def dataType = left.dataType
 
@@ -115,4 +129,18 @@ case class MaxOf(left: Expression, right: Expression) extends Expression {
   }
 
   override def toString = s"MaxOf($left, $right)"
+}
+
+/**
+ * A function that get the absolute value of the numeric value.
+ */
+case class Abs(child: Expression) extends UnaryExpression  {
+  type EvaluatedType = Any
+
+  def dataType = child.dataType
+  override def foldable = child.foldable
+  def nullable = child.nullable
+  override def toString = s"Abs($child)"
+
+  override def eval(input: Row): Any = n1(child, input, _.abs(_))
 }

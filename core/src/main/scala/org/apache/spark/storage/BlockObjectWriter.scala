@@ -65,8 +65,6 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
 /**
  * BlockObjectWriter which writes directly to a file on disk. Appends to the given file.
- * The given write metrics will be updated incrementally, but will not necessarily be current until
- * commitAndClose is called.
  */
 private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
@@ -75,6 +73,8 @@ private[spark] class DiskBlockObjectWriter(
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
     syncWrites: Boolean,
+    // These write metrics concurrently shared with other active BlockObjectWriter's who
+    // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics)
   extends BlockObjectWriter(blockId)
   with Logging
@@ -94,14 +94,30 @@ private[spark] class DiskBlockObjectWriter(
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
+  private var initialized = false
+
+  /**
+   * Cursors used to represent positions in the file.
+   *
+   * xxxxxxxx|--------|---       |
+   *         ^        ^          ^
+   *         |        |        finalPosition
+   *         |      reportedPosition
+   *       initialPosition
+   *
+   * initialPosition: Offset in the file where we start writing. Immutable.
+   * reportedPosition: Position at the time of the last update to the write metrics.
+   * finalPosition: Offset where we stopped writing. Set on closeAndCommit() then never changed.
+   * -----: Current writes to the underlying file.
+   * xxxxx: Existing contents of the file.
+   */
   private val initialPosition = file.length()
   private var finalPosition: Long = -1
-  private var initialized = false
+  private var reportedPosition = initialPosition
 
   /** Calling channel.position() to update the write metrics can be a little bit expensive, so we
     * only call it every N writes */
   private var writesSinceMetricsUpdate = 0
-  private var lastPosition = initialPosition
 
   override def open(): BlockObjectWriter = {
     fos = new FileOutputStream(file, true)
@@ -140,17 +156,18 @@ private[spark] class DiskBlockObjectWriter(
       //       serializer stream and the lower level stream.
       objOut.flush()
       bs.flush()
-      updateBytesWritten()
       close()
     }
     finalPosition = file.length()
+    // In certain compression codecs, more bytes are written after close() is called
+    writeMetrics.shuffleBytesWritten += (finalPosition - reportedPosition)
   }
 
   // Discard current writes. We do this by flushing the outstanding writes and then
   // truncating the file to its initial position.
   override def revertPartialWritesAndClose() {
     try {
-      writeMetrics.shuffleBytesWritten -= (lastPosition - initialPosition)
+      writeMetrics.shuffleBytesWritten -= (reportedPosition - initialPosition)
 
       if (initialized) {
         objOut.flush()
@@ -189,10 +206,14 @@ private[spark] class DiskBlockObjectWriter(
     new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 
+  /**
+   * Report the number of bytes written in this writer's shuffle write metrics.
+   * Note that this is only valid before the underlying streams are closed.
+   */
   private def updateBytesWritten() {
     val pos = channel.position()
-    writeMetrics.shuffleBytesWritten += (pos - lastPosition)
-    lastPosition = pos
+    writeMetrics.shuffleBytesWritten += (pos - reportedPosition)
+    reportedPosition = pos
   }
 
   private def callWithTiming(f: => Unit) = {

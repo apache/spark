@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -38,13 +39,62 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      OptimizeIn) ::
     Batch("Filter Pushdown", FixedPoint(100),
+      UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
       ColumnPruning) :: Nil
 }
+
+/**
+  *  Pushes operations to either side of a Union.
+  */
+object UnionPushdown extends Rule[LogicalPlan] {
+
+  /**
+    *  Maps Attributes from the left side to the corresponding Attribute on the right side.
+    */
+  def buildRewrites(union: Union): AttributeMap[Attribute] = {
+    assert(union.left.output.size == union.right.output.size)
+
+    AttributeMap(union.left.output.zip(union.right.output))
+  }
+
+  /**
+    *  Rewrites an expression so that it can be pushed to the right side of a Union operator.
+    *  This method relies on the fact that the output attributes of a union are always equal
+    *  to the left child's output.
+    */
+  def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
+    val result = e transform {
+      case a: Attribute => rewrites(a)
+    }
+
+    // We must promise the compiler that we did not discard the names in the case of project
+    // expressions.  This is safe since the only transformation is from Attribute => Attribute.
+    result.asInstanceOf[A]
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into union
+    case Filter(condition, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Filter(condition, left),
+        Filter(pushToRight(condition, rewrites), right))
+
+    // Push down projection into union
+    case Project(projectList, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Project(projectList, left),
+        Project(projectList.map(pushToRight(_, rewrites)), right))
+  }
+}
+
 
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan using the following
@@ -65,8 +115,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate unneeded attributes from either side of a Join.
     case Project(projectList, Join(left, right, joinType, condition)) =>
       // Collect the list of all references required either above or to evaluate the condition.
-      val allReferences: Set[Attribute] =
-        projectList.flatMap(_.references).toSet ++ condition.map(_.references).getOrElse(Set.empty)
+      val allReferences: AttributeSet =
+        AttributeSet(
+          projectList.flatMap(_.references.iterator)) ++
+          condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
       /** Applies a projection only when the child is producing unnecessary attributes */
       def pruneJoinChild(c: LogicalPlan) = prunedChild(c, allReferences)
@@ -76,8 +128,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate unneeded attributes from right side of a LeftSemiJoin.
     case Join(left, right, LeftSemi, condition) =>
       // Collect the list of all references required to evaluate the condition.
-      val allReferences: Set[Attribute] =
-        condition.map(_.references).getOrElse(Set.empty)
+      val allReferences: AttributeSet =
+        condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
@@ -104,7 +156,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: Set[Attribute]) =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
       Project(allReferences.filter(c.outputSet.contains).toSeq, c)
     } else {
@@ -224,6 +276,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
+ * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
+ * which is much faster
+ */
+object OptimizeIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+          val hSet = list.map(e => e.eval(null))
+          InSet(v, HashSet() ++ hSet, v +: list)
+    }
+  }
+}
+
+/**
  * Simplifies boolean expressions where the answer can be determined without evaluating both sides.
  * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
  * is only safe when evaluations of expressions does not result in side effects.
@@ -247,6 +313,18 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (Literal(false, BooleanType), r) => r
           case (l, Literal(false, BooleanType)) => l
           case (_, _) => or
+        }
+
+      case not @ Not(exp) =>
+        exp match {
+          case Literal(true, BooleanType) => Literal(false)
+          case Literal(false, BooleanType) => Literal(true)
+          case GreaterThan(l, r) => LessThanOrEqual(l, r)
+          case GreaterThanOrEqual(l, r) => LessThan(l, r)
+          case LessThan(l, r) => GreaterThanOrEqual(l, r)
+          case LessThanOrEqual(l, r) => GreaterThan(l, r)
+          case Not(e) => e
+          case _ => not
         }
 
       // Turn "if (true) a else b" into "a", and if (false) a else b" into "b".

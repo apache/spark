@@ -37,4 +37,15 @@ package object trees extends Logging {
   // Since we want tree nodes to be lightweight, we create one logger for all treenode instances.
   protected override def logName = "catalyst.trees"
 
+  /**
+   * A [[TreeNode]] companion for reference equality for Hash based Collection.
+   */
+  class TreeNodeRef(val obj: TreeNode[_]) {
+    override def equals(o: Any) = o match {
+      case that: TreeNodeRef => that.obj.eq(obj)
+      case _ => false
+    }
+
+    override def hashCode = if (obj == null) 0 else obj.hashCode
+  }
 }

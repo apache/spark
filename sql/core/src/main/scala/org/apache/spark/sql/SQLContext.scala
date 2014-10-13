@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -31,12 +32,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.SparkStrategies
+import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.{Logging, SparkContext}
 
 /**
  * :: AlphaComponent ::
@@ -50,6 +50,7 @@ import org.apache.spark.{Logging, SparkContext}
 class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
   with SQLConf
+  with CacheManager
   with ExpressionConversions
   with UDFRegistration
   with Serializable {
@@ -65,15 +66,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, caseSensitive = true)
+
   @transient
   protected[sql] val optimizer = Optimizer
-  @transient
-  protected[sql] val parser = new catalyst.SqlParser
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = parser(sql)
+  @transient
+  protected[sql] val sqlParser = {
+    val fallback = new catalyst.SqlParser
+    new catalyst.SparkSQLParser(fallback(_))
+  }
+
+  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
+
+  sparkContext.getConf.getAll.foreach {
+    case (key, value) if key.startsWith("spark.sql") => setConf(key, value)
+    case _ =>
+  }
 
   /**
    * :: DeveloperApi ::
@@ -89,8 +100,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))(self))
+  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
+    SparkPlan.currentContext.set(self)
+    new SchemaRDD(this,
+      LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+  }
 
   /**
    * :: DeveloperApi ::
@@ -126,7 +140,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
     // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))(self)
+    val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
     new SchemaRDD(this, logicalPlan)
   }
 
@@ -186,9 +200,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
+    val columnNameOfCorruptJsonRecord = columnNameOfCorruptRecord
     val appliedSchema =
-      Option(schema).getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0)))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+      Option(schema).getOrElse(
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(json, 1.0, columnNameOfCorruptJsonRecord)))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 
@@ -197,8 +214,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val appliedSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
-    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    val columnNameOfCorruptJsonRecord = columnNameOfCorruptRecord
+    val appliedSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
   }
 
@@ -244,7 +264,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.logicalPlan)
+    catalog.registerTable(None, tableName, rdd.queryExecution.logical)
   }
 
   /**
@@ -264,45 +284,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
-
-  /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = {
-    val currentTable = table(tableName).queryExecution.analyzed
-    val asInMemoryRelation = currentTable match {
-      case _: InMemoryRelation =>
-        currentTable.logicalPlan
-
-      case _ =>
-        InMemoryRelation(useCompression, columnBatchSize, executePlan(currentTable).executedPlan)
-    }
-
-    catalog.registerTable(None, tableName, asInMemoryRelation)
-  }
-
-  /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = {
-    table(tableName).queryExecution.analyzed match {
-      // This is kind of a hack to make sure that if this was just an RDD registered as a table,
-      // we reregister the RDD as a table.
-      case inMem @ InMemoryRelation(_, _, _, e: ExistingRdd) =>
-        inMem.cachedColumnBuffers.unpersist()
-        catalog.unregisterTable(None, tableName)
-        catalog.registerTable(None, tableName, SparkLogicalPlan(e)(self))
-      case inMem: InMemoryRelation =>
-        inMem.cachedColumnBuffers.unpersist()
-        catalog.unregisterTable(None, tableName)
-      case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
-    }
-  }
-
-  /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = {
-    val relation = table(tableName).queryExecution.analyzed
-    relation match {
-      case _: InMemoryRelation => true
-      case _ => false
-    }
-  }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
@@ -344,8 +325,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
         prunePushedDownFilters: Seq[Expression] => Seq[Expression],
         scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
-      val projectSet = projectList.flatMap(_.references).toSet
-      val filterSet = filterPredicates.flatMap(_.references).toSet
+      val projectSet = AttributeSet(projectList.flatMap(_.references))
+      val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
       val filterCondition = prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
@@ -354,7 +335,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       // TODO: Decouple final output schema from expression evaluation so this copy can be
       // avoided safely.
 
-      if (projectList.toSet == projectSet && filterSet.subsetOf(projectSet)) {
+      if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+          filterSet.subsetOf(projectSet)) {
         // When it is possible to just use column pruning to get the right projection and
         // when the columns of this projection are enough to evaluate all filter conditions,
         // just do a scan followed by a filter, with no extra project.
@@ -393,10 +375,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
     lazy val optimizedPlan = optimizer(analyzed)
+    lazy val withCachedData = useCachedData(optimizedPlan)
+
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(optimizedPlan).next()
+      planner(withCachedData).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
@@ -408,10 +392,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
-    def simpleString: String = stringOrError(executedPlan)
+    def simpleString: String =
+      s"""== Physical Plan ==
+         |${stringOrError(executedPlan)}
+      """.stripMargin.trim
 
     override def toString: String =
-      s"""== Logical Plan ==
+      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
+      // however, the `toRdd` will cause the real execution, which is not what we want.
+      // We need to think about how to avoid the side effect.
+      s"""== Parsed Logical Plan ==
+         |${stringOrError(logical)}
+         |== Analyzed Logical Plan ==
          |${stringOrError(analyzed)}
          |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
@@ -419,7 +411,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(executedPlan)}
          |Code Generation: ${executedPlan.codegenEnabled}
          |== RDD ==
-         |${stringOrError(toRdd.toDebugString)}
       """.stripMargin.trim
   }
 
@@ -429,8 +420,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * It is only used by PySpark.
    */
   private[sql] def parseDataType(dataTypeString: String): DataType = {
-    val parser = org.apache.spark.sql.catalyst.types.DataType
-    parser(dataTypeString)
+    DataType.fromJson(dataTypeString)
   }
 
   /**
@@ -450,7 +440,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
     import scala.collection.JavaConversions._
-    import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
@@ -472,8 +461,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case (null, _) => null
 
       case (c: java.util.List[_], ArrayType(elementType, _)) =>
-        val converted = c.map { e => convert(e, elementType)}
-        JListWrapper(converted)
+        c.map { e => convert(e, elementType)}: Seq[Any]
 
       case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
         c.asInstanceOf[Array[_]].map(e => convert(e, elementType)): Seq[Any]
@@ -513,6 +501,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       iter.map { m => new GenericRow(m): Row}
     }
 
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRdd))(self))
+    new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 }

@@ -41,12 +41,36 @@ import org.apache.spark.io.CompressionCodec
 private[spark] class FileLogger(
     logDir: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
+    hadoopConf: Configuration,
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true,
     dirPermissions: Option[FsPermission] = None)
   extends Logging {
+
+  def this(
+      logDir: String,
+      sparkConf: SparkConf,
+      compress: Boolean,
+      overwrite: Boolean) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = compress,
+      overwrite = overwrite)
+  }
+
+  def this(
+      logDir: String,
+      sparkConf: SparkConf,
+      compress: Boolean) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = compress,
+      overwrite = true)
+  }
+
+  def this(
+      logDir: String,
+      sparkConf: SparkConf) = {
+    this(logDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf), compress = false,
+      overwrite = true)
+  }
 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
@@ -57,7 +81,7 @@ private[spark] class FileLogger(
    * create unique FileSystem instance only for FileLogger
    */
   private val fileSystem = {
-    val conf = SparkHadoopUtil.get.newConfiguration()
+    val conf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val logUri = new URI(logDir)
     val scheme = logUri.getScheme
     if (scheme == "hdfs") {

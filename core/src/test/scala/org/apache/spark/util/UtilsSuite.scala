@@ -112,7 +112,7 @@ class UtilsSuite extends FunSuite {
   }
 
   test("reading offset bytes of a file") {
-    val tmpDir2 = Files.createTempDir()
+    val tmpDir2 = Utils.createTempDir()
     tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
@@ -141,7 +141,7 @@ class UtilsSuite extends FunSuite {
   }
 
   test("reading offset bytes across multiple files") {
-    val tmpDir = Files.createTempDir()
+    val tmpDir = Utils.createTempDir()
     tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
     Files.write("0123456789", files(0), Charsets.UTF_8)
@@ -189,17 +189,28 @@ class UtilsSuite extends FunSuite {
     assert(Utils.getIteratorSize(iterator) === 5L)
   }
 
-  test("findOldFiles") {
+  test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
     val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
     val child2: File = Utils.createTempDir(parent.getCanonicalPath)
-    // set the last modified time of child1 to 10 secs old
-    child1.setLastModified(System.currentTimeMillis() - (1000 * 10))
+    val child3: File = Utils.createTempDir(child1.getCanonicalPath)
+    // set the last modified time of child1 to 30 secs old
+    child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
-    val result = Utils.findOldFiles(parent, 5) // find files older than 5 secs
-    assert(result.size.equals(1))
-    assert(result(0).getCanonicalPath.equals(child1.getCanonicalPath))
+    // although child1 is old, child2 is still new so return true
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    child2.setLastModified(System.currentTimeMillis - (1000 * 30))
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    parent.setLastModified(System.currentTimeMillis - (1000 * 30))
+    // although parent and its immediate children are new, child3 is still old
+    // we expect a full recursive search for new files.
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    child3.setLastModified(System.currentTimeMillis - (1000 * 30))
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
   }
 
   test("resolveURI") {
@@ -295,6 +306,30 @@ class UtilsSuite extends FunSuite {
       Option(server1).foreach(_.close())
       Option(server2).foreach(_.close())
     }
+  }
+
+  test("deleteRecursively") {
+    val tempDir1 = Utils.createTempDir()
+    assert(tempDir1.exists())
+    Utils.deleteRecursively(tempDir1)
+    assert(!tempDir1.exists())
+
+    val tempDir2 = Utils.createTempDir()
+    val tempFile1 = new File(tempDir2, "foo.txt")
+    Files.touch(tempFile1)
+    assert(tempFile1.exists())
+    Utils.deleteRecursively(tempFile1)
+    assert(!tempFile1.exists())
+
+    val tempDir3 = new File(tempDir2, "subdir")
+    assert(tempDir3.mkdir())
+    val tempFile2 = new File(tempDir3, "bar.txt")
+    Files.touch(tempFile2)
+    assert(tempFile2.exists())
+    Utils.deleteRecursively(tempDir2)
+    assert(!tempDir2.exists())
+    assert(!tempDir3.exists())
+    assert(!tempFile2.exists())
   }
 
 }

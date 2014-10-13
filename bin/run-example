@@ -19,7 +19,7 @@
 
 SCALA_VERSION=2.10
 
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 export SPARK_HOME="$FWDIR"
 EXAMPLES_DIR="$FWDIR"/examples
 
@@ -35,12 +35,12 @@ else
 fi
 
 if [ -f "$FWDIR/RELEASE" ]; then
-  export SPARK_EXAMPLES_JAR=`ls "$FWDIR"/lib/spark-examples-*hadoop*.jar`
+  export SPARK_EXAMPLES_JAR="`ls "$FWDIR"/lib/spark-examples-*hadoop*.jar`"
 elif [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar ]; then
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar`
+  export SPARK_EXAMPLES_JAR="`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar`"
 fi
 
-if [[ -z $SPARK_EXAMPLES_JAR ]]; then
+if [[ -z "$SPARK_EXAMPLES_JAR" ]]; then
   echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
   echo "You need to build Spark before running this program" 1>&2
   exit 1

@@ -51,7 +51,8 @@ if __name__ == "__main__":
         Usage: cassandra_inputformat <host> <keyspace> <cf>
 
         Run with example jar:
-        ./bin/spark-submit --driver-class-path /path/to/example/jar /path/to/examples/cassandra_inputformat.py <host> <keyspace> <cf>
+        ./bin/spark-submit --driver-class-path /path/to/example/jar \
+        /path/to/examples/cassandra_inputformat.py <host> <keyspace> <cf>
         Assumes you have some data in Cassandra already, running on <host>, in <keyspace> and <cf>
         """
         exit(-1)
@@ -61,12 +62,12 @@ if __name__ == "__main__":
     cf = sys.argv[3]
     sc = SparkContext(appName="CassandraInputFormat")
 
-    conf = {"cassandra.input.thrift.address":host,
-            "cassandra.input.thrift.port":"9160",
-            "cassandra.input.keyspace":keyspace,
-            "cassandra.input.columnfamily":cf,
-            "cassandra.input.partitioner.class":"Murmur3Partitioner",
-            "cassandra.input.page.row.size":"3"}
+    conf = {"cassandra.input.thrift.address": host,
+            "cassandra.input.thrift.port": "9160",
+            "cassandra.input.keyspace": keyspace,
+            "cassandra.input.columnfamily": cf,
+            "cassandra.input.partitioner.class": "Murmur3Partitioner",
+            "cassandra.input.page.row.size": "3"}
     cass_rdd = sc.newAPIHadoopRDD(
         "org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat",
         "java.util.Map",

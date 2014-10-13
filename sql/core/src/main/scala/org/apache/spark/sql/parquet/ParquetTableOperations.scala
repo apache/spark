@@ -289,9 +289,9 @@ case class InsertIntoParquetTable(
     def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      val attemptNumber = (context.getAttemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.getPartitionId,
         attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = new AppendingParquetOutputFormat(taskIdOffset)
@@ -331,12 +331,20 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    val taskId: TaskID = context.getTaskAttemptID.getTaskID
+    val taskId: TaskID = getTaskAttemptID(context).getTaskID
     val partition: Int = taskId.getId
     val filename = s"part-r-${partition + offset}.parquet"
     val committer: FileOutputCommitter =
       getOutputCommitter(context).asInstanceOf[FileOutputCommitter]
     new Path(committer.getWorkPath, filename)
+  }
+
+  // The TaskAttemptContext is a class in hadoop-1 but is an interface in hadoop-2.
+  // The signatures of the method TaskAttemptContext.getTaskAttemptID for the both versions
+  // are the same, so the method calls are source-compatible but NOT binary-compatible because
+  // the opcode of method call for class is INVOKEVIRTUAL and for interface is INVOKEINTERFACE.
+  private def getTaskAttemptID(context: TaskAttemptContext): TaskAttemptID = {
+    context.getClass.getMethod("getTaskAttemptID").invoke(context).asInstanceOf[TaskAttemptID]
   }
 }
 
@@ -427,11 +435,15 @@ private[parquet] class FilteringParquetRowInputFormat
         s"maxSplitSize or minSplitSie should not be negative: maxSplitSize = $maxSplitSize;" +
           s" minSplitSize = $minSplitSize")
     }
-
+    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val getGlobalMetaData =
       classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
     getGlobalMetaData.setAccessible(true)
     val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
+    // if parquet file is empty, return empty splits.
+    if (globalMetaData == null) {
+      return splits
+    }
 
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,
@@ -442,7 +454,6 @@ private[parquet] class FilteringParquetRowInputFormat
       classOf[ParquetInputFormat[_]].getDeclaredMethods.find(_.getName == "generateSplits").get
     generateSplits.setAccessible(true)
 
-    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     for (footer <- footers) {
       val fs = footer.getFile.getFileSystem(configuration)
       val file = footer.getFile
