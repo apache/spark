@@ -68,8 +68,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
 
-    val strategy = new Strategy(algo = Classification, impurity = Gini,
-      maxDepth = 2, maxBins = 10,
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
       numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
 
     val rf = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
@@ -94,7 +93,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
 
-    val strategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+    val strategy = new Strategy(algo = Regression, impurity = Variance,
+      maxDepth = 2, maxBins = 10,
       numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
