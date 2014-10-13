@@ -17,16 +17,16 @@
 
 package org.apache.spark.deploy
 
-import org.scalatest.FunSuite
 import org.apache.spark.deploy.worker.CommandUtils
 import org.apache.spark.util.Utils
-import org.scalatest.Matchers
+
+import org.scalatest.{FunSuite, Matchers}
 
 class CommandUtilsSuite extends FunSuite with Matchers {
 
   test("set libraryPath correctly") {
     val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
-    val libraryPath = Utils.libraryPath
+    val libraryPath = Utils.libraryPathName
     val env = CommandUtils.buildEnvironment(cmd)
     env.keySet should contain(libraryPath)
     assert(env(libraryPath).startsWith("libraryPathToB"))

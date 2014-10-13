@@ -63,7 +63,7 @@ trait ExecutorRunnableUtil extends Logging {
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
       val libraryPath = Seq(p, Utils.libraryPathScriptVar).mkString(File.pathSeparator)
-      prefixEnv += s"${Utils.libraryPath}=$libraryPath"
+      prefixEnv += s"${Utils.libraryPathName}=$libraryPath"
     }
 
     javaOpts += "-Djava.io.tmpdir=" +

@@ -353,7 +353,7 @@ private[spark] trait ClientBase extends Logging {
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
         libraryPaths = libraryPaths :+ Utils.libraryPathScriptVar
-        prefixEnv += s"${Utils.libraryPath}=${libraryPaths.mkString(File.pathSeparator)}"
+        prefixEnv += s"${Utils.libraryPathName}=${libraryPaths.mkString(File.pathSeparator)}"
       }
     }
 

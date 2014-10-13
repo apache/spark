@@ -40,15 +40,14 @@ object CommandUtils extends Logging {
       command.arguments
   }
 
-  def buildEnvironment(command: Command): Map[String, String] = {
+  def buildEnvironment(command: Command,
+    env: Map[String, String] = sys.env): Map[String, String] = {
     val libraryPathEntries = command.libraryPathEntries
     if (libraryPathEntries.nonEmpty) {
-      val libraryPath = Utils.libraryPath
-      val pathSeparator = File.pathSeparator
-      val sysLibraryPath = sys.env.get(libraryPath)
-      val cmdLibraryPath = command.environment.get(libraryPath)
-      val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ sysLibraryPath
-      command.environment + ((Utils.libraryPath, libraryPaths.mkString(pathSeparator)))
+      val libraryPathName = Utils.libraryPathName
+      val cmdLibraryPath = command.environment.get(libraryPathName)
+      val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
+      command.environment + ((libraryPathName, libraryPaths.mkString(File.pathSeparator)))
     } else {
       command.environment
     }
