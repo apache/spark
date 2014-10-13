@@ -19,20 +19,22 @@ package org.apache.spark.graphx.api.python
 
 import java.io._
 import java.net.Socket
-import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Collections}
+import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
+import org.apache.spark._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.graphx.VertexRDD
+import org.apache.spark.graphx.{VertexId, VertexRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark._
 import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
-private[python] class PythonVertexRDD[VD: ClassTag](
+private[graphx] class PythonVertexRDD(
     parent: JavaRDD[Array[Byte]],
     command: Array[Byte],
     envVars: JMap[String, String],
@@ -42,9 +44,9 @@ private[python] class PythonVertexRDD[VD: ClassTag](
     broadcastVars: JList[Broadcast[Array[Byte]]],
     accumulator: Accumulator[JList[Array[Byte]]],
     targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-  extends VertexRDD[VD](parent.firstParent, targetStorageLevel) {
+  extends RDD[(VertexId, _)](parent.firstParent, targetStorageLevel) {
 
-  import PythonVertexRDD._
+  import org.apache.spark.graphx.api.python.PythonVertexRDD._
 
   val bufferSize = conf.getInt("spark.buffer.size", DEFAULT_SPARK_BUFFER_SIZE)
   val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
@@ -206,7 +208,7 @@ private[python] class PythonVertexRDD[VD: ClassTag](
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
-        val oldBids = PythonRDD.getWorkerBroadcasts(worker)
+        val oldBids = getWorkerBroadcasts(new Socket())
         val newBids = broadcastVars.map(_.id).toSet
         // number of different broadcasts
         val cnt = oldBids.diff(newBids).size + newBids.diff(oldBids).size
@@ -245,6 +247,13 @@ private[python] class PythonVertexRDD[VD: ClassTag](
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
           worker.shutdownOutput()
+      }
+    }
+
+    private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
+    private def getWorkerBroadcasts(worker: Socket) = {
+      synchronized {
+        workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
       }
     }
   }
