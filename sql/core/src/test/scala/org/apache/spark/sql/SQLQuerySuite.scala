@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.test._
 import org.scalatest.BeforeAndAfterAll
@@ -693,5 +694,30 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-3813 CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END") {
     checkAnswer(
       sql("SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"), 1)
+  }
+
+  test("throw errors for non-aggregate attributes with aggregation") {
+    def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
+      val logicalPlan = sql(query).queryExecution.logical
+
+      if (isInvalidQuery) {
+        val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
+        assert(
+          e.getMessage.startsWith("Expression not in GROUP BY"),
+          "Non-aggregate attribute(s) not detected\n" + logicalPlan)
+      } else {
+        // Should not throw
+        sql(query).queryExecution.analyzed
+      }
+    }
+
+    checkAggregation("SELECT key, COUNT(*) FROM testData")
+    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", false)
+
+    checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
+    checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)
+
+    checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
+    checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
   }
 }
