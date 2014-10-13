@@ -156,7 +156,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
    * Returns a copy of this [[AttributeReference]] with new qualifiers.
    */
   override def withQualifiers(newQualifiers: Seq[String]) = {
-    if (newQualifiers == qualifiers) {
+    if (newQualifiers.filterNot(qualifiers.toSet).isEmpty && qualifiers.filterNot(newQualifiers.toSet).isEmpty) {
       this
     } else {
       AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
