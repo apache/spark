@@ -35,8 +35,6 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.log4j.PropertyConfigurator
@@ -170,6 +168,20 @@ private[spark] object Utils extends Logging {
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
   private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
+  // Add a shutdown hook to delete the temp dirs when the JVM exits
+  Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dirs") {
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      logDebug("Shutdown hook called")
+      shutdownDeletePaths.foreach { dirPath =>
+        try {
+          Utils.deleteRecursively(new File(dirPath))
+        } catch {
+          case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
+        }
+      }
+    }
+  })
+
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
@@ -254,14 +266,6 @@ private[spark] object Utils extends Logging {
     }
 
     registerShutdownDeleteDir(dir)
-
-    // Add a shutdown hook to delete the temp dir when the JVM exits
-    Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
-      override def run() {
-        // Attempt to delete if some patch which is parent of this is not already registered.
-        if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
-      }
-    })
     dir
   }
 
@@ -668,15 +672,30 @@ private[spark] object Utils extends Logging {
    */
   def deleteRecursively(file: File) {
     if (file != null) {
-      if (file.isDirectory() && !isSymlink(file)) {
-        for (child <- listFilesSafely(file)) {
-          deleteRecursively(child)
+      try {
+        if (file.isDirectory && !isSymlink(file)) {
+          var savedIOException: IOException = null
+          for (child <- listFilesSafely(file)) {
+            try {
+              deleteRecursively(child)
+            } catch {
+              // In case of multiple exceptions, only last one will be thrown
+              case ioe: IOException => savedIOException = ioe
+            }
+          }
+          if (savedIOException != null) {
+            throw savedIOException
+          }
+          shutdownDeletePaths.synchronized {
+            shutdownDeletePaths.remove(file.getAbsolutePath)
+          }
         }
-      }
-      if (!file.delete()) {
-        // Delete can also fail if the file simply did not exist
-        if (file.exists()) {
-          throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      } finally {
+        if (!file.delete()) {
+          // Delete can also fail if the file simply did not exist
+          if (file.exists()) {
+            throw new IOException("Failed to delete: " + file.getAbsolutePath)
+          }
         }
       }
     }
@@ -710,18 +729,20 @@ private[spark] object Utils extends Logging {
    * Determines if a directory contains any files newer than cutoff seconds.
    * 
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
-   * @param cutoff measured in seconds. Returns true if there are any files in dir newer than this.
+   * @param cutoff measured in seconds. Returns true if there are any files or directories in the
+   *               given directory whose last modified time is later than this many seconds ago
    */
   def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
-    val currentTimeMillis = System.currentTimeMillis
     if (!dir.isDirectory) {
-      throw new IllegalArgumentException (dir + " is not a directory!")
-    } else {
-      val files = FileUtils.listFilesAndDirs(dir, TrueFileFilter.TRUE, TrueFileFilter.TRUE)
-      val cutoffTimeInMillis = (currentTimeMillis - (cutoff * 1000))
-      val newFiles = files.filter { _.lastModified > cutoffTimeInMillis }
-      newFiles.nonEmpty
+      throw new IllegalArgumentException(s"$dir is not a directory!")
     }
+    val filesAndDirs = dir.listFiles()
+    val cutoffTimeInMillis = System.currentTimeMillis - (cutoff * 1000)
+
+    filesAndDirs.exists(_.lastModified() > cutoffTimeInMillis) ||
+    filesAndDirs.filter(_.isDirectory).exists(
+      subdir => doesDirectoryContainAnyNewFiles(subdir, cutoff)
+    )
   }
 
   /**

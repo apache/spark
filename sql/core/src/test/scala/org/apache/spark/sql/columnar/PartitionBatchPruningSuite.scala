@@ -67,10 +67,11 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
   checkBatchPruning("i > 8 AND i <= 21", 9 to 21, 2, 3)
   checkBatchPruning("i < 2 OR i > 99", Seq(1, 100), 2, 2)
   checkBatchPruning("i < 2 OR (i > 78 AND i < 92)", Seq(1) ++ (79 to 91), 3, 4)
+  checkBatchPruning("NOT (i < 88)", 88 to 100, 1, 2)
 
   // With unsupported predicate
   checkBatchPruning("i < 12 AND i IS NOT NULL", 1 to 11, 1, 2)
-  checkBatchPruning("NOT (i < 88)", 88 to 100, 5, 10)
+  checkBatchPruning(s"NOT (i in (${(1 to 30).mkString(",")}))", 31 to 100, 5, 10)
 
   def checkBatchPruning(
       filter: String,

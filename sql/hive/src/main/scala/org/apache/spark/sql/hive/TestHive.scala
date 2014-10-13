@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
@@ -67,7 +67,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
   /** Sets up the system initially or after a RESET command */
-  protected def configure() {
+  protected def configure(): Unit = {
     setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
     setConf("hive.metastore.warehouse.dir", warehousePath)
@@ -154,7 +154,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
-        case CacheCommand(tbl, _) => tbl :: Nil
+        case CacheTableCommand(tbl, _, _) => tbl :: Nil
         case _ => Nil
       }
 

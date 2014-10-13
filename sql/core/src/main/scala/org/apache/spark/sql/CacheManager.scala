@@ -22,7 +22,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
+import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
 private case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
@@ -74,10 +74,14 @@ private[sql] trait CacheManager {
     cachedData.clear()
   }
 
-  /** Caches the data produced by the logical representation of the given schema rdd. */
+  /**
+   * Caches the data produced by the logical representation of the given schema rdd.  Unlike
+   * `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because recomputing
+   * the in-memory columnar representation of the underlying table is expensive.
+   */
   private[sql] def cacheQuery(
       query: SchemaRDD,
-      storageLevel: StorageLevel = MEMORY_ONLY): Unit = writeLock {
+      storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
     val planToCache = query.queryExecution.optimizedPlan
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
@@ -91,14 +95,10 @@ private[sql] trait CacheManager {
   }
 
   /** Removes the data for the given SchemaRDD from the cache */
-  private[sql] def uncacheQuery(query: SchemaRDD, blocking: Boolean = false): Unit = writeLock {
+  private[sql] def uncacheQuery(query: SchemaRDD, blocking: Boolean = true): Unit = writeLock {
     val planToCache = query.queryExecution.optimizedPlan
     val dataIndex = cachedData.indexWhere(_.plan.sameResult(planToCache))
-
-    if (dataIndex < 0) {
-      throw new IllegalArgumentException(s"Table $query is not cached.")
-    }
-
+    require(dataIndex >= 0, s"Table $query is not cached.")
     cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
     cachedData.remove(dataIndex)
   }
@@ -135,5 +135,4 @@ private[sql] trait CacheManager {
       case _ =>
     }
   }
-
 }
