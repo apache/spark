@@ -162,3 +162,17 @@ test_that("takeSample() on RDDs", {
     expect_true(length(unique(s)) < 100L)
   }
 })
+
+test_that("mapValues() on pairwise RDDs", {
+  multiples <- mapValues(intRdd, function(x) x * 2)
+  actual <- collect(multiples)
+  expect_equal(actual, lapply(intPairs, function(x) list(x[[1]], x[[2]] * 2)))
+})
+
+test_that("distinct() on RDDs", {
+  nums.rep2 <- rep(1:10, 2)
+  rdd.rep2 <- parallelize(sc, nums.rep2, 2L)
+  uniques <- distinct(rdd.rep2)
+  actual <- sort(unlist(collect(uniques)))
+  expect_equal(actual, nums)
+})

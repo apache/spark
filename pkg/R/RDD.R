@@ -602,6 +602,33 @@ setMethod("take",
             resList
           })
 
+#' Removes the duplicates from RDD.
+#'
+#' This function returns a new RDD containing the distinct elements in the 
+#' given RDD. The same as `distinct()' in Spark.
+#'
+#' @param rdd The RDD to remove duplicates from
+#' @rdname distinct
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, c(1,2,2,3,3,3))
+#' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
+#'}
+setGeneric("distinct", function(rdd) { standardGeneric("distinct") })
+
+#' @rdname distinct
+#' @aliases distinct,RDD
+setMethod("distinct",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            identical.mapped <- lapply(rdd, function(x) list(x, NULL))
+            reduced <- reduceByKey(identical.mapped, 
+                                   function(x, y) x, as.integer(2))
+            resRDD <- lapply(reduced, function(x) x[[1]])
+            resRDD
+          })
 
 #' Return an RDD that is a sampled subset of the given RDD.
 #'
@@ -741,6 +768,35 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             sample(samples)[1:total]
           })
 
+#' Applys a function to all values of the elements, without modifying the keys.
+#'
+#' The same as `mapValues()' in Spark.
+#'
+#' @param X The RDD to apply the transformation.
+#' @param FUN the transformation to apply on the value of each element.
+#' @return a new RDD created by the transformation.
+#' @rdname mapValues
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' makePairs <- lapply(rdd, function(x) list(x, x))
+#' collect(mapValues(makePairs, function(x) x * 2))
+#' Output: list(list(1,2), list(2,4), list(3,6), ...)
+#'}
+setGeneric("mapValues", function(X, FUN) { standardGeneric("mapValues") })
+
+#' @rdname mapValues
+#' @aliases mapValues,RDD,function-method
+setMethod("mapValues",
+          signature(X = "RDD", FUN = "function"),
+          function(X, FUN) {
+            func <- function(x) {
+              list(x[[1]], FUN(x[[2]]))
+            }
+            lapply(X, func)
+          })
 
 ############ Shuffle Functions ############
 
