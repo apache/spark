@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impl
 
+import org.apache.spark.Logging
+
 import scala.collection.mutable
 
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -82,7 +84,7 @@ private[tree] class DecisionTreeMetadata(
 
 }
 
-private[tree] object DecisionTreeMetadata {
+private[tree] object DecisionTreeMetadata extends Logging {
 
   /**
    * Construct a [[DecisionTreeMetadata]] instance for this dataset and parameters.
@@ -103,6 +105,10 @@ private[tree] object DecisionTreeMetadata {
     }
 
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
+    if (maxPossibleBins < strategy.maxBins) {
+      logWarning(s"DecisionTree reducing maxBins from ${strategy.maxBins} to $maxPossibleBins" +
+        s" (= number of training instances)")
+    }
 
     // We check the number of bins here against maxPossibleBins.
     // This needs to be checked here instead of in Strategy since maxPossibleBins can be modified

@@ -175,6 +175,7 @@ private class RandomForest (
         treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
       timer.stop("findBestSplits")
     }
+    baggedInput.unpersist()
 
     timer.stop("total")
 
