@@ -968,3 +968,5 @@ class DAG(Base):
         job.end_date = datetime.now()
         session.merge(job)
         session.commit()
+
+Base.metadata.create_all(settings.engine)

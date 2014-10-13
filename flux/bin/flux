@@ -2,6 +2,7 @@
 
 from flux import settings
 from flux.models import DagBag, TaskInstance, DagPickle, State
+from sqlalchemy.ext.declarative import declarative_base
 
 import dateutil.parser
 from datetime import datetime
@@ -183,8 +184,12 @@ def initdb(args):
             "This will empty crush the current DB if it exists. "
             "Proceed? (y/n)").upper() == "Y":
         logging.basicConfig(level=logging.DEBUG)
-        from flux import models
+        from flux.models import *
+        Base = declarative_base()
+        Base.metadata.create_all(settings.engine)
+
         session = settings.Session()
+        """
         session.query(models.DatabaseConnection).delete()
         mysqldb = models.DatabaseConnection(
             db_id='local_mysql', db_type='mysql',
@@ -201,8 +206,7 @@ def initdb(args):
         mysql_hook.run("DROP TABLE IF EXISTS user;")
         mysql_hook.run("DROP TABLE IF EXISTS log;")
         mysql_hook.run("DROP TABLE IF EXISTS dag;")
-
-        Base.metadata.create_all(settings.engine)
+        """
         session.close()
 
 
