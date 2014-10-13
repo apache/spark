@@ -106,11 +106,11 @@ object GradientBoosting extends Logging {
    *                More bins give higher granularity.
    * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
    *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example,
+   *                                an entry (n -> k) implies the feature n is categorical with k
+   *                                categories 0, 1, 2, ... , k-1. It's important to note that
+   *                                features are zero-indexed.
    * @param minInstancesPerNode Minimum number of instances each child must have after split.
    *                            Default value is 1. If a split cause left or right child
    *                            to have less than minInstancesPerNode,
@@ -142,7 +142,9 @@ object GradientBoosting extends Logging {
     val quantileCalculationStrategyType = {
       quantileCalculationStrategy match {
         case "sort" => QuantileStrategy.Sort
-        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+        case _ =>
+          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
+            s"$quantileCalculationStrategy")
       }
     }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -180,11 +182,11 @@ object GradientBoosting extends Logging {
    *                More bins give higher granularity.
    * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
    *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example,
+   *                                an entry (n -> k) implies the feature n is categorical with k
+   *                                categories 0, 1, 2, ... , k-1. It's important to note that
+   *                                features are zero-indexed.
    * @param minInstancesPerNode Minimum number of instances each child must have after split.
    *                            Default value is 1. If a split cause left or right child
    *                            to have less than minInstancesPerNode,
@@ -217,7 +219,9 @@ object GradientBoosting extends Logging {
     val quantileCalculationStrategyType = {
       quantileCalculationStrategy match {
         case "sort" => QuantileStrategy.Sort
-        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+        case _ =>
+          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
+            s"$quantileCalculationStrategy")
       }
     }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -250,11 +254,11 @@ object GradientBoosting extends Logging {
    *                More bins give higher granularity.
    * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
    *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example,
+   *                                an entry (n -> k) implies the feature n is categorical with k
+   *                                categories 0, 1, 2, ... , k-1. It's important to note that
+   *                                features are zero-indexed.
    * @param minInstancesPerNode Minimum number of instances each child must have after split.
    *                            Default value is 1. If a split cause left or right child
    *                            to have less than minInstancesPerNode,
@@ -286,7 +290,9 @@ object GradientBoosting extends Logging {
     val quantileCalculationStrategyType = {
       quantileCalculationStrategy match {
         case "sort" => QuantileStrategy.Sort
-        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+        case _ =>
+          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
+            s"$quantileCalculationStrategy")
       }
     }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -324,11 +330,11 @@ object GradientBoosting extends Logging {
    *                More bins give higher granularity.
    * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
    *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example,
+   *                                an entry (n -> k) implies the feature n is categorical with k
+   *                                categories 0, 1, 2, ... , k-1. It's important to note that
+   *                                features are zero-indexed.
    * @param minInstancesPerNode Minimum number of instances each child must have after split.
    *                            Default value is 1. If a split cause left or right child
    *                            to have less than minInstancesPerNode,
@@ -361,13 +367,16 @@ object GradientBoosting extends Logging {
     val quantileCalculationStrategyType = {
       quantileCalculationStrategy match {
         case "sort" => QuantileStrategy.Sort
-        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+        case _ =>
+          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
+            s"$quantileCalculationStrategy")
       }
     }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
       impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
       numClassesForClassification, maxBins, quantileCalculationStrategyType,
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap, minInstancesPerNode, minInfoGain, maxMemoryInMB)
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+      minInstancesPerNode, minInfoGain, maxMemoryInMB)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
