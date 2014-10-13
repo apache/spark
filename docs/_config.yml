@@ -1,5 +1,7 @@
 highlighter: pygments
 markdown: kramdown
+gems:
+  - jekyll-redirect-from
 
 # For some reason kramdown seems to behave differently on different
 # OS/packages wrt encoding. So we hard code this config.

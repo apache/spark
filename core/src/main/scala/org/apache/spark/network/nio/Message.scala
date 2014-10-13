@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.util.Utils
 
 private[nio] abstract class Message(val typ: Long, val id: Int) {
   var senderAddress: InetSocketAddress = null
@@ -82,6 +83,19 @@ private[nio] object Message {
 
   def createBufferMessage(ackId: Int): BufferMessage = {
     createBufferMessage(new Array[ByteBuffer](0), ackId)
+  }
+
+  /**
+   * Create a "negative acknowledgment" to notify a sender that an error occurred
+   * while processing its message.  The exception's stacktrace will be formatted
+   * as a string, serialized into a byte array, and sent as the message payload.
+   */
+  def createErrorMessage(exception: Exception, ackId: Int): BufferMessage = {
+    val exceptionString = Utils.exceptionString(exception)
+    val serializedExceptionString = ByteBuffer.wrap(exceptionString.getBytes("utf-8"))
+    val errorMessage = createBufferMessage(serializedExceptionString, ackId)
+    errorMessage.hasError = true
+    errorMessage
   }
 
   def create(header: MessageChunkHeader): Message = {

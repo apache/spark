@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 
+import org.apache.spark.sql.catalyst.SparkSQLParser
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -39,10 +40,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-private[hive] case class ShellCommand(cmd: String) extends Command
-
-private[hive] case class SourceCommand(filePath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
@@ -128,9 +125,11 @@ private[hive] object HiveQl {
     "TOK_CREATETABLE",
     "TOK_DESCTABLE"
   ) ++ nativeCommands
-  
-  // It parses hive sql query along with with several Spark SQL specific extensions
-  protected val hiveSqlParser = new ExtendedHiveQlParser
+
+  protected val hqlParser = {
+    val fallback = new ExtendedHiveQlParser
+    new SparkSQLParser(fallback(_))
+  }
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
@@ -231,7 +230,7 @@ private[hive] object HiveQl {
 
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = hiveSqlParser(sql)
+  def parseSql(sql: String): LogicalPlan = hqlParser(sql)
 
   /** Creates LogicalPlan for a given HiveQL string. */
   def createPlan(sql: String) = {
@@ -652,7 +651,7 @@ private[hive] object HiveQl {
   def nodeToRelation(node: Node): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
-      Subquery(alias, nodeToPlan(query))
+      Subquery(cleanIdentifier(alias), nodeToPlan(query))
 
     case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
       val Token("TOK_SELECT",
