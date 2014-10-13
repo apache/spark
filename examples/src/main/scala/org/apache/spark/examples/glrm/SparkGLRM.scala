@@ -119,7 +119,7 @@ object SparkGLRM {
   }
 
   def fitGLRM(R: RDD[(Int, Int, Double)], M:Int, U:Int,
-              lossFunction: (Int, Int, Double, Double) => Double,
+              lossFunctionGrad: (Int, Int, Double, Double) => Double,
               moviesProx: (BDV[Double], Double, Double) => BDV[Double],
               usersProx: (BDV[Double], Double, Double) => BDV[Double],
               rank: Int,
@@ -159,14 +159,14 @@ object SparkGLRM {
 
       // Update ms
       println("Computing gradient losses")
-      var lg = computeLossGrads(msb, usb, R, lossFunction)
+      var lg = computeLossGrads(msb, usb, R, lossFunctionGrad)
       println("Updating M factors")
       ms = update(usb, msb, lg, stepSize, mCount, moviesProx, regPen)
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
 
       // Update us
       println("Computing gradient losses")
-      lg = computeLossGrads(usb, msb, RT, lossFunction)
+      lg = computeLossGrads(usb, msb, RT, lossFunctionGrad)
       println("Updating U factors")
       us = update(msb, usb, lg, stepSize, uCount, usersProx, regPen)
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
@@ -190,7 +190,7 @@ object SparkGLRM {
     // Number of users
     val U = 1000
     // Number of non-zeros per row
-    val NNZ = 10
+    val NNZ = 100
     // Number of features
     val rank = 2
     // Number of iterations
