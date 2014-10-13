@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
@@ -52,7 +53,8 @@ private[hive]
 class HadoopTableReader(
     @transient attributes: Seq[Attribute],
     @transient relation: MetastoreRelation,
-    @transient sc: HiveContext)
+    @transient sc: HiveContext,
+    @transient hiveExtraConf: HiveConf)
   extends TableReader {
 
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
@@ -63,7 +65,7 @@ class HadoopTableReader(
   // TODO: set aws s3 credentials.
 
   private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
+    sc.sparkContext.broadcast(new SerializableWritable(hiveExtraConf))
 
   def broadcastedHiveConf = _broadcastedHiveConf
 
