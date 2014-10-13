@@ -349,7 +349,6 @@ case object FloatType extends FractionalType {
 object ArrayType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
-  def typeName: String = "array"
 }
 
 /**
@@ -395,8 +394,6 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
-
-  def typeName = "struct"
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -459,8 +456,6 @@ object MapType {
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
     MapType(keyType: DataType, valueType: DataType, true)
-
-  def simpleName = "map"
 }
 
 /**
