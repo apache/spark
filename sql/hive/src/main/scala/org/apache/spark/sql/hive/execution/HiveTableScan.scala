@@ -86,10 +86,14 @@ case class HiveTableScan(
     ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
     ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
 
+    val tableDesc = relation.tableDesc
+    val deserializer = tableDesc.getDeserializerClass.newInstance
+    deserializer.initialize(hiveConf, tableDesc.getProperties)
+
     // Specifies types and object inspectors of columns to be scanned.
     val structOI = ObjectInspectorUtils
       .getStandardObjectInspector(
-        relation.tableDesc.getDeserializer.getObjectInspector,
+        deserializer.getObjectInspector,
         ObjectInspectorCopyOption.JAVA)
       .asInstanceOf[StructObjectInspector]
 
