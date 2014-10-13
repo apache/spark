@@ -23,8 +23,6 @@ import java.net.{URL, URLClassLoader}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import com.google.common.io.Files
-
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.util.Utils
 
@@ -39,10 +37,8 @@ class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     super.beforeAll()
-    tempDir1 = Files.createTempDir()
-    tempDir1.deleteOnExit()
-    tempDir2 = Files.createTempDir()
-    tempDir2.deleteOnExit()
+    tempDir1 = Utils.createTempDir()
+    tempDir2 = Utils.createTempDir()
     url1 = "file://" + tempDir1
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
