@@ -70,10 +70,11 @@ object SparkGLRM {
 
   // L1 prox
   def proxL1(v:BDV[Double], stepSize:Double, regPen:Double): BDV[Double] = {
+    val sr = regPen * stepSize
     val arr = v.toArray.map(x =>
-      if (math.abs(x) < regPen) 0
-      else if (x < -regPen) x + regPen
-      else x - regPen
+      if (math.abs(x) < sr) 0
+      else if (x < -sr) x + sr
+      else x - sr
     )
     new BDV[Double](arr)
   }
@@ -97,7 +98,7 @@ object SparkGLRM {
   // Update factors
   def update(us: Broadcast[Array[BDV[Double]]], ms: Broadcast[Array[BDV[Double]]],
              loss_grads: RDD[(Int, Int, Double)], stepSize: Double,
-             norms: Array[Double],
+             nnz: Array[Double],
              prox: (BDV[Double], Double, Double) => BDV[Double], regPen: Double)
   : Array[BDV[Double]] = {
     val rank = ms.value(0).length
@@ -107,7 +108,11 @@ object SparkGLRM {
                 .reduceByKey(_ + _).collect() // vector addition through breeze
 
     for (entry <- retu) {
-      ret(entry._1) = prox(ms.value(entry._1) - entry._2 * stepSize, stepSize, regPen)
+      val idx = entry._1
+      val g = entry._2
+      val alpha = (stepSize / (nnz(idx) + 1))
+
+      ret(idx) = prox(ms.value(idx) - g * alpha, alpha, regPen)
     }
 
     ret
@@ -145,7 +150,7 @@ object SparkGLRM {
     var msb = sc.broadcast(ms)
     var usb = sc.broadcast(us)
 
-    val stepSize = 1.0 / (maxU + maxM)
+    val stepSize = 1.0
 
     val errs = Array.ofDim[Double](numIterations)
 
@@ -183,13 +188,13 @@ object SparkGLRM {
     // Number of movies
     val M = 1000000
     // Number of users
-    val U = 100
+    val U = 1000
     // Number of non-zeros per row
     val NNZ = 10
     // Number of features
     val rank = 2
     // Number of iterations
-    val numIterations = 10
+    val numIterations = 100
     // regularization parameter
     val regPen = 0.1
 
@@ -201,9 +206,7 @@ object SparkGLRM {
       while (inds.size < NNZ) {
         inds += scala.util.Random.nextInt(U)
       }
-      //inds.toArray.map(j => (i, j, scala.math.random))
-      val vi = i.toDouble
-      inds.toArray.map(j => (i, j, i*j.toDouble + vi*vi + j*j.toDouble + vi*vi*vi + j.toDouble*j*j.toDouble))
+      inds.toArray.map(j => (i, j, scala.math.random))
     }.cache()
 
     printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, regPen=%f\n",
