@@ -923,25 +923,20 @@ object DecisionTree extends Serializable with Logging {
             splits(featureIndex) = new Array[Split](numSplits)
             bins(featureIndex) = new Array[Bin](numBins)
 
-            if (numSplits == 0) {
-              bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
-                new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
-            } else {
-              for (splitIndex <- 0 until numSplits) {
-                val threshold = featureSplits(splitIndex)
-                splits(featureIndex)(splitIndex) =
-                  new Split(featureIndex, threshold, Continuous, List())
-              }
-              bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
-                splits(featureIndex)(0), Continuous, Double.MinValue)
-              for (splitIndex <- 1 until numSplits) {
-                bins(featureIndex)(splitIndex) =
-                  new Bin(splits(featureIndex)(splitIndex - 1), splits(featureIndex)(splitIndex),
-                    Continuous, Double.MinValue)
-              }
-              bins(featureIndex)(numSplits) = new Bin(splits(featureIndex)(numSplits - 1),
-                new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
+            for (splitIndex <- 0 until numSplits) {
+              val threshold = featureSplits(splitIndex)
+              splits(featureIndex)(splitIndex) =
+                new Split(featureIndex, threshold, Continuous, List())
             }
+            bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
+              splits(featureIndex)(0), Continuous, Double.MinValue)
+            for (splitIndex <- 1 until numSplits) {
+              bins(featureIndex)(splitIndex) =
+                new Bin(splits(featureIndex)(splitIndex - 1), splits(featureIndex)(splitIndex),
+                  Continuous, Double.MinValue)
+            }
+            bins(featureIndex)(numSplits) = new Bin(splits(featureIndex)(numSplits - 1),
+              new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
           } else {
             // Categorical feature
             val featureArity = metadata.featureArity(featureIndex)
@@ -1108,6 +1103,7 @@ object DecisionTree extends Serializable with Logging {
       splits.toArray
     }
 
+    assert(splits.length > 0)
     // set number of splits accordingly
     metadata.setNumSplits(featureIndex, splits.length)
 
