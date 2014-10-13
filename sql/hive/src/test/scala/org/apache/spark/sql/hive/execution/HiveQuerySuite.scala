@@ -802,6 +802,9 @@ class HiveQuerySuite extends HiveComparisonTest {
     clear()
   }
 
+  createQueryTest("select from thrift based table",
+    "SELECT * from src_thrift")
+  
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
 }
