@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -33,6 +33,7 @@ object Literal {
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(d, DecimalType)
     case t: Timestamp => Literal(t, TimestampType)
+    case d: Date => Literal(d, DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
   }

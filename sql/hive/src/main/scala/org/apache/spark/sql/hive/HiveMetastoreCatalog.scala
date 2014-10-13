@@ -186,6 +186,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
     "decimal" ^^^ DecimalType |
+    "date" ^^^ DateType |
     "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
 
@@ -235,6 +236,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case LongType => "bigint"
     case BinaryType => "binary"
     case BooleanType => "boolean"
+    case DateType => "date"
     case DecimalType => "decimal"
     case TimestampType => "timestamp"
     case NullType => "void"

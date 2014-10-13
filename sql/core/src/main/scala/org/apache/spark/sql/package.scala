@@ -168,6 +168,16 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
+   * The data type representing `java.sql.Date` values.
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  val DateType = catalyst.types.DateType
+
+  /**
+   * :: DeveloperApi ::
+   *
    * The data type representing `scala.math.BigDecimal` values.
    *
    * @group dataType

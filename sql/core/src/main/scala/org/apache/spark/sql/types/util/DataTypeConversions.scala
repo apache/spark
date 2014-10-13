@@ -41,6 +41,7 @@ protected[sql] object DataTypeConversions {
     case StringType => JDataType.StringType
     case BinaryType => JDataType.BinaryType
     case BooleanType => JDataType.BooleanType
+    case DateType => JDataType.DateType
     case TimestampType => JDataType.TimestampType
     case DecimalType => JDataType.DecimalType
     case DoubleType => JDataType.DoubleType
@@ -80,6 +81,8 @@ protected[sql] object DataTypeConversions {
       BinaryType
     case booleanType: org.apache.spark.sql.api.java.BooleanType =>
       BooleanType
+    case dateType: org.apache.spark.sql.api.java.DateType =>
+      DateType
     case timestampType: org.apache.spark.sql.api.java.TimestampType =>
       TimestampType
     case decimalType: org.apache.spark.sql.api.java.DecimalType =>
