@@ -20,19 +20,11 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.QueryTest
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
-import org.apache.spark.sql.hive.HiveQl
 import org.apache.spark.sql.hive.test.TestHive._
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
 case class Nested3(f3: Int)
-
-case class A1(x: Int)
-case class A2(a: A3, k:Int)
-case class A3(x: String)
-case class A4(x: String)
 
 /**
  * A collection of hive query tests where we generate the answers ourselves instead of depending on
@@ -122,30 +114,6 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       1)
-  }
-
-  test("test ambiguousReferences resolved as hive") {
-    sparkContext.parallelize(A1(1) :: Nil).registerTempTable("t1")
-    sparkContext.parallelize(A2(A3("test"), 1) :: Nil).registerTempTable("t2")
-    checkAnswer(
-      sql("SELECT a.x FROM t1 a JOIN t2 b ON a.x = b.k"),
-      1)
-  }
-
-  test("test ambiguousReferences exception thrown") {
-    sparkContext.parallelize(A3("a") :: Nil).registerTempTable("t3")
-    sparkContext.parallelize(A4("b") :: Nil).registerTempTable("t4")
-    intercept[TreeNodeException[Project]] {
-      checkAnswer(
-        sql("SELECT x FROM t3 a JOIN t4 b"),
-        "a")
-    }
-  }
-
-  test("test particular table alias") {
-    checkAnswer(
-      sql("SELECT key.value, COUNT(1) FROM src key JOIN src b GROUP BY key.value"),
-      sql("SELECT a.value, COUNT(1) FROM src a JOIN src b GROUP BY a.value").collect().toSeq)
   }
 
   test("test CTAS") {

@@ -132,8 +132,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver): Option[NamedExpression] = {
 
     val parts = name.split("\\.").toList
+
     // Reference to hive SemanticAnalyzer
     // we should filter some input Attribute if 'name' contains table alias.
+    // For example:
+    // CREATE TABLE t1(x INT);
+    // CREATE TABLE t2(a STRUCT<x: INT>, k INT);
+    // SELECT a.x FROM t1 a JOIN t2 b;
     val inputMatchTableAlias = input.filter(_.qualifiers.exists(resolver(_, parts.head)))
 
     val (finalParts, finalInput) =
