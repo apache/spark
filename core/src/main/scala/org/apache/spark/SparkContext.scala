@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
+import java.util.Arrays
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
@@ -1429,7 +1430,10 @@ object SparkContext extends Logging {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+      // getBytes method returns array which is longer then data to be returned
+      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
+    )
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =
