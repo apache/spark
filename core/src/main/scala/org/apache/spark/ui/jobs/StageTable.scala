@@ -176,9 +176,9 @@ private[ui] class StageTableBase(
       {makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,
         stageData.numFailedTasks, s.numTasks)}
     </td>
-    <td sorttable_customekey={inputRead.toString}>{inputReadWithUnit}</td>
-    <td sorttable_customekey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
-    <td sorttable_customekey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
+    <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
+    <td sorttable_customkey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
+    <td sorttable_customkey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
   }
 
   /** Render an HTML row that represents a stage */
