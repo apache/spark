@@ -156,12 +156,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    */
   private def checkForLogs() = {
     try {
-
       val logStatus = fs.listStatus(new Path(resolvedLogDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
 
       // Load all new logs from the log directory. Only directories that have a modification time
-      // later than the last known log directory will be loaded
+      // later than the last known log directory will be loaded.
       var newLastModifiedTime = lastModifiedTime
       val logInfos = logDirs
         .filter { dir =>
