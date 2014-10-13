@@ -122,14 +122,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
-        Array(3), Gini, QuantileStrategy.Sort,
+        Array(5), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
       val featureSamples = Array(1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits.length === 2)
-      assert(fakeMetadata.numSplits(0) === 2)
-      assert(fakeMetadata.numBins(0) === 3)
+      assert(splits.length === 3)
+      assert(fakeMetadata.numSplits(0) === 3)
+      assert(fakeMetadata.numBins(0) === 4)
     }
   }
 

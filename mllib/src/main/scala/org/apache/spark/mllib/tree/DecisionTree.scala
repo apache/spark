@@ -925,7 +925,7 @@ object DecisionTree extends Serializable with Logging {
 
             if (numSplits == 0) {
               bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
-                new DummyLowSplit(featureIndex, Continuous), Continuous, Double.MinValue)
+                new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
             } else {
               for (splitIndex <- 0 until numSplits) {
                 val threshold = featureSplits(splitIndex)
@@ -1073,9 +1073,9 @@ object DecisionTree extends Serializable with Logging {
 
       // if possible splits is not enough or just enough,
       // just return all possible splits
-      val possibleSplits = valueCount.length - 1
+      val possibleSplits = valueCount.length
       if (possibleSplits <= numSplits) {
-        return valueCount.slice(0, possibleSplits).map(_._1)
+        return valueCount.map(_._1)
       }
 
       // stride between splits
