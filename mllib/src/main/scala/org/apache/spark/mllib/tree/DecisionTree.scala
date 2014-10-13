@@ -914,7 +914,8 @@ object DecisionTree extends Serializable with Logging {
           val numBins = metadata.numBins(featureIndex)
           if (metadata.isContinuous(featureIndex)) {
             val featureSamples = sampledInput.map(lp => lp.features(featureIndex))
-            val featureSplits = findSplitsForContinuousFeature(featureSamples, metadata, featureIndex)
+            val featureSplits = findSplitsForContinuousFeature(featureSamples,
+              metadata, featureIndex)
 
             val numSplits = featureSplits.length
             val numBins = numSplits + 1
