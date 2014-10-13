@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext._
 import org.apache.spark.sql.{SchemaRDD, Row}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * :: DeveloperApi ::
@@ -54,6 +55,23 @@ package object debug {
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
+      }
+    }
+
+    def typeCheck(): Unit = {
+      val plan = query.queryExecution.executedPlan
+      val visited = new collection.mutable.HashSet[TreeNodeRef]()
+      val debugPlan = plan transform {
+        case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
+          visited += new TreeNodeRef(s)
+          TypeCheck(s)
+      }
+      try {
+        println(s"Results returned: ${debugPlan.execute().count()}")
+      } catch {
+        case e: Exception =>
+          def unwrap(e: Throwable): Throwable = if (e.getCause == null) e else unwrap(e.getCause)
+          println(s"Deepest Error: ${unwrap(e)}")
       }
     }
   }
@@ -112,6 +130,73 @@ package object debug {
             currentRow
           }
         }
+      }
+    }
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Helper functions for checking that runtime types match a given schema.
+   */
+  @DeveloperApi
+  object TypeCheck {
+    def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
+      case (null, _) =>
+
+      case (row: Row, StructType(fields)) =>
+        row.zip(fields.map(_.dataType)).foreach { case(d,t) => typeCheck(d,t) }
+      case (s: Seq[_], ArrayType(elemType, _)) =>
+        s.foreach(typeCheck(_, elemType))
+      case (m: Map[_, _], MapType(keyType, valueType, _)) =>
+        m.keys.foreach(typeCheck(_, keyType))
+        m.values.foreach(typeCheck(_, valueType))
+
+      case (_: Long, LongType) =>
+      case (_: Int, IntegerType) =>
+      case (_: String, StringType) =>
+      case (_: Float, FloatType) =>
+      case (_: Byte, ByteType) =>
+      case (_: Short, ShortType) =>
+      case (_: Boolean, BooleanType) =>
+      case (_: Double, DoubleType) =>
+
+      case (d, t) => sys.error(s"Invalid data found: got $d (${d.getClass}) expected $t")
+    }
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Augments SchemaRDDs with debug methods.
+   */
+  @DeveloperApi
+  private[sql] case class TypeCheck(child: SparkPlan) extends SparkPlan {
+    import TypeCheck._
+
+    override def nodeName  = ""
+
+    /* Only required when defining this class in a REPL.
+    override def makeCopy(args: Array[Object]): this.type =
+      TypeCheck(args(0).asInstanceOf[SparkPlan]).asInstanceOf[this.type]
+    */
+
+    def output = child.output
+
+    def children = child :: Nil
+
+    def execute() = {
+      child.execute().map { row =>
+        try typeCheck(row, child.schema) catch {
+          case e: Exception =>
+            sys.error(
+              s"""
+                  |ERROR WHEN TYPE CHECKING QUERY
+                  |==============================
+                  |$e
+                  |======== BAD TREE ============
+                  |$child
+             """.stripMargin)
+        }
+        row
       }
     }
   }

@@ -138,11 +138,6 @@ case class Aggregate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  /** The set of all AttributeReferences required for this aggregation. */
-  def references =
-    AttributeSet(
-      groupingExpressions.flatMap(_.references) ++ aggregateExpressions.flatMap(_.references))
-
   override def output = aggregateExpressions.map(_.toAttribute)
 }
 
