@@ -18,13 +18,15 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkContext._
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, BoostingStrategy}
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.impl.TimeTracker
-import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
-import org.apache.spark.mllib.tree.loss.{Losses, LeastSquaresError, Loss}
+import org.apache.spark.mllib.tree.impurity.Impurities
+import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.{GradientBoostingModel, DecisionTreeModel}
@@ -34,12 +36,10 @@ import org.apache.spark.storage.StorageLevel
 /**
  * :: Experimental ::
  * A class that implements gradient boosting for regression problems.
- * @param strategy Parameters for the underlying decision tree estimators
  * @param boostingStrategy Parameters for the gradient boosting algorithm
  */
 @Experimental
 class GradientBoosting (
-    private val strategy: Strategy,
     private val boostingStrategy: BoostingStrategy) extends Serializable with Logging {
 
   /**
@@ -48,12 +48,13 @@ class GradientBoosting (
    * @return GradientBoostingModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): GradientBoostingModel = {
-    val algo = strategy.algo
+    val strategy = boostingStrategy.strategy
+    val algo = boostingStrategy.algo
     algo match {
-      case Regression => GradientBoosting.boost(input, strategy, boostingStrategy)
+      case Regression => GradientBoosting.boost(input, boostingStrategy)
       case Classification =>
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoosting.boost(remappedInput, strategy, boostingStrategy)
+        GradientBoosting.boost(remappedInput, boostingStrategy)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -73,125 +74,408 @@ object GradientBoosting extends Logging {
    *       Using [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
    *       is recommended to clearly specify regression.
    *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param strategy The configuration parameters for the underlying tree-based estimators
-   *                 which specify the type of algorithm (classification, regression, etc.),
-   *                 feature type (continuous, categorical), depth of the tree,
-   *                 quantile calculation strategy, etc.
    * @return GradientBoostingModel that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
-      strategy: Strategy,
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {
-    new GradientBoosting(strategy, boostingStrategy).train(input)
+    new GradientBoosting(boostingStrategy).train(input)
   }
 
-  // TODO: Add javadoc
   /**
    * Method to train a gradient boosting regression model.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
+   * @param numEstimators Number of estimators used in boosting stages. In other words,
+   *                      number of boosting iterations performed.
+   * @param loss Loss function used for minimization during gradient boosting.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
+   *                     learning rate should be between in the interval (0, 1]
+   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
+   * @param maxBins Maximum number of bins used for discretizing continuous features and
+   *                for choosing how to split on features at each node.
+   *                More bins give higher granularity.
+   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
+   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
+   *                                number of discrete values they take. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It's important to note that features are
+   *                                zero-indexed.
+   * @param minInstancesPerNode Minimum number of instances each child must have after split.
+   *                            Default value is 1. If a split cause left or right child
+   *                            to have less than minInstancesPerNode,
+   *                            this split will not be considered as a valid split.
+   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
+   *                    If a split has less information gain than minInfoGain,
+   *                    this split will not be considered as a valid split.
+   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
+   *                      256 MB.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
       numEstimators: Int,
-      learningRate: Double,
-      subsample: Double,
       loss: String,
-      checkpointPeriod: Int,
       impurity: String,
       maxDepth: Int,
+      learningRate: Double,
+      subsample: Double,
+      checkpointPeriod: Int,
       maxBins: Int,
-      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
+      quantileCalculationStrategy: String,
+      categoricalFeaturesInfo: Map[Int, Int],
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      maxMemoryInMB: Int): GradientBoostingModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
-    val boostingStrategy = new BoostingStrategy(numEstimators, learningRate, subsample, lossType,
-      checkpointPeriod)
-    // TODO: Remove tree strategy and merge it into boosting strategy
-    val strategy = new Strategy(Regression, impurityType, maxDepth, 2, maxBins,
-      Sort, categoricalFeaturesInfo, subsample = subsample)
-    new GradientBoosting(strategy, boostingStrategy).train(input)
+    val quantileCalculationStrategyType = {
+      quantileCalculationStrategy match {
+        case "sort" => QuantileStrategy.Sort
+        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+      }
+    }
+    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
+      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2, maxBins,
+      quantileCalculationStrategyType, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB)
+    new GradientBoosting(boostingStrategy).train(input)
   }
 
-  // TODO: Add javadoc
+
   /**
-   * Method to train a gradient boosting regression model.
+   * Method to train a gradient boosting binary classification model.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
+   * @param numEstimators Number of estimators used in boosting stages. In other words,
+   *                      number of boosting iterations performed.
+   * @param loss Loss function used for minimization during gradient boosting.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
+   *                     learning rate should be between in the interval (0, 1]
+   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
+   * @param numClassesForClassification Number of classes for classification.
+   *                                    (Ignored for regression.)
+   *                                    Default value is 2 (binary classification).
+   * @param maxBins Maximum number of bins used for discretizing continuous features and
+   *                for choosing how to split on features at each node.
+   *                More bins give higher granularity.
+   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
+   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
+   *                                number of discrete values they take. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It's important to note that features are
+   *                                zero-indexed.
+   * @param minInstancesPerNode Minimum number of instances each child must have after split.
+   *                            Default value is 1. If a split cause left or right child
+   *                            to have less than minInstancesPerNode,
+   *                            this split will not be considered as a valid split.
+   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
+   *                    If a split has less information gain than minInfoGain,
+   *                    this split will not be considered as a valid split.
+   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
+   *                      256 MB.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
       numEstimators: Int,
-      learningRate: Double,
-      subsample: Double,
       loss: String,
-      checkpointPeriod: Int,
       impurity: String,
       maxDepth: Int,
+      learningRate: Double,
+      subsample: Double,
+      checkpointPeriod: Int,
       numClassesForClassification: Int,
       maxBins: Int,
-      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
+      quantileCalculationStrategy: String,
+      categoricalFeaturesInfo: Map[Int, Int],
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      maxMemoryInMB: Int): GradientBoostingModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
-    val boostingStrategy = new BoostingStrategy(numEstimators, learningRate, subsample, lossType,
-      checkpointPeriod)
-    // TODO: Remove tree strategy and merge it into boosting strategy
-    val strategy = new Strategy(Classification, impurityType, maxDepth, numClassesForClassification, maxBins,
-      Sort, categoricalFeaturesInfo, subsample = subsample)
-    new GradientBoosting(strategy, boostingStrategy).train(input)
+    val quantileCalculationStrategyType = {
+      quantileCalculationStrategy match {
+        case "sort" => QuantileStrategy.Sort
+        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+      }
+    }
+    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
+      impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
+      numClassesForClassification, maxBins, quantileCalculationStrategyType,
+      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB)
+    new GradientBoosting(boostingStrategy).train(input)
+  }
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting#trainRegressor]]
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param numEstimators Number of estimators used in boosting stages. In other words,
+   *                      number of boosting iterations performed.
+   * @param loss Loss function used for minimization during gradient boosting.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
+   *                     learning rate should be between in the interval (0, 1]
+   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
+   * @param maxBins Maximum number of bins used for discretizing continuous features and
+   *                for choosing how to split on features at each node.
+   *                More bins give higher granularity.
+   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
+   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
+   *                                number of discrete values they take. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It's important to note that features are
+   *                                zero-indexed.
+   * @param minInstancesPerNode Minimum number of instances each child must have after split.
+   *                            Default value is 1. If a split cause left or right child
+   *                            to have less than minInstancesPerNode,
+   *                            this split will not be considered as a valid split.
+   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
+   *                    If a split has less information gain than minInfoGain,
+   *                    this split will not be considered as a valid split.
+   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
+   *                      256 MB.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainRegressor(
+      input: JavaRDD[LabeledPoint],
+      numEstimators: Int,
+      loss: String,
+      impurity: String,
+      maxDepth: Int,
+      learningRate: Double,
+      subsample: Double,
+      checkpointPeriod: Int,
+      maxBins: Int,
+      quantileCalculationStrategy: String,
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      maxMemoryInMB: Int): GradientBoostingModel = {
+    val lossType = Losses.fromString(loss)
+    val impurityType = Impurities.fromString(impurity)
+    val quantileCalculationStrategyType = {
+      quantileCalculationStrategy match {
+        case "sort" => QuantileStrategy.Sort
+        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+      }
+    }
+    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
+      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2, maxBins,
+      quantileCalculationStrategyType, categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int,
+        Int]].asScala.toMap, minInstancesPerNode, minInfoGain, maxMemoryInMB)
+    new GradientBoosting(boostingStrategy).train(input)
   }
 
-  // TODO: Add javadoc
+
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param numEstimators Number of estimators used in boosting stages. In other words,
+   *                      number of boosting iterations performed.
+   * @param loss Loss function used for minimization during gradient boosting.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
+   *                     learning rate should be between in the interval (0, 1]
+   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
+   * @param numClassesForClassification Number of classes for classification.
+   *                                    (Ignored for regression.)
+   *                                    Default value is 2 (binary classification).
+   * @param maxBins Maximum number of bins used for discretizing continuous features and
+   *                for choosing how to split on features at each node.
+   *                More bins give higher granularity.
+   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
+   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
+   *                                number of discrete values they take. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It's important to note that features are
+   *                                zero-indexed.
+   * @param minInstancesPerNode Minimum number of instances each child must have after split.
+   *                            Default value is 1. If a split cause left or right child
+   *                            to have less than minInstancesPerNode,
+   *                            this split will not be considered as a valid split.
+   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
+   *                    If a split has less information gain than minInfoGain,
+   *                    this split will not be considered as a valid split.
+   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
+   *                      256 MB.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainClassifier(
+      input: JavaRDD[LabeledPoint],
+      numEstimators: Int,
+      loss: String,
+      impurity: String,
+      maxDepth: Int,
+      learningRate: Double,
+      subsample: Double,
+      checkpointPeriod: Int,
+      numClassesForClassification: Int,
+      maxBins: Int,
+      quantileCalculationStrategy: String,
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      maxMemoryInMB: Int): GradientBoostingModel = {
+    val lossType = Losses.fromString(loss)
+    val impurityType = Impurities.fromString(impurity)
+    val quantileCalculationStrategyType = {
+      quantileCalculationStrategy match {
+        case "sort" => QuantileStrategy.Sort
+        case _ =>   throw new IllegalArgumentException(s"Did not recognize Loss name: $quantileCalculationStrategy")
+      }
+    }
+    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
+      impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
+      numClassesForClassification, maxBins, quantileCalculationStrategyType,
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap, minInstancesPerNode, minInfoGain, maxMemoryInMB)
+    new GradientBoosting(boostingStrategy).train(input)
+  }
+
+
   /**
    * Method to train a gradient boosting regression model.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
-   * @param strategy The configuration parameters for the underlying tree-based estimators
-   *                 which specify the type of algorithm (classification, regression, etc.),
-   *                 feature type (continuous, categorical), depth of the tree,
-   *                 quantile calculation strategy, etc.
+   * @param numEstimators Number of estimators used in boosting stages. In other words,
+   *                      number of boosting iterations performed.
+   * @param loss Loss function used for minimization during gradient boosting.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
+   *                     learning rate should be between in the interval (0, 1]
+   * @param subsample  Fraction of the training data used for learning the decision tree.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
-      strategy: Strategy,
-      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
-    // TODO: Add require for algo
-    // TODO: Remove tree strategy and merge it into boosting strategy
-    new GradientBoosting(strategy, boostingStrategy).train(input)
+      numEstimators: Int,
+      loss: String,
+      impurity: String,
+      maxDepth: Int,
+      learningRate: Double,
+      subsample: Double): GradientBoostingModel = {
+    val lossType = Losses.fromString(loss)
+    val impurityType = Impurities.fromString(impurity)
+    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
+      impurityType, maxDepth, learningRate, subsample)
+    new GradientBoosting(boostingStrategy).train(input)
   }
 
-  // TODO: Add javadoc
+
+  /**
+   * Method to train a gradient boosting binary classification model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param numEstimators Number of estimators used in boosting stages. In other words,
+   *                      number of boosting iterations performed.
+   * @param loss Loss function used for minimization during gradient boosting.
+   * @param impurity Criterion used for information gain calculation.
+   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
+   * @param maxDepth Maximum depth of the tree.
+   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
+   *                     learning rate should be between in the interval (0, 1]
+   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainClassifier(
+      input: RDD[LabeledPoint],
+      numEstimators: Int,
+      loss: String,
+      impurity: String,
+      maxDepth: Int,
+      learningRate: Double,
+      subsample: Double): GradientBoostingModel = {
+    val lossType = Losses.fromString(loss)
+    val impurityType = Impurities.fromString(impurity)
+    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
+      impurityType, maxDepth, learningRate, subsample)
+    new GradientBoosting(boostingStrategy).train(input)
+  }
+
+
+  /**
+   * Method to train a gradient boosting regression model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param boostingStrategy Configuration options for the boosting algorithm.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainRegressor(
+      input: RDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+    val algo = boostingStrategy.algo
+    require(algo == Regression, s"Only Regression algo supported. Provided algo is $algo.")
+    new GradientBoosting(boostingStrategy).train(input)
+  }
+
   /**
    * Method to train a gradient boosting classification model.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
-   * @param strategy The configuration parameters for the underlying tree-based estimators
-   *                 which specify the type of algorithm (classification, regression, etc.),
-   *                 feature type (continuous, categorical), depth of the tree,
-   *                 quantile calculation strategy, etc.
+   * @param boostingStrategy Configuration options for the boosting algorithm.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainClassification(
       input: RDD[LabeledPoint],
-      strategy: Strategy,
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {
-    // TODO: Add require for algo
-    // TODO: Remove tree strategy and merge it into boosting strategy
-    new GradientBoosting(strategy, boostingStrategy).train(input)
+    val algo = boostingStrategy.algo
+    require(algo == Classification, s"Only Classification algo supported. Provided algo is $algo.")
+    new GradientBoosting(boostingStrategy).train(input)
   }
 
   // TODO: java friendly API for classification and regression
@@ -200,13 +484,11 @@ object GradientBoosting extends Logging {
   /**
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
-   * @param strategy tree parameters
    * @param boostingStrategy boosting parameters
    * @return
    */
   private def boost(
       input: RDD[LabeledPoint],
-      strategy: Strategy,
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {
 
     val timer = new TimeTracker()
@@ -223,6 +505,7 @@ object GradientBoosting extends Logging {
     // TODO: Implement Stochastic gradient boosting using BaggedPoint
     val subsample = boostingStrategy.subsample
     val checkpointingPeriod = boostingStrategy.checkpointPeriod
+    val strategy = boostingStrategy.strategy
 
     // Cache input
     input.persist(StorageLevel.MEMORY_AND_DISK)
