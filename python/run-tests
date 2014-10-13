@@ -82,6 +82,7 @@ function run_mllib_tests() {
 }
 
 function run_streaming_tests() {
+    echo "Run streaming tests ..."
     run_test "pyspark/streaming/util.py"
     run_test "pyspark/streaming/tests.py"
 }
