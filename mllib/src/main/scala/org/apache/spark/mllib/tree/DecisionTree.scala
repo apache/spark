@@ -1056,47 +1056,52 @@ object DecisionTree extends Serializable with Logging {
       valueCount.toArray
     }
 
-    val numSplits = metadata.numSplits(featureIndex)
 
-    // sort feature samples first
-    val sortedFeatureSamples = featureSamples.sorted
+    val splits = {
+      val numSplits = metadata.numSplits(featureIndex)
 
-    // get count for each distinct value
-    val valueCount = getValueCount(sortedFeatureSamples)
-    if (valueCount.length <= numSplits) {
-      return valueCount.map(_._1)
-    }
+      // sort feature samples first
+      val sortedFeatureSamples = featureSamples.sorted
 
-    // stride between splits
-    val stride: Double = featureSamples.length.toDouble / (numSplits + 1)
-    logDebug("stride = " + stride)
-
-    // iterate `valueCount` to find splits
-    val splits = new ArrayBuffer[Double]
-    var index = 1
-    // currentCount: sum of counts of values that have been visited
-    var currentCount = valueCount(0)._2
-    // expectedCount: expected value for `currentCount`.
-    // If `currentCount` is closest value to `expectedCount`,
-    // then current value is a split threshold.
-    // After finding a split threshold, `expectedCount` is added by stride.
-    var expectedCount = stride
-    while (index < valueCount.length) {
-      // If adding count of current value to currentCount
-      // makes currentCount less close to expectedCount,
-      // previous value is a split threshold.
-      if (math.abs(currentCount - expectedCount) <
-        math.abs(currentCount + valueCount(index)._2 - expectedCount)) {
-        splits.append(valueCount(index-1)._1)
-        expectedCount += stride
+      // get count for each distinct value
+      val valueCount = getValueCount(sortedFeatureSamples)
+      if (valueCount.length <= numSplits) {
+        return valueCount.map(_._1)
       }
-      currentCount += valueCount(index)._2
-      index += 1
+
+      // stride between splits
+      val stride: Double = featureSamples.length.toDouble / (numSplits + 1)
+      logDebug("stride = " + stride)
+
+      // iterate `valueCount` to find splits
+      val splits = new ArrayBuffer[Double]
+      var index = 1
+      // currentCount: sum of counts of values that have been visited
+      var currentCount = valueCount(0)._2
+      // expectedCount: expected value for `currentCount`.
+      // If `currentCount` is closest value to `expectedCount`,
+      // then current value is a split threshold.
+      // After finding a split threshold, `expectedCount` is added by stride.
+      var expectedCount = stride
+      while (index < valueCount.length) {
+        // If adding count of current value to currentCount
+        // makes currentCount less close to expectedCount,
+        // previous value is a split threshold.
+        if (math.abs(currentCount - expectedCount) <
+          math.abs(currentCount + valueCount(index)._2 - expectedCount)) {
+          splits.append(valueCount(index-1)._1)
+          expectedCount += stride
+        }
+        currentCount += valueCount(index)._2
+        index += 1
+      }
+
+      splits.toArray
     }
 
     // set number of splits accordingly
     metadata.setNumSplits(featureIndex, splits.length)
 
-    splits.toArray
+    splits
   }
 }
