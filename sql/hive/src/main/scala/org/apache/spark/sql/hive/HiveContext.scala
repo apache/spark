@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConversions._
@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.TimestampWritable
+import org.apache.hadoop.hive.serde2.io.DateWritable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -362,7 +363,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType, TimestampType, BinaryType)
+        ShortType, DecimalType, DateType, TimestampType, BinaryType)
 
     protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -377,6 +378,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
+      case (d: Date, DateType) => new DateWritable(d).toString
       case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
       case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
       case (other, tpe) if primitiveTypes contains tpe => other.toString

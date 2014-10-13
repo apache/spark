@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.sql.Date
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.lib.Node
@@ -330,6 +331,7 @@ private[hive] object HiveQl {
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
     case Token("TOK_DOUBLE", Nil) => DoubleType
+    case Token("TOK_DATE", Nil) => DateType
     case Token("TOK_TIMESTAMP", Nil) => TimestampType
     case Token("TOK_BINARY", Nil) => BinaryType
     case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
@@ -937,6 +939,8 @@ private[hive] object HiveQl {
       Cast(nodeToExpr(arg), DecimalType)
     case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), TimestampType)
+    case Token("TOK_FUNCTION", Token("TOK_DATE", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DateType)
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
@@ -1059,6 +1063,9 @@ private[hive] object HiveQl {
 
     case ast: ASTNode if ast.getType == HiveParser.StringLiteral =>
       Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_DATELITERAL =>
+      Literal(Date.valueOf(ast.getText.substring(1, ast.getText.length - 1)))
 
     case a: ASTNode =>
       throw new NotImplementedError(
