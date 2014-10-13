@@ -98,7 +98,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
           def isValidAggregateExpression(expr: Expression): Boolean = expr match {
             case _: AggregateExpression => true
-            case e: Attribute if groupingExprs.contains(e) => true
+            case e: Attribute => groupingExprs.contains(e)
             case e if groupingExprs.contains(e) => true
             case e if e.references.isEmpty => true
             case e => e.children.forall(isValidAggregateExpression)
