@@ -19,9 +19,12 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.impl.TimeTracker
+import org.apache.spark.mllib.tree.impurity.{Impurities, Impurity}
+import org.apache.spark.mllib.tree.loss.{Losses, LeastSquaresError, Loss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.{GradientBoostingModel, DecisionTreeModel}
@@ -61,11 +64,13 @@ class GradientBoosting (
 
 object GradientBoosting extends Logging {
 
+  // TODO: Add javadoc
   /**
    * Method to train a gradient boosting model.
-   * The method currently only supports regression.
    *
    * Note: Using [[org.apache.spark.mllib.tree.GradientBoosting#trainRegressor]]
+   *       is recommended to clearly specify regression.
+   *       Using [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
    *       is recommended to clearly specify regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
@@ -84,7 +89,68 @@ object GradientBoosting extends Logging {
     new GradientBoosting(strategy, boostingStrategy).train(input)
   }
 
+  // TODO: Add javadoc
+  /**
+   * Method to train a gradient boosting regression model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainRegressor(
+      input: RDD[LabeledPoint],
+      numEstimators: Int,
+      learningRate: Double,
+      subsample: Double,
+      loss: String,
+      checkpointPeriod: Int,
+      impurity: String,
+      maxDepth: Int,
+      maxBins: Int,
+      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
+    val lossType = Losses.fromString(loss)
+    val impurityType = Impurities.fromString(impurity)
+    val boostingStrategy = new BoostingStrategy(numEstimators, learningRate, subsample, lossType,
+      checkpointPeriod)
+    // TODO: Remove tree strategy and merge it into boosting strategy
+    val strategy = new Strategy(Regression, impurityType, maxDepth, 2, maxBins,
+      Sort, categoricalFeaturesInfo, subsample = subsample)
+    new GradientBoosting(strategy, boostingStrategy).train(input)
+  }
 
+  // TODO: Add javadoc
+  /**
+   * Method to train a gradient boosting regression model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainClassifier(
+      input: RDD[LabeledPoint],
+      numEstimators: Int,
+      learningRate: Double,
+      subsample: Double,
+      loss: String,
+      checkpointPeriod: Int,
+      impurity: String,
+      maxDepth: Int,
+      numClassesForClassification: Int,
+      maxBins: Int,
+      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
+    val lossType = Losses.fromString(loss)
+    val impurityType = Impurities.fromString(impurity)
+    val boostingStrategy = new BoostingStrategy(numEstimators, learningRate, subsample, lossType,
+      checkpointPeriod)
+    // TODO: Remove tree strategy and merge it into boosting strategy
+    val strategy = new Strategy(Classification, impurityType, maxDepth, numClassesForClassification, maxBins,
+      Sort, categoricalFeaturesInfo, subsample = subsample)
+    new GradientBoosting(strategy, boostingStrategy).train(input)
+  }
+
+  // TODO: Add javadoc
   /**
    * Method to train a gradient boosting regression model.
    *
@@ -98,11 +164,38 @@ object GradientBoosting extends Logging {
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainRegressor(
-             input: RDD[LabeledPoint],
-             strategy: Strategy,
-             boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+      input: RDD[LabeledPoint],
+      strategy: Strategy,
+      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+    // TODO: Add require for algo
+    // TODO: Remove tree strategy and merge it into boosting strategy
     new GradientBoosting(strategy, boostingStrategy).train(input)
   }
+
+  // TODO: Add javadoc
+  /**
+   * Method to train a gradient boosting classification model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param strategy The configuration parameters for the underlying tree-based estimators
+   *                 which specify the type of algorithm (classification, regression, etc.),
+   *                 feature type (continuous, categorical), depth of the tree,
+   *                 quantile calculation strategy, etc.
+   * @return GradientBoostingModel that can be used for prediction
+   */
+  def trainClassification(
+      input: RDD[LabeledPoint],
+      strategy: Strategy,
+      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+    // TODO: Add require for algo
+    // TODO: Remove tree strategy and merge it into boosting strategy
+    new GradientBoosting(strategy, boostingStrategy).train(input)
+  }
+
+  // TODO: java friendly API for classification and regression
+
 
   /**
    * Internal method for performing regression using trees as base learners.
@@ -128,7 +221,7 @@ object GradientBoosting extends Logging {
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
     // TODO: Implement Stochastic gradient boosting using BaggedPoint
-    val subSample = boostingStrategy.subsample
+    val subsample = boostingStrategy.subsample
     val checkpointingPeriod = boostingStrategy.checkpointPeriod
 
     // Cache input
