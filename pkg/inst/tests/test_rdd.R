@@ -164,9 +164,11 @@ test_that("takeSample() on RDDs", {
 })
 
 test_that("mapValues() on pairwise RDDs", {
-  multiples <- mapValues(intRdd, function(x) x * 2)
+  multiples <- mapValues(intRdd, function(x) { x * 2 })
   actual <- collect(multiples)
-  expect_equal(actual, lapply(intPairs, function(x) list(x[[1]], x[[2]] * 2)))
+  expect_equal(actual, lapply(intPairs, function(x) {
+    list(x[[1]], x[[2]] * 2)
+    }))
 })
 
 test_that("distinct() on RDDs", {

@@ -607,7 +607,8 @@ setMethod("take",
 #' This function returns a new RDD containing the distinct elements in the 
 #' given RDD. The same as `distinct()' in Spark.
 #'
-#' @param rdd The RDD to remove duplicates from
+#' @param rdd The RDD to remove duplicates from.
+#' @param numPartitions Number of partitions to create.
 #' @rdname distinct
 #' @export
 #' @examples
@@ -616,17 +617,25 @@ setMethod("take",
 #' rdd <- parallelize(sc, c(1,2,2,3,3,3))
 #' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
 #'}
-setGeneric("distinct", function(rdd) { standardGeneric("distinct") })
+setGeneric("distinct", 
+           function(rdd, numPartitions) { standardGeneric("distinct") })
 
+setClassUnion("missingOrInteger", c("missing", "integer"))
 #' @rdname distinct
-#' @aliases distinct,RDD
+#' @aliases distinct,RDD,missingOrInteger-method
 setMethod("distinct",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            identical.mapped <- lapply(rdd, function(x) list(x, NULL))
+          signature(rdd = "RDD", numPartitions = "missingOrInteger"),
+          function(rdd, numPartitions) {
+            if (missing(numPartitions)) {
+              jrdd <- getJRDD(rdd)
+              partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
+              numPartitions <- .jcall(partitions, "I", "size")
+            }
+            identical.mapped <- lapply(rdd, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped, 
-                                   function(x, y) x, as.integer(2))
-            resRDD <- lapply(reduced, function(x) x[[1]])
+                                   function(x, y) { x }, 
+                                   numPartitions)
+            resRDD <- lapply(reduced, function(x) { x[[1]] })
             resRDD
           })
 
@@ -781,8 +790,8 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' makePairs <- lapply(rdd, function(x) list(x, x))
-#' collect(mapValues(makePairs, function(x) x * 2))
+#' makePairs <- lapply(rdd, function(x) { list(x, x) })
+#' collect(mapValues(makePairs, function(x) { x * 2) })
 #' Output: list(list(1,2), list(2,4), list(3,6), ...)
 #'}
 setGeneric("mapValues", function(X, FUN) { standardGeneric("mapValues") })
