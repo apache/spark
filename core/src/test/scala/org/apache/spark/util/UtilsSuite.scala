@@ -23,7 +23,7 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
@@ -116,7 +116,7 @@ class UtilsSuite extends FunSuite {
     tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(Charsets.UTF_8))
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
     f1.close()
 
     // Read first few bytes
@@ -144,9 +144,9 @@ class UtilsSuite extends FunSuite {
     val tmpDir = Utils.createTempDir()
     tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), Charsets.UTF_8)
-    Files.write("abcdefghij", files(1), Charsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), Charsets.UTF_8)
+    Files.write("0123456789", files(0), UTF_8)
+    Files.write("abcdefghij", files(1), UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), UTF_8)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
