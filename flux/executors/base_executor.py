@@ -71,6 +71,7 @@ class LocalWorker(multiprocessing.Process):
                 self.task_queue.task_done()
                 break
             BASE_FOLDER = settings.BASE_FOLDER
+            print command
             command = (
                 "exec bash -c '"
                 "cd $FLUX_HOME;\n" +

@@ -186,10 +186,10 @@ class TaskInstance(Base):
         ignore_dependencies = "-i" if ignore_dependencies else ""
         force = "--force" if force else ""
         subdir = ""
-        if not pickle and self.dag and self.dag.filepath:
-            subdir = "-sd {self.task.dag.filepath}"
+        if not pickle and self.task.dag and self.task.dag.filepath:
+            subdir = "-sd {0}".format(self.task.dag.filepath)
         return (
-            "./flux run "
+            "flux run "
             "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
             "{pickle} "
@@ -968,5 +968,3 @@ class DAG(Base):
         job.end_date = datetime.now()
         session.merge(job)
         session.commit()
-
-Base.metadata.create_all(settings.engine)
