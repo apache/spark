@@ -107,7 +107,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
-        Array(5), Gini, QuantileStrategy.Sort,
+        Array(6), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
       val featureSamples = Array.fill(200000)(math.random)

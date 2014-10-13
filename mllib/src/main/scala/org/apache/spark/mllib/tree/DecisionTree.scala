@@ -1052,6 +1052,7 @@ object DecisionTree extends Serializable with Logging {
       }
       // last value is not put into valueCount
       // because we should not use it as a split threshold
+      valueCount.append((currentValue, currentCount))
 
       valueCount.toArray
     }
@@ -1065,8 +1066,12 @@ object DecisionTree extends Serializable with Logging {
 
       // get count for each distinct value
       val valueCount = getValueCount(sortedFeatureSamples)
-      if (valueCount.length <= numSplits) {
-        return valueCount.map(_._1)
+
+      // if possible splits is not enough or just enough,
+      // just return all possible splits
+      val possibleSplits = valueCount.length - 1
+      if (possibleSplits <= numSplits) {
+        return valueCount.slice(0, possibleSplits).map(_._1)
       }
 
       // stride between splits
