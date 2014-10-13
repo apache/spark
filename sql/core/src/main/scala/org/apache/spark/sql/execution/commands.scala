@@ -48,29 +48,28 @@ trait Command {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommand(
-    key: Option[String], value: Option[String], output: Seq[Attribute])(
+case class SetCommand(kv: Option[(String, Option[String])], output: Seq[Attribute])(
     @transient context: SQLContext)
   extends LeafNode with Command with Logging {
 
-  override protected lazy val sideEffectResult: Seq[Row] = (key, value) match {
-    // Set value for key k.
-    case (Some(k), Some(v)) =>
-      if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
+  override protected lazy val sideEffectResult: Seq[Row] = kv match {
+    // Set value for the key.
+    case Some((key, Some(value))) =>
+      if (key == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
         logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-        context.setConf(SQLConf.SHUFFLE_PARTITIONS, v)
-        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$v"))
+        context.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
+        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
       } else {
-        context.setConf(k, v)
-        Seq(Row(s"$k=$v"))
+        context.setConf(key, value)
+        Seq(Row(s"$key=$value"))
       }
 
-    // Query the value bound to key k.
-    case (Some(k), _) =>
+    // Query the value bound to the key.
+    case Some((key, None)) =>
       // TODO (lian) This is just a workaround to make the Simba ODBC driver work.
       // Should remove this once we get the ODBC driver updated.
-      if (k == "-v") {
+      if (key == "-v") {
         val hiveJars = Seq(
           "hive-exec-0.12.0.jar",
           "hive-service-0.12.0.jar",
@@ -84,23 +83,20 @@ case class SetCommand(
           Row("system:java.class.path=" + hiveJars),
           Row("system:sun.java.command=shark.SharkServer2"))
       } else {
-        if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
+        if (key == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
           logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
             s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
           Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}"))
         } else {
-          Seq(Row(s"$k=${context.getConf(k, "<undefined>")}"))
+          Seq(Row(s"$key=${context.getConf(key, "<undefined>")}"))
         }
       }
 
     // Query all key-value pairs that are set in the SQLConf of the context.
-    case (None, None) =>
+    case _ =>
       context.getAllConfs.map { case (k, v) =>
         Row(s"$k=$v")
       }.toSeq
-
-    case _ =>
-      throw new IllegalArgumentException()
   }
 
   override def otherCopyArgs = context :: Nil

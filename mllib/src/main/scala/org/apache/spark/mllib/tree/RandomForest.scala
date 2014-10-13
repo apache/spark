@@ -185,6 +185,8 @@ private class RandomForest (
       timer.stop("findBestSplits")
     }
 
+    baggedInput.unpersist()
+
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")

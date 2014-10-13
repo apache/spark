@@ -112,7 +112,7 @@ class UtilsSuite extends FunSuite {
   }
 
   test("reading offset bytes of a file") {
-    val tmpDir2 = Files.createTempDir()
+    val tmpDir2 = Utils.createTempDir()
     tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
@@ -141,7 +141,7 @@ class UtilsSuite extends FunSuite {
   }
 
   test("reading offset bytes across multiple files") {
-    val tmpDir = Files.createTempDir()
+    val tmpDir = Utils.createTempDir()
     tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
     Files.write("0123456789", files(0), Charsets.UTF_8)
@@ -306,6 +306,30 @@ class UtilsSuite extends FunSuite {
       Option(server1).foreach(_.close())
       Option(server2).foreach(_.close())
     }
+  }
+
+  test("deleteRecursively") {
+    val tempDir1 = Utils.createTempDir()
+    assert(tempDir1.exists())
+    Utils.deleteRecursively(tempDir1)
+    assert(!tempDir1.exists())
+
+    val tempDir2 = Utils.createTempDir()
+    val tempFile1 = new File(tempDir2, "foo.txt")
+    Files.touch(tempFile1)
+    assert(tempFile1.exists())
+    Utils.deleteRecursively(tempFile1)
+    assert(!tempFile1.exists())
+
+    val tempDir3 = new File(tempDir2, "subdir")
+    assert(tempDir3.mkdir())
+    val tempFile2 = new File(tempDir3, "bar.txt")
+    Files.touch(tempFile2)
+    assert(tempFile2.exists())
+    Utils.deleteRecursively(tempDir2)
+    assert(!tempDir2.exists())
+    assert(!tempDir3.exists())
+    assert(!tempFile2.exists())
   }
 
 }

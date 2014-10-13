@@ -789,7 +789,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result3(0)(1) === "the answer")
     Utils.deleteRecursively(tmpdir)
   }
-  
+
   test("Querying on empty parquet throws exception (SPARK-3536)") {
     val tmpdir = Utils.createTempDir()
     Utils.deleteRecursively(tmpdir)
@@ -797,5 +797,19 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val result1 = sql("SELECT * FROM tmpemptytable").collect()
     assert(result1.size === 0)
     Utils.deleteRecursively(tmpdir)
+  }
+
+  test("DataType string parser compatibility") {
+    val schema = StructType(List(
+      StructField("c1", IntegerType, false),
+      StructField("c2", BinaryType, false)))
+
+    val fromCaseClassString = ParquetTypesConverter.convertFromString(schema.toString)
+    val fromJson = ParquetTypesConverter.convertFromString(schema.json)
+
+    (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
+      assert(a.name == b.name)
+      assert(a.dataType === b.dataType)
+    }
   }
 }
