@@ -37,7 +37,7 @@ import org.apache.spark.util.TaskCompletionListenerException;
 * Contextual information about a task which can be read or mutated during execution.
 */
 @DeveloperApi
-public class TaskContext implements Serializable {
+public abstract class TaskContext implements Serializable {
 
   private int stageId;
   private int partitionId;
@@ -45,59 +45,13 @@ public class TaskContext implements Serializable {
   private boolean runningLocally;
   private TaskMetrics taskMetrics;
 
-  /**
-   * :: DeveloperApi ::
-   * Contextual information about a task which can be read or mutated during execution.
-   *
-   * @param stageId stage id
-   * @param partitionId index of the partition
-   * @param attemptId the number of attempts to execute this task
-   * @param runningLocally whether the task is running locally in the driver JVM
-   * @param taskMetrics performance metrics of the task
-   */
-  @DeveloperApi
-  public TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally,
-                     TaskMetrics taskMetrics) {
+  TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally,
+      TaskMetrics taskMetrics) {
     this.attemptId = attemptId;
     this.partitionId = partitionId;
     this.runningLocally = runningLocally;
     this.stageId = stageId;
     this.taskMetrics = taskMetrics;
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Contextual information about a task which can be read or mutated during execution.
-   *
-   * @param stageId stage id
-   * @param partitionId index of the partition
-   * @param attemptId the number of attempts to execute this task
-   * @param runningLocally whether the task is running locally in the driver JVM
-   */
-  @DeveloperApi
-  public TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally) {
-    this.attemptId = attemptId;
-    this.partitionId = partitionId;
-    this.runningLocally = runningLocally;
-    this.stageId = stageId;
-    this.taskMetrics = TaskMetrics.empty();
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Contextual information about a task which can be read or mutated during execution.
-   *
-   * @param stageId stage id
-   * @param partitionId index of the partition
-   * @param attemptId the number of attempts to execute this task
-   */
-  @DeveloperApi
-  public TaskContext(int stageId, int partitionId, long attemptId) {
-    this.attemptId = attemptId;
-    this.partitionId = partitionId;
-    this.runningLocally = false;
-    this.stageId = stageId;
-    this.taskMetrics = TaskMetrics.empty();
   }
 
   private static ThreadLocal<TaskContext> taskContext =
@@ -107,7 +61,7 @@ public class TaskContext implements Serializable {
    * :: Internal API ::
    * This is spark internal API, not intended to be called from user programs.
    */
-  public static void setTaskContext(TaskContext tc) {
+  static void setTaskContext(TaskContext tc) {
     taskContext.set(tc);
   }
 
@@ -116,7 +70,7 @@ public class TaskContext implements Serializable {
   }
 
   /** :: Internal API ::  */
-  public static void unset() {
+  static void unset() {
     taskContext.remove();
   }
 
@@ -222,20 +176,14 @@ public class TaskContext implements Serializable {
     interrupted = true;
   }
 
-  @Deprecated
-  /** Deprecated: use getStageId() */
   public int stageId() {
     return stageId;
   }
 
-  @Deprecated
-  /** Deprecated: use getPartitionId() */
   public int partitionId() {
     return partitionId;
   }
 
-  @Deprecated
-  /** Deprecated: use getAttemptId() */
   public long attemptId() {
     return attemptId;
   }
@@ -249,18 +197,6 @@ public class TaskContext implements Serializable {
   public boolean isRunningLocally() {
     return runningLocally;
   }
-
-  public int getStageId() {
-    return stageId;
-  }
-
-  public int getPartitionId() {
-    return partitionId;
-  }
-
-  public long getAttemptId() {
-    return attemptId;
-  }  
 
   /** ::Internal API:: */
   public TaskMetrics taskMetrics() {
