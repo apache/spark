@@ -917,9 +917,9 @@ object DecisionTree extends Serializable with Logging {
             val featureSamples = sampledInput.map(lp => lp.features(featureIndex)).sorted
             val featureSplits = findSplits(featureSamples, metadata.numSplits(featureIndex))
             val numSplits = featureSplits.length
+            logDebug("numSplits= " + numSplits)
             metadata.setNumBinForFeature(featureIndex, numSplits + 1)
             val numBins = metadata.numBins(featureIndex)
-            logDebug("numSplits= " + numSplits)
 
             splits(featureIndex) = new Array[Split](numSplits)
             bins(featureIndex) = new Array[Bin](numBins)
