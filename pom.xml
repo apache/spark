@@ -127,6 +127,11 @@
     <hbase.version>0.94.6</hbase.version>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
+    <!-- Version used in Maven Hive dependency -->
+    <hive.version>0.12.0-protobuf-2.5</hive.version>
+    <!-- Version used for internal directory structure -->
+    <hive.version.short>0.12.0</hive.version.short>
+    <derby.version>10.4.2.0</derby.version>
     <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
@@ -1260,34 +1265,28 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hive-default</id>
+      <id>hive-0.12.0</id>
       <activation>
-        <property>
-          <name>!hive.version</name>
-        </property>
+        <activeByDefault>false</activeByDefault>
       </activation>
+      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
       <properties>
-        <hive.version>0.12.0</hive.version>
+        <hive.version>0.12.0-protobuf-2.5</hive.version>
+        <hive.version.short>0.12.0-protobuf-2.5</hive.version.short>
         <derby.version>10.4.2.0</derby.version>
       </properties>
     </profile>
     <profile>
-      <id>hive</id>
+      <id>hive-0.13.1</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <modules>
-        <module>sql/hive-thriftserver</module>
-      </modules>
-    </profile>
-    <profile>
-      <id>hive-versions</id>
-      <activation>
-        <property>
-          <name>hive.version</name>
-        </property>
-      </activation>
       <properties>
+        <hive.version>0.13.1</hive.version>
+        <hive.version.short>0.13.1</hive.version.short>
         <derby.version>10.10.1.1</derby.version>
       </properties>
     </profile>
