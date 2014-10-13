@@ -80,7 +80,7 @@ private[spark] object AkkaUtils extends Logging {
     val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 600)
     val akkaFailureDetector =
       conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
-    val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
+    val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 100)
 
     val secretKey = securityManager.getSecretKey()
     val isAuthOn = securityManager.isAuthenticationEnabled()
