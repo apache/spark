@@ -768,7 +768,7 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             sample(samples)[1:total]
           })
 
-#' Applys a function to all values of the elements, without modifying the keys.
+#' Applies a function to all values of the elements, without modifying the keys.
 #'
 #' The same as `mapValues()' in Spark.
 #'
