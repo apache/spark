@@ -26,7 +26,7 @@ import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, Thread
 import org.eclipse.jetty.util.MultiException
 
 import scala.collection.JavaConversions._
-import scala.collection.Map
+import scala.collection.{Seq, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -35,7 +35,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{CharEncoding, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -1525,6 +1525,68 @@ private[spark] object Utils extends Logging {
     PropertyConfigurator.configure(pro)
   }
 
+  /**
+   * Flatten a map of maps out into a single map, later maps in the propList
+   * have priority over older ones
+   * @param propList Seq of property maps[PropName->PropValue] to merge
+   */
+  private[spark] def mergePropertyMaps(propList: Seq[Map[String, String]]): Map[String, String] = {
+    propList.reverse.reduce(_ ++ _)
+  }
+
+
+  /**
+   * Returns an Optional File if it exists
+   * @param filePath Path to create a file object on
+   * @return Some(File) if file exists in file system None otherwise
+   */
+  def getFileIfExists(filePath: String): Option[File] = {
+    val File = new File(filePath)
+    if (File.exists) {
+      Some(File)
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Parses a property file using the java properties file parser
+   * @param filePath Path to property file
+   * @return Map of config values parsed from file
+   * @throws FileNotFoundException if file does not exist
+   * @throws IOException if file exists but is not accessible
+   */
+  def getPropertyValuesFromFile(filePath: String): Map[String, String] = {
+    val propFile = new File(filePath)
+    loadPropFile(propFile)
+  }
+
+  /**
+   * returns a loaded property file
+   * @param propFile File object pointing to properties file
+   * @return java properties object
+   * @throws FileNotFoundException if file does not exist
+   * @throws IOException if file exists but is not accessible
+   */
+  def loadPropFile(propFile: File): Map[String, String] = {
+    var isr: InputStreamReader = new InputStreamReader(new FileInputStream(propFile), CharEncoding.UTF_8)
+    try {
+      getPropertyValuesFromStream(isr)
+    } finally {
+      isr.close()
+    }
+  }
+
+  /**
+   * Loads property object from stream. the passed InputStreamReader is not closed
+   * @param r Reader to load property file from
+   * @return Map[PropName->PropValue]
+   */
+  def getPropertyValuesFromStream(r: java.io.Reader) = {
+    val prop = new Properties()
+    prop.load(r)
+    prop.asInstanceOf[java.util.Map[String, String]]
+  }
 }
 
 /**
@@ -1546,4 +1608,6 @@ private[spark] class RedirectThread(in: InputStream, out: OutputStream, name: St
       }
     }
   }
+
+
 }

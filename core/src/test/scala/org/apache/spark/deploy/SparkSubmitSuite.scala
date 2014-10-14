@@ -17,7 +17,9 @@
 
 package org.apache.spark.deploy
 
-import java.io._
+import java.io.{File, OutputStream, PrintStream}
+
+import org.apache.spark.deploy.ConfigConstants._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,6 +28,7 @@ import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
+import org.apache.spark.util.Utils
 
 class SparkSubmitSuite extends FunSuite with Matchers {
   def beforeAll() {
@@ -50,7 +53,10 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     SparkSubmit.printStream = printStream
 
     @volatile var exitedCleanly = false
-    SparkSubmit.exitFn = () => exitedCleanly = true
+    SparkSubmit.exitFn = () => {
+      exitedCleanly = true
+      throw new ApplicationExitException("")
+    }
 
     val thread = new Thread {
       override def run() = try {
@@ -69,9 +75,6 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     }
   }
 
-  test("prints usage on empty input") {
-    testPrematureExit(Array[String](), "Usage: spark-submit")
-  }
 
   test("prints usage with only --help") {
     testPrematureExit(Array("--help"), "Usage: spark-submit")
@@ -83,15 +86,17 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "No main class")
+    testPrematureExit(Array("foo1.jar"), "main class")
   }
 
   test("handles arguments with --key=val") {
     val clArgs = Seq(
       "--jars=one.jar,two.jar,three.jar",
-      "--name=myApp")
+      "--name=myApp",
+      "--class=foo",
+      "userjar.jar")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.jars should include regex (".*one.jar,.*two.jar,.*three.jar")
+    appArgs.jars.get should include regex (".*one.jar,.*two.jar,.*three.jar")
     appArgs.name should be ("myApp")
   }
 
@@ -213,7 +218,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have size (0)
-    sysProps should have size (5)
+    //sysProps should have size (5)
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
@@ -306,19 +311,233 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     runSparkSubmit(args)
   }
 
-  test("SPARK_CONF_DIR overrides spark-defaults.conf") {
-    forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
-      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-      val args = Seq(
-        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
-        "--name", "testApp",
-        "--master", "local",
-        unusedJar.toString)
-      val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
-      assert(appArgs.propertiesFile != null)
-      assert(appArgs.propertiesFile.startsWith(path))
-      appArgs.executorMemory should  be ("2.3g")
-    }
+  test("deploymode other then client or cluster should return error") {
+    val clArgs = Array(
+      "--deploy-mode", "foobar",
+      "--class", "Foo",
+      "thejar.jar")
+    testPrematureExit(clArgs, "Deploy mode")
+  }
+
+  test("bad master url handled should return error") {
+    val clArgs = Array(
+      "--class", "Foo",
+      "--master", "foo:bar",
+      "thejar.jar")
+    testPrematureExit(clArgs, "Master")
+  }
+
+  test("test file uris are normalised correctly") {
+    val clArgs = Seq(
+      "--master", "yarn-standalone",
+      "--deploy-mode", "cluster",
+      "--class", "org.SomeClass",
+      "--files", """foo/bar/file1.jar""",
+      "--archives", """foo/bar/archive1.jar""",
+      "--jars", """foo/bar/jar1.jar,foo/bar/jar2.jar""",
+      "http://foo/bar/thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    // Single slash file URIs do not seem correct, but matches unit tests for Utils.resolvesUri
+    appArgs.files.foreach( f => f should startWith ("file:/") )
+    appArgs.archives.foreach( a => a should startWith ("file:/") )
+    appArgs.jars.foreach( j => j should startWith ("file:/") )
+    appArgs.primaryResource should be ("http://foo/bar/thejar.jar")
+  }
+
+  test("test primary resource spark shell uris are not resolved") {
+    val clArgs = Seq(
+      "--master", "local",
+      "--deploy-mode", "client",
+      "--class", "org.SomeClass",
+      "spark-shell")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.primaryResource should be ("spark-shell")
+  }
+
+  test("test primary resource internal paths are not resolved") {
+    val clArgs = Seq(
+      "--master", "local",
+      "--deploy-mode", "cluster",
+      "--class", "org.SomeClass",
+      "spark-internal")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.primaryResource should be ("spark-internal")
+  }
+
+  test("test yarn-standalone is turned to yarn cluster") {
+    val clArgs = Seq(
+      "--master", "yarn-standalone",
+      "--deploy-mode", "cluster",
+      "--class", "org.SomeClass",
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.master should be ("yarn-cluster")
+  }
+
+  test("yarn cluster implies cluster mode") {
+    val clArgs = Seq(
+      "--master", "yarn-cluster",
+      "--class", "org.SomeClass",
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.deployModeFlag should be (DM_CLUSTER)
+  }
+
+  test("yarn-client with cluster mode should return error") {
+    val clArgs = Array(
+      "--master", "yarn-client",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "cluster",
+      "thejar.jar")
+    testPrematureExit(clArgs, "not compatible")
+  }
+
+  test("SPARK_APP_CLASS is used for name when SPARK_APP_NAME is not present"){
+    val clArgs = Seq(
+      "--master", "yarn-cluster",
+      "--class", "org.SomeClass",
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.name should be ("org.SomeClass")
+  }
+
+  test("SPARK_APP_PRIMARY_RESOURCE is used for name when name and class is not present") {
+    val clArgs = Seq(
+      "--master", "local",
+      "thejar.py")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.name should be ("thejar.py")
+  }
+
+  test("yarn-cluster in client deploymode should return an error") {
+    val clArgs = Array(
+      "--master", "yarn-cluster",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "client",
+      "thejar.jar")
+    testPrematureExit(clArgs, "not compatible")
+  }
+
+  test("yarn-client in cluster deploymode should return an error") {
+    val clArgs = Array(
+      "--master", "yarn-client",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "cluster",
+      "thejar.jar")
+    testPrematureExit(clArgs, "not compatible")
+  }
+
+  test("MESOS cluster mode should return an error") {
+    val clArgs = Array(
+      "--master", "mesos",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "cluster",
+      "thejar.jar")
+    testPrematureExit(clArgs, "not supported")
+  }
+
+  test("Python in cluster mode should be invalid") {
+    val clArgs = Array(
+      "--master", "yarn-cluster",
+      "thejar.py")
+    testPrematureExit(clArgs, "not supported ")
+  }
+
+  test("cluster deploy mode for SparkShell should be invalid") {
+    val clArgs = Array(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "cluster",
+      "spark-shell")
+    testPrematureExit(clArgs, "not applicable")
+  }
+
+  test("Only local python files should be supported") {
+    val clArgs = Array(
+      "--master", "mesos",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "client",
+      "http://foo.bar/test.py")
+    testPrematureExit(clArgs, "Only local")
+  }
+
+  test("Only local additional python files are supported") {
+    val clArgs = Array(
+      "--master", "mesos",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "client",
+      "--py-files", "file://foo.bar/additional.py",
+      "--verbose",
+      "http://foo.bar/test.py")
+    testPrematureExit(clArgs, "Only local")
+  }
+
+  test("Not specifying primary resource should cause error") {
+    val clArgs = Array(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "client"
+    )
+    testPrematureExit(clArgs, "primary resource")
+  }
+
+  test("conf option without value should return error") {
+    val clArgs = Array(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--conf", "missing",
+      "foo.jar"
+    )
+    testPrematureExit(clArgs, "config without")
+  }
+
+  test("Non local py-files should cause error") {
+    val clArgs = Array(
+    "--master", "mesos",
+    "--class", "org.SomeClass",
+    "--deploy-mode", "client",
+    "--py-files", "http://foo.bar/additional.py",
+    "test.py")
+    testPrematureExit(clArgs, "Only local additional python")
+  }
+
+  test("py-files should not be valid with java primary resource") {
+    val clArgs = Array(
+      "--master", "mesos",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "client",
+      "--py-files", "foo.py",
+      "test.java")
+    testPrematureExit(clArgs, "not a Python script")
+  }
+
+  test("unsupported param should cause error") {
+    val clArgs = Array(
+      "--foobar", "yarn-cluster",
+      "--class", "org.SomeClass",
+      "--deploy-mode", "cluster",
+      "thejar.jar")
+    testPrematureExit(clArgs, "Unrecognized option")
+  }
+
+  test("spark-internal python uses correct main class") {
+    val clArgs = Array(
+      "--master", "local",
+      "--deploy-mode", "client",
+      SparkSubmit.PYSPARK_SHELL)
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    mainClass should be (PY4J_GATEWAYSERVER)
+  }
+
+  test("python uses correct main class") {
+    val clArgs = Array(
+      "--master", "yarn-client",
+      "--deploy-mode", "client",
+      "test.py")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    mainClass should be (PYTHON_RUNNER)
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
@@ -328,22 +547,6 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-  }
-
-  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
-    val tmpDir = Utils.createTempDir()
-
-    val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
-    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
-    for ((key, value) <- defaults) writer.write(s"$key $value\n")
-
-    writer.close()
-
-    try {
-      f(tmpDir.getAbsolutePath)
-    } finally {
-      Utils.deleteRecursively(tmpDir)
-    }
   }
 }
 
@@ -392,4 +595,8 @@ object SimpleApplicationTest {
       }
     }
   }
+
+  // TODO: Confirm the following are valid behaviour to test
+  // when should file resolving default to hdfs?
+
 }

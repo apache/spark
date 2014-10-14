@@ -20,8 +20,9 @@ package org.apache.spark.deploy
 import java.io.File
 
 import scala.collection.JavaConversions._
-
+import scala.collection.mutable.HashMap
 import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.deploy.ConfigConstants._
 
 /**
  * Launch an application through Spark submit in client mode with the appropriate classpath,
@@ -50,71 +51,69 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val javaOpts = sys.env("JAVA_OPTS")
     val defaultDriverMemory = sys.env("OUR_JAVA_MEM")
 
-    // Spark submit specific environment variables
-    val deployMode = sys.env("SPARK_SUBMIT_DEPLOY_MODE")
-    val propertiesFile = sys.env("SPARK_SUBMIT_PROPERTIES_FILE")
+    // SPARK_SUBMIT_BOOTSTRAP_DRIVER is used for runtime validation
     val bootstrapDriver = sys.env("SPARK_SUBMIT_BOOTSTRAP_DRIVER")
-    val submitDriverMemory = sys.env.get("SPARK_SUBMIT_DRIVER_MEMORY")
-    val submitLibraryPath = sys.env.get("SPARK_SUBMIT_LIBRARY_PATH")
-    val submitClasspath = sys.env.get("SPARK_SUBMIT_CLASSPATH")
-    val submitJavaOpts = sys.env.get("SPARK_SUBMIT_OPTS")
+
+    // list of environment variables that override differently named properties
+    val envOverides = Map( "OUR_JAVA_MEM" -> SPARK_DRIVER_MEMORY,
+      "SPARK_SUBMIT_DEPLOY_MODE" -> SPARK_DEPLOY_MODE,
+      "SPARK_SUBMIT_DRIVER_MEMORY" -> SPARK_DRIVER_MEMORY,
+      "SPARK_SUBMIT_LIBRARY_PATH" -> SPARK_DRIVER_EXTRA_LIBRARY_PATH,
+      "SPARK_SUBMIT_CLASSPATH" -> SPARK_DRIVER_EXTRA_CLASSPATH,
+      "SPARK_SUBMIT_OPTS" -> SPARK_DRIVER_EXTRA_JAVA_OPTIONS
+    )
+
+    /* SPARK_SUBMIT environment variables are treated as the highest priority source
+     *  of config information for their respective config variable (as listed in envOverrides)
+     */
+    val submitEnvVars = new HashMap() ++ envOverides
+      .map { case(varName, propName) => (sys.env.get(varName), propName) }
+      .filter { case(variable, _) => variable.isDefined }
+      .map { case(variable, propName) => propName -> variable.get }
+
+    // Property file loading comes after all SPARK* env variables are processed and should not
+    // overwrite existing SPARK env variables
+    sys.env.get("SPARK_SUBMIT_PROPERTIES_FILE")
+    .flatMap ( Utils.getFileIfExists )
+    .map ( Utils.loadPropFile )
+    .getOrElse(Map.empty)
+    .foreach { case(k,v) =>
+      submitEnvVars.getOrElseUpdate(k,v)
+    }
+
+     /* See docco for SparkSubmitArguments to see the various config sources and their priority.
+      * Of note here is that we are explicitly treating SPARK_SUBMIT* environment vars
+      * as the highest priority source, Followed by props loaded from a specified
+      * SPARK_SUBMIT_PROPERTIES_FILE (which is merged into submitEnvVars above),
+      * Followed by the standard priorities specified by the documentation of SparkSubmitArguments.
+      */
+    val conf = SparkSubmitArguments.mergeSparkProperties(Seq(submitEnvVars))
 
     assume(runner != null, "RUNNER must be set")
     assume(classpath != null, "CLASSPATH must be set")
     assume(javaOpts != null, "JAVA_OPTS must be set")
     assume(defaultDriverMemory != null, "OUR_JAVA_MEM must be set")
-    assume(deployMode == "client", "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
-    assume(propertiesFile != null, "SPARK_SUBMIT_PROPERTIES_FILE must be set")
+    assume(conf.getOrElse(SPARK_DEPLOY_MODE, "") == "client",
+      "SPARK_SUBMIT_DEPLOY_MODE must be \"client\"!")
+    assume(conf.contains(SPARK_PROPERTIES_FILE), "SPARK_SUBMIT_PROPERTIES_FILE must be set")
     assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set")
 
-    // Parse the properties file for the equivalent spark.driver.* configs
-    val properties = SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
-    val confDriverMemory = properties.get("spark.driver.memory")
-    val confLibraryPath = properties.get("spark.driver.extraLibraryPath")
-    val confClasspath = properties.get("spark.driver.extraClassPath")
-    val confJavaOpts = properties.get("spark.driver.extraJavaOptions")
+    val confDriverMemory = conf.get(SPARK_DRIVER_MEMORY)
+    val confLibraryPath = conf.get(SPARK_DRIVER_EXTRA_LIBRARY_PATH)
+    val confClasspath = conf.get(SPARK_DRIVER_EXTRA_CLASSPATH)
+    val confJavaOpts = conf.get(SPARK_DRIVER_EXTRA_CLASSPATH)
 
-    // Favor Spark submit arguments over the equivalent configs in the properties file.
-    // Note that we do not actually use the Spark submit values for library path, classpath,
-    // and Java opts here, because we have already captured them in Bash.
-
-    val newDriverMemory = submitDriverMemory
-      .orElse(confDriverMemory)
-      .getOrElse(defaultDriverMemory)
-
-    val newLibraryPath =
-      if (submitLibraryPath.isDefined) {
-        // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
-        ""
-      } else {
-        confLibraryPath.map("-Djava.library.path=" + _).getOrElse("")
-      }
-
-    val newClasspath =
-      if (submitClasspath.isDefined) {
-        // SPARK_SUBMIT_CLASSPATH is already captured in CLASSPATH
-        classpath
-      } else {
-        classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
-      }
-
-    val newJavaOpts =
-      if (submitJavaOpts.isDefined) {
-        // SPARK_SUBMIT_OPTS is already captured in JAVA_OPTS
-        javaOpts
-      } else {
-        javaOpts + confJavaOpts.map(" " + _).getOrElse("")
-      }
-
-    val filteredJavaOpts = Utils.splitCommandString(newJavaOpts)
+    val filteredJavaOpts = Utils.splitCommandString(confJavaOpts.getOrElse(""))
       .filterNot(_.startsWith("-Xms"))
       .filterNot(_.startsWith("-Xmx"))
+
+    val newDriverMemory = conf.get(SPARK_DRIVER_MEMORY).get
 
     // Build up command
     val command: Seq[String] =
       Seq(runner) ++
-      Seq("-cp", newClasspath) ++
-      Seq(newLibraryPath) ++
+      Seq("-cp", confClasspath.getOrElse("")) ++
+      Seq(confLibraryPath.getOrElse("")) ++
       filteredJavaOpts ++
       Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
       Seq("org.apache.spark.deploy.SparkSubmit") ++
