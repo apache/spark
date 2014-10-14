@@ -74,10 +74,10 @@ private[hive] object HiveQl {
     "TOK_REVOKE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
+    "TOK_TRUNCATETABLE",
 
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
-    "TOK_TRUNCATETABLE",
 
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
@@ -225,6 +225,11 @@ private[hive] object HiveQl {
     try {
       val tree = getAst(sql)
       if (nativeCommands contains tree.getText) {
+        if(tree.asInstanceOf[ASTNode].getText == "TOK_TRUNCATETABLE"){
+          if(tree.getChildren.exists(_.asInstanceOf[ASTNode].getText == "TOK_TABCOLNAME") ){
+            sys.error("Truncate tabel can not support columns")
+          }
+        }
         NativeCommand(sql)
       } else {
         nodeToPlan(tree) match {
