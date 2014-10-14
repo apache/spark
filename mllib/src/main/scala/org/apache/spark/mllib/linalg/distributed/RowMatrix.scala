@@ -111,7 +111,10 @@ class RowMatrix(
    */
   def computeGramianMatrix(): Matrix = {
     val n = numCols().toInt
-    val nt: Int = n * (n + 1) / 2
+    checkNumColumns(n)
+    // Computes n*(n+1)/2, avoiding overflow in the multiplication.
+    // This succeeds when n <= 65535, which is checked above
+    val nt: Int = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
 
     // Compute the upper triangular part of the gram matrix.
     val GU = rows.treeAggregate(new BDV[Double](new Array[Double](nt)))(
@@ -121,6 +124,16 @@ class RowMatrix(
       }, combOp = (U1, U2) => U1 += U2)
 
     RowMatrix.triuToFull(n, GU.data)
+  }
+
+  private def checkNumColumns(cols: Int): Unit = {
+    if (cols > 65535) {
+      throw new IllegalArgumentException(s"Argument with more than 65535 cols: $cols")
+    }
+    if (cols > 10000) {
+      val mem = cols * cols * 8
+      logWarning(s"$cols columns will require at least $mem bytes of memory!")
+    }
   }
 
   /**
@@ -301,12 +314,7 @@ class RowMatrix(
    */
   def computeCovariance(): Matrix = {
     val n = numCols().toInt
-
-    if (n > 10000) {
-      val mem = n * n * java.lang.Double.SIZE / java.lang.Byte.SIZE
-      logWarning(s"The number of columns $n is greater than 10000! " +
-        s"We need at least $mem bytes of memory.")
-    }
+    checkNumColumns(n)
 
     val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
       seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
