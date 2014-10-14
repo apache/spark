@@ -42,6 +42,9 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   // all files found
   private val foundFiles = new HashMap[String, Long]
+  if (newFilesOnly) {
+    foundFiles ++= fs.listStatus(directoryPath).map(f => (f.getPath.toString, f.getLen))
+  }
 
   // Files with mod time earlier than this is ignored. This is updated every interval
   // such that in the current interval, files older than any file found in the
