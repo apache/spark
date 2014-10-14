@@ -74,15 +74,15 @@ spark_rotate_log ()
     log=$1;
     num=5;
     if [ -n "$2" ]; then
-	num=$2
+      num=$2
     fi
     if [ -f "$log" ]; then # rotate logs
-	while [ $num -gt 1 ]; do
-	    prev=`expr $num - 1`
-	    [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
-	    num=$prev
-	done
-	mv "$log" "$log.$num";
+      while [ $num -gt 1 ]; do
+         prev=`expr $num - 1`
+         [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
+         num=$prev
+      done
+      mv "$log" "$log.$num";
     fi
 }
 
