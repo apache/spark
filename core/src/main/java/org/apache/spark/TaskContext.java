@@ -39,21 +39,6 @@ import org.apache.spark.util.TaskCompletionListenerException;
 @DeveloperApi
 public abstract class TaskContext implements Serializable {
 
-  private int stageId;
-  private int partitionId;
-  private long attemptId;
-  private boolean runningLocally;
-  private TaskMetrics taskMetrics;
-
-  TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally,
-      TaskMetrics taskMetrics) {
-    this.attemptId = attemptId;
-    this.partitionId = partitionId;
-    this.runningLocally = runningLocally;
-    this.stageId = stageId;
-    this.taskMetrics = taskMetrics;
-  }
-
   private static ThreadLocal<TaskContext> taskContext =
     new ThreadLocal<TaskContext>();
 
@@ -74,29 +59,15 @@ public abstract class TaskContext implements Serializable {
     taskContext.remove();
   }
 
-  // List of callback functions to execute when the task completes.
-  private transient List<TaskCompletionListener> onCompleteCallbacks =
-    new ArrayList<TaskCompletionListener>();
-
-  // Whether the corresponding task has been killed.
-  private volatile boolean interrupted = false;
-
-  // Whether the task has completed.
-  private volatile boolean completed = false;
-
   /**
    * Checks whether the task has completed.
    */
-  public boolean isCompleted() {
-    return completed;
-  }
+  public abstract boolean isCompleted();
 
   /**
    * Checks whether the task has been killed.
    */
-  public boolean isInterrupted() {
-    return interrupted;
-  }
+  public abstract boolean isInterrupted();
 
   /**
    * Add a (Java friendly) listener to be executed on task completion.
@@ -104,10 +75,7 @@ public abstract class TaskContext implements Serializable {
    * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
-  public TaskContext addTaskCompletionListener(TaskCompletionListener listener) {
-    onCompleteCallbacks.add(listener);
-    return this;
-  }
+  public abstract TaskContext addTaskCompletionListener(TaskCompletionListener listener);
 
   /**
    * Add a listener in the form of a Scala closure to be executed on task completion.
@@ -115,15 +83,7 @@ public abstract class TaskContext implements Serializable {
    * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
-  public TaskContext addTaskCompletionListener(final Function1<TaskContext, Unit> f) {
-    onCompleteCallbacks.add(new TaskCompletionListener() {
-      @Override
-      public void onTaskCompletion(TaskContext context) {
-        f.apply(context);
-      }
-    });
-    return this;
-  }
+  public abstract TaskContext addTaskCompletionListener(final Function1<TaskContext, Unit> f);
 
   /**
    * Add a callback function to be executed on task completion. An example use
@@ -131,75 +91,24 @@ public abstract class TaskContext implements Serializable {
    * Will be called in any situation - success, failure, or cancellation.
    *
    * Deprecated: use addTaskCompletionListener
-   * 
+   *
    * @param f Callback function.
    */
   @Deprecated
-  public void addOnCompleteCallback(final Function0<Unit> f) {
-    onCompleteCallbacks.add(new TaskCompletionListener() {
-      @Override
-      public void onTaskCompletion(TaskContext context) {
-        f.apply();
-      }
-    });
-  }
+  public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
-  /**
-   * ::Internal API::
-   * Marks the task as completed and triggers the listeners.
-   */
-  public void markTaskCompleted() throws TaskCompletionListenerException {
-    completed = true;
-    List<String> errorMsgs = new ArrayList<String>(2);
-    // Process complete callbacks in the reverse order of registration
-    List<TaskCompletionListener> revlist =
-      new ArrayList<TaskCompletionListener>(onCompleteCallbacks);
-    Collections.reverse(revlist);
-    for (TaskCompletionListener tcl: revlist) {
-      try {
-        tcl.onTaskCompletion(this);
-      } catch (Throwable e) {
-        errorMsgs.add(e.getMessage());
-      }
-    }
+  public abstract int stageId();
 
-    if (!errorMsgs.isEmpty()) {
-      throw new TaskCompletionListenerException(JavaConversions.asScalaBuffer(errorMsgs));
-    }
-  }
+  public abstract int partitionId();
 
-  /**
-   * ::Internal API::
-   * Marks the task for interruption, i.e. cancellation.
-   */
-  public void markInterrupted() {
-    interrupted = true;
-  }
-
-  public int stageId() {
-    return stageId;
-  }
-
-  public int partitionId() {
-    return partitionId;
-  }
-
-  public long attemptId() {
-    return attemptId;
-  }
+  public abstract long attemptId();
 
   @Deprecated
   /** Deprecated: use isRunningLocally() */
-  public boolean runningLocally() {
-    return runningLocally;
-  }
+  public abstract boolean runningLocally();
 
-  public boolean isRunningLocally() {
-    return runningLocally;
-  }
+  public abstract boolean isRunningLocally();
 
   /** ::Internal API:: */
-  public TaskMetrics taskMetrics() {
-    return taskMetrics;
-  }
+  public abstract TaskMetrics taskMetrics();
 }

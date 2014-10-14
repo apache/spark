@@ -22,5 +22,5 @@ private [spark] object TaskContextHelper {
   def setTaskContext(tc: TaskContext): Unit = TaskContext.setTaskContext(tc)
 
   def unset(): Unit = TaskContext.unset()
-
+  
 }
