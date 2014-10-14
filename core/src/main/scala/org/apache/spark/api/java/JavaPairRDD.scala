@@ -17,6 +17,7 @@
 
 package org.apache.spark.api.java
 
+import java.io.Serializable
 import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
 
@@ -614,7 +615,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return the key-value pairs in this RDD to the master as a Map.
    */
-  def collectAsMap(): java.util.Map[K, V] = mapAsJavaMap(rdd.collectAsMap())
+  def collectAsMap(): java.util.Map[K, V] = new SerializableMapWrapper(rdd.collectAsMap())
+
+  class SerializableMapWrapper(underlying: collection.Map[K, V])
+    extends MapWrapper(underlying) with Serializable
 
   /**
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
