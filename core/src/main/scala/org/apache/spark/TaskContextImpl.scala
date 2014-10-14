@@ -22,12 +22,12 @@ import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerExce
 
 import scala.collection.mutable.ArrayBuffer
 
-private[spark] class TaskContextImpl(_stageId: Int,
-    _partitionId: Int,
-    _attemptId: Long,
-    _runningLocally: Boolean = false,
-    _taskMetrics: TaskMetrics = TaskMetrics.empty)
-  extends TaskContext(_stageId, _partitionId, _attemptId, _runningLocally, _taskMetrics)
+private[spark] class TaskContextImpl(val stageId: Int,
+    val partitionId: Int,
+    val attemptId: Long,
+    val runningLocally: Boolean = false,
+    val taskMetrics: TaskMetrics = TaskMetrics.empty)
+  extends TaskContext(stageId, partitionId, attemptId, runningLocally, taskMetrics)
   with Logging {
 
   // List of callback functions to execute when the task completes.
@@ -84,19 +84,8 @@ private[spark] class TaskContextImpl(_stageId: Int,
 
   override def isCompleted: Boolean = completed
 
-  override def taskMetrics(): TaskMetrics = _taskMetrics
-
-  override def isRunningLocally: Boolean = _runningLocally
-
-  override def runningLocally(): Boolean = _runningLocally
+  override def isRunningLocally: Boolean = runningLocally
 
   override def isInterrupted: Boolean = interrupted
-
-  override def partitionId(): Int = _partitionId
-
-  override def attemptId(): Long = _attemptId
-
-  override def stageId(): Int = _stageId
-
 }
 
