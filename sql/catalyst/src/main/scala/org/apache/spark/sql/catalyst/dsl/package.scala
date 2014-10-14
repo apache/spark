@@ -68,6 +68,8 @@ package object dsl {
     def * (other: Expression) = Multiply(expr, other)
     def / (other: Expression) = Divide(expr, other)
     def % (other: Expression) = Remainder(expr, other)
+    def & (other: Expression) = BitwiseAnd(expr, other)
+    def | (other: Expression) = BitwiseOr(expr, other)
 
     def && (other: Expression) = And(expr, other)
     def || (other: Expression) = Or(expr, other)

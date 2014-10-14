@@ -258,6 +258,8 @@ class SqlParser extends AbstractSparkSQLParser {
       ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
       | "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1, e2) }
       | "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1, e2) }
+      | "&" ^^^ { (e1: Expression, e2: Expression) => BitwiseAnd(e1, e2) }
+      | "|" ^^^ { (e1: Expression, e2: Expression) => BitwiseOr(e1, e2) }
       )
 
   protected lazy val function: Parser[Expression] =

@@ -64,6 +64,23 @@ abstract class BinaryArithmetic extends BinaryExpression {
     }
     left.dataType
   }
+
+  override def eval(input: Row): Any = {
+    val evalE1 = left.eval(input)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = right.eval(input)
+      if (evalE2 == null) {
+        null
+      } else {
+        evalInternal(evalE1, evalE2)
+      }
+    }
+  }
+
+  def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any =
+    sys.error(s"Unsupported binary operation")
 }
 
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
@@ -98,6 +115,30 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   def symbol = "%"
 
   override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
+}
+
+case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
+  def symbol = "&"
+
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
+      case ByteType => (evalE1.asInstanceOf[Byte] & evalE2.asInstanceOf[Byte]).toByte
+      case ShortType => (evalE1.asInstanceOf[Short] & evalE2.asInstanceOf[Short]).toShort
+      case IntegerType => evalE1.asInstanceOf[Int] & evalE2.asInstanceOf[Int]
+      case LongType => evalE1.asInstanceOf[Long] & evalE2.asInstanceOf[Long]
+      case other => sys.error(s"Unsupported bitwise & operation on ${other}")
+  }
+}
+
+case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
+  def symbol = "&"
+
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
+      case ByteType => (evalE1.asInstanceOf[Byte] | evalE2.asInstanceOf[Byte]).toByte
+      case ShortType => (evalE1.asInstanceOf[Short] | evalE2.asInstanceOf[Short]).toShort
+      case IntegerType => evalE1.asInstanceOf[Int] | evalE2.asInstanceOf[Int]
+      case LongType => evalE1.asInstanceOf[Long] | evalE2.asInstanceOf[Long]
+      case other => sys.error(s"Unsupported bitwise | operation on ${other}")
+  }
 }
 
 case class MaxOf(left: Expression, right: Expression) extends Expression {
