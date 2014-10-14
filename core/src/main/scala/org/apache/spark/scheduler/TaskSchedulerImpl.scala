@@ -527,7 +527,7 @@ private[spark] class TaskSchedulerImpl(
       // Start a timer to request new executors if it is not already running
       if (!m.isAddTimerRunning) {
         logDebug("Starting add executor timer because a new pending task is received")
-        m.startAddExecutorTimer()
+        m.startAddTimer()
       }
     }
   }
@@ -541,7 +541,7 @@ private[spark] class TaskSchedulerImpl(
     taskSetsWithPendingTasks.remove(taskSetId)
     if (taskSetsWithPendingTasks.isEmpty) {
       logDebug("Canceling add executor timer because there are no more pending tasks")
-      executorAllocationManager.foreach(_.cancelAddExecutorTimer())
+      executorAllocationManager.foreach(_.cancelAddTimer())
     }
   }
 
@@ -555,7 +555,7 @@ private[spark] class TaskSchedulerImpl(
       executorIdToRunningTaskSets.getOrElseUpdate(executorId, new HashSet[String]) += taskSetId
       logDebug(s"Canceling idle timer for executor $executorId " +
         s"because a new task is scheduled on the executor")
-      executorAllocationManager.foreach(_.cancelRemoveExecutorTimer(executorId))
+      executorAllocationManager.foreach(_.cancelRemoveTimer(executorId))
     }
   }
 
@@ -575,7 +575,7 @@ private[spark] class TaskSchedulerImpl(
           if (!m.isRemoveTimerRunning(executorId)) {
             logDebug(s"Starting idle timer for executor $executorId " +
               s"because there are no more tasks scheduled on the executor")
-            m.startRemoveExecutorTimer(executorId)
+            m.startRemoveTimer(executorId)
           }
         }
       }

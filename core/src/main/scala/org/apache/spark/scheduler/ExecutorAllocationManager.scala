@@ -80,15 +80,15 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   // How frequently to add and remove executors (seconds)
-  private val addExecutorThreshold =
+  private val addThreshold =
     conf.getLong("spark.dynamicAllocation.addExecutorThreshold", 60)
-  private val addExecutorInterval =
-    conf.getLong("spark.dynamicAllocation.addExecutorInterval", addExecutorThreshold)
-  private val addExecutorRetryInterval =
-    conf.getLong("spark.dynamicAllocation.addExecutorRetryInterval", addExecutorInterval)
-  private val removeExecutorThreshold =
+  private val addInterval =
+    conf.getLong("spark.dynamicAllocation.addExecutorInterval", addThreshold)
+  private val addRetryInterval =
+    conf.getLong("spark.dynamicAllocation.addExecutorRetryInterval", addInterval)
+  private val removeThreshold =
     conf.getLong("spark.dynamicAllocation.removeExecutorThreshold", 600)
-  private val removeExecutorRetryInterval =
+  private val removeRetryInterval =
     conf.getLong("spark.dynamicAllocation.removeExecutorRetryInterval", 300)
 
   // Number of executors to add in the next round
@@ -99,26 +99,26 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   private val executorsPendingToRemove = new mutable.HashSet[String]
 
   // Retry attempts
-  private var addExecutorRetryAttempts = 0
-  private val removeExecutorRetryAttempts = new mutable.HashMap[String, Int]
-  private val maxAddExecutorRetryAttempts =
+  private var addRetryAttempts = 0
+  private val removeRetryAttempts = new mutable.HashMap[String, Int]
+  private val maxAddRetryAttempts =
     conf.getInt("spark.dynamicAllocation.maxAddExecutorRetryAttempts", 10)
-  private val maxRemoveExecutorRetryAttempts =
+  private val maxRemoveRetryAttempts =
     conf.getInt("spark.dynamicAllocation.maxRemoveExecutorRetryAttempts", 10)
 
   // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
   private val executorIds = new mutable.HashSet[String]
 
   // Timers for keeping track of when to add/remove executors (ms)
-  private var addExecutorTimer = 0
-  private var addExecutorRetryTimer = 0
-  private val removeExecutorTimers = new mutable.HashMap[String, Long]
-  private val removeExecutorRetryTimers = new mutable.HashMap[String, Long]
+  private var addTimer = 0
+  private var addRetryTimer = 0
+  private val removeTimers = new mutable.HashMap[String, Long]
+  private val retryRemoveTimers = new mutable.HashMap[String, Long]
 
   // Additional variables used for adding executors
   private var addThresholdCrossed = false
-  private var addExecutorTimerEnabled = false
-  private var addExecutorRetryTimerEnabled = false
+  private var addTimerEnabled = false
+  private var addRetryTimerEnabled = false
 
   // Loop interval (ms)
   private val intervalMs = 100
@@ -154,28 +154,28 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
       override def run() {
         while (true) {
           try {
-            if (addExecutorTimerEnabled) {
-              val threshold = if (addThresholdCrossed) addExecutorInterval else addExecutorThreshold
-              if (addExecutorTimer > threshold * 1000) {
+            if (addTimerEnabled) {
+              val threshold = if (addThresholdCrossed) addInterval else addThreshold
+              if (addTimer > threshold * 1000) {
                 addThresholdCrossed = true
                 addExecutors()
               }
             }
 
-            if (addExecutorRetryTimerEnabled) {
-              if (addExecutorRetryTimer > addExecutorRetryInterval * 1000) {
+            if (addRetryTimerEnabled) {
+              if (addRetryTimer > addRetryInterval * 1000) {
                 retryAddExecutors()
               }
             }
 
-            removeExecutorTimers.foreach { case (id, t) =>
-              if (t > removeExecutorThreshold * 1000) {
+            removeTimers.foreach { case (id, t) =>
+              if (t > removeThreshold * 1000) {
                 removeExecutor(id)
               }
             }
 
-            removeExecutorRetryTimers.foreach { case (id, t) =>
-              if (t > removeExecutorRetryInterval * 1000) {
+            retryRemoveTimers.foreach { case (id, t) =>
+              if (t > removeRetryInterval * 1000) {
                 retryRemoveExecutors(id)
               }
             }
@@ -185,17 +185,17 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
           } finally {
             // Advance all timers that are enabled
             Thread.sleep(intervalMs)
-            if (addExecutorTimerEnabled) {
-              addExecutorTimer += intervalMs
+            if (addTimerEnabled) {
+              addTimer += intervalMs
             }
-            if (addExecutorRetryTimerEnabled) {
-              addExecutorRetryTimer += intervalMs
+            if (addRetryTimerEnabled) {
+              addRetryTimer += intervalMs
             }
-            removeExecutorTimers.foreach { case (id, _) =>
-              removeExecutorTimers(id) += intervalMs
+            removeTimers.foreach { case (id, _) =>
+              removeTimers(id) += intervalMs
             }
-            removeExecutorRetryTimers.foreach { case (id, _) =>
-              removeExecutorRetryTimers(id) += intervalMs
+            retryRemoveTimers.foreach { case (id, _) =>
+              retryRemoveTimers(id) += intervalMs
             }
           }
         }
@@ -212,7 +212,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    */
   private def addExecutors(): Unit = synchronized {
     // Restart add timer because there are still pending tasks
-    startAddExecutorTimer()
+    startAddTimer()
 
     // Wait until the previous round of executors have registered
     if (numExecutorsPendingToAdd > 0) {
@@ -241,7 +241,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     numExecutorsToAdd *= 2
     numExecutorsPendingToAdd += actualNumExecutorsToAdd
     backend.requestExecutors(actualNumExecutorsToAdd)
-    startAddExecutorRetryTimer()
+    startAddRetryTimer()
   }
 
   /**
@@ -252,27 +252,27 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     // Do not retry if there are no executors pending to be added (should never happen)
     if (numExecutorsPendingToAdd == 0) {
       logWarning("Attempted to retry adding executors when there are none pending to be added")
-      cancelAddExecutorRetryTimer()
+      cancelAddRetryTimer()
       return
     }
 
     // Do not retry if we have already exceeded the maximum number of attempts
-    addExecutorRetryAttempts += 1
-    if (addExecutorRetryAttempts > maxAddExecutorRetryAttempts) {
+    addRetryAttempts += 1
+    if (addRetryAttempts > maxAddRetryAttempts) {
       logInfo(s"Giving up on adding $numExecutorsPendingToAdd executor(s) " +
-        s"after $maxAddExecutorRetryAttempts failed attempts")
+        s"after $maxAddRetryAttempts failed attempts")
       numExecutorsPendingToAdd = 0
       // Also cancel original add timer because the cluster is not granting us new executors
-      cancelAddExecutorTimer()
+      cancelAddTimer()
       return
     }
 
     // Retry a previous request, then restart the retry timer in case this retry also fails
     logInfo(s"Previously requested executors have not all registered yet. " +
       s"Retrying to add $numExecutorsPendingToAdd executor(s) " +
-      s"[attempt $addExecutorRetryAttempts/$maxAddExecutorRetryAttempts]")
+      s"[attempt $addRetryAttempts/$maxAddRetryAttempts]")
     backend.requestExecutors(numExecutorsPendingToAdd)
-    startAddExecutorRetryTimer()
+    startAddRetryTimer()
   }
 
   /**
@@ -283,16 +283,16 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     // Do not kill the executor if we are not aware of it (should never happen)
     if (!executorIds.contains(executorId)) {
       logWarning(s"Attempted to remove unknown executor $executorId")
-      cancelRemoveExecutorTimer(executorId)
+      cancelRemoveTimer(executorId)
       return
     }
 
     // Do not kill the executor again if it is already pending to be killed (should never happen)
     if (executorsPendingToRemove.contains(executorId) ||
-        removeExecutorRetryAttempts.contains(executorId) ||
-        removeExecutorRetryTimers.contains(executorId)) {
+        removeRetryAttempts.contains(executorId) ||
+        retryRemoveTimers.contains(executorId)) {
       logWarning(s"Executor $executorId is already pending to be removed!")
-      cancelRemoveExecutorTimer(executorId)
+      cancelRemoveTimer(executorId)
       return
     }
 
@@ -303,18 +303,18 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
         "executor(s) left, which is the limit")
       // Restart the remove timer to keep the executor marked as idle
       // Otherwise we won't be able to remove this executor even after new executors have joined
-      startRemoveExecutorTimer(executorId)
+      startRemoveTimer(executorId)
       return
     }
 
     // Send a kill request to the backend for this executor
     // Start the retry timer in case this removal fails
     logInfo(s"Removing executor $executorId because it has been idle for " +
-      s"$removeExecutorThreshold seconds (new total is ${numExistingExecutors - 1})")
+      s"$removeThreshold seconds (new total is ${numExistingExecutors - 1})")
     executorsPendingToRemove.add(executorId)
     backend.killExecutor(executorId)
-    cancelRemoveExecutorTimer(executorId)
-    startRemoveExecutorRetryTimer(executorId)
+    cancelRemoveTimer(executorId)
+    startRemoveRetryTimer(executorId)
   }
 
   /**
@@ -325,34 +325,34 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     // Do not kill the executor if we are not aware of it (should never happen)
     if (!executorIds.contains(executorId)) {
       logWarning(s"Attempted to retry removing unknown executor $executorId")
-      cancelRemoveExecutorRetryTimer(executorId)
+      cancelRemoveRetryTimer(executorId)
       return
     }
 
     // Do not retry if this executor is not pending to be killed (should never happen)
     if (!executorsPendingToRemove.contains(executorId)) {
       logDebug(s"Attempted to retry removing executor $executorId when it's not to be removed!")
-      cancelRemoveExecutorRetryTimer(executorId)
+      cancelRemoveRetryTimer(executorId)
       return
     }
 
     // Do not retry if we have already exceeded the maximum number of attempts
-    removeExecutorRetryAttempts(executorId) =
-      removeExecutorRetryAttempts.getOrElse(executorId, 0) + 1
-    if (removeExecutorRetryAttempts(executorId) > maxRemoveExecutorRetryAttempts) {
+    removeRetryAttempts(executorId) =
+      removeRetryAttempts.getOrElse(executorId, 0) + 1
+    if (removeRetryAttempts(executorId) > maxRemoveRetryAttempts) {
       logInfo(s"Giving up on removing executor $executorId after " +
-        s"$maxRemoveExecutorRetryAttempts failed attempts!")
+        s"$maxRemoveRetryAttempts failed attempts!")
       executorsPendingToRemove.remove(executorId)
-      cancelRemoveExecutorRetryTimer(executorId)
+      cancelRemoveRetryTimer(executorId)
       return
     }
 
     // Retry a previous kill request for this executor
     // Restart the retry timer in case this retry also fails
     logInfo(s"Retrying previous attempt to remove $executorId " +
-      s"[attempt ${removeExecutorRetryAttempts(executorId)}/$maxRemoveExecutorRetryAttempts]")
+      s"[attempt ${removeRetryAttempts(executorId)}/$maxRemoveRetryAttempts]")
     backend.killExecutor(executorId)
-    startRemoveExecutorRetryTimer(executorId)
+    startRemoveRetryTimer(executorId)
   }
 
   /**
@@ -366,11 +366,11 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
         logDebug(s"Decremented pending executors to add ($numExecutorsPendingToAdd left)")
         if (numExecutorsPendingToAdd == 0) {
           logDebug("All previously pending executors have registered!")
-          cancelAddExecutorRetryTimer()
+          cancelAddRetryTimer()
         }
       }
       executorIds.add(executorId)
-      startRemoveExecutorTimer(executorId)
+      startRemoveTimer(executorId)
     }
   }
 
@@ -385,7 +385,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
         executorsPendingToRemove.remove(executorId)
         logDebug(s"Removing executor $executorId from pending executors to remove " +
           s"(${executorsPendingToRemove.size} left)")
-        cancelRemoveExecutorRetryTimer(executorId)
+        cancelRemoveRetryTimer(executorId)
       }
     } else {
       logWarning(s"Unknown executor $executorId has been removed!")
@@ -395,91 +395,91 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   /**
    * Return whether the add timer is already running.
    */
-  def isAddTimerRunning: Boolean = addExecutorTimerEnabled || addExecutorRetryTimerEnabled
+  def isAddTimerRunning: Boolean = addTimerEnabled || addRetryTimerEnabled
 
   /**
    * Return whether the remove timer for the given executor is already running.
    */
   def isRemoveTimerRunning(executorId: String): Boolean = {
-    removeExecutorTimers.contains(executorId) || removeExecutorRetryTimers.contains(executorId)
+    removeTimers.contains(executorId) || retryRemoveTimers.contains(executorId)
   }
 
   /**
-   * Start a timer to add executors, to expire in `addExecutorThreshold` seconds in the first
-   * round, and `addExecutorInterval` seconds in every round thereafter. This is called when
+   * Start a timer to add executors, to expire in `addThreshold` seconds in the first
+   * round, and `addInterval` seconds in every round thereafter. This is called when
    * the scheduler receives new pending tasks and the timer is not already started. This resets
    * the value of any existing add timer.
    */
-  def startAddExecutorTimer(): Unit = {
-    val threshold = if (addThresholdCrossed) addExecutorInterval else addExecutorThreshold
+  def startAddTimer(): Unit = {
+    val threshold = if (addThresholdCrossed) addInterval else addThreshold
     logDebug(s"Starting add executor timer (to expire in $threshold seconds)")
-    addExecutorTimer = 0
-    addExecutorTimerEnabled = true
+    addTimer = 0
+    addTimerEnabled = true
   }
 
   /**
-   * Start a timer to remove the given executor, to expire in `removeExecutorThreshold` seconds.
+   * Start a timer to remove the given executor, to expire in `removeThreshold` seconds.
    * This is called when an executor registers or finishes running tasks, and the timer is not
    * already started. This resets the value of any existing timer to remove this executor.
    */
-  def startRemoveExecutorTimer(executorId: String): Unit = {
+  def startRemoveTimer(executorId: String): Unit = {
     logDebug(s"Starting remove executor timer for $executorId " +
-      s"(to expire in $removeExecutorThreshold seconds)")
-    removeExecutorTimers(executorId) = 0
+      s"(to expire in $removeThreshold seconds)")
+    removeTimers(executorId) = 0
   }
 
   /**
-   * Start a retry timer to add executors, to expire in `addExecutorRetryInterval` seconds. This
+   * Start a retry timer to add executors, to expire in `addRetryInterval` seconds. This
    * is called when an add timer or another retry timer is triggered. This resets the value of
    * any existing retry timer.
    */
-  private def startAddExecutorRetryTimer(): Unit = {
-    logDebug(s"Starting add executor retry timer (to expire in $addExecutorRetryInterval seconds)")
-    addExecutorRetryTimer = 0
-    addExecutorRetryTimerEnabled = true
+  private def startAddRetryTimer(): Unit = {
+    logDebug(s"Starting add executor retry timer (to expire in $addRetryInterval seconds)")
+    addRetryTimer = 0
+    addRetryTimerEnabled = true
   }
 
   /**
-   * Start a retry timer to remove the given executor, to expire in `removeExecutorRetryInterval`
+   * Start a retry timer to remove the given executor, to expire in `removeRetryInterval`
    * seconds. This is called when the remove timer or another retry timer for this executor is
    * triggered. This resets the value of any existing retry timer to remove this executor.
    */
-  private def startRemoveExecutorRetryTimer(executorId: String): Unit = {
+  private def startRemoveRetryTimer(executorId: String): Unit = {
     logDebug(s"Starting remove executor retry timer for $executorId " +
-      s"(to expire in $removeExecutorRetryInterval seconds)")
-    removeExecutorRetryTimers(executorId) = 0
+      s"(to expire in $removeRetryInterval seconds)")
+    retryRemoveTimers(executorId) = 0
   }
 
   /**
    * Cancel any existing add timer. This is called when there are no longer pending tasks left.
    */
-  def cancelAddExecutorTimer(): Unit = {
+  def cancelAddTimer(): Unit = {
     logDebug(s"Canceling add executor timer")
-    addExecutorTimer = 0
-    addExecutorTimerEnabled = false
+    addTimer = 0
+    addTimerEnabled = false
     addThresholdCrossed = false
-    cancelAddExecutorRetryTimer()
+    cancelAddRetryTimer()
   }
 
   /**
    * Cancel any existing remove timer for the given executor.
    * This is called when this executor is scheduled a new task.
    */
-  def cancelRemoveExecutorTimer(executorId: String): Unit = {
+  def cancelRemoveTimer(executorId: String): Unit = {
     logDebug(s"Canceling remove executor timer for $executorId")
-    removeExecutorTimers.remove(executorId)
-    cancelRemoveExecutorRetryTimer(executorId)
+    removeTimers.remove(executorId)
+    cancelRemoveRetryTimer(executorId)
   }
 
   /**
    * Cancel any existing add retry timer. This is called when all previously requested
    * executors have registered, or when there is no longer a need to add executors.
    */
-  private def cancelAddExecutorRetryTimer(): Unit = {
+  private def cancelAddRetryTimer(): Unit = {
     logDebug(s"Canceling add executor retry timer")
-    addExecutorRetryTimer = 0
-    addExecutorRetryAttempts = 0
-    addExecutorRetryTimerEnabled = false
+    addRetryTimer = 0
+    addRetryAttempts = 0
+    addRetryTimerEnabled = false
   }
 
   /**
@@ -487,10 +487,10 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    * executor pending to be removed has been removed, or when there is no longer a need to
    * remove this executor.
    */
-  private def cancelRemoveExecutorRetryTimer(executorId: String): Unit = {
+  private def cancelRemoveRetryTimer(executorId: String): Unit = {
     logDebug(s"Canceling remove executor retry timer for $executorId")
-    removeExecutorRetryAttempts.remove(executorId)
-    removeExecutorRetryTimers.remove(executorId)
+    removeRetryAttempts.remove(executorId)
+    retryRemoveTimers.remove(executorId)
   }
 
 }
