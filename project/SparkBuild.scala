@@ -72,7 +72,7 @@ object SparkBuild extends PomBuild {
     }
     Properties.envOrNone("SPARK_HADOOP_VERSION") match {
       case Some(v) =>
-        if (v.matches("0.23.*")) isAlphaYarn = true
+        if (v.matches("^0\\.23\\.[0-9]+.*") || v.matches("^2\\.[01]\\.[0-9]+.*")) isAlphaYarn = true
         println("NOTE: SPARK_HADOOP_VERSION is deprecated, please use -Dhadoop.version=" + v)
         System.setProperty("hadoop.version", v)
       case None =>
