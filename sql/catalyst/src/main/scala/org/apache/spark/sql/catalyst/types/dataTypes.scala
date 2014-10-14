@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
 import scala.reflect.ClassTag
@@ -251,6 +251,16 @@ case object TimestampType extends NativeType {
   }
 }
 
+case object DateType extends NativeType {
+  private[sql] type JvmType = Date
+
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+
+  private[sql] val ordering = new Ordering[JvmType] {
+    def compare(x: Date, y: Date) = x.compareTo(y)
+  }
+}
+
 abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -350,7 +360,6 @@ case object FloatType extends FractionalType {
 object ArrayType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
-  def typeName: String = "array"
 }
 
 /**
@@ -408,8 +417,6 @@ case class StructField(
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
-
-  def typeName = "struct"
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -472,8 +479,6 @@ object MapType {
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
     MapType(keyType: DataType, valueType: DataType, true)
-
-  def simpleName = "map"
 }
 
 /**

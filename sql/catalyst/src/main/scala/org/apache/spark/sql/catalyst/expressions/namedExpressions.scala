@@ -58,6 +58,8 @@ abstract class NamedExpression extends Expression {
 abstract class Attribute extends NamedExpression {
   self: Product =>
 
+  override def references = AttributeSet(this)
+
   def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
   def withName(newName: String): Attribute
@@ -122,8 +124,6 @@ case class AttributeReference(
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
-
-  override def references = AttributeSet(this :: Nil)
 
   override def equals(other: Any) = other match {
     case ar: AttributeReference => exprId == ar.exprId && dataType == ar.dataType
