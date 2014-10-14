@@ -50,12 +50,12 @@ object SparkGLRM {
   }
 
   def lossL1Grad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
-    // gradient of L1 loss
+    // a subgradient of L1
     math.signum(prediction - actual)
   }
 
   def mixedLossGrad(i: Int, j: Int, prediction: Double, actual: Double): Double = {
-    // weird loss function for demonstration
+    // weird loss function subgradient for demonstration
     if (i + j % 2 == 0) lossL1Grad(i, j, prediction, actual) else lossL2squaredGrad(i, j, prediction, actual)
   }
 
@@ -97,14 +97,14 @@ object SparkGLRM {
 
   // Update factors
   def update(us: Broadcast[Array[BDV[Double]]], ms: Broadcast[Array[BDV[Double]]],
-             loss_grads: RDD[(Int, Int, Double)], stepSize: Double,
+             lossGrads: RDD[(Int, Int, Double)], stepSize: Double,
              nnz: Array[Double],
              prox: (BDV[Double], Double, Double) => BDV[Double], regPen: Double)
   : Array[BDV[Double]] = {
     val rank = ms.value(0).length
     val ret = Array.fill(ms.value.size)(BDV.zeros[Double](rank))
 
-    val retu = loss_grads.map { case (i, j, lossij) => (i, us.value(j) * lossij) } // vector/scalar multiply
+    val retu = lossGrads.map { case (i, j, lossij) => (i, us.value(j) * lossij) } // vector/scalar multiply
                 .reduceByKey(_ + _).collect() // vector addition through breeze
 
     for (entry <- retu) {
@@ -186,11 +186,11 @@ object SparkGLRM {
     val sc = new SparkContext(sparkConf)
 
     // Number of movies
-    val M = 1000000
+    val M = 10000
     // Number of users
-    val U = 1000
+    val U = 10000
     // Number of non-zeros per row
-    val NNZ = 100
+    val NNZ = 1000
     // Number of features
     val rank = 2
     // Number of iterations
@@ -198,7 +198,7 @@ object SparkGLRM {
     // regularization parameter
     val regPen = 0.1
 
-    // Number of partitions for data
+    // Number of partitions for data, set to number of cores in cluster
     val numChunks = 4
     // Build non-zeros
     val R = sc.parallelize(0 until M, numChunks).flatMap{i =>
