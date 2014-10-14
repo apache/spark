@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.api.java.JavaFutureAction
@@ -285,12 +286,12 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
 
   override def isDone: Boolean = {
     // According to java.util.Future's Javadoc, this returns True if the task was completed,
-    // whether that completion was due to succesful execution, an exception, or a cancellation.
+    // whether that completion was due to successful execution, an exception, or a cancellation.
     futureAction.isCancelled || futureAction.isCompleted
   }
 
   override def jobIds(): java.util.List[java.lang.Integer] = {
-    new java.util.ArrayList(futureAction.jobIds.map(x => new Integer(x)).asJava)
+    Collections.unmodifiableList(futureAction.jobIds.map(Integer.valueOf).asJava)
   }
 
   private def getImpl(timeout: Duration): T = {
@@ -300,10 +301,10 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
       case scala.util.Success(value) => converter(value)
       case Failure(exception) =>
         if (isCancelled) {
-          throw new CancellationException("Job cancelled: ${exception.message}");
+          throw new CancellationException("Job cancelled").initCause(exception)
         } else {
           // java.util.Future.get() wraps exceptions in ExecutionException
-          throw new ExecutionException("Exception thrown by job: ", exception)
+          throw new ExecutionException("Exception thrown by job", exception)
         }
     }
   }
@@ -313,7 +314,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
   override def get(timeout: Long, unit: TimeUnit): T =
     getImpl(Duration.fromNanos(unit.toNanos(timeout)))
 
-  override def cancel(mayInterruptIfRunning: Boolean): Boolean = {
+  override def cancel(mayInterruptIfRunning: Boolean): Boolean = synchronized {
     if (isDone) {
       // According to java.util.Future's Javadoc, this should return false if the task is completed.
       false

@@ -30,6 +30,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.base.Throwables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -1306,21 +1307,6 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(data.size(), collected.length);
   }
 
-  private static final class IdentityWithDelay<T> implements Function<T, T> {
-
-    final int delayMillis;
-
-    IdentityWithDelay(int delayMillis) {
-      this.delayMillis = delayMillis;
-    }
-
-    @Override
-    public T call(T x) throws Exception {
-      Thread.sleep(delayMillis);
-      return x;
-    }
-  }
-
   private static final class BuggyMapFunction<T> implements Function<T, T> {
 
     @Override
@@ -1333,22 +1319,19 @@ public class JavaAPISuite implements Serializable {
   public void collectAsync() throws Exception {
     List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
     JavaRDD<Integer> rdd = sc.parallelize(data, 1);
-    JavaFutureAction<List<Integer>> future =
-        rdd.map(new IdentityWithDelay<Integer>(200)).collectAsync();
-    Assert.assertFalse(future.isCancelled());
-    Assert.assertFalse(future.isDone());
+    JavaFutureAction<List<Integer>> future = rdd.collectAsync();
     List<Integer> result = future.get();
-    Assert.assertEquals(result, data);
+    Assert.assertEquals(data, result);
     Assert.assertFalse(future.isCancelled());
     Assert.assertTrue(future.isDone());
-    Assert.assertEquals(future.jobIds().size(), 1);
+    Assert.assertEquals(1, future.jobIds().size());
   }
 
   @Test
   public void foreachAsync() throws Exception {
     List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
     JavaRDD<Integer> rdd = sc.parallelize(data, 1);
-    JavaFutureAction<Void> future = rdd.map(new IdentityWithDelay<Integer>(200)).foreachAsync(
+    JavaFutureAction<Void> future = rdd.foreachAsync(
         new VoidFunction<Integer>() {
           @Override
           public void call(Integer integer) throws Exception {
@@ -1356,39 +1339,39 @@ public class JavaAPISuite implements Serializable {
           }
         }
     );
-    Assert.assertFalse(future.isCancelled());
-    Assert.assertFalse(future.isDone());
     future.get();
     Assert.assertFalse(future.isCancelled());
     Assert.assertTrue(future.isDone());
-    Assert.assertEquals(future.jobIds().size(), 1);
+    Assert.assertEquals(1, future.jobIds().size());
   }
 
   @Test
   public void countAsync() throws Exception {
     List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
     JavaRDD<Integer> rdd = sc.parallelize(data, 1);
-    JavaFutureAction<Long> future = rdd.map(new IdentityWithDelay<Integer>(200)).countAsync();
-    Assert.assertFalse(future.isCancelled());
-    Assert.assertFalse(future.isDone());
+    JavaFutureAction<Long> future = rdd.countAsync();
     long count = future.get();
-    Assert.assertEquals(count, data.size());
+    Assert.assertEquals(data.size(), count);
     Assert.assertFalse(future.isCancelled());
     Assert.assertTrue(future.isDone());
-    Assert.assertEquals(future.jobIds().size(), 1);
+    Assert.assertEquals(1, future.jobIds().size());
   }
 
   @Test
   public void testAsyncActionCancellation() throws Exception {
     List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
     JavaRDD<Integer> rdd = sc.parallelize(data, 1);
-    JavaFutureAction<Long> future = rdd.map(new IdentityWithDelay<Integer>(200)).countAsync();
-    Thread.sleep(200);
+    JavaFutureAction<Void> future = rdd.foreachAsync(new VoidFunction<Integer>() {
+      @Override
+      public void call(Integer integer) throws Exception {
+        Thread.sleep(10000);  // To ensure that the job won't finish before it's cancelled.
+      }
+    });
     future.cancel(true);
     Assert.assertTrue(future.isCancelled());
     Assert.assertTrue(future.isDone());
     try {
-      long count = future.get(2000, TimeUnit.MILLISECONDS);
+      future.get(2000, TimeUnit.MILLISECONDS);
       Assert.fail("Expected future.get() for cancelled job to throw CancellationException");
     } catch (CancellationException ignored) {
       // pass
@@ -1400,12 +1383,11 @@ public class JavaAPISuite implements Serializable {
     List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
     JavaRDD<Integer> rdd = sc.parallelize(data, 1);
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<Integer>()).countAsync();
-    Thread.sleep(200);
     try {
-      long count = future.get(2000, TimeUnit.MILLISECONDS);
+      long count = future.get(2, TimeUnit.SECONDS);
       Assert.fail("Expected future.get() for failed job to throw ExcecutionException");
-    } catch (ExecutionException ignored) {
-      // pass
+    } catch (ExecutionException ee) {
+      Assert.assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
     }
     Assert.assertTrue(future.isDone());
   }

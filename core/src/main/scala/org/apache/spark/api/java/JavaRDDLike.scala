@@ -21,12 +21,14 @@ import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark._
+import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
@@ -578,8 +580,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * future for counting the number of elements in this RDD.
    */
   def countAsync(): JavaFutureAction[JLong] = {
-    import org.apache.spark.SparkContext._
-    new JavaFutureActionWrapper[Long, JLong](rdd.countAsync(), x => new JLong(x))
+    new JavaFutureActionWrapper[Long, JLong](rdd.countAsync(), JLong.valueOf)
   }
 
   /**
@@ -587,8 +588,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * retrieving an array containing all of the elements in this RDD.
    */
   def collectAsync(): JavaFutureAction[JList[T]] = {
-    import org.apache.spark.SparkContext._
-    new JavaFutureActionWrapper(rdd.collectAsync(), (x: Seq[T]) => new java.util.ArrayList(x))
+    new JavaFutureActionWrapper(rdd.collectAsync(), (x: Seq[T]) => x.asJava)
   }
 
   /**
@@ -596,8 +596,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * future for retrieving the first `num` elements of this RDD.
    */
   def takeAsync(num: Int): JavaFutureAction[JList[T]] = {
-    import org.apache.spark.SparkContext._
-    new JavaFutureActionWrapper(rdd.takeAsync(num), (x: Seq[T]) => new java.util.ArrayList(x))
+    new JavaFutureActionWrapper(rdd.takeAsync(num), (x: Seq[T]) => x.asJava)
   }
 
   /**
@@ -605,7 +604,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * applies a function f to all the elements of this RDD.
    */
   def foreachAsync(f: VoidFunction[T]): JavaFutureAction[Void] = {
-    import org.apache.spark.SparkContext._
     new JavaFutureActionWrapper[Unit, Void](rdd.foreachAsync(x => f.call(x)),
       { x => null.asInstanceOf[Void] })
   }
@@ -615,7 +613,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * applies a function f to each partition of this RDD.
    */
   def foreachPartitionAsync(f: VoidFunction[java.util.Iterator[T]]): JavaFutureAction[Void] = {
-    import org.apache.spark.SparkContext._
     new JavaFutureActionWrapper[Unit, Void](rdd.foreachPartitionAsync(x => f.call(x)),
       { x => null.asInstanceOf[Void] })
   }
