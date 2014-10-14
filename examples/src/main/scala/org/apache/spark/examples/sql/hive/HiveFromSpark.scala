@@ -62,16 +62,6 @@ object HiveFromSpark {
     println("Result of SELECT *:")
     sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
 
-    // Write out an RDD as a orc file.
-    rdd.saveAsOrcFile("pair.orc")
-
-    // Read in orc file. Orc files are self-describing so the schmema is preserved.
-    val orcFile = hiveContext.orcFile("pair.orc")
-
-    // These files can also be registered as tables.
-    orcFile.registerTempTable("orcFile")
-    sql("SELECT * FROM records r JOIN orcFile s ON r.key = s.key").collect().foreach(println)
-
     sc.stop()
   }
 }

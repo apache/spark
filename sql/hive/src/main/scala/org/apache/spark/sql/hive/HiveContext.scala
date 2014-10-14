@@ -122,7 +122,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
-   * Loads a Orc file, returning the result as a [[SchemaRDD]].
+   * Loads a ORC file, returning the result as a [[SchemaRDD]].
    *
    * @group userf
    */
@@ -135,7 +135,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * This registered table can be used as the target of future `insertInto` operations.
    *
    * {{{
-   *   val sqlContext = new SQLContext(...)
+   *   val sqlContext = new HiveContext(...)
    *   import sqlContext._
    *
    *   case class Person(name: String, age: Int)

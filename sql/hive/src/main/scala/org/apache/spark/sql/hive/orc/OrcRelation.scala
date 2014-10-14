@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 import java.io.IOException
-import org.apache.hadoop.hive.ql.stats.StatsSetupConst
-
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -29,6 +27,7 @@ import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.orc.OrcProto.Type.Kind
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 
 import org.apache.spark.sql.parquet.FileSystemHelper
 import org.apache.spark.sql.SQLContext
@@ -37,7 +36,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedException, MultiInstanc
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.types._
-
 
 private[sql] case class OrcRelation(
     path: String,
@@ -59,9 +57,9 @@ private[sql] case class OrcRelation(
 
   override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
 
-  def orcSchema: Seq[Attribute] = {
+  private def orcSchema: Seq[Attribute] = {
     val origPath = new Path(path)
-    val reader = OrcFileOperator.readMetaData(origPath, conf)
+    val reader = OrcFileOperator.getMetaDataReader(origPath, conf)
 
     if (null != reader) {
       val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
@@ -74,8 +72,8 @@ private[sql] case class OrcRelation(
       val totalType = reader.getTypes.get(0)
       val keys = totalType.getFieldNamesList
       val types = totalType.getSubtypesList
-      log.info("field name is {}", keys)
-      log.info("types is {}", types)
+      log.info("field names are {}", keys)
+      log.info("types are {}", types)
 
       val colBuff = new StringBuilder
       val typeBuff = new StringBuilder
@@ -214,26 +212,21 @@ private[sql] object OrcRelation {
 }
 
 private[sql] object OrcFileOperator {
-  def readMetaData(origPath: Path, configuration: Option[Configuration]): Reader = {
+  def getMetaDataReader(origPath: Path, configuration: Option[Configuration]): Reader = {
     val conf = configuration.getOrElse(new Configuration())
     val fs: FileSystem = origPath.getFileSystem(conf)
     val orcFiles = FileSystemHelper.listFiles(origPath, conf, ".orc")
-    if (orcFiles != Seq.empty) {
-      if (fs.exists(origPath)) {
-        OrcFile.createReader(fs, orcFiles(0))
-      } else {
-        null
-      }
+    require(orcFiles != Seq.empty, "orcFiles is empty")
+    if (fs.exists(origPath)) {
+      OrcFile.createReader(fs, orcFiles(0))
     } else {
-      null
+      throw new IOException(s"File not found: $origPath")
     }
   }
 
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration) {
-    if (origPath == null) {
-      throw new IllegalArgumentException("Unable to write Parquet metadata: path is null")
-    }
+    require(origPath != null, "Unable to write ORC metadata: path is null")
     val fs = origPath.getFileSystem(conf)
     if (fs == null) {
       throw new IllegalArgumentException(

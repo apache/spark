@@ -66,7 +66,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     // test default compression codec, now only support zlib
     rdd.saveAsOrcFile(tempDir)
-    var actualCodec = OrcFileOperator.readMetaData(new Path(tempDir), Some(new Configuration())).getCompression.name
+    var actualCodec = OrcFileOperator.getMetaDataReader(new Path(tempDir), Some(new Configuration())).getCompression.name
     assert(actualCodec == "ZLIB")
 
     Utils.deleteRecursively(new File(tempDir))

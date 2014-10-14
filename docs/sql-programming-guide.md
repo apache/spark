@@ -597,6 +597,129 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
 </tr>
 </table>
 
+## ORC Files
+
+[ORC](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+ORC) is a columnar format that is supported in Hive, it provides a highly efficient way to store data on HDFS to speed up query performance.
+Spark SQL provides support for both reading and writing ORC files that automatically preserves the schema
+of the original data.
+
+### Loading Data Programmatically
+
+Using the data from the above example:
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// Use HiveContext to read or write ORC File.
+val sqlContext = new HiveContext(sc)
+import sqlContext._
+val people: RDD[Person] = ... // An RDD of case class objects, from the previous example.
+
+// The RDD is implicitly converted to a SchemaRDD by createSchemaRDD, allowing it to be stored using ORC.
+rdd.registerTempTable("people")
+rdd.saveAsOrcFile("people.orc")
+
+// Read in the ORC file created above.  ORC files are self-describing so the schema is preserved.
+// The result of loading a ORC file is also a SchemaRDD.
+val orcFile = hiveContext.orcFile("pair.orc")
+
+//ORC files can also be registered as tables and then used in SQL statements.
+orcFile.registerTempTable("orcFile")
+val teenagers = sqlContext.sql("SELECT name FROM orcFile WHERE age >= 13 AND age <= 19")
+teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// Use JavaHiveContext to read or write ORC File.
+JavaHiveContext sqlContext = new org.apache.spark.sql.hive.api.java.HiveContext(sc);
+JavaSchemaRDD schemaPeople = ... // The JavaSchemaRDD from the previous example.
+
+// JavaSchemaRDDs can be saved as ORC files, maintaining the schema information.
+schemaPeople.saveAsOrcFile("people.orc");
+
+// Read in the ORC file created above.  ORC files are self-describing so the schema is preserved.
+// The result of loading a ORC file is also a JavaSchemaRDD.
+JavaSchemaRDD orcFile = sqlContext.orcFile("people.orc");
+
+// ORC files can also be registered as tables and then used in SQL statements.
+orcFile.registerTempTable("orcFile");
+JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM orcFile WHERE age >= 13 AND age <= 19");
+List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+  public String call(Row row) {
+    return "Name: " + row.getString(0);
+  }
+}).collect();
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+# Use HiveContext to read or write ORC File.
+from pyspark.sql import HiveContext
+sqlContext = HiveContext(sc)
+
+schemaPeople # The SchemaRDD from the previous example.
+
+# SchemaRDDs can be saved as ORC files, maintaining the schema information.
+schemaPeople.saveAsOrcFile("people.orc")
+
+# Read in the ORC file created above. ORC files are self-describing so the schema is preserved.
+# The result of loading a ORC file is also a SchemaRDD.
+orcFile = sqlContext.orcFile("people.orc")
+
+# ORC files can also be registered as tables and then used in SQL statements.
+orcFile.registerTempTable("orcFile");
+teenagers = sqlContext.sql("SELECT name FROM orcFile WHERE age >= 13 AND age <= 19")
+teenNames = teenagers.map(lambda p: "Name: " + p.name)
+for teenName in teenNames.collect():
+  print teenName
+{% endhighlight %}
+
+</div>
+
+</div>
+
+### Configuration
+
+Configuration of ORC can be done using the `setConf` method on HiveContext or by running
+`SET key=value` commands using SQL.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.sql.parquet.binaryAsString</code></td>
+  <td>false</td>
+  <td>
+    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
+    not differentiate between binary data and strings when writing out the Parquet schema.  This
+    flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.cacheMetadata</code></td>
+  <td>false</td>
+  <td>
+    Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.compression.codec</code></td>
+  <td>snappy</td>
+  <td>
+    Sets the compression codec use when writing Parquet files. Acceptable values include:
+    uncompressed, snappy, gzip, lzo.
+  </td>
+</tr>
+</table>
+
 ## JSON Datasets
 <div class="codetabs">
 
