@@ -65,7 +65,6 @@ class GradientBoosting (
 
 object GradientBoosting extends Logging {
 
-  // TODO: Add javadoc
   /**
    * Method to train a gradient boosting model.
    *
@@ -74,6 +73,10 @@ object GradientBoosting extends Logging {
    *       Using [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
    *       is recommended to clearly specify regression.
    *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param boostingStrategy Configuration options for the boosting algorithm.
    * @return GradientBoostingModel that can be used for prediction
    */
   def train(
@@ -101,25 +104,11 @@ object GradientBoosting extends Logging {
    *                     learning rate should be between in the interval (0, 1]
    * @param subsample  Fraction of the training data used for learning the decision tree.
    * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
-   * @param maxBins Maximum number of bins used for discretizing continuous features and
-   *                for choosing how to split on features at each node.
-   *                More bins give higher granularity.
-   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
-   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @param minInstancesPerNode Minimum number of instances each child must have after split.
-   *                            Default value is 1. If a split cause left or right child
-   *                            to have less than minInstancesPerNode,
-   *                            this split will not be considered as a valid split.
-   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
-   *                    If a split has less information gain than minInfoGain,
-   *                    this split will not be considered as a valid split.
-   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
-   *                      256 MB.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainRegressor(
@@ -131,26 +120,12 @@ object GradientBoosting extends Logging {
       learningRate: Double,
       subsample: Double,
       checkpointPeriod: Int,
-      maxBins: Int,
-      quantileCalculationStrategy: String,
-      categoricalFeaturesInfo: Map[Int, Int],
-      minInstancesPerNode: Int,
-      minInfoGain: Double,
-      maxMemoryInMB: Int): GradientBoostingModel = {
+      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
-    val quantileCalculationStrategyType = {
-      quantileCalculationStrategy match {
-        case "sort" => QuantileStrategy.Sort
-        case _ =>
-          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
-            s"$quantileCalculationStrategy")
-      }
-    }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2, maxBins,
-      quantileCalculationStrategyType, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB)
+      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2,
+      categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -177,25 +152,11 @@ object GradientBoosting extends Logging {
    * @param numClassesForClassification Number of classes for classification.
    *                                    (Ignored for regression.)
    *                                    Default value is 2 (binary classification).
-   * @param maxBins Maximum number of bins used for discretizing continuous features and
-   *                for choosing how to split on features at each node.
-   *                More bins give higher granularity.
-   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
-   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @param minInstancesPerNode Minimum number of instances each child must have after split.
-   *                            Default value is 1. If a split cause left or right child
-   *                            to have less than minInstancesPerNode,
-   *                            this split will not be considered as a valid split.
-   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
-   *                    If a split has less information gain than minInfoGain,
-   *                    this split will not be considered as a valid split.
-   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
-   *                      256 MB.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainClassifier(
@@ -208,26 +169,12 @@ object GradientBoosting extends Logging {
       subsample: Double,
       checkpointPeriod: Int,
       numClassesForClassification: Int,
-      maxBins: Int,
-      quantileCalculationStrategy: String,
-      categoricalFeaturesInfo: Map[Int, Int],
-      minInstancesPerNode: Int,
-      minInfoGain: Double,
-      maxMemoryInMB: Int): GradientBoostingModel = {
+      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
-    val quantileCalculationStrategyType = {
-      quantileCalculationStrategy match {
-        case "sort" => QuantileStrategy.Sort
-        case _ =>
-          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
-            s"$quantileCalculationStrategy")
-      }
-    }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
       impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
-      numClassesForClassification, maxBins, quantileCalculationStrategyType,
-      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB)
+      numClassesForClassification, categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
   /**
@@ -249,25 +196,11 @@ object GradientBoosting extends Logging {
    *                     learning rate should be between in the interval (0, 1]
    * @param subsample  Fraction of the training data used for learning the decision tree.
    * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
-   * @param maxBins Maximum number of bins used for discretizing continuous features and
-   *                for choosing how to split on features at each node.
-   *                More bins give higher granularity.
-   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
-   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @param minInstancesPerNode Minimum number of instances each child must have after split.
-   *                            Default value is 1. If a split cause left or right child
-   *                            to have less than minInstancesPerNode,
-   *                            this split will not be considered as a valid split.
-   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
-   *                    If a split has less information gain than minInfoGain,
-   *                    this split will not be considered as a valid split.
-   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
-   *                      256 MB.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainRegressor(
@@ -279,26 +212,14 @@ object GradientBoosting extends Logging {
       learningRate: Double,
       subsample: Double,
       checkpointPeriod: Int,
-      maxBins: Int,
-      quantileCalculationStrategy: String,
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
-      minInstancesPerNode: Int,
-      minInfoGain: Double,
-      maxMemoryInMB: Int): GradientBoostingModel = {
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
+      : GradientBoostingModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
-    val quantileCalculationStrategyType = {
-      quantileCalculationStrategy match {
-        case "sort" => QuantileStrategy.Sort
-        case _ =>
-          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
-            s"$quantileCalculationStrategy")
-      }
-    }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2, maxBins,
-      quantileCalculationStrategyType, categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int,
-        Int]].asScala.toMap, minInstancesPerNode, minInfoGain, maxMemoryInMB)
+      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2,
+      categoricalFeaturesInfo = categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int,
+        Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -325,25 +246,11 @@ object GradientBoosting extends Logging {
    * @param numClassesForClassification Number of classes for classification.
    *                                    (Ignored for regression.)
    *                                    Default value is 2 (binary classification).
-   * @param maxBins Maximum number of bins used for discretizing continuous features and
-   *                for choosing how to split on features at each node.
-   *                More bins give higher granularity.
-   * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
-   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @param minInstancesPerNode Minimum number of instances each child must have after split.
-   *                            Default value is 1. If a split cause left or right child
-   *                            to have less than minInstancesPerNode,
-   *                            this split will not be considered as a valid split.
-   * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
-   *                    If a split has less information gain than minInfoGain,
-   *                    this split will not be considered as a valid split.
-   * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
-   *                      256 MB.
    * @return GradientBoostingModel that can be used for prediction
    */
   def trainClassifier(
@@ -356,27 +263,14 @@ object GradientBoosting extends Logging {
       subsample: Double,
       checkpointPeriod: Int,
       numClassesForClassification: Int,
-      maxBins: Int,
-      quantileCalculationStrategy: String,
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
-      minInstancesPerNode: Int,
-      minInfoGain: Double,
-      maxMemoryInMB: Int): GradientBoostingModel = {
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
+      : GradientBoostingModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
-    val quantileCalculationStrategyType = {
-      quantileCalculationStrategy match {
-        case "sort" => QuantileStrategy.Sort
-        case _ =>
-          throw new IllegalArgumentException("Did not recognize quantile calculation strategy: " +
-            s"$quantileCalculationStrategy")
-      }
-    }
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
       impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
-      numClassesForClassification, maxBins, quantileCalculationStrategyType,
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      minInstancesPerNode, minInfoGain, maxMemoryInMB)
+      numClassesForClassification, categoricalFeaturesInfo =
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -487,7 +381,6 @@ object GradientBoosting extends Logging {
     new GradientBoosting(boostingStrategy).train(input)
   }
 
-  // TODO: java friendly API for classification and regression
 
 
   /**
@@ -511,7 +404,6 @@ object GradientBoosting extends Logging {
     val trees = new Array[DecisionTreeModel](numEstimators + 1)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
-    // TODO: Implement Stochastic gradient boosting using BaggedPoint
     val subsample = boostingStrategy.subsample
     val checkpointingPeriod = boostingStrategy.checkpointPeriod
     val strategy = boostingStrategy.strategy
