@@ -524,7 +524,12 @@ private[spark] class TaskSchedulerImpl(
    */
   def newPendingTask(taskSetId: String): Unit = executorScalingLock.synchronized {
     taskSetsWithPendingTasks.add(taskSetId)
-    executorScalingManager.foreach(_.startAddExecutorTimer())
+    executorScalingManager.foreach { m =>
+      // Start a timer to request new executors if it is not already running
+      if (!m.isAddTimerRunning) {
+        m.startAddExecutorTimer()
+      }
+    }
   }
 
   /**
@@ -562,7 +567,12 @@ private[spark] class TaskSchedulerImpl(
       val contains = executorIdToRunningTaskSets.contains(executorId)
       if (!contains || executorIdToRunningTaskSets(executorId).isEmpty) {
         executorIdToRunningTaskSets.remove(executorId)
-        executorScalingManager.foreach(_.startRemoveExecutorTimer(executorId))
+        executorScalingManager.foreach { m =>
+          // Start a timer to remove this executor if the timer is not already running
+          if (!m.isRemoveTimerRunning(executorId)) {
+            m.startRemoveExecutorTimer(executorId)
+          }
+        }
       }
       if (!contains) {
         logWarning(s"Unknown executor $executorId has no more running tasks in task set $taskSetId")
