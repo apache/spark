@@ -227,7 +227,7 @@ private[hive] object HiveQl {
       if (nativeCommands contains tree.getText) {
         if(tree.asInstanceOf[ASTNode].getText == "TOK_TRUNCATETABLE"){
           if(tree.getChildren.exists(_.asInstanceOf[ASTNode].getText == "TOK_TABCOLNAME") ){
-            sys.error("Truncate tabel can not support columns")
+            sys.error("Truncate table can not support columns")
           }
         }
         NativeCommand(sql)
