@@ -457,6 +457,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     logDebug(s"Canceling add executor timer")
     addExecutorTimer = 0
     addExecutorTimerEnabled = false
+    addThresholdCrossed = false
     cancelAddExecutorRetryTimer()
   }
 
