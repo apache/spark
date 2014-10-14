@@ -127,7 +127,6 @@
     <hbase.version>0.94.6</hbase.version>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
-    <hive.version>0.12.0-protobuf-2.5</hive.version>
     <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
@@ -441,7 +440,7 @@
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
-        <version>10.4.2.0</version>
+        <version>${derby.version}</version>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
@@ -1272,7 +1271,18 @@
         </dependency>
       </dependencies>
     </profile>
-
+    <profile>
+      <id>hive-default</id>
+      <activation>
+        <property>
+          <name>!hive.version</name>
+        </property>
+      </activation>
+      <properties>
+        <hive.version>0.12.0-protobuf-2.5</hive.version>
+        <derby.version>10.4.2.0</derby.version>
+      </properties>
+    </profile>
     <profile>
       <id>hive</id>
       <activation>
@@ -1282,6 +1292,16 @@
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
-
+    <profile>
+      <id>hive-versions</id>
+      <activation>
+        <property>
+          <name>hive.version</name>
+        </property>
+      </activation>
+      <properties>
+        <derby.version>10.10.1.1</derby.version>
+      </properties>
+    </profile>
   </profiles>
 </project>

@@ -38,6 +38,7 @@ import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.hive.thriftserver.HiveShim
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -116,7 +117,7 @@ private[hive] object SparkSQLCLIDriver {
       }
     }
 
-    if (!sessionState.isRemoteMode && !ShimLoader.getHadoopShims.usesJobShell()) {
+    if (!sessionState.isRemoteMode) {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
       // See also: code in ExecDriver.java
@@ -258,7 +259,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hconf)
+      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hconf)
 
       if (proc != null) {
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor]) {
