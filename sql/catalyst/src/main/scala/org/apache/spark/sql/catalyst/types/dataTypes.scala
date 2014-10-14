@@ -19,22 +19,20 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.util.Metadata
-
 import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s.JsonAST.JValue
 import org.json4s._
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
-
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -380,8 +378,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
- * @param metadata The metadata of this field, which is a map from string to simple type that can be
- *                 serialized to JSON automatically. The metadata should be preserved during
+ * @param metadata The metadata of this field. The metadata should be preserved during
  *                 transformation if the content of the column is not modified, e.g, in selection.
  */
 case class StructField(

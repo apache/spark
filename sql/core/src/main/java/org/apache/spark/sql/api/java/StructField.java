@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.api.java;
 
-import org.apache.spark.sql.catalyst.util.Metadata;
-
 import java.util.Map;
+
+import org.apache.spark.sql.catalyst.util.Metadata;
 
 /**
  * A StructField object represents a field in a StructType object.
@@ -28,11 +28,10 @@ import java.util.Map;
  * The field of {@code dataType} specifies the data type of a StructField.
  * The field of {@code nullable} specifies if values of a StructField can contain {@code null}
  * values.
- * The field of {@code metadata} provides extra information of the StructField, which is a map from
- * string to simple type that can be serialized to JSON automatically
+ * The field of {@code metadata} provides extra information of the StructField.
  *
  * To create a {@link StructField},
- * {@link DataType#createStructField(String, DataType, boolean, Map)}
+ * {@link DataType#createStructField(String, DataType, boolean, Metadata)}
  * should be used.
  */
 public class StructField {

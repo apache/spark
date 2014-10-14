@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.api.java;
 
-import org.apache.spark.sql.catalyst.util.Metadata;
-
 import java.util.*;
+
+import org.apache.spark.sql.catalyst.util.Metadata;
 
 /**
  * The base type of all Spark SQL data types.

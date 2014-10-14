@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.sql.catalyst.util.MetadataBuilder
-import org.apache.spark.sql.types.util.DataTypeConversions
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.{DataType => SDataType, StructField => SStructField}
-import org.apache.spark.sql.{StructType => SStructType}
-import DataTypeConversions._
+import org.apache.spark.sql.{DataType => SDataType, StructField => SStructField,
+  StructType => SStructType}
+import org.apache.spark.sql.catalyst.util.MetadataBuilder
+import org.apache.spark.sql.types.util.DataTypeConversions._
 
 class ScalaSideDataTypeConversionSuite extends FunSuite {
 

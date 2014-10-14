@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.util.MetadataBuilder
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.catalyst.util.MetadataBuilder
 
 class DataTypeSuite extends FunSuite {
 
