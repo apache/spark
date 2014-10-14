@@ -156,6 +156,8 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
 object Client {
 
+  val exitAtFinishParam = "spark.yarn.system.exit"
+
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a " +
@@ -174,11 +176,17 @@ object Client {
     } catch {
       case e: Exception => {
         Console.err.println(e.getMessage)
-        System.exit(1)
+        sparkConf.get(exitAtFinishParam, "true") match {
+          case "true" => System.exit(1)
+          case _ => throw e
+        }
       }
     }
 
-    System.exit(0)
+    sparkConf.get(exitAtFinishParam, "true") match {
+      case "true" =>  System.exit(0)
+      case _ => Unit
+    }
   }
 
 }
