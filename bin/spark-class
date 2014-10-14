@@ -105,7 +105,7 @@ else
     exit 1
   fi
 fi
-JAVA_VERSION=$("$RUNNER" -version 2>&1 | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
+JAVA_VERSION=$("$RUNNER" -version 2>&1 | grep 'version' | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 if [ "$JAVA_VERSION" -ge 18 ]; then
