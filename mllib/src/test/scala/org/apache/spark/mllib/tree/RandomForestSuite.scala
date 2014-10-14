@@ -53,7 +53,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 1)
     val rdd = sc.parallelize(arr)
     seeds.foreach { seed =>
-      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, numSubsamples, seed = seed)
+      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, true)
       val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
       RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
