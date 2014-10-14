@@ -340,8 +340,8 @@ private[spark] object Utils extends Logging {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
-    uri.getScheme match {
-      case "http" | "https" | "ftp" =>
+    Option(uri.getScheme) match {
+      case Some("http") | Some("https") | Some("ftp") =>
         logInfo("Fetching " + url + " to " + tempFile)
 
         var uc: URLConnection = null
@@ -374,7 +374,7 @@ private[spark] object Utils extends Logging {
           }
         }
         Files.move(tempFile, targetFile)
-      case "file" | null =>
+      case Some("file") | None =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
@@ -403,7 +403,7 @@ private[spark] object Utils extends Logging {
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
-      case _ =>
+      case Some(other) =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
@@ -1368,16 +1368,17 @@ private[spark] object Utils extends Logging {
     if (uri.getPath == null) {
       throw new IllegalArgumentException(s"Given path is malformed: $uri")
     }
-    uri.getScheme match {
-      case windowsDrive(d) if windows =>
+
+    Option(uri.getScheme) match {
+      case Some(windowsDrive(d)) if windows =>
         new URI("file:/" + uri.toString.stripPrefix("/"))
-      case null =>
+      case None =>
         // Preserve fragments for HDFS file name substitution (denoted by "#")
         // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
         val fragment = uri.getFragment
         val part = new File(uri.getPath).toURI
         new URI(part.getScheme, part.getPath, fragment)
-      case _ =>
+      case Some(other) =>
         uri
     }
   }
@@ -1399,10 +1400,11 @@ private[spark] object Utils extends Logging {
     } else {
       paths.split(",").filter { p =>
         val formattedPath = if (windows) formatWindowsPath(p) else p
-        new URI(formattedPath).getScheme match {
-          case windowsDrive(d) if windows => false
-          case "local" | "file" | null => false
-          case _ => true
+        val uri = new URI(formattedPath)
+        Option(uri.getScheme) match {
+          case Some(windowsDrive(d)) if windows => false
+          case Some("local") | Some("file") | None => false
+          case Some(other) => true
         }
       }
     }
