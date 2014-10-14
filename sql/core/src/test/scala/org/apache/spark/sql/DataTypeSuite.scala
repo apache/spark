@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.types.DataType
+
 class DataTypeSuite extends FunSuite {
 
   test("construct an ArrayType") {
@@ -55,4 +57,30 @@ class DataTypeSuite extends FunSuite {
       struct(Set("b", "d", "e", "f"))
     }
   }
+
+  def checkDataTypeJsonRepr(dataType: DataType): Unit = {
+    test(s"JSON - $dataType") {
+      assert(DataType.fromJson(dataType.json) === dataType)
+    }
+  }
+
+  checkDataTypeJsonRepr(BooleanType)
+  checkDataTypeJsonRepr(ByteType)
+  checkDataTypeJsonRepr(ShortType)
+  checkDataTypeJsonRepr(IntegerType)
+  checkDataTypeJsonRepr(LongType)
+  checkDataTypeJsonRepr(FloatType)
+  checkDataTypeJsonRepr(DoubleType)
+  checkDataTypeJsonRepr(DecimalType)
+  checkDataTypeJsonRepr(TimestampType)
+  checkDataTypeJsonRepr(StringType)
+  checkDataTypeJsonRepr(BinaryType)
+  checkDataTypeJsonRepr(ArrayType(DoubleType, true))
+  checkDataTypeJsonRepr(ArrayType(StringType, false))
+  checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))
+  checkDataTypeJsonRepr(MapType(IntegerType, ArrayType(DoubleType), false))
+  checkDataTypeJsonRepr(
+    StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", ArrayType(DoubleType), nullable = false))))
 }

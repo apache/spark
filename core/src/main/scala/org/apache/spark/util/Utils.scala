@@ -35,8 +35,6 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.log4j.PropertyConfigurator
@@ -170,6 +168,20 @@ private[spark] object Utils extends Logging {
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
   private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
+  // Add a shutdown hook to delete the temp dirs when the JVM exits
+  Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dirs") {
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      logDebug("Shutdown hook called")
+      shutdownDeletePaths.foreach { dirPath =>
+        try {
+          Utils.deleteRecursively(new File(dirPath))
+        } catch {
+          case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
+        }
+      }
+    }
+  })
+
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
@@ -254,14 +266,6 @@ private[spark] object Utils extends Logging {
     }
 
     registerShutdownDeleteDir(dir)
-
-    // Add a shutdown hook to delete the temp dir when the JVM exits
-    Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
-      override def run() {
-        // Attempt to delete if some patch which is parent of this is not already registered.
-        if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
-      }
-    })
     dir
   }
 
@@ -336,8 +340,8 @@ private[spark] object Utils extends Logging {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
-    uri.getScheme match {
-      case "http" | "https" | "ftp" =>
+    Option(uri.getScheme) match {
+      case Some("http") | Some("https") | Some("ftp") =>
         logInfo("Fetching " + url + " to " + tempFile)
 
         var uc: URLConnection = null
@@ -370,7 +374,7 @@ private[spark] object Utils extends Logging {
           }
         }
         Files.move(tempFile, targetFile)
-      case "file" | null =>
+      case Some("file") | None =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
@@ -399,7 +403,7 @@ private[spark] object Utils extends Logging {
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
-      case _ =>
+      case Some(other) =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
@@ -668,15 +672,30 @@ private[spark] object Utils extends Logging {
    */
   def deleteRecursively(file: File) {
     if (file != null) {
-      if (file.isDirectory() && !isSymlink(file)) {
-        for (child <- listFilesSafely(file)) {
-          deleteRecursively(child)
+      try {
+        if (file.isDirectory && !isSymlink(file)) {
+          var savedIOException: IOException = null
+          for (child <- listFilesSafely(file)) {
+            try {
+              deleteRecursively(child)
+            } catch {
+              // In case of multiple exceptions, only last one will be thrown
+              case ioe: IOException => savedIOException = ioe
+            }
+          }
+          if (savedIOException != null) {
+            throw savedIOException
+          }
+          shutdownDeletePaths.synchronized {
+            shutdownDeletePaths.remove(file.getAbsolutePath)
+          }
         }
-      }
-      if (!file.delete()) {
-        // Delete can also fail if the file simply did not exist
-        if (file.exists()) {
-          throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      } finally {
+        if (!file.delete()) {
+          // Delete can also fail if the file simply did not exist
+          if (file.exists()) {
+            throw new IOException("Failed to delete: " + file.getAbsolutePath)
+          }
         }
       }
     }
@@ -710,18 +729,20 @@ private[spark] object Utils extends Logging {
    * Determines if a directory contains any files newer than cutoff seconds.
    * 
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
-   * @param cutoff measured in seconds. Returns true if there are any files in dir newer than this.
+   * @param cutoff measured in seconds. Returns true if there are any files or directories in the
+   *               given directory whose last modified time is later than this many seconds ago
    */
   def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
-    val currentTimeMillis = System.currentTimeMillis
     if (!dir.isDirectory) {
-      throw new IllegalArgumentException (dir + " is not a directory!")
-    } else {
-      val files = FileUtils.listFilesAndDirs(dir, TrueFileFilter.TRUE, TrueFileFilter.TRUE)
-      val cutoffTimeInMillis = (currentTimeMillis - (cutoff * 1000))
-      val newFiles = files.filter { _.lastModified > cutoffTimeInMillis }
-      newFiles.nonEmpty
+      throw new IllegalArgumentException(s"$dir is not a directory!")
     }
+    val filesAndDirs = dir.listFiles()
+    val cutoffTimeInMillis = System.currentTimeMillis - (cutoff * 1000)
+
+    filesAndDirs.exists(_.lastModified() > cutoffTimeInMillis) ||
+    filesAndDirs.filter(_.isDirectory).exists(
+      subdir => doesDirectoryContainAnyNewFiles(subdir, cutoff)
+    )
   }
 
   /**
@@ -1347,16 +1368,17 @@ private[spark] object Utils extends Logging {
     if (uri.getPath == null) {
       throw new IllegalArgumentException(s"Given path is malformed: $uri")
     }
-    uri.getScheme match {
-      case windowsDrive(d) if windows =>
+
+    Option(uri.getScheme) match {
+      case Some(windowsDrive(d)) if windows =>
         new URI("file:/" + uri.toString.stripPrefix("/"))
-      case null =>
+      case None =>
         // Preserve fragments for HDFS file name substitution (denoted by "#")
         // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
         val fragment = uri.getFragment
         val part = new File(uri.getPath).toURI
         new URI(part.getScheme, part.getPath, fragment)
-      case _ =>
+      case Some(other) =>
         uri
     }
   }
@@ -1378,10 +1400,11 @@ private[spark] object Utils extends Logging {
     } else {
       paths.split(",").filter { p =>
         val formattedPath = if (windows) formatWindowsPath(p) else p
-        new URI(formattedPath).getScheme match {
-          case windowsDrive(d) if windows => false
-          case "local" | "file" | null => false
-          case _ => true
+        val uri = new URI(formattedPath)
+        Option(uri.getScheme) match {
+          case Some(windowsDrive(d)) if windows => false
+          case Some("local") | Some("file") | None => false
+          case Some(other) => true
         }
       }
     }
