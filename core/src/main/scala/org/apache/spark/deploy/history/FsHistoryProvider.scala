@@ -220,7 +220,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         applications = newApps
       }
     } catch {
-      case t: Throwable => logError("Exception in checking for event log updates", t)
+      case t: Exception => logError("Exception in checking for event log updates", t)
     }
   }
 
