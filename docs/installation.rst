@@ -12,13 +12,30 @@ Debian packages
     sudo apt-get install libmysqlclient-dev mysql-server
     sudo apt-get g++
 
-Required environment variable, add this to your .bashrc
-'''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Mac setup
+'''''''''''''''
+
+::
+
+    # Install mysql
+    brew install mysql
+    # Start mysql
+    mysql.server start
+
+    # Install python package managers
+    sudo easy_install pip
+    sudo pip install virtualenv
+    
+
+Required environment variable, add this to your .bashrc or .bash_profile
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 ::
 
     export FLUX_HOME=~/Flux
     export PATH=$PATH:$FLUX_HOME/flux/bin
+    # also run it, or source it, or start a new shell
+    source ~/.bashrc
 
 Create a python virtualenv
 ''''''''''''''''''''''''''
@@ -44,8 +61,10 @@ fine.
 
 ::
 
+    # If :
     $ mysql -u root -p 
-    mysql> CREATE DATABASE flux;
+    mysql> 
+    CREATE DATABASE flux;
     CREATE USER 'flux'@'localhost' IDENTIFIED BY 'flux';
     GRANT ALL PRIVILEGES ON flux.* TO 'flux'@'localhost';
 

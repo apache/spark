@@ -190,7 +190,7 @@ class TaskInstance(Base):
             force=False,
             pickle=None):
         """
-        Returns a command that can be executed anywhere where flux is 
+        Returns a command that can be executed anywhere where flux is
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
@@ -472,7 +472,7 @@ class Log(Base):
 class BaseJob(Base):
     """
     Abstract class to be derived for jobs. Jobs are processing items with state
-    and duration that aren't task instances. For instance a BackfillJob is 
+    and duration that aren't task instances. For instance a BackfillJob is
     a collection of task instance runs, but should have it's own state, start
     and end time.
     """
@@ -762,7 +762,7 @@ class BaseOperator(Base):
 
     def detect_downstream_cycle(self, task=None):
         """
-        When invoked, this routine will raise an exception if a cycle is 
+        When invoked, this routine will raise an exception if a cycle is
         detected downstream from self. It is invoked when tasks are added to
         the DAG to detect cycles.
         """
@@ -794,7 +794,7 @@ class BaseOperator(Base):
 
     def get_direct_relatives(self, upstream=False):
         """
-        Get the direct relatives to the current task, upstream or 
+        Get the direct relatives to the current task, upstream or
         downstream.
         """
         if upstream:
@@ -961,8 +961,8 @@ class DAG(Base):
             self, task_regex,
             include_downstream=False, include_upstream=True):
         """
-        Returns a subset of the current dag as a deep copy of the current dag 
-        based on a regex that should match one or many tasks, and includes 
+        Returns a subset of the current dag as a deep copy of the current dag
+        based on a regex that should match one or many tasks, and includes
         upstream and downstream neighboors based on the flag passed.
         """
         dag = copy.deepcopy(self)

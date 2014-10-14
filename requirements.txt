@@ -1,4 +1,5 @@
 chartkick
+flake8
 flask
 flask-admin
 flask-bootstrap

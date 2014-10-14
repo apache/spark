@@ -18,7 +18,6 @@ class MySqlOperator(BaseOperator):
         Parameters:
         mysql_dbid: reference to a specific mysql database
         sql: the sql code you to be executed
-        
         """
         super(MySqlOperator, self).__init__(*args, **kwargs)
 

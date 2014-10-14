@@ -4,7 +4,7 @@ from flux.operators import BashOperator
 
 default_args = {
     'owner': 'max',
-    'start_date': datetime(2014, 10, 1),
+    'start_date': datetime(2014, 10, 12),
     'schedule_interval': timedelta(hours=1),
     'mysql_dbid': 'local_mysql',
 }
