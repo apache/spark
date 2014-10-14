@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -51,8 +50,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
   private var logDirPath: Path = _
 
   before {
-    testDir = Files.createTempDir()
-    testDir.deleteOnExit()
+    testDir = Utils.createTempDir()
     logDirPath = Utils.getFilePath(testDir, "spark-events")
   }
 
@@ -169,7 +167,9 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify logging directory exists
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val logBaseDir = conf.get("spark.eventLog.dir")
+    val appId = EventLoggingListenerSuite.getUniqueApplicationId
+    val eventLogger = new EventLoggingListener(appId, logBaseDir, conf)
     eventLogger.start()
     val logPath = new Path(eventLogger.logDir)
     assert(fileSystem.exists(logPath))
@@ -209,7 +209,9 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify that all information is correctly parsed before stop()
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val logBaseDir = conf.get("spark.eventLog.dir")
+    val appId = EventLoggingListenerSuite.getUniqueApplicationId
+    val eventLogger = new EventLoggingListener(appId, logBaseDir, conf)
     eventLogger.start()
     var eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
     assertInfoCorrect(eventLoggingInfo, loggerStopped = false)
@@ -228,7 +230,9 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private def testEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val logBaseDir = conf.get("spark.eventLog.dir")
+    val appId = EventLoggingListenerSuite.getUniqueApplicationId
+    val eventLogger = new EventLoggingListener(appId, logBaseDir, conf)
     val listenerBus = new LiveListenerBus
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey")
@@ -408,4 +412,6 @@ object EventLoggingListenerSuite {
     }
     conf
   }
+
+  def getUniqueApplicationId = "test-" + System.currentTimeMillis
 }
