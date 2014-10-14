@@ -527,6 +527,7 @@ private[spark] class TaskSchedulerImpl(
     executorScalingManager.foreach { m =>
       // Start a timer to request new executors if it is not already running
       if (!m.isAddTimerRunning) {
+        logDebug("Starting add executor timer because a new pending task is received")
         m.startAddExecutorTimer()
       }
     }
@@ -540,6 +541,7 @@ private[spark] class TaskSchedulerImpl(
   def noMorePendingTasks(taskSetId: String): Unit = executorScalingLock.synchronized {
     taskSetsWithPendingTasks.remove(taskSetId)
     if (taskSetsWithPendingTasks.isEmpty) {
+      logDebug("Canceling add executor timer because there are no more pending tasks")
       executorScalingManager.foreach(_.cancelAddExecutorTimer())
     }
   }
@@ -552,6 +554,8 @@ private[spark] class TaskSchedulerImpl(
   def newRunningTaskForExecutor(executorId: String, taskSetId: String): Unit = {
     executorScalingLock.synchronized {
       executorIdToRunningTaskSets.getOrElseUpdate(executorId, new HashSet[String]) += taskSetId
+      logDebug(s"Canceling idle timer for executor $executorId " +
+        s"because a new task is scheduled on the executor")
       executorScalingManager.foreach(_.cancelRemoveExecutorTimer(executorId))
     }
   }
@@ -570,6 +574,8 @@ private[spark] class TaskSchedulerImpl(
         executorScalingManager.foreach { m =>
           // Start a timer to remove this executor if the timer is not already running
           if (!m.isRemoveTimerRunning(executorId)) {
+            logDebug(s"Starting idle timer for executor $executorId " +
+              s"because there are no more tasks scheduled on the executor")
             m.startRemoveExecutorTimer(executorId)
           }
         }
