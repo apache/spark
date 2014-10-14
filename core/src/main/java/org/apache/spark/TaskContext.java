@@ -62,8 +62,8 @@ public abstract class TaskContext implements Serializable {
    */
   public abstract boolean isInterrupted();
 
+  /** @deprecated: use isRunningLocally() */
   @Deprecated
-  /** Deprecated: use isRunningLocally() */
   public abstract boolean runningLocally();
 
   public abstract boolean isRunningLocally();
@@ -89,7 +89,7 @@ public abstract class TaskContext implements Serializable {
    * is for HadoopRDD to register a callback to close the input stream.
    * Will be called in any situation - success, failure, or cancellation.
    *
-   * Deprecated: use addTaskCompletionListener
+   * @deprecated: use addTaskCompletionListener
    *
    * @param f Callback function.
    */
