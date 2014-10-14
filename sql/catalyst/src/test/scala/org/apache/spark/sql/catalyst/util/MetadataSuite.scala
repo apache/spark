@@ -1,49 +1,69 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.sql.catalyst.util
 
-import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.FunSuite
 
 class MetadataSuite extends FunSuite {
 
   val baseMetadata = new MetadataBuilder()
-      .putString("purpose", "ml")
-      .build()
+    .putString("purpose", "ml")
+    .putBoolean("isBase", true)
+    .build()
 
   val summary = new MetadataBuilder()
-      .putInt("numFeatures", 10)
-      .build()
+    .putLong("numFeatures", 10L)
+    .build()
 
   val age = new MetadataBuilder()
-      .putString("name", "age")
-      .putInt("index", 1)
-      .putBoolean("categorical", false)
-      .putDouble("average", 45.0)
-      .build()
+    .putString("name", "age")
+    .putLong("index", 1L)
+    .putBoolean("categorical", false)
+    .putDouble("average", 45.0)
+    .build()
 
   val gender = new MetadataBuilder()
-      .putString("name", "gender")
-      .putInt("index", 5)
-      .putBoolean("categorical", true)
-      .putStringArray("categories", Seq("male", "female"))
-      .build()
+    .putString("name", "gender")
+    .putLong("index", 5)
+    .putBoolean("categorical", true)
+    .putStringArray("categories", Array("male", "female"))
+    .build()
 
   val metadata = new MetadataBuilder()
-      .withMetadata(baseMetadata)
-      .putMetadata("summary", summary)
-      .putIntArray("int[]", Seq(0, 1))
-      .putDoubleArray("double[]", Seq(3.0, 4.0))
-      .putBooleanArray("boolean[]", Seq(true, false))
-      .putMetadataArray("features", Seq(age, gender))
-      .build()
+    .withMetadata(baseMetadata)
+    .putBoolean("isBase", false) // overwrite an existing key
+    .putMetadata("summary", summary)
+    .putLongArray("long[]", Array(0L, 1L))
+    .putDoubleArray("double[]", Array(3.0, 4.0))
+    .putBooleanArray("boolean[]", Array(true, false))
+    .putMetadataArray("features", Array(age, gender))
+    .build()
 
   test("metadata builder and getters") {
-    assert(age.getInt("index") === 1)
+    assert(age.getLong("index") === 1L)
     assert(age.getDouble("average") === 45.0)
     assert(age.getBoolean("categorical") === false)
     assert(age.getString("name") === "age")
     assert(metadata.getString("purpose") === "ml")
+    assert(metadata.getBoolean("isBase") === false)
     assert(metadata.getMetadata("summary") === summary)
-    assert(metadata.getIntArray("int[]").toSeq === Seq(0, 1))
+    assert(metadata.getLongArray("long[]").toSeq === Seq(0L, 1L))
     assert(metadata.getDoubleArray("double[]").toSeq === Seq(3.0, 4.0))
     assert(metadata.getBooleanArray("boolean[]").toSeq === Seq(true, false))
     assert(gender.getStringArray("categories").toSeq === Seq("male", "female"))
@@ -55,6 +75,8 @@ class MetadataSuite extends FunSuite {
     withClue("toJson must produce a valid JSON string") {
       parse(json)
     }
-    assert(Metadata.fromJson(json) === metadata)
+    val parsed = Metadata.fromJson(json)
+    assert(parsed === metadata)
+    assert(parsed.## === metadata.##)
   }
 }
