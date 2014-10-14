@@ -23,7 +23,7 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
 /**
- * An agent that dynamically scales the number of executors based on the workload.
+ * An agent that dynamically allocates and removes executors based on the workload.
  *
  * The add policy depends on the number of pending tasks. If the queue of pending tasks is not
  * drained in N seconds, then new executors are added. If the queue persists for another M
@@ -69,7 +69,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  * request to add or remove executors. The mechanism to actually do this will be added separately,
  * e.g. in SPARK-3822 for Yarn.
  */
-private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) extends Logging {
+private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl) extends Logging {
   private val conf = scheduler.conf
 
   // Lower and upper bounds on the number of executors. These are required.
