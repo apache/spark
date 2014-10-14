@@ -49,9 +49,12 @@ fine.
     CREATE USER 'flux'@'localhost' IDENTIFIED BY 'flux';
     GRANT ALL PRIVILEGES ON flux.* TO 'flux'@'localhost';
 
-Start the web server
+Get things started
 ''''''''''''''''''''
 
 ::
+    # Creating the necessary tables in the database
+    flux initdb
 
+    # Start the web server!
     flux webserver --port 8080

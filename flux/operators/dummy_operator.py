@@ -2,6 +2,10 @@ from flux.models import BaseOperator
 
 
 class DummyOperator(BaseOperator):
+    """
+    Operator that does literally nothing. It can be used to group tasks in a
+    dag.
+    """
 
     template_fields = tuple()
 

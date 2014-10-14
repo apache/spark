@@ -46,6 +46,10 @@ class DagBag(object):
         self.executor = executor
 
     def process_file(self, filepath):
+        """
+        Given a path to a python module, this method imports the module and
+        look for dag objects whithin it.
+        """
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
         if file_ext != '.py':
             return
@@ -66,6 +70,10 @@ class DagBag(object):
                         dag.db_merge()
 
     def collect_dags(self, file_location):
+        """
+        Given a file path or a folder, this file looks for python modules,
+        imports them and adds them to the dagbag collection.
+        """
         if os.path.isfile(file_location):
             self.process_file(file_location)
         elif os.path.isdir(file_location):
@@ -93,7 +101,8 @@ class DatabaseConnection(Base):
     """
     Placeholder to store information about different database instances
     connection information. The idea here is that scripts use references to
-    database instances (db_id) when using operators or hooks.
+    database instances (db_id) instead of hard coding hostname, logins and
+    passwords when using operators or hooks.
     """
     __tablename__ = "db_connection"
 
@@ -180,6 +189,11 @@ class TaskInstance(Base):
             ignore_dependencies=False,
             force=False,
             pickle=None):
+        """
+        Returns a command that can be executed anywhere where flux is 
+        installed. This command is part of the message sent to executors by
+        the orchestrator.
+        """
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
         pickle = "--pickle {0}".format(pickle.id) if pickle else ""
@@ -228,7 +242,7 @@ class TaskInstance(Base):
 
     def error(self, main_session=None):
         """
-        Fails the task
+        Forces the task instance's state to FAILED in the database.
         """
         session = settings.Session()
         logging.error("Recording the task instance as FAILED")
@@ -238,6 +252,9 @@ class TaskInstance(Base):
         session.close()
 
     def refresh_from_db(self, main_session=None):
+        """
+        Refreshes the task instance from the database based on the primary key
+        """
         session = main_session or settings.Session()
         TI = TaskInstance
         ti = session.query(TI).filter(
@@ -258,9 +275,18 @@ class TaskInstance(Base):
 
     @property
     def key(self):
+        """
+        Returns a tuple that identifies the task instance uniquely
+        """
         return (self.dag_id, self.task_id, self.execution_date)
 
     def is_runnable(self):
+        """
+        Returns a boolean on whether the task instance has met all dependencies
+        and is ready to run. It considers the task's state, the state
+        of its dependencies, depends_on_past and makes sure the execution
+        isn't in the future.
+        """
         if self.execution_date > datetime.now() - self.task.schedule_interval:
             return False
         elif self.state == State.UP_FOR_RETRY and not self.ready_for_retry():
@@ -272,7 +298,8 @@ class TaskInstance(Base):
 
     def are_dependencies_met(self, main_session=None):
         """
-        Returns a boolean on whether this task is ready to run.
+        Returns a boolean on whether the upstream tasks are in a SUCCESS state
+        and considers depends_on_past and the previous' run state.
         """
 
         # Using the session if passed as param
@@ -310,6 +337,10 @@ class TaskInstance(Base):
         ).format(ti=self)
 
     def ready_for_retry(self):
+        """
+        Checks on whether the task instance is in the right state and timeframe
+        to be retried.
+        """
         return self.state == State.UP_FOR_RETRY and \
             self.end_date + self.task.retry_delay < datetime.now()
 
@@ -319,6 +350,9 @@ class TaskInstance(Base):
             force=False,
             mark_success=False,
             ):
+        """
+        Runs the task instnace.
+        """
         session = settings.Session()
         self.refresh_from_db(session)
         iso = datetime.now().isoformat()
@@ -412,6 +446,9 @@ class TaskInstance(Base):
 
 
 class Log(Base):
+    """
+    Used to actively log events to the database
+    """
 
     __tablename__ = "log"
 
@@ -433,6 +470,12 @@ class Log(Base):
 
 
 class BaseJob(Base):
+    """
+    Abstract class to be derived for jobs. Jobs are processing items with state
+    and duration that aren't task instances. For instance a BackfillJob is 
+    a collection of task instance runs, but should have it's own state, start
+    and end time.
+    """
 
     __tablename__ = "job"
 
@@ -482,12 +525,20 @@ class BaseJob(Base):
 
 
 class BackfillJob(BaseJob):
+    """
+    A backfill job consists of a dag or subdag for a specific time range. It
+    triggers a set of task instance runs, in the right order and lasts for
+    as long as it takes for the set of task instance to be completed.
+    """
 
     __mapper_args__ = {
         'polymorphic_identity': 'BackfillJob'
     }
 
     def run(self, dag, start_date=None, end_date=None, mark_success=False):
+        """
+        Runs a dag for a specified date range.
+        """
         session = settings.Session()
         executor = self.executor
         self.dag = dag
@@ -886,6 +937,10 @@ class DAG(Base):
             self, start_date=None, end_date=None,
             upstream=False, downstream=False):
         session = settings.Session()
+        """
+        Clears a set of task instances associated with the current dag for
+        a specified date range.
+        """
 
         TI = TaskInstance
         tis = session.query(TI).filter(TI.dag_id == self.dag_id)
@@ -905,7 +960,11 @@ class DAG(Base):
     def sub_dag(
             self, task_regex,
             include_downstream=False, include_upstream=True):
-
+        """
+        Returns a subset of the current dag as a deep copy of the current dag 
+        based on a regex that should match one or many tasks, and includes 
+        upstream and downstream neighboors based on the flag passed.
+        """
         dag = copy.deepcopy(self)
         regex_match = [
             t for t in dag.tasks if re.findall(task_regex, t.task_id)]
@@ -935,6 +994,9 @@ class DAG(Base):
                 return task
 
     def tree_view(self):
+        """
+        Shows an ascii tree representation of the DAG
+        """
 
         def get_downstream(task, level=0):
             print (" " * level * 4) + str(task)
@@ -968,5 +1030,3 @@ class DAG(Base):
         job.end_date = datetime.now()
         session.merge(job)
         session.commit()
-
-Base.metadata.create_all(settings.engine)
