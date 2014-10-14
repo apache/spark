@@ -455,18 +455,21 @@ private[spark] class BlockManagerInfo(
 
     updateLastSeenMs()
 
-    if (_blocks.containsKey(blockId)) {
-      // The block exists on the slave already.
-      val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
-
-      if (originalLevel.useMemory) {
-        _remainingMem += memSize
-      }
-    }
-
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
-       * But the memSize here indicates the data size in or dropped from memory,
+      // isValid means it is either stored in-memory, on-disk or on-Tachyon.
+       
+      if (_blocks.containsKey(blockId)) {
+        // The block exists on the slave already.
+        val blockStatus: BlockStatus = _blocks.get(blockId)
+        val originalLevel: StorageLevel = blockStatus.storageLevel
+        val originalMemSize: Long = blockStatus.memSize
+
+        if (originalLevel.useMemory) {
+          _remainingMem += originalMemSize
+        }
+      }
+      
+      /* The memSize here indicates the data size in or dropped from memory,
        * tachyonSize here indicates the data size in or dropped from Tachyon,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
