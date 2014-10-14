@@ -17,7 +17,6 @@
 
 package org.apache.spark.api.java
 
-import java.util
 import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
