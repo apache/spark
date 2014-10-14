@@ -91,17 +91,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             joins.BuildLeft
           }
         val hashJoin = joins.ShuffledHashJoin(
-          leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
+          leftKeys, rightKeys, buildSide, Inner, condition, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right) =>
-        execution.ShuffledHashOuterJoin(
-          leftKeys, rightKeys, BuildRight, LeftOuter, 
+        joins.ShuffledHashJoin(
+          leftKeys, rightKeys, joins.BuildRight, LeftOuter,
           condition, planLater(left), planLater(right)) :: Nil
         
       case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right) =>
-        execution.ShuffledHashOuterJoin(
-          leftKeys, rightKeys, BuildLeft, RightOuter, 
+        joins.ShuffledHashJoin(
+          leftKeys, rightKeys, joins.BuildLeft, RightOuter,
           condition, planLater(left), planLater(right)) :: Nil
         
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
