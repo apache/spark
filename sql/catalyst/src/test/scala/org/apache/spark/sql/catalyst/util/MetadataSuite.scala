@@ -71,7 +71,7 @@ class MetadataSuite extends FunSuite {
   }
 
   test("metadata json conversion") {
-    val json = metadata.toJson
+    val json = metadata.json
     withClue("toJson must produce a valid JSON string") {
       parse(json)
     }

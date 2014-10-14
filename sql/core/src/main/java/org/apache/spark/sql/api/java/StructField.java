@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java;
 
+import org.apache.spark.sql.catalyst.util.Metadata;
+
 import java.util.Map;
 
 /**
@@ -37,13 +39,13 @@ public class StructField {
   private String name;
   private DataType dataType;
   private boolean nullable;
-  private Map<String, Object> metadata;
+  private Metadata metadata;
 
   protected StructField(
       String name,
       DataType dataType,
       boolean nullable,
-      Map<String, Object> metadata) {
+      Metadata metadata) {
     this.name = name;
     this.dataType = dataType;
     this.nullable = nullable;
@@ -62,7 +64,7 @@ public class StructField {
     return nullable;
   }
 
-  public Map<String, Object> getMetadata() {
+  public Metadata getMetadata() {
     return metadata;
   }
 

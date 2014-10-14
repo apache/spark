@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.util.Metadata
+
 import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
@@ -74,7 +76,7 @@ object DataType {
         ("name", JString(name)),
         ("nullable", JBool(nullable)),
         ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable, metadata.values)
+      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
   }
 
   @deprecated("Use DataType.fromJson instead")
@@ -386,7 +388,7 @@ case class StructField(
     name: String,
     dataType: DataType,
     nullable: Boolean,
-    metadata: Map[String, Any] = Map.empty) {
+    metadata: Metadata = Metadata.empty) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
@@ -402,7 +404,7 @@ case class StructField(
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
       ("nullable" -> nullable) ~
-      ("metadata" -> Extraction.decompose(metadata)(DefaultFormats))
+      ("metadata" -> metadata.jsonValue)
   }
 }
 

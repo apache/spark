@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
+import org.apache.spark.sql.catalyst.util.Metadata
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -44,7 +45,7 @@ abstract class Expression extends TreeNode[Expression] {
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the metadata when an expression is a reference to another expression with metadata. */
-  def metadata: Map[String, Any] = Map.empty
+  def metadata: Metadata = Metadata.empty
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: Row = null): EvaluatedType

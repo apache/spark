@@ -32,7 +32,7 @@ protected[sql] object DataTypeConversions {
       scalaStructField.name,
       asJavaDataType(scalaStructField.dataType),
       scalaStructField.nullable,
-      scalaStructField.metadata.asJava.asInstanceOf[java.util.Map[String, Object]])
+      scalaStructField.metadata)
   }
 
   /**
@@ -69,7 +69,7 @@ protected[sql] object DataTypeConversions {
       javaStructField.getName,
       asScalaDataType(javaStructField.getDataType),
       javaStructField.isNullable,
-      javaStructField.getMetadata.asScala.toMap)
+      javaStructField.getMetadata)
   }
 
   /**

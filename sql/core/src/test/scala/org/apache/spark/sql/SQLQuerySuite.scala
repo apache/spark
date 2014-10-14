@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
-import org.apache.spark.sql.test._
-import org.scalatest.BeforeAndAfterAll
 import java.util.TimeZone
 
-/* Implicits */
-import TestSQLContext._
-import TestData._
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.MetadataBuilder
+import org.apache.spark.sql.test.TestSQLContext._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -684,11 +683,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val schema = person.schema
     val docKey = "doc"
     val docValue = "first name"
+    val metadata = new MetadataBuilder()
+      .putString(docKey, docValue)
+      .build()
     val schemaWithMeta = new StructType(Seq(
-      schema("id"), schema("name").copy(metadata = Map(docKey -> docValue)), schema("age")))
+      schema("id"), schema("name").copy(metadata = metadata), schema("age")))
     val personWithMeta = applySchema(person, schemaWithMeta)
     def validateMetadata(rdd: SchemaRDD): Unit = {
-      assert(rdd.schema("name").metadata(docKey) === docValue)
+      assert(rdd.schema("name").metadata.getString(docKey) == docValue)
     }
     personWithMeta.registerTempTable("personWithMeta")
     validateMetadata(personWithMeta.select('name))

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java;
 
+import org.apache.spark.sql.catalyst.util.Metadata;
+
 import java.util.*;
 
 /**
@@ -148,7 +150,7 @@ public abstract class DataType {
       String name,
       DataType dataType,
       boolean nullable,
-      Map<String, Object> metadata) {
+      Metadata metadata) {
     if (name == null) {
       throw new IllegalArgumentException("name should not be null.");
     }
@@ -165,10 +167,10 @@ public abstract class DataType {
   /**
    * Creates a StructField with empty metadata.
    *
-   * @see #createStructField(String, DataType, boolean, java.util.Map)
+   * @see #createStructField(String, DataType, boolean, Metadata)
    */
   public static StructField createStructField(String name, DataType dataType, boolean nullable) {
-    return createStructField(name, dataType, nullable, new HashMap<String, Object>());
+    return createStructField(name, dataType, nullable, Metadata.empty());
   }
 
   /**

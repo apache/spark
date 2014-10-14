@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util.Metadata
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -86,7 +87,7 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
-  override def metadata: Map[String, Any] = child.metadata
+  override def metadata: Metadata = child.metadata
 
   override def toAttribute = {
     if (resolved) {
@@ -118,7 +119,7 @@ case class AttributeReference(
     name: String,
     dataType: DataType,
     nullable: Boolean = true,
-    override val metadata: Map[String, Any] = Map.empty)(
+    override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
 

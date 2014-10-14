@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.api.java
 
+import org.apache.spark.sql.catalyst.util.MetadataBuilder
 import org.apache.spark.sql.types.util.DataTypeConversions
 import org.scalatest.FunSuite
 
@@ -66,12 +67,15 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
     checkDataType(simpleScalaStructType)
 
     // Complex StructType.
+    val metadata = new MetadataBuilder()
+      .putString("name", "age")
+      .build()
     val complexScalaStructType = SStructType(
       SStructField("simpleArray", simpleScalaArrayType, true) ::
       SStructField("simpleMap", simpleScalaMapType, true) ::
       SStructField("simpleStruct", simpleScalaStructType, true) ::
       SStructField("boolean", org.apache.spark.sql.BooleanType, false) ::
-      SStructField("withMeta", org.apache.spark.sql.DoubleType, false, Map("name" -> "age")) :: Nil)
+      SStructField("withMeta", org.apache.spark.sql.DoubleType, false, metadata) :: Nil)
     checkDataType(complexScalaStructType)
 
     // Complex ArrayType.
