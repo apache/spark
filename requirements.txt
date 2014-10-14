@@ -12,3 +12,4 @@ python-dateutil
 sphinx
 sphinx_rtd_theme
 sqlalchemy
+thrift

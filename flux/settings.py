@@ -12,6 +12,7 @@ if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 DAGS_FOLDER = FLUX_HOME + '/dags'
 BASE_LOG_FOLDER = FLUX_HOME + "/logs"
+HIVE_HOME_PY = '/usr/lib/hive/lib/py'
 RUN_AS_MASTER = True
 JOB_HEARTBEAT_SEC = 5
 ID_LEN = 250  # Used for dag_id and task_id VARCHAR length
