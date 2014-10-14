@@ -261,7 +261,8 @@ private[scheduler] class ExecutorScalingManager(scheduler: TaskSchedulerImpl) ex
       logInfo(s"Giving up on adding $numExecutorsPendingToAdd executors " +
         s"after $maxAddExecutorRetryAttempts failed attempts")
       numExecutorsPendingToAdd = 0
-      cancelAddExecutorRetryTimer()
+      // Also cancel original add timer because the cluster is not granting us new executors
+      cancelAddExecutorTimer()
       return
     }
 
