@@ -200,7 +200,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
 private object TorrentBroadcast extends Logging {
   /** Size of each block. Default value is 4MB. */
   private lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
-  private lazy val EMBEDDED_SIZE = conf.getInt("spark.broadcast.embeddedSize", 4) * 1024
+  private lazy val EMBEDDED_SIZE = conf.getInt("spark.broadcast.embeddedSize", 8) * 1024
   private var initialized = false
   private var conf: SparkConf = null
   private var compress: Boolean = false
