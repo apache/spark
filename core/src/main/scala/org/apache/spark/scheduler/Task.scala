@@ -70,7 +70,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   var metrics: Option[TaskMetrics] = None
 
   // Task context, to be initialized in run().
-  @transient protected var context: TaskContext = _
+  @transient protected var context: TaskContextImpl = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _

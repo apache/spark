@@ -27,7 +27,7 @@ private[spark] class TaskContextImpl(val stageId: Int,
     val attemptId: Long,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
-  extends TaskContext(stageId, partitionId, attemptId, runningLocally, taskMetrics)
+  extends TaskContext
   with Logging {
 
   // List of callback functions to execute when the task completes.

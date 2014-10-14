@@ -17,6 +17,9 @@
 
 package org.apache.spark
 
+/**
+ * This class exists to restrict the visibility of TaskContext setters.
+ */
 private [spark] object TaskContextHelper {
 
   def setTaskContext(tc: TaskContext): Unit = TaskContext.setTaskContext(tc)

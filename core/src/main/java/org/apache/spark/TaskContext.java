@@ -18,56 +18,55 @@
 package org.apache.spark;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import scala.Function0;
 import scala.Function1;
 import scala.Unit;
-import scala.collection.JavaConversions;
 
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.util.TaskCompletionListener;
-import org.apache.spark.util.TaskCompletionListenerException;
 
 /**
-* :: DeveloperApi ::
-* Contextual information about a task which can be read or mutated during execution.
-*/
-@DeveloperApi
+ * Contextual information about a task which can be read or mutated during
+ * execution. To access the TaskContext for a running task use
+ * TaskContext.get().
+ */
 public abstract class TaskContext implements Serializable {
-
-  private static ThreadLocal<TaskContext> taskContext =
-    new ThreadLocal<TaskContext>();
-
   /**
-   * :: Internal API ::
-   * This is spark internal API, not intended to be called from user programs.
+   * Return the currently active TaskContext. This can be called inside of
+   * user functions to access contextual information about running tasks.
    */
-  static void setTaskContext(TaskContext tc) {
-    taskContext.set(tc);
-  }
-
   public static TaskContext get() {
     return taskContext.get();
   }
 
-  /** :: Internal API ::  */
+  private static ThreadLocal<TaskContext> taskContext =
+    new ThreadLocal<TaskContext>();
+
+  static void setTaskContext(TaskContext tc) {
+    taskContext.set(tc);
+  }
+
   static void unset() {
     taskContext.remove();
   }
 
   /**
-   * Checks whether the task has completed.
+   * Whether the task has completed.
    */
   public abstract boolean isCompleted();
 
   /**
-   * Checks whether the task has been killed.
+   * Whether the task has been killed.
    */
   public abstract boolean isInterrupted();
+
+  @Deprecated
+  /** Deprecated: use isRunningLocally() */
+  public abstract boolean runningLocally();
+
+  public abstract boolean isRunningLocally();
 
   /**
    * Add a (Java friendly) listener to be executed on task completion.
@@ -103,12 +102,7 @@ public abstract class TaskContext implements Serializable {
 
   public abstract long attemptId();
 
-  @Deprecated
-  /** Deprecated: use isRunningLocally() */
-  public abstract boolean runningLocally();
-
-  public abstract boolean isRunningLocally();
-
-  /** ::Internal API:: */
+  /** ::DeveloperApi:: */
+  @DeveloperApi
   public abstract TaskMetrics taskMetrics();
 }
