@@ -152,6 +152,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
           "<cores> <appid> [<workerUrl>] ")
         System.exit(1)
+
+      // NB: These arguments are provided by SparkDeploySchedulerBackend (for standalone mode)
+      // and CoarseMesosSchedulerBackend (for mesos mode).
       case 5 =>
         run(args(0), args(1), args(2), args(3).toInt, args(4), None)
       case x if x > 5 =>
