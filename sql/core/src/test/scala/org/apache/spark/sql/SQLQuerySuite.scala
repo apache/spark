@@ -720,4 +720,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
     checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
   }
+
+  test("SPARK-3483 Special chars in column names") {
+    val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
+    jsonRDD(data).registerTempTable("records")
+    sql("SELECT `key?number1` FROM records")
+  }
 }
