@@ -28,6 +28,9 @@ cd "$FWDIR"
 
 source "$FWDIR/dev/run-tests-codes.sh"
 
+echo "env is"
+env
+
 COMMENTS_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
 PULL_REQUEST_URL="https://github.com/apache/spark/pull/$ghprbPullId"
 
@@ -49,12 +52,16 @@ SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
 
 TESTS_TIMEOUT="120m" # format: http://linux.die.net/man/1/timeout
 
+echo `env`
+
 function post_message () {
   local message=$1
   local data="{\"body\": \"$message\"}"
   local HTTP_CODE_HEADER="HTTP Response Code: "
   
   echo "Attempting to post to Github..."
+  echo "Message is $message"
+  echo "data is $data"
   
   local curl_output=$(
     curl `#--dump-header -` \
@@ -66,7 +73,9 @@ function post_message () {
       --header "Content-Type: application/json" \
       "$COMMENTS_URL" #> /dev/null #| "$FWDIR/dev/jq" .id #| head -n 8
   )
+  echo "curl output is ${curl_output}"
   local curl_status=${PIPESTATUS[0]}
+  echo "curl status is ${curl_status}"
 
   if [ "$curl_status" -ne 0 ]; then
       echo "Failed to post message to GitHub." >&2
@@ -80,12 +89,15 @@ function post_message () {
     echo "${curl_output}" \
     | grep -v -e "^${HTTP_CODE_HEADER}"
   )
+  echo "api_response is ${api_response}"
   
+
   local http_code=$(
     echo "${curl_output}" \
     | grep -e "^${HTTP_CODE_HEADER}" \
     | sed -r -e "s/^${HTTP_CODE_HEADER}//g"
   )
+  echo "http_code is ${http_code}"
 
   if [ -n "$http_code" ] && [ "$http_code" -ne "201" ]; then
       echo " > http_code: ${http_code}." >&2
