@@ -628,6 +628,25 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Get an RDD for given Hadoop file and range (start and length), it's used for streaming
+   * to support appended data to existed files.
+   */
+  private[spark] def partialHadoopFile[K, V, F <: NewInputFormat[K, V]]
+      (path: String, start: Long, length: Long)
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F],
+       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
+    val job = new NewHadoopJob(conf)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updatedConf = job.getConfiguration
+    updatedConf.set(PartialHadoopRDD.START_KEY, start.toString)
+    updatedConf.set(PartialHadoopRDD.LENGTH_KEY, length.toString)
+    new PartialHadoopRDD(this,
+      fm.runtimeClass.asInstanceOf[Class[F]],
+      km.runtimeClass.asInstanceOf[Class[K]],
+      vm.runtimeClass.asInstanceOf[Class[V]], updatedConf).setName(path)
+  }
+
+  /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *

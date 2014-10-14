@@ -18,9 +18,10 @@
 package org.apache.spark.streaming.dstream
 
 import java.io.{ObjectInputStream, IOException}
+import scala.collection.mutable
 import scala.collection.mutable.{HashSet, HashMap}
 import scala.reflect.ClassTag
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.spark.rdd.RDD
@@ -39,8 +40,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
 
-  // files found in the last interval
-  private val lastFoundFiles = new HashSet[String]
+  // all files found
+  private val foundFiles = new HashMap[String, Long]
 
   // Files with mod time earlier than this is ignored. This is updated every interval
   // such that in the current interval, files older than any file found in the
@@ -50,9 +51,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   // Latest file mod time seen till any point of time
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
-  @transient private[streaming] var files = new HashMap[Time, Array[String]]
-  @transient private var fileModTimes = new TimeStampedHashMap[String, Long](true)
-  @transient private var lastNewFileFindingTime = 0L
+  @transient private[streaming] var files = new HashMap[Time, Array[(String, Long, Long)]]
 
   override def start() { }
 
@@ -75,8 +74,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     val (newFiles, minNewFileModTime) = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     if (!newFiles.isEmpty) {
-      lastFoundFiles.clear()
-      lastFoundFiles ++= newFiles
+      foundFiles ++= newFiles.map(x => (x._1, x._3))
       ignoreTime = minNewFileModTime
     }
     files += ((validTime, newFiles.toArray))
@@ -92,26 +90,25 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
     logDebug("Cleared files are:\n" +
       oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
-    // Delete file mod times that weren't accessed in the last round of getting new files
-    fileModTimes.clearOldValues(lastNewFileFindingTime - 1)
   }
 
   /**
    * Find files which have modification timestamp <= current time and return a 3-tuple of
    * (new files found, latest modification time among them, files with latest modification time)
    */
-  private def findNewFiles(currentTime: Long): (Seq[String], Long) = {
+  private def findNewFiles(currentTime: Long): (Seq[(String, Long, Long)], Long) = {
     logDebug("Trying to get new files for time " + currentTime)
-    lastNewFileFindingTime = System.currentTimeMillis
+    val lastNewFileFindingTime = System.currentTimeMillis
     val filter = new CustomPathFilter(currentTime)
-    val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+    val newFiles = fs.listStatus(directoryPath).map(filter(_)).filter(_._1 != null)
+    // clean up not-existed files
+    foundFiles --= foundFiles.keys.filterNot(filter.allFiles.contains)
     val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
     logInfo("Finding new files took " + timeTaken + " ms")
-    logDebug("# cached file times = " + fileModTimes.size)
     if (timeTaken > slideDuration.milliseconds) {
       logWarning(
         "Time taken to find new files exceeds the batch size. " +
-          "Consider increasing the batch size or reduceing the number of " +
+          "Consider increasing the batch size or reducing the number of " +
           "files in the monitored directory."
       )
     }
@@ -119,8 +116,9 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /** Generate one RDD from an array of files */
-  private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    val fileRDDs = files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
+  private def filesToRDD(files: Seq[(String, Long, Long)]): RDD[(K, V)] = {
+    val fileRDDs = files.map{case (path: String, start: Long, end: Long) =>
+      context.sparkContext.partialHadoopFile[K, V, F](path, start, end - start)}
     files.zip(fileRDDs).foreach { case (file, rdd) => {
       if (rdd.partitions.size == 0) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
@@ -141,11 +139,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     fs_
   }
 
-  private def getFileModTime(path: Path) = {
-    // Get file mod time from cache or fetch it from the file system
-    fileModTimes.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
-  }
-
   private def reset()  {
     fs_ = null
   }
@@ -155,8 +148,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new HashMap[Time, RDD[(K,V)]] ()
-    files = new HashMap[Time, Array[String]]
-    fileModTimes = new TimeStampedHashMap[String, Long](true)
+    files = new HashMap[Time, Array[(String, Long, Long)]]
   }
 
   /**
@@ -166,11 +158,11 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private[streaming]
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
 
-    def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
+    def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[(String, Long, Long)]]]
 
     override def update(time: Time) {
       hadoopFiles.clear()
-      hadoopFiles ++= files
+      hadoopFiles ++= files  // copy
     }
 
     override def cleanup(time: Time) { }
@@ -198,46 +190,53 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    * ... have modification time more than ignore time
    * ... have not been seen in the last interval
    * ... have modification time less than maxModTime
+   * ... have size larger than in foundFiles
+   *
+   * Return (path, start, end)
    */
   private[streaming]
-  class CustomPathFilter(maxModTime: Long) extends PathFilter {
+  class CustomPathFilter(maxModTime: Long) {
 
     // Minimum of the mod times of new files found in the current interval
     var minNewFileModTime = -1L
+    var allFiles = new mutable.HashSet[String]()
 
-    def accept(path: Path): Boolean = {
+    def apply(status: FileStatus): (String, Long, Long) = {
       try {
+        val path = status.getPath
         if (!filter(path)) {  // Reject file if it does not satisfy filter
           logDebug("Rejected by filter " + path)
-          return false
+          return (null, 0, 0)
         }
-        // Reject file if it was found in the last interval
-        if (lastFoundFiles.contains(path.toString)) {
-          logDebug("Mod time equal to last mod time, but file considered already")
-          return false
-        }
-        val modTime = getFileModTime(path)
+        allFiles.add(path.toString)
+        val modTime = status.getModificationTime
         logDebug("Mod time for " + path + " is " + modTime)
         if (modTime < ignoreTime) {
           // Reject file if it was created before the ignore time (or, before last interval)
           logDebug("Mod time " + modTime + " less than ignore time " + ignoreTime)
-          return false
+          return (null, 0, 0)
         } else if (modTime > maxModTime) {
           // Reject file if it is too new that considering it may give errors
           logDebug("Mod time more than ")
-          return false
+          return (null, 0, 0)
+        }
+        val lastSize = foundFiles.getOrElse(path.toString, 0L)
+        val size = status.getLen
+        if (size <= lastSize) {
+          logDebug("no new data")
+          return (null, 0, 0)
         }
         if (minNewFileModTime < 0 || modTime < minNewFileModTime) {
           minNewFileModTime = modTime
         }
-        logDebug("Accepted " + path)
+        logDebug(s"Accepted $path from $lastSize to $size")
+        (path.toString, lastSize, size)
       } catch {
         case fnfe: java.io.FileNotFoundException =>
           logWarning("Error finding new files", fnfe)
           reset()
-          return false
+          return (null, 0, 0)
       }
-      true
     }
   }
 }

@@ -21,7 +21,7 @@ import akka.actor.Actor
 import akka.actor.Props
 import akka.util.ByteString
 
-import java.io.{File, BufferedWriter, OutputStreamWriter}
+import java.io.{FileWriter, File, BufferedWriter, OutputStreamWriter}
 import java.net.{InetSocketAddress, SocketException, ServerSocket}
 import java.nio.charset.Charset
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
@@ -110,8 +110,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val expectedOutput = input.map(_.toString)
     Thread.sleep(1000)
     for (i <- 0 until input.size) {
-      val file = new File(testDir, i.toString)
-      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
+      val file = new FileWriter(new File(testDir, (i / 2).toString), true)
+      file.write(input(i) + "\n")
+      file.close()
       logInfo("Created file " + file)
       Thread.sleep(batchDuration.milliseconds)
       Thread.sleep(1000)

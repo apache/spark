@@ -346,4 +346,17 @@ class FileSuite extends FunSuite with LocalSparkContext {
         }.collect()
     assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
+
+  test("partial files") {
+    sc = new SparkContext("local", "test")
+    val path = new File(tempDir, "partial")
+    val f = new FileWriter(path)
+    f.write("1\n2\n3\n4\n")
+    f.close()
+    for (i <- 1L to 4L) {
+      val rdd = sc.partialHadoopFile[LongWritable, Text, NewTextInputFormat](path.toString, i * 2 - 2, 2)
+        .map(_._2.toString)
+      assert(rdd.collect().toList === List(i.toString))
+    }
+  }
 }
