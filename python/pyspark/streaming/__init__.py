@@ -1,5 +1,3 @@
-[epydoc] # Epydoc section marker (required by ConfigParser)
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,22 +15,7 @@
 # limitations under the License.
 #
 
-# Information about the project.
-name: Spark 1.0.0 Python API Docs
-url: http://spark.apache.org
+from pyspark.streaming.context import StreamingContext
+from pyspark.streaming.dstream import DStream
 
-# The list of modules to document.  Modules can be named using
-# dotted names, module filenames, or package directory names.
-# This option may be repeated.
-modules: pyspark
-
-# Write html output to the directory "apidocs"
-output: html
-target: docs/
-
-private: no
-
-exclude: pyspark.cloudpickle pyspark.worker pyspark.join
-         pyspark.java_gateway pyspark.examples pyspark.shell pyspark.tests
-         pyspark.rddsampler pyspark.daemon
-         pyspark.mllib.tests pyspark.shuffle
+__all__ = ['StreamingContext', 'DStream']

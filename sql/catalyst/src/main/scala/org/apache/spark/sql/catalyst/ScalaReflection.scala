@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -77,8 +77,9 @@ object ScalaReflection {
       val Schema(valueDataType, valueNullable) = schemaFor(valueType)
       Schema(MapType(schemaFor(keyType).dataType,
         valueDataType, valueContainsNull = valueNullable), nullable = true)
-    case t if t <:< typeOf[String]            => Schema(StringType, nullable = true)
+    case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
+    case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
     case t if t <:< typeOf[BigDecimal] => Schema(DecimalType, nullable = true)
     case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
     case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
