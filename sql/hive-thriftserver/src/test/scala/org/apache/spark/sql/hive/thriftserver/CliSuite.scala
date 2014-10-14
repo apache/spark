@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 
 class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
@@ -62,8 +62,11 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
     def captureOutput(source: String)(line: String) {
       buffer += s"$source> $line"
+      // If we haven't found all expected answers...
       if (next.get() < expectedAnswers.size) {
+        // If another expected answer is found...
         if (line.startsWith(expectedAnswers(next.get()))) {
+          // If all expected answers have been found...
           if (next.incrementAndGet() == expectedAnswers.size) {
             foundAllExpectedAnswers.trySuccess(())
           }
@@ -77,7 +80,8 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
     Future {
       val exitValue = process.exitValue()
-      logInfo(s"Spark SQL CLI process exit value: $exitValue")
+      foundAllExpectedAnswers.tryFailure(
+        new SparkException(s"Spark SQL CLI process exit value: $exitValue"))
     }
 
     try {
@@ -98,6 +102,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
            |End CliSuite failure output
            |===========================
          """.stripMargin, cause)
+      throw cause
     } finally {
       warehousePath.delete()
       metastorePath.delete()
@@ -109,7 +114,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
-    runCliWithin(1.minute)(
+    runCliWithin(3.minute)(
       "CREATE TABLE hive_test(key INT, val STRING);"
         -> "OK",
       "SHOW TABLES;"
@@ -120,7 +125,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
         -> "Time taken: ",
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
-      "DROP TABLE hive_test"
+      "DROP TABLE hive_test;"
         -> "Time taken: "
     )
   }

@@ -39,6 +39,7 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType
     case c: Class[_] if c == classOf[hiveIo.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[hiveIo.ShortWritable] => ShortType
+    case c: Class[_] if c == classOf[hiveIo.DateWritable] => DateType
     case c: Class[_] if c == classOf[hiveIo.TimestampWritable] => TimestampType
     case c: Class[_] if c == classOf[hadoopIo.Text] => StringType
     case c: Class[_] if c == classOf[hadoopIo.IntWritable] => IntegerType
@@ -49,6 +50,7 @@ private[hive] trait HiveInspectors {
 
     // java class
     case c: Class[_] if c == classOf[java.lang.String] => StringType
+    case c: Class[_] if c == classOf[java.sql.Date] => DateType
     case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
     case c: Class[_] if c == classOf[HiveDecimal] => DecimalType
     case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType
@@ -93,6 +95,7 @@ private[hive] trait HiveInspectors {
       System.arraycopy(b.getBytes(), 0, bytes, 0, b.getLength)
       bytes
     }
+    case d: hiveIo.DateWritable => d.get
     case t: hiveIo.TimestampWritable => t.getTimestamp
     case b: hiveIo.HiveDecimalWritable => BigDecimal(b.getHiveDecimal().bigDecimalValue())
     case list: java.util.List[_] => list.map(unwrap)
@@ -108,6 +111,7 @@ private[hive] trait HiveInspectors {
     case str: String => str
     case p: java.math.BigDecimal => p
     case p: Array[Byte] => p
+    case p: java.sql.Date => p
     case p: java.sql.Timestamp => p
   }
 
@@ -147,6 +151,7 @@ private[hive] trait HiveInspectors {
     case l: Byte => l: java.lang.Byte
     case b: BigDecimal => new HiveDecimal(b.underlying())
     case b: Array[Byte] => b
+    case d: java.sql.Date => d
     case t: java.sql.Timestamp => t
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
     case m: Map[_,_] =>
@@ -173,6 +178,7 @@ private[hive] trait HiveInspectors {
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
     case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
+    case DateType => PrimitiveObjectInspectorFactory.javaDateObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
     case StructType(fields) =>
@@ -211,6 +217,8 @@ private[hive] trait HiveInspectors {
     case _: JavaBinaryObjectInspector => BinaryType
     case _: WritableHiveDecimalObjectInspector => DecimalType
     case _: JavaHiveDecimalObjectInspector => DecimalType
+    case _: WritableDateObjectInspector => DateType
+    case _: JavaDateObjectInspector => DateType
     case _: WritableTimestampObjectInspector => TimestampType
     case _: JavaTimestampObjectInspector => TimestampType
     case _: WritableVoidObjectInspector => NullType
@@ -238,6 +246,7 @@ private[hive] trait HiveInspectors {
       case ShortType => shortTypeInfo
       case StringType => stringTypeInfo
       case DecimalType => decimalTypeInfo
+      case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
     }
