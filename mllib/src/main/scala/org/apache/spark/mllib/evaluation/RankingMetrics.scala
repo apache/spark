@@ -23,8 +23,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 
-
-
 /**
  * ::Experimental::
  * Evaluator for ranking algorithms.
@@ -37,11 +35,12 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Returns the precsion@k for each query
    */
-  lazy val precAtK: RDD[Array[Double]] = predictionAndLabels.map {case (pred, lab)=>
+  private lazy val precAtK: RDD[Array[Double]] = predictionAndLabels.map{ case (pred, lab)=>
     val labSet = lab.toSet
     val n = pred.length
-    val topKPrec = Array.fill[Double](n)(0.0)
-    var (i, cnt) = (0, 0)
+    val topKPrec = new Array[Double](n)
+    var i = 0
+    var cnt = 0
 
     while (i < n) {
       if (labSet.contains(pred(i))) {
@@ -54,6 +53,14 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   }
 
   /**
+   * Compute the average precision of all the queries, truncated at ranking position k.
+   * If for a query, the ranking algorithm returns n (n < k) results,
+   * the precision value will be computed as #(relevant items retrived) / k.
+   * See the following paper for detail:
+   *
+   * IR evaluation methods for retrieving highly relevant documents.
+   *    K. Jarvelin and J. Kekalainen
+   *
    * @param k the position to compute the truncated precision
    * @return the average precision at the first k ranking positions
    */
@@ -69,9 +76,11 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Returns the average precision for each query
    */
-  lazy val avePrec: RDD[Double] = predictionAndLabels.map {case (pred, lab) =>
+  private lazy val avePrec: RDD[Double] = predictionAndLabels.map {case (pred, lab) =>
     val labSet = lab.toSet
-    var (i, cnt, precSum) = (0, 0, 0.0)
+    var i = 0
+    var cnt = 0
+    var precSum = 0.0
     val n = pred.length
 
     while (i < n) {
@@ -87,19 +96,22 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Returns the mean average precision (MAP) of all the queries
    */
-  lazy val meanAvePrec: Double = avePrec.mean
+  lazy val meanAveragePrecision: Double = avePrec.mean
 
   /**
    * Returns the normalized discounted cumulative gain for each query
    */
-  lazy val ndcgAtK: RDD[Array[Double]] = predictionAndLabels.map {case (pred, lab) =>
+  private lazy val ndcgAtK: RDD[Array[Double]] = predictionAndLabels.map {case (pred, lab) =>
     val labSet = lab.toSet
     val labSetSize = labSet.size
     val n = math.max(pred.length, labSetSize)
-    val topKNdcg = Array.fill[Double](n)(0.0)
-    var (maxDcg, dcg, i) = (0.0, 0.0, 0)
+    val topKNdcg = new Array[Double](n)
+    var maxDcg = 0.0
+    var dcg = 0.0
+    var i = 0
+
     while (i < n) {
-      /* Calculate 1/log2(i + 2) */
+      /** Calculate 1/log2(i + 2) */
       val gain = math.log(2) / math.log(i + 2)
       if (labSet.contains(pred(i))) {
         dcg += gain
@@ -114,6 +126,13 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   }
 
   /**
+   * Compute the average NDCG value of all the queries, truncated at ranking position k.
+   * If for a query, the ranking algorithm returns n (n < k) results, the NDCG value at
+   * at position n will be used. See the following paper for detail:
+   *
+   * IR evaluation methods for retrieving highly relevant documents.
+   *    K. Jarvelin and J. Kekalainen
+   *
    * @param k the position to compute the truncated ndcg
    * @return the average ndcg at the first k ranking positions
    */

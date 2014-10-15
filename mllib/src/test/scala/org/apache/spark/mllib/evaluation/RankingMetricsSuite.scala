@@ -31,17 +31,7 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     val eps: Double = 1E-5
 
     val metrics = new RankingMetrics(predictionAndLabels)
-    val precAtK = metrics.precAtK.collect()
-    val avePrec = metrics.avePrec.collect()
-    val map = metrics.meanAvePrec
-    val ndcgAtK = metrics.ndcgAtK.collect()
-
-    assert(precAtK(0)(4) ~== 0.4 absTol eps)
-    assert(precAtK(1)(6) ~== 3.0/7 absTol eps)
-    assert(precAtK(0)(2) ~== 2.0/3 absTol eps)
-    assert(precAtK(1)(2) ~== 1.0/3 absTol eps)
-    assert(precAtK(0)(9) ~== 0.5 absTol eps)
-    assert(precAtK(1)(9) ~== 0.3 absTol eps)
+    val map = metrics.meanAveragePrecision
 
     assert(metrics.precision(1) ~== 0.5 absTol eps)
     assert(metrics.precision(2) ~== 0.5 absTol eps)
@@ -49,17 +39,11 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     assert(metrics.precision(4) ~== 0.375 absTol eps)
     assert(metrics.precision(10) ~== 0.4 absTol eps)
 
-    assert(avePrec(0) ~== 0.622222 absTol eps)
-    assert(avePrec(1) ~== 0.442857 absTol eps)
-
     assert(map ~== 0.532539 absTol eps)
 
-    assert(ndcgAtK(0)(4) ~== 0.508740 absTol eps)
-    assert(ndcgAtK(1)(2) ~== 0.296082 absTol eps)
-
-    assert(metrics.ndcg(3) ~== (ndcgAtK(0)(2) + ndcgAtK(1)(2)) / 2 absTol eps)
-    assert(metrics.ndcg(5) ~== (ndcgAtK(0)(4) + ndcgAtK(1)(4)) / 2 absTol eps)
-    assert(metrics.ndcg(10) ~== (ndcgAtK(0)(9) + ndcgAtK(1)(9)) / 2 absTol eps)
+    assert(metrics.ndcg(3) ~== 0.5 absTol eps)
+    assert(metrics.ndcg(5) ~== 0.493182 absTol eps)
+    assert(metrics.ndcg(10) ~== 0.731869 absTol eps)
     assert(metrics.ndcg(15) ~== metrics.ndcg(10) absTol eps)
 
   }
