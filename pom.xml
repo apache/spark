@@ -103,6 +103,7 @@
     <module>external/flume-sink</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
+    <module>external/redis</module>
     <module>examples</module>
   </modules>
 
@@ -189,6 +190,10 @@
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
+    </repository>
+    <repository>
+        <id>rediscala</id>
+        <url>https://raw.github.com/etaty/rediscala-mvn/master/releases/</url>
     </repository>
     <repository>
       <id>cloudera-repo</id>

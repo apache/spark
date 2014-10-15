@@ -32,10 +32,10 @@ object BuildCommons {
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
   sql, streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingMqtt,
-  streamingTwitter, streamingZeromq) =
+  streamingTwitter, streamingZeromq, streamingRedis) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
-      "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
+      "streaming-mqtt", "streaming-twitter", "streaming-zeromq", "streaming-redis").map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl, sparkKinesisAsl) =
     Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl", "kinesis-asl")
@@ -194,8 +194,8 @@ object OldDeps {
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
       "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
-      "spark-core").map(versionArtifact(_).get intransitive())
+      "spark-streaming-redis", "spark-streaming", "spark-mllib", "spark-bagel",
+      "spark-graphx", "spark-core").map(versionArtifact(_).get intransitive())
   )
 }
 
@@ -316,7 +316,8 @@ object Unidoc {
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
         "streaming.api.java", "streaming.flume", "streaming.kafka",
-        "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis"
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis",
+        "streaming.redis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",

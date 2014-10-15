@@ -316,6 +316,7 @@ some of the common ones are as follows.
 <tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Redis </td><td> spark-streaming-redis_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td></td><td></td></tr>
 </table>
 
@@ -1562,6 +1563,7 @@ package and renamed for better clarity.
     [TwitterUtils](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
     [ZeroMQUtils](api/scala/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$), and
     [MQTTUtils](api/scala/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$)
+    [RedisUtils](api/scala/index.html#org.apache.spark.streaming.redis.RedisUtils$)
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
@@ -1572,6 +1574,7 @@ package and renamed for better clarity.
     [TwitterUtils](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html),
     [ZeroMQUtils](api/java/index.html?org/apache/spark/streaming/zeromq/ZeroMQUtils.html), and
     [MQTTUtils](api/java/index.html?org/apache/spark/streaming/mqtt/MQTTUtils.html)
+    [RedisUtils](api/java/index.html?org/apache/spark/streaming/redis/RedisUtils.html)
 
 * More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
