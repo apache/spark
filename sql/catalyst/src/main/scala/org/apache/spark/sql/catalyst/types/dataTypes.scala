@@ -77,7 +77,7 @@ object DataType {
       StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
   }
 
-  @deprecated("Use DataType.fromJson instead")
+  @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private object CaseClassStringParser extends RegexParsers {
@@ -400,6 +400,9 @@ case class StructField(
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
+
+  // override the default toString to be compatible with legacy parquet files.
+  override def toString: String = s"StructField($name,$dataType,$nullable)"
 
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
