@@ -72,8 +72,8 @@ private[sql] case class OrcRelation(
       val totalType = reader.getTypes.get(0)
       val keys = totalType.getFieldNamesList
       val types = totalType.getSubtypesList
-      log.info("field names are {}", keys)
-      log.info("types are {}", types)
+      logInfo("field names are {}", keys)
+      logInfo("types are {}", types)
 
       val colBuff = new StringBuilder
       val typeBuff = new StringBuilder
@@ -91,6 +91,7 @@ private[sql] case class OrcRelation(
       typeBuff.setLength(typeBuff.length - 1)
       prop.setProperty("columns", colBuff.toString())
       prop.setProperty("columns.types", typeBuff.toString())
+      logInfo(s"columns are ${colBuff}, columns.types are $typeBuff")
       val attributes = convertToAttributes(reader, keys, types)
       attributes
     } else {
@@ -122,7 +123,7 @@ private[sql] case class OrcRelation(
         case Kind.DOUBLE =>
           new AttributeReference(keys.get(i), DoubleType, false)()
         case _ => {
-          log.info("unsupported datatype")
+          logInfo("unsupported datatype")
           null
         }
       }
