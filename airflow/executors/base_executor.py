@@ -1,8 +1,8 @@
 import logging
 import time
 
-from flux import settings
-from flux.utils import State
+from airflow import settings
+from airflow.utils import State
 
 
 class BaseExecutor(object):
@@ -74,7 +74,7 @@ class LocalWorker(multiprocessing.Process):
             print command
             command = (
                 "exec bash -c '"
-                "cd $FLUX_HOME;\n" +
+                "cd $AIRFLOW_HOME;\n" +
                 "source init.sh;\n" +
                 command +
                 "'"
@@ -91,7 +91,7 @@ class LocalWorker(multiprocessing.Process):
 
 class LocalExecutor(BaseExecutor):
 
-    def __init__(self, parallelism=16):
+    def __init__(self, parallelism=8):
         super(LocalExecutor, self).__init__()
         self.parallelism = parallelism
 

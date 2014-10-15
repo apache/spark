@@ -2,9 +2,9 @@ from datetime import datetime
 import logging
 from time import sleep
 
-from flux import settings
-from flux.models import BaseOperator, TaskInstance, State
-from flux.hooks import MySqlHook
+from airflow import settings
+from airflow.models import BaseOperator, TaskInstance, State
+from airflow.hooks import MySqlHook
 
 
 class BaseSensorOperator(BaseOperator):

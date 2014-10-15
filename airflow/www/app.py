@@ -17,17 +17,17 @@ from pygments.formatters import HtmlFormatter
 import markdown
 import chartkick
 
-from flux.settings import Session
-from flux import models
-from flux.models import State
-from flux import settings
-from flux import utils
+from airflow.settings import Session
+from airflow import models
+from airflow.models import State
+from airflow import settings
+from airflow import utils
 
 dagbag = models.DagBag(settings.DAGS_FOLDER)
 session = Session()
 
 app = Flask(__name__)
-app.secret_key = 'fluxified'
+app.secret_key = 'airflowified'
 
 # Init for chartkick, the python wrapper for highcharts
 ck = Blueprint(
@@ -54,13 +54,13 @@ class HomeView(AdminIndexView):
     @expose("/")
     def index(self):
         md = "".join(
-            open(settings.FLUX_HOME + '/README.md', 'r').readlines())
+            open(settings.AIRFLOW_HOME + '/README.md', 'r').readlines())
         content = Markup(markdown.markdown(md))
         return self.render('admin/index.html', content=content)
-admin = Admin(app, name="Flux", index_view=HomeView(name='Home'))
+admin = Admin(app, name="Airflow", index_view=HomeView(name='Home'))
 
 
-class Flux(BaseView):
+class Airflow(BaseView):
 
     def is_visible(self):
         return False
@@ -145,7 +145,7 @@ class Flux(BaseView):
                 downstream=downstream)
 
             flash("{0} task instances have been cleared".format(count))
-            return redirect(url_for('flux.tree', dag_id=dag_id))
+            return redirect(url_for('airflow.tree', dag_id=dag_id))
 
         dates = utils.date_range(
             from_date, base_date, dag.schedule_interval)
@@ -369,7 +369,7 @@ class Flux(BaseView):
         )
 
 
-admin.add_view(Flux(name='DAGs'))
+admin.add_view(Airflow(name='DAGs'))
 
 # ------------------------------------------------
 # Leveraging the admin for CRUD and browse on models
@@ -388,14 +388,14 @@ class ModelViewOnly(ModelView):
 
 
 def filepath_formatter(view, context, model, name):
-    url = url_for('flux.code', dag_id=model.dag_id)
+    url = url_for('airflow.code', dag_id=model.dag_id)
     short_fp = model.filepath.replace(settings.BASE_FOLDER + '/dags/', '')
     link = Markup('<a href="{url}">{short_fp}</a>'.format(**locals()))
     return link
 
 
 def dag_formatter(view, context, model, name):
-    url = url_for('flux.tree', dag_id=model.dag_id, num_runs=45)
+    url = url_for('airflow.tree', dag_id=model.dag_id, num_runs=45)
     link = Markup('<a href="{url}">{model.dag_id}</a>'.format(**locals()))
     return link
 

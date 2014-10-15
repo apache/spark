@@ -1,7 +1,7 @@
 import logging
 import sys
 import os
-from flux import settings
+from airflow import settings
 
 # Adding the Hive python libs to python path
 sys.path.insert(0, settings.HIVE_HOME_PY)
@@ -13,7 +13,7 @@ from thrift.protocol import TBinaryProtocol
 from hive_metastore import ThriftHiveMetastore
 from hive_service import ThriftHive
 
-from flux.hooks.base_hook import BaseHook
+from airflow.hooks.base_hook import BaseHook
 
 METASTORE_THRIFT_HOST = "localhost"
 METASTORE_THRIFT_PORT = 10000

@@ -32,8 +32,8 @@ Required environment variable, add this to your .bashrc or .bash_profile
 
 ::
 
-    export FLUX_HOME=~/Flux
-    export PATH=$PATH:$FLUX_HOME/flux/bin
+    export AIRFLOW_HOME=~/Airflow
+    export PATH=$PATH:$AIRFLOW_HOME/airflow/bin
     # also run it, or source it, or start a new shell
     source ~/.bashrc
 
@@ -45,8 +45,8 @@ Create a python virtualenv
     virtualenv env # creates the environment
     source init.sh # activates the environment
 
-Use pip to install the python packages required by Flux
-'''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Use pip to install the python packages required by Airflow
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 ::
 
@@ -61,19 +61,19 @@ fine.
 
 ::
 
-    # If :
     $ mysql -u root -p 
     mysql> 
-    CREATE DATABASE flux;
-    CREATE USER 'flux'@'localhost' IDENTIFIED BY 'flux';
-    GRANT ALL PRIVILEGES ON flux.* TO 'flux'@'localhost';
+    CREATE DATABASE airflow;
+    CREATE USER 'airflow'@'localhost' IDENTIFIED BY 'airflow';
+    GRANT ALL PRIVILEGES ON airflow.* TO 'airflow'@'localhost';
 
 Get things started
 ''''''''''''''''''''
 
 ::
+
     # Creating the necessary tables in the database
-    flux initdb
+    airflow initdb
 
     # Start the web server!
-    flux webserver --port 8080
+    airflow webserver --port 8080

@@ -1,5 +1,5 @@
-from flux.operators import ExternalTaskSensor
-from flux import DAG
+from airflow.operators import ExternalTaskSensor
+from airflow import DAG
 from datetime import datetime
 
 # Setting some default operator parameters

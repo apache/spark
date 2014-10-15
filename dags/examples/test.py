@@ -1,5 +1,5 @@
-from flux.operators import BashOperator
-from flux.models import DAG
+from airflow.operators import BashOperator
+from airflow.models import DAG
 from datetime import datetime, timedelta
 
 default_args = {

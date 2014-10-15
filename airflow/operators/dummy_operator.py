@@ -1,4 +1,4 @@
-from flux.models import BaseOperator
+from airflow.models import BaseOperator
 
 
 class DummyOperator(BaseOperator):

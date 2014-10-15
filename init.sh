@@ -1,3 +1,3 @@
 #!/bin/bash
-source $FLUX_HOME/env/bin/activate
-export PYTHONPATH=$FLUX_HOME
+source $AIRFLOW_HOME/env/bin/activate
+export PYTHONPATH=$AIRFLOW_HOME

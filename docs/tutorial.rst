@@ -1,5 +1,5 @@
 
-Flux tutorial
+Airflow tutorial
 =============
 
 This tutorial walks through some of the fundamental concepts, objects
@@ -8,15 +8,15 @@ and their usage.
 Hooks
 -----
 
-Hooks are a simple abstraction layer on systems Flux interacts with. You
+Hooks are a simple abstraction layer on systems Airflow interacts with. You
 should expect a lot more consistency across hooks than you would with
 the different systems' underlying libraries. You should also expect a
 higher level of abstraction.
 
-Connection information is stored in the Flux metadata database, so that
+Connection information is stored in the Airflow metadata database, so that
 you don't need to hard code or remember this connection information. In
 the bellow example, we connect to a MySQL database by specifying the
-mysql\_dbid, which looks up Flux's metadata to get the actual hostname,
+mysql\_dbid, which looks up Airflow's metadata to get the actual hostname,
 login, password, and schema name behind the scene.
 
 Common methods: \* Get a recordset \* Extract a csv file \* Run a
@@ -31,12 +31,12 @@ statement \* Load into a table from a csv file \* Get a pandas dataframe
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG, datefmt='%I:%M:%S')
 .. code:: python
 
-    from flux.hooks import MySqlHook
+    from airflow.hooks import MySqlHook
     mysql_hook = MySqlHook(mysql_dbid='local_mysql')
     sql = """
     SELECT table_schema, table_name 
     FROM information_schema.tables 
-    WHERE table_schema = 'flux'
+    WHERE table_schema = 'airflow'
     """
     mysql_hook.get_records(sql)
 
@@ -44,17 +44,17 @@ statement \* Load into a table from a csv file \* Get a pandas dataframe
 
 .. parsed-literal::
 
-    (('flux', 'dag'),
-     ('flux', 'dag_pickle'),
-     ('flux', 'dag_picle'),
-     ('flux', 'db_connection'),
-     ('flux', 'deleteme'),
-     ('flux', 'job'),
-     ('flux', 'log'),
-     ('flux', 'task'),
-     ('flux', 'task_instance'),
-     ('flux', 'tmp'),
-     ('flux', 'user'))
+    (('airflow', 'dag'),
+     ('airflow', 'dag_pickle'),
+     ('airflow', 'dag_picle'),
+     ('airflow', 'db_connection'),
+     ('airflow', 'deleteme'),
+     ('airflow', 'job'),
+     ('airflow', 'log'),
+     ('airflow', 'task'),
+     ('airflow', 'task_instance'),
+     ('airflow', 'tmp'),
+     ('airflow', 'user'))
 
 
 
@@ -77,12 +77,12 @@ instances.
 
 Bellow we run a simple remote MySQL statement, over a date range. The
 task.run() method will instanciate many task runs for the schedule
-specified, and run them, storing the state in the Flux database. If you
+specified, and run them, storing the state in the Airflow database. If you
 were to re-run this, it would say it already succeded.
 
 .. code:: python
 
-    from flux.operators import MySqlOperator
+    from airflow.operators import MySqlOperator
     from datetime import datetime, timedelta
     
     sql = """
@@ -128,8 +128,8 @@ and their associated task instance run states.
 
 .. code:: python
 
-    from flux.operators import MySqlOperator
-    from flux import DAG
+    from airflow.operators import MySqlOperator
+    from airflow import DAG
     from datetime import datetime
     
     # Setting some default operator parameters
@@ -166,8 +166,8 @@ and their associated task instance run states.
 
 .. parsed-literal::
 
-    INFO:Adding to queue: ./flux run test_dag mysql_fisrt 2014-09-01T00:00:00  --pickle 10  
-    INFO:Adding to queue: ./flux run test_dag mysql_second 2014-09-01T00:00:00  --pickle 10  
+    INFO:Adding to queue: ./airflow run test_dag mysql_fisrt 2014-09-01T00:00:00  --pickle 10  
+    INFO:Adding to queue: ./airflow run test_dag mysql_second 2014-09-01T00:00:00  --pickle 10  
     INFO:Run summary:
 
 
@@ -228,22 +228,22 @@ false negative, rerun subsection DAGs.
 
     %%bash
     # Printing the --help for the main and subcommands
-    cd /home/mistercrunch/Flux
-    ./flux --help
+    cd /home/mistercrunch/Airflow
+    ./airflow --help
     echo ============================================================================
-    ./flux backfill -h
+    ./airflow backfill -h
     echo ============================================================================
-    ./flux clear -h
+    ./airflow clear -h
     echo ============================================================================
-    ./flux run -h
+    ./airflow run -h
     echo ============================================================================
-    ./flux webserver -h
+    ./airflow webserver -h
     echo ============================================================================
-    ./flux master -h
+    ./airflow master -h
 
 .. parsed-literal::
 
-    usage: flux_bin.py [-h] {backfill,clear,run,webserver,master} ...
+    usage: airflow_bin.py [-h] {backfill,clear,run,webserver,master} ...
     
     positional arguments:
       {backfill,clear,run,webserver,master}
@@ -251,13 +251,13 @@ false negative, rerun subsection DAGs.
         backfill            Run subsections of a DAG for a specified date range
         clear               Clear a set of task instance, as if they never ran
         run                 Run a single task instance
-        webserver           Start a Flux webserver instance
+        webserver           Start a Airflow webserver instance
         master              Start a master scheduler instance
     
     optional arguments:
       -h, --help            show this help message and exit
     ============================================================================
-    usage: flux_bin.py backfill [-h] [-t TASK_REGEX] [-s START_DATE] [-e END_DATE] [-m] [-sd SUBDIR] dag_id
+    usage: airflow_bin.py backfill [-h] [-t TASK_REGEX] [-s START_DATE] [-e END_DATE] [-m] [-sd SUBDIR] dag_id
     
     positional arguments:
       dag_id                The id of the dag to run
@@ -274,7 +274,7 @@ false negative, rerun subsection DAGs.
       -sd SUBDIR, --subdir SUBDIR
                             File location or directory from which to look for the dag
     ============================================================================
-    usage: flux_bin.py clear [-h] [-t TASK_REGEX] [-s START_DATE] [-e END_DATE] [-sd SUBDIR] dag_id
+    usage: airflow_bin.py clear [-h] [-t TASK_REGEX] [-s START_DATE] [-e END_DATE] [-sd SUBDIR] dag_id
     
     positional arguments:
       dag_id                The id of the dag to run
@@ -290,7 +290,7 @@ false negative, rerun subsection DAGs.
       -sd SUBDIR, --subdir SUBDIR
                             File location or directory from which to look for the dag
     ============================================================================
-    usage: flux_bin.py run [-h] [-sd SUBDIR] [-m] [-f] [-i] [-p PICKLE] dag_id task_id execution_date
+    usage: airflow_bin.py run [-h] [-sd SUBDIR] [-m] [-f] [-i] [-p PICKLE] dag_id task_id execution_date
     
     positional arguments:
       dag_id                The id of the dag to run
@@ -308,13 +308,13 @@ false negative, rerun subsection DAGs.
       -p PICKLE, --pickle PICKLE
                             Serialized pickle object of the entire dag (used internally)
     ============================================================================
-    usage: flux_bin.py webserver [-h] [-p PORT]
+    usage: airflow_bin.py webserver [-h] [-p PORT]
     
     optional arguments:
       -h, --help            show this help message and exit
       -p PORT, --port PORT  Set the port on which to run the web server
     ============================================================================
-    usage: flux_bin.py master [-h] [-d DAG_ID] [-sd SUBDIR]
+    usage: airflow_bin.py master [-h] [-d DAG_ID] [-sd SUBDIR]
     
     optional arguments:
       -h, --help            show this help message and exit
@@ -328,17 +328,17 @@ false negative, rerun subsection DAGs.
 
     %%bash
     # Example run command
-    cd $FLUX_HOME
-    ./flux run example_2 runme_1 2014-09-01 -sd /home/mistercrunch/Flux/dags/examples/example2.py
+    cd $AIRFLOW_HOME
+    ./airflow run example_2 runme_1 2014-09-01 -sd /home/mistercrunch/Airflow/dags/examples/example2.py
     
     # Printing the log
-    cat /home/mistercrunch/Flux/logs/example_2/runme_1/2014-09-01T00:00:00
+    cat /home/mistercrunch/Airflow/logs/example_2/runme_1/2014-09-01T00:00:00
 
 .. parsed-literal::
 
-    Logging into: /home/mistercrunch/Flux/logs/example_2/runme_1/2014-09-01T00:00:00
-    [2014-10-08 15:11:39,177] {models.py:44} INFO - Filling up the DagBag from /home/mistercrunch/Flux/dags/examples/example2.py
-    [2014-10-08 15:11:39,177] {models.py:53} INFO - Importing /home/mistercrunch/Flux/dags/examples/example2.py
+    Logging into: /home/mistercrunch/Airflow/logs/example_2/runme_1/2014-09-01T00:00:00
+    [2014-10-08 15:11:39,177] {models.py:44} INFO - Filling up the DagBag from /home/mistercrunch/Airflow/dags/examples/example2.py
+    [2014-10-08 15:11:39,177] {models.py:53} INFO - Importing /home/mistercrunch/Airflow/dags/examples/example2.py
     [2014-10-08 15:11:39,272] {models.py:325} INFO - 
     --------------------------------------------------------------------------------
     New run starting @2014-10-08T15:11:39.272355
@@ -380,7 +380,7 @@ Here's the source for the MySqlOperator
 Executors
 ---------
 
-Executors are an abrastraction on top of systems that can run Flux task
+Executors are an abrastraction on top of systems that can run Airflow task
 instances. The default LocalExecutor is a simple implementation of
 Python's multiprocessing with a simple joinable queue.
 

@@ -1,6 +1,6 @@
-from flux import DAG
+from airflow import DAG
 from datetime import datetime, timedelta
-from flux.operators import BashOperator
+from airflow.operators import BashOperator
 
 default_args = {
     'owner': 'max',

@@ -1,5 +1,5 @@
-from flux.operators import BashOperator, MySqlOperator
-from flux.models import DAG
+from airflow.operators import BashOperator, MySqlOperator
+from airflow.models import DAG
 from datetime import datetime
 
 default_args = {

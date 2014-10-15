@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Flux documentation build configuration file, created by
+# Airflow documentation build configuration file, created by
 # sphinx-quickstart on Thu Oct  9 20:50:01 2014.
 #
 # This file is execfile()d with the current directory set to its
@@ -14,12 +14,12 @@
 
 import sys
 import os
-from flux import settings
+from airflow import settings
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-sys.path.insert(0, settings.FLUX_HOME + "/src/flux")
+sys.path.insert(0, settings.AIRFLOW_HOME + "/src/airflow")
 
 # -- General configuration ------------------------------------------------
 
@@ -49,7 +49,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Flux'
+project = u'Airflow'
 copyright = u'2014, Maxime Beauchemin'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -184,7 +184,7 @@ html_use_index = True
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'Fluxdoc'
+htmlhelp_basename = 'Airflowdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -204,7 +204,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'Flux.tex', u'Flux Documentation',
+  ('index', 'Airflow.tex', u'Airflow Documentation',
    u'Maxime Beauchemin', 'manual'),
 ]
 
@@ -234,7 +234,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'flux', u'Flux Documentation',
+    ('index', 'airflow', u'Airflow Documentation',
      [u'Maxime Beauchemin'], 1)
 ]
 
@@ -248,8 +248,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('index', 'Flux', u'Flux Documentation',
-   u'Maxime Beauchemin', 'Flux', 'One line description of project.',
+  ('index', 'Airflow', u'Airflow Documentation',
+   u'Maxime Beauchemin', 'Airflow', 'One line description of project.',
    'Miscellaneous'),
 ]
 

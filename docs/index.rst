@@ -1,15 +1,15 @@
-Flux's Documentation
+Airflow's Documentation
 ================================
-Flux is a system to programmaticaly author, schedule and monitor data pipelines. 
+Airflow is a system to programmaticaly author, schedule and monitor data pipelines. 
 
-Use the Flux library to define workflows as directed acyclic graphs (DAGs) of data related tasks. Command line utilities make it easy to run parts of workflows interactively, and commiting pipelines into production is all it takes for the master scheduler to run the pipelines with the schedule and dependencies specified.
+Use the Airflow library to define workflows as directed acyclic graphs (DAGs) of data related tasks. Command line utilities make it easy to run parts of workflows interactively, and commiting pipelines into production is all it takes for the master scheduler to run the pipelines with the schedule and dependencies specified.
 
-The Flux UI make it easy to visualize pipelines running in production, monitor progress and pinpoint and troubleshoot issues when needed.
+The Airflow UI make it easy to visualize pipelines running in production, monitor progress and pinpoint and troubleshoot issues when needed.
 
 Principles
 ----------
 
--  **Dynamic:** Flux has intrinsec support for dynamic pipeline
+-  **Dynamic:** Airflow has intrinsec support for dynamic pipeline
    generation: you can write pipelines, as well as writing code that
    defines pipeline.
 -  **Interactivity:** the libraries are intuitive so that writting /

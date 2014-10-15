@@ -15,10 +15,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from flux import macros
-from flux.executors import DEFAULT_EXECUTOR
-from flux import settings
-from flux import utils
+from airflow import macros
+from airflow.executors import DEFAULT_EXECUTOR
+from airflow import settings
+from airflow import utils
 from settings import ID_LEN
 import socket
 from utils import State
@@ -190,7 +190,7 @@ class TaskInstance(Base):
             force=False,
             pickle=None):
         """
-        Returns a command that can be executed anywhere where flux is
+        Returns a command that can be executed anywhere where airflow is
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
@@ -203,7 +203,7 @@ class TaskInstance(Base):
         if not pickle and self.task.dag and self.task.dag.filepath:
             subdir = "-sd {0}".format(self.task.dag.filepath)
         return (
-            "flux run "
+            "airflow run "
             "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
             "{pickle} "

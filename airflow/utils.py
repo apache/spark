@@ -35,7 +35,7 @@ def validate_key(k, max_length=250):
     elif not re.match(r'^[A-Za-z0-9_]+$', k):
         raise Exception(
             "The key has to be made of alphanumeric characters and "
-            "undersfluxs exclusively")
+            "undersairflows exclusively")
     else:
         return True
 

@@ -1,6 +1,6 @@
 import logging
-from flux.models import BaseOperator
-from flux.hooks import MySqlHook
+from airflow.models import BaseOperator
+from airflow.hooks import MySqlHook
 
 
 class MySqlOperator(BaseOperator):

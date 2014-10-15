@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
-from flux import settings
-from flux.models import DagBag, TaskInstance, DagPickle, State
-from sqlalchemy.ext.declarative import declarative_base
+from airflow import settings
+from airflow.models import DagBag, TaskInstance, DagPickle, State
 
 import dateutil.parser
 from datetime import datetime
@@ -185,7 +184,7 @@ def initdb(args):
             "Proceed? (y/n)").upper() == "Y":
         logging.basicConfig(level=logging.DEBUG)
 
-        from flux import models
+        from airflow import models
 
         logging.info("Dropping tables that exist")
         models.Base.metadata.drop_all(settings.engine)
@@ -198,8 +197,8 @@ def initdb(args):
         session.query(models.DatabaseConnection).delete()
         mysqldb = models.DatabaseConnection(
             db_id='local_mysql', db_type='mysql',
-            host='localhost', login='flux', password='flux',
-            schema='flux')
+            host='localhost', login='airflow', password='airflow',
+            schema='airflow')
         session.add(mysqldb)
         session.commit()
 

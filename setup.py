@@ -7,18 +7,18 @@ reqs = (str(ir.req) for ir in parse_requirements('requirements.txt'))
 print reqs
 
 setup(
-    name='flux',
+    name='airflow',
     version='0.1',
     packages=[
-        'flux', 
-        'flux.operators', 
-        'flux.executors',
-        'flux.hooks',
-        'flux.www',
+        'airflow', 
+        'airflow.operators', 
+        'airflow.executors',
+        'airflow.hooks',
+        'airflow.www',
     ],
-    scripts=['flux/bin/flux'],
+    scripts=['airflow/bin/airflow'],
     install_requires=reqs,
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
-    url='https://github.com/mistercrunch/Flux',
+    url='https://github.com/mistercrunch/Airflow',
 )

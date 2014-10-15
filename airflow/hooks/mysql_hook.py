@@ -1,6 +1,6 @@
 import MySQLdb
-from flux import settings
-from flux.models import DatabaseConnection
+from airflow import settings
+from airflow.models import DatabaseConnection
 
 
 class MySqlHook(object):

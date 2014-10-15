@@ -1,4 +1,4 @@
-import flux as flux
+import airflow as airflow
 from datetime import datetime
 
 default_args = {
@@ -7,13 +7,13 @@ default_args = {
     'mysql_dbid': 'local_mysql',
 }
 
-dag = flux.DAG('test_mysql')
+dag = airflow.DAG('test_mysql')
 
-create = flux.operators.MySqlOperator(task_id='create',
+create = airflow.operators.MySqlOperator(task_id='create',
         sql='CREATE TABLE IF NOT EXISTS tmp (tmp INT);', **default_args)
 dag.add_task(create)
 
-ms = flux.operators.MySqlSensorOperator(task_id='sensor',
+ms = airflow.operators.MySqlSensorOperator(task_id='sensor',
         sql='SELECT COUNT(*) FROM tmp;', **default_args)
 dag.add_task(ms)
 ms.set_upstream(create)

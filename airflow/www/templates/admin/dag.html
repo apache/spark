@@ -1,6 +1,6 @@
 {% extends "admin/master.html" %}
 
-{% block title %}Flux - DAGs{% endblock %}
+{% block title %}Airflow - DAGs{% endblock %}
 
 {% block head_css %}
 {{ super() }}
@@ -11,29 +11,29 @@
 {% block body %}
   <h2>DAG: {{ dag.dag_id }}</h2>
   <ul class="nav nav-pills">
-    <li><a href="{{ url_for("flux.tree", dag_id=dag.dag_id, num_runs=45) }}">
+    <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=45) }}">
       <i class="icon-plus-sign"></i>Tree View
     </a></li>
-    <li><a href="{{ url_for("flux.graph", dag_id=dag.dag_id) }}">
+    <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">
       <i class="icon-random"></i>
       Graph View</a></li>
-    <li><a href="{{ url_for("flux.duration", dag_id=dag.dag_id) }}">
+    <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id) }}">
       <i class="icon-signal"></i>Task Duration
     </a></li>
     <li>
-      <a href="{{ url_for("flux.landing_times", dag_id=dag.dag_id) }}">
+      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id) }}">
         <i class="icon-signal"></i>
         Landing Times
       </a>
     </li>
     <li>
-      <a href="{{ url_for("flux.gantt", dag_id=dag.dag_id) }}">
+      <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id) }}">
         <i class="icon-align-left"></i>
         Gantt
       </a>
     </li>
     <li>
-      <a href="{{ url_for("flux.code", dag_id=dag.dag_id) }}">
+      <a href="{{ url_for("airflow.code", dag_id=dag.dag_id) }}">
       <i class="icon-barcode"></i>
         Code
       </a>
@@ -115,7 +115,7 @@
     }
 
     $("#btn_log").click(function(){
-      url = "{{ url_for('flux.log') }}" +
+      url = "{{ url_for('airflow.log') }}" +
         "?task_id=" + task_id +
         "&dag_id=" + dag_id +
         "&execution_date=" + execution_date;
@@ -123,7 +123,7 @@
     });
 
     $("#btn_clear").click(function(){
-      url = "{{ url_for('flux.tree') }}" +
+      url = "{{ url_for('airflow.tree') }}" +
         "?action=clear" +
         "&task_id=" + task_id +
         "&dag_id=" + dag_id +
@@ -136,14 +136,14 @@
     });
 
     $("#btn_gantt").click(function(){
-      url = "{{ url_for('flux.gantt') }}" +
+      url = "{{ url_for('airflow.gantt') }}" +
         "?dag_id=" + dag_id +
         "&execution_date=" + execution_date;
       window.location = url;
     });
 
     $("#btn_graph").click(function(){
-      url = "{{ url_for('flux.graph') }}" +
+      url = "{{ url_for('airflow.graph') }}" +
         "?dag_id=" + dag_id +
         "&execution_date=" + execution_date;
       window.location = url;

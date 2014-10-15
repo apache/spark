@@ -1,6 +1,6 @@
-from flux.operators import MySqlOperator
-from flux.executors import SequentialExecutor
-from flux import DAG
+from airflow.operators import MySqlOperator
+from airflow.executors import SequentialExecutor
+from airflow import DAG
 from datetime import datetime
 
 # Setting some default operator parameters
