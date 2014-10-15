@@ -242,14 +242,14 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
       shuffleSpillCompress <- Set(true, false);
       shuffleCompress <- Set(true, false)
     ) {
-      val conf = new SparkConf()
+      val myConf = conf.clone()
         .setAppName("test")
         .setMaster("local")
         .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
         .set("spark.shuffle.compress", shuffleCompress.toString)
         .set("spark.shuffle.memoryFraction", "0.001")
       resetSparkContext()
-      sc = new SparkContext(conf)
+      sc = new SparkContext(myConf)
       try {
         sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
       } catch {
@@ -268,15 +268,20 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
     rdd.count()
 
     // Delete one of the local shuffle blocks.
-    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
+    val shuffleBlockId = new ShuffleBlockId(0, 0, 0)
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(shuffleBlockId)
     val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
-    assert(hashFile.exists() || sortFile.exists())
+    val memoryBlock = sc.env.blockManager.memoryStore.getBytes(shuffleBlockId)
+    assert(hashFile.exists() || sortFile.exists() || memoryBlock.isDefined)
 
     if (hashFile.exists()) {
       hashFile.delete()
     }
     if (sortFile.exists()) {
       sortFile.delete()
+    }
+    if (memoryBlock.isDefined) {
+      sc.env.blockManager.memoryStore.remove(shuffleBlockId)
     }
 
     // This count should retry the execution of the previous stage and rerun shuffle.
