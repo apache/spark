@@ -25,9 +25,9 @@ engine = create_engine('mysql://airflow:airflow@localhost/airflow')
 # engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )
 Session.configure(bind=engine)
 HEADER = """\
-  _____ __
-_/ ____\  |  __ _____  ___
-\   __\|  | |  |  \  \/  /
- |  |  |  |_|  |  />    <
- |__|  |____/____//__/\_ \\
-                        \/"""
+       .__         _____.__                 
+_____  |__|_______/ ____\  |   ______  _  __
+\__  \ |  \_  __ \   __\|  |  /  _ \ \/ \/ /
+ / __ \|  ||  | \/|  |  |  |_(  <_> )     / 
+(____  /__||__|   |__|  |____/\____/ \/\_/  
+     \/"""
