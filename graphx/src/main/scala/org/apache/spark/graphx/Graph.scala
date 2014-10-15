@@ -195,6 +195,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the underlying index structures can be reused.
    *
    * @param map the function from an edge object to a new edge value.
+   * @param mapUsersSrcAttr indicates whether the source vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the source vertex attribute
+   * is not needed.
+   * @param mapUsersSrcAttr indicates whether the destination vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the destination vertex attribute
+   * is not needed.
    *
    * @tparam ED2 the new edge data type
    *
@@ -207,8 +213,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
-    mapTriplets((pid, iter) => iter.map(map))
+  def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2,
+    mapUsesSrcAttr: Boolean = true, mapUsesDstAttr: Boolean = true): Graph[VD, ED2] = {
+    mapTriplets((pid, iter) => iter.map(map), mapUsesSrcAttr, mapUsesDstAttr)
   }
 
   /**
@@ -223,11 +230,18 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the underlying index structures can be reused.
    *
    * @param map the iterator transform
+   * @param mapUsersSrcAttr indicates whether the source vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the source vertex attribute
+   * is not needed.
+   * @param mapUsersSrcAttr indicates whether the destination vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the destination vertex attribute
+   * is not needed.
    *
    * @tparam ED2 the new edge data type
    *
    */
-  def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2])
+  def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+    mapUsesSrcAttr: Boolean, mapUsesDstAttr: Boolean)
     : Graph[VD, ED2]
 
   /**
@@ -296,6 +310,13 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * be commutative and associative and is used to combine the output
    * of the map phase
    *
+   * @param mapUsesSrcAttr whether on not the map function will read the
+   * source vertex attribute.  If set to false then data movement may
+   * be minimized.
+   * @param mapUsesDstAttr whether on not the map function will read the
+   * destination vertex attribute.  If set to false then data movement may
+   * be minimized.
+   *
    * @param activeSetOpt optionally, a set of "active" vertices and a direction of edges to
    * consider when running `mapFunc`. If the direction is `In`, `mapFunc` will only be run on
    * edges with destination in the active set.  If the direction is `Out`,
@@ -303,6 +324,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * direction is `Either`, `mapFunc` will be run on edges with *either* vertex in the active set
    * . If the direction is `Both`, `mapFunc` will be run on edges with *both* vertices in the
    * active set. The active set must have the same index as the graph's vertices.
+   * @param mapUsersSrcAttr indicates whether the source vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the source vertex attribute
+   * is not needed.
+   * @param mapUsersSrcAttr indicates whether the destination vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the destination vertex attribute
+   * is not needed.
    *
    * @example We can use this function to compute the in-degree of each
    * vertex
@@ -322,7 +349,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None,
+      mapUsesSrcAttr: Boolean = true, mapUsesDstAttr: Boolean = true)
     : VertexRDD[A]
 
   /**
@@ -351,7 +379,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    */
   def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
-      (mapFunc: (VertexId, VD, Option[U]) => VD2)(implicit eq: VD =:= VD2 = null)
+      (map: (VertexId, VD, Option[U]) => VD2)(implicit eq: VD =:= VD2 = null)
     : Graph[VD2, ED]
 
   /**

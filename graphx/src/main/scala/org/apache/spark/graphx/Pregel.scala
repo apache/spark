@@ -138,7 +138,7 @@ object Pregel extends Logging {
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
       // get to send messages. We must cache messages so it can be materialized on the next line,
       // allowing us to uncache the previous iteration.
-      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).cache()
+      messages = g.mapReduceTriplets(sendMsg, mergeMsg, activeSetOpt = Some((newVerts, activeDirection))).cache()
       // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
       // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).

@@ -127,13 +127,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def mapTriplets[ED2: ClassTag](
-      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+      map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+    mapUsesSrcAttr: Boolean, mapUsesDstAttr: Boolean): Graph[VD, ED2] = {
     vertices.cache()
-    val mapUsesSrcAttr = accessesVertexAttr(f, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(f, "dstAttr")
     replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
     val newEdges = replicatedVertexView.edges.mapEdgePartitions { (pid, part) =>
-      part.map(f(pid, part.tripletIterator(mapUsesSrcAttr, mapUsesDstAttr)))
+      part.map(map(pid, part.tripletIterator(mapUsesSrcAttr, mapUsesDstAttr)))
     }
     new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
   }
@@ -171,14 +170,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)],
+      mapUsesSrcAttr: Boolean, mapUsesDstAttr: Boolean): VertexRDD[A] = {
 
     vertices.cache()
-
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
-    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
+    // val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
+    // val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
     replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
     val view = activeSetOpt match {
       case Some((activeSet, _)) =>
