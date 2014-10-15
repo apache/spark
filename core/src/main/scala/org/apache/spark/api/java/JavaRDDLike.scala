@@ -17,7 +17,6 @@
 
 package org.apache.spark.api.java
 
-import java.io.Serializable
 import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
@@ -592,7 +591,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new SerializableMapWrapper(underlying)
 
   private[java] class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
-    extends MapWrapper(underlying) with Serializable
+    extends MapWrapper(underlying) with java.io.Serializable
 
 
 }
