@@ -202,7 +202,7 @@ object SparkGLRM {
     val regPen = 0.1
 
     // Number of partitions for data, set to number of cores in cluster
-    val numChunks = 4
+    val numChunks = 96
     // Build non-zeros
     val R = sc.parallelize(0 until M, numChunks).flatMap{i =>
       val inds = new scala.collection.mutable.TreeSet[Int]()
