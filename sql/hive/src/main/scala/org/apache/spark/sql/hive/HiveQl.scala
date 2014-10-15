@@ -74,7 +74,6 @@ private[hive] object HiveQl {
     "TOK_REVOKE",
     "TOK_SHOW_GRANT",
     "TOK_SHOW_ROLE_GRANT",
-    "TOK_TRUNCATETABLE",
 
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
@@ -122,7 +121,8 @@ private[hive] object HiveQl {
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
     "TOK_CREATETABLE",
-    "TOK_DESCTABLE"
+    "TOK_DESCTABLE",
+    "TOK_TRUNCATETABLE"
   ) ++ nativeCommands
 
   protected val hqlParser = {
@@ -225,11 +225,6 @@ private[hive] object HiveQl {
     try {
       val tree = getAst(sql)
       if (nativeCommands contains tree.getText) {
-        if(tree.asInstanceOf[ASTNode].getText == "TOK_TRUNCATETABLE"){
-          if(tree.getChildren.exists(_.asInstanceOf[ASTNode].getText == "TOK_TABCOLNAME") ){
-            sys.error("Truncate table can not support columns")
-          }
-        }
         NativeCommand(sql)
       } else {
         nodeToPlan(tree) match {
@@ -477,6 +472,9 @@ private[hive] object HiveQl {
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
+
+    case Token("TOK_TRUNCATETABLE",
+          Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::
