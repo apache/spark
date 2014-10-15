@@ -198,7 +198,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @param mapUsesSrcAttr indicates whether the source vertex attribute should be included in
    * the triplet. Setting this to false can improve performance if the source vertex attribute
    * is not needed.
-   * @param mapUsesSrcAttr indicates whether the destination vertex attribute should be included in
+   * @param mapUsesDstAttr indicates whether the destination vertex attribute should be included in
    * the triplet. Setting this to false can improve performance if the destination vertex attribute
    * is not needed.
    *
@@ -233,7 +233,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @param mapUsesSrcAttr indicates whether the source vertex attribute should be included in
    * the triplet. Setting this to false can improve performance if the source vertex attribute
    * is not needed.
-   * @param mapUsesSrcAttr indicates whether the destination vertex attribute should be included in
+   * @param mapUsesDstAttr indicates whether the destination vertex attribute should be included in
    * the triplet. Setting this to false can improve performance if the destination vertex attribute
    * is not needed.
    *
@@ -320,7 +320,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @param mapUsesSrcAttr indicates whether the source vertex attribute should be included in
    * the triplet. Setting this to false can improve performance if the source vertex attribute
    * is not needed.
-   * @param mapUsesSrcAttr indicates whether the destination vertex attribute should be included in
+   * @param mapUsesDstAttr indicates whether the destination vertex attribute should be included in
    * the triplet. Setting this to false can improve performance if the destination vertex attribute
    * is not needed.
    *
