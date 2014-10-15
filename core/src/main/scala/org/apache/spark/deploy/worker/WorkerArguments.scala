@@ -54,13 +54,14 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   parse(args.toList)
 
-  checkWorkerMemory()
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
   if (conf.contains("spark.worker.ui.port")) {
     webUiPort = conf.get("spark.worker.ui.port").toInt
   }
+
+  checkWorkerMemory()
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
