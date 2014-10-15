@@ -246,8 +246,6 @@ class SparkContext(config: SparkConf) extends Logging {
   listenerBus.addListener(jobProgressListener)
   listenerBus.addListener(storageListener)
 
-  private val statusApi = new StatusAPIImpl(this)
-
   // Initialize the Spark UI:
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
@@ -873,11 +871,48 @@ class SparkContext(config: SparkConf) extends Logging {
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
 
-  def getJobsIdsForGroup(jobGroup: String): Array[Int] = statusApi.jobIdsForGroup(jobGroup)
+  /**
+   * Return a list of all known jobs in a particular job group.  The returned list may contain
+   * running, failed, and completed jobs, and may vary across invocations of this method.
+   */
+  def getJobIdsForGroup(jobGroup: String): Array[Int] = {
+    jobProgressListener.synchronized {
+      val jobData = jobProgressListener.jobIdToData.valuesIterator
+      jobData.filter(_.jobGroup.exists(_ == jobGroup)).map(_.jobId).toArray
+    }
+  }
 
-  def getJobInfo(jobId: Int): Option[SparkJobInfo] = statusApi.newJobInfo(jobId)
+  /**
+   * Returns job information, or None if the job info could not be found or was garbage-collected.
+   */
+  def getJobInfo(jobId: Int): Option[SparkJobInfo] = {
+    jobProgressListener.synchronized {
+      jobProgressListener.jobIdToData.get(jobId).map { data =>
+        new SparkJobInfoImpl(jobId, data.stageIds.toArray, data.status)
+      }
+    }
+  }
 
-  def getStageInfo(stageId: Int): Option[SparkStageInfo] = statusApi.newStageInfo(stageId)
+  /**
+   * Returns stage information, or None if the stage info could not be found or was
+   * garbage-collected.
+   */
+  def getStageInfo(stageId: Int): Option[SparkStageInfo] = {
+    jobProgressListener.synchronized {
+      for (
+        info <- jobProgressListener.stageIdToInfo.get(stageId);
+        data <- jobProgressListener.stageIdToData.get((stageId, info.attemptId))
+      ) yield {
+        new SparkStageInfoImpl(
+          stageId,
+          info.name,
+          info.numTasks,
+          data.numActiveTasks,
+          data.numCompleteTasks,
+          data.numFailedTasks)
+      }
+    }
+  }
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining

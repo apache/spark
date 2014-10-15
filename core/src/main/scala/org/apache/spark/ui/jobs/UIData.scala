@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
+import org.apache.spark.ExecutionStatus
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.util.collection.OpenHashSet
@@ -70,5 +71,5 @@ private[jobs] object UIData {
     jobId: Int,
     stageIds: Seq[Int],
     jobGroup: Option[String],
-    var status: String /* one of "running", "completed", or "failed" */)
+    var status: ExecutionStatus)
 }

@@ -70,18 +70,18 @@ public final class JavaStatusAPITest {
     });
 
     // Monitor the progress of our job
-    while (sc.getJobsIdsForGroup(APP_NAME).length == 0) {
+    while (sc.getJobIdsForGroup(APP_NAME).length == 0) {
       System.out.println("Waiting for job to be submitted to scheduler");
       Thread.sleep(1000);
     }
-    int jobId = sc.getJobsIdsForGroup(APP_NAME)[0];
+    int jobId = sc.getJobIdsForGroup(APP_NAME)[0];
     System.out.println("Job was submitted with id " + jobId);
     while (!jobFuture.isDone()) {
       Thread.sleep(1000);  // 1 second
       SparkJobInfo jobInfo = sc.getJobInfo(jobId);
       SparkStageInfo stageInfo = sc.getStageInfo(jobInfo.stageIds()[0]);
       System.out.println(stageInfo.numTasks() + " tasks total: " + stageInfo.numActiveTasks() +
-          " active, " + stageInfo.numCompleteTasks() + " complete");
+          " active, " + stageInfo.numCompletedTasks() + " complete");
     }
 
     System.out.println("Job results are: " + jobFuture.get());

@@ -17,45 +17,10 @@
 
 package org.apache.spark
 
-private[spark] class StatusAPIImpl(sc: SparkContext) {
-
-  def jobIdsForGroup(jobGroup: String): Array[Int] = {
-    sc.jobProgressListener.synchronized {
-      val jobData = sc.jobProgressListener.jobIdToData.valuesIterator
-      jobData.filter(_.jobGroup == Some(jobGroup)).map(_.jobId).toArray
-    }
-  }
-
-  def newJobInfo(jobId: Int): Option[SparkJobInfo] = {
-    sc.jobProgressListener.synchronized {
-      sc.jobProgressListener.jobIdToData.get(jobId).map { data =>
-        new SparkJobInfoImpl(jobId, data.stageIds.toArray, data.status)
-      }
-    }
-  }
-
-  def newStageInfo(stageId: Int): Option[SparkStageInfo] = {
-    sc.jobProgressListener.synchronized {
-      for (
-        info <- sc.jobProgressListener.stageIdToInfo.get(stageId);
-        data <- sc.jobProgressListener.stageIdToData.get((stageId, info.attemptId))
-      ) yield {
-        new SparkStageInfoImpl(
-          stageId,
-          info.name,
-          numTasks = info.numTasks,
-          numActiveTasks = data.numActiveTasks,
-          numCompleteTasks = data.numCompleteTasks,
-          numFailedTasks = data.numFailedTasks)
-      }
-    }
-  }
-}
-
 private class SparkJobInfoImpl (
   val jobId: Int,
   val stageIds: Array[Int],
-  val status: String)
+  val status: ExecutionStatus)
  extends SparkJobInfo
 
 private class SparkStageInfoImpl(
@@ -63,6 +28,6 @@ private class SparkStageInfoImpl(
   val name: String,
   val numTasks: Int,
   val numActiveTasks: Int,
-  val numCompleteTasks: Int,
+  val numCompletedTasks: Int,
   val numFailedTasks: Int)
  extends SparkStageInfo
