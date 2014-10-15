@@ -83,15 +83,21 @@ private[spark] class FileSystemPersistenceEngine(
     val serialized = serializer.toBinary(value)
 
     val out = new FileOutputStream(file)
-    out.write(serialized)
-    out.close()
+    try {
+      out.write(serialized)
+    } finally {
+      out.close()
+    }
   }
 
   def deserializeFromFile[T](file: File)(implicit m: Manifest[T]): T = {
     val fileData = new Array[Byte](file.length().asInstanceOf[Int])
     val dis = new DataInputStream(new FileInputStream(file))
-    dis.readFully(fileData)
-    dis.close()
+    try {
+      dis.readFully(fileData)
+    } finally {
+      dis.close()
+    }
 
     val clazz = m.runtimeClass.asInstanceOf[Class[T]]
     val serializer = serialization.serializerFor(clazz)

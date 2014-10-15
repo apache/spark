@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -335,7 +335,26 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 }
 
-private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 8, 12) {
+private[sql] object DATE extends NativeColumnType(DateType, 8, 8) {
+  override def extract(buffer: ByteBuffer) = {
+    val date = new Date(buffer.getLong())
+    date
+  }
+
+  override def append(v: Date, buffer: ByteBuffer): Unit = {
+    buffer.putLong(v.getTime)
+  }
+
+  override def getField(row: Row, ordinal: Int) = {
+    row(ordinal).asInstanceOf[Date]
+  }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Date): Unit = {
+    row(ordinal) = value
+  }
+}
+
+private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
   override def extract(buffer: ByteBuffer) = {
     val timestamp = new Timestamp(buffer.getLong())
     timestamp.setNanos(buffer.getInt())
@@ -376,7 +395,7 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](9, 16) {
+private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](10, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row(ordinal) = value
   }
@@ -387,7 +406,7 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](9, 16) {
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-private[sql] object GENERIC extends ByteArrayColumnType[DataType](10, 16) {
+private[sql] object GENERIC extends ByteArrayColumnType[DataType](11, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]): Unit = {
     row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
   }
@@ -407,6 +426,7 @@ private[sql] object ColumnType {
       case ShortType     => SHORT
       case StringType    => STRING
       case BinaryType    => BINARY
+      case DateType      => DATE
       case TimestampType => TIMESTAMP
       case _             => GENERIC
     }

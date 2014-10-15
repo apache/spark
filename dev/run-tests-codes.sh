@@ -1,4 +1,4 @@
-[epydoc] # Epydoc section marker (required by ConfigParser)
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,22 +17,11 @@
 # limitations under the License.
 #
 
-# Information about the project.
-name: Spark 1.0.0 Python API Docs
-url: http://spark.apache.org
-
-# The list of modules to document.  Modules can be named using
-# dotted names, module filenames, or package directory names.
-# This option may be repeated.
-modules: pyspark
-
-# Write html output to the directory "apidocs"
-output: html
-target: docs/
-
-private: no
-
-exclude: pyspark.cloudpickle pyspark.worker pyspark.join
-         pyspark.java_gateway pyspark.examples pyspark.shell pyspark.tests
-         pyspark.rddsampler pyspark.daemon
-         pyspark.mllib.tests pyspark.shuffle
+readonly BLOCK_GENERAL=10
+readonly BLOCK_RAT=11
+readonly BLOCK_SCALA_STYLE=12
+readonly BLOCK_PYTHON_STYLE=13
+readonly BLOCK_BUILD=14
+readonly BLOCK_SPARK_UNIT_TESTS=15
+readonly BLOCK_PYSPARK_UNIT_TESTS=16
+readonly BLOCK_MIMA=17

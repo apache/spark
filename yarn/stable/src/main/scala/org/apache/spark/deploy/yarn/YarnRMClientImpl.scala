@@ -17,8 +17,13 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.{Map, Set}
+import java.util.{List => JList}
 
+import scala.collection.{Map, Set}
+import scala.collection.JavaConversions._
+import scala.util._
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
@@ -40,6 +45,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
 
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
+  private var registered: Boolean = false
 
   override def register(
       conf: YarnConfiguration,
@@ -54,13 +60,19 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     this.uiHistoryAddress = uiHistoryAddress
 
     logInfo("Registering the ApplicationMaster")
-    amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
+    synchronized {
+      amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
+      registered = true
+    }
     new YarnAllocationHandler(conf, sparkConf, amClient, getAttemptId(), args,
       preferredNodeLocations, securityMgr)
   }
 
-  override def shutdown(status: FinalApplicationStatus, diagnostics: String = "") =
-    amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
+  override def unregister(status: FinalApplicationStatus, diagnostics: String = "") = synchronized {
+    if (registered) {
+      amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
+    }
+  }
 
   override def getAttemptId() = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
@@ -69,7 +81,28 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     appAttemptId
   }
 
-  override def getProxyHostAndPort(conf: YarnConfiguration) = WebAppUtils.getProxyHostAndPort(conf)
+  override def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String) = {
+    // Figure out which scheme Yarn is using. Note the method seems to have been added after 2.2,
+    // so not all stable releases have it.
+    val prefix = Try(classOf[WebAppUtils].getMethod("getHttpSchemePrefix", classOf[Configuration])
+        .invoke(null, conf).asInstanceOf[String]).getOrElse("http://")
+
+    // If running a new enough Yarn, use the HA-aware API for retrieving the RM addresses.
+    try {
+      val method = classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
+        classOf[Configuration])
+      val proxies = method.invoke(null, conf).asInstanceOf[JList[String]]
+      val hosts = proxies.map { proxy => proxy.split(":")(0) }
+      val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
+      Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
+    } catch {
+      case e: NoSuchMethodException =>
+        val proxy = WebAppUtils.getProxyHostAndPort(conf)
+        val parts = proxy.split(":")
+        val uriBase = prefix + proxy + proxyBase
+        Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
+    }
+  }
 
   override def getMaxRegAttempts(conf: YarnConfiguration) =
     conf.getInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)

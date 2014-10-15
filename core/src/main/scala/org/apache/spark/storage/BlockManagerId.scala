@@ -59,6 +59,8 @@ class BlockManagerId private (
 
   def port: Int = port_
 
+  def isDriver: Boolean = (executorId == "<driver>")
+
   override def writeExternal(out: ObjectOutput) {
     out.writeUTF(executorId_)
     out.writeUTF(host_)

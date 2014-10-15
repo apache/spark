@@ -630,7 +630,6 @@ class DAGScheduler(
   protected def runLocallyWithinThread(job: ActiveJob) {
     var jobResult: JobResult = JobSucceeded
     try {
-      SparkEnv.set(env)
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
       val taskContext =
@@ -1303,7 +1302,7 @@ class DAGScheduler(
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
     val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
     if (!rddPrefs.isEmpty) {
-      return rddPrefs.map(host => TaskLocation(host))
+      return rddPrefs.map(TaskLocation(_))
     }
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
     // that has any placement preferences. Ideally we would choose based on transfer sizes,
