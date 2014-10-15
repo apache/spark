@@ -175,7 +175,10 @@ object SparkGLRM {
         val err = ms(i).dot(us(j)) - rij
         err * err
       }.mean())
+
+      println(s"RMSEs at iteration $iter: " + errs.mkString(", "))
     }
+
 
     (msb.value, usb.value, errs)
   }
@@ -186,9 +189,9 @@ object SparkGLRM {
     val sc = new SparkContext(sparkConf)
 
     // Number of movies
-    val M = 10000
+    val M = 1000000
     // Number of users
-    val U = 10000
+    val U = 100000
     // Number of non-zeros per row
     val NNZ = 1000
     // Number of features
@@ -214,8 +217,6 @@ object SparkGLRM {
 
     // Fit GLRM
     val (ms, us, errs) = fitGLRM(R, M, U, lossL2squaredGrad, proxL2, proxL2, rank, numIterations, regPen)
-
-    println(s"RMSEs: " + errs.mkString(", "))
 
     sc.stop()
   }
