@@ -3,6 +3,7 @@ import sys
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
+
 if 'AIRFLOW_HOME' not in os.environ:
     os.environ['AIRFLOW_HOME'] = os.path.join(os.path.dirname(__file__), "..")
 AIRFLOW_HOME = os.environ['AIRFLOW_HOME']
@@ -18,6 +19,7 @@ JOB_HEARTBEAT_SEC = 5
 ID_LEN = 250  # Used for dag_id and task_id VARCHAR length
 LOG_FORMAT = \
     '[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s'
+
 Session = sessionmaker()
 engine = create_engine('mysql://airflow:airflow@localhost/airflow')
 # engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )

@@ -61,6 +61,8 @@ class DagBag(object):
         else:
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
+                    dag.filepath = filepath.replace(
+                        settings.AIRFLOW_HOME + '/', '')
                     if dag.dag_id in self.dags:
                         raise Exception(
                             'Two DAGs with the same dag_id. No good.')
@@ -143,7 +145,7 @@ class DagPickle(Base):
     __tablename__ = "dag_pickle"
 
     def __init__(self, dag, job):
-        self.pickle = dag.pickle()
+        self.pickle = pickle.dumps(dag)
         self.dag_id = dag.dag_id
         self.job = job
 
@@ -497,9 +499,8 @@ class BaseJob(Base):
     def __init__(self, executor=DEFAULT_EXECUTOR):
         self.state = None
         self.hostname = socket.gethostname()
-        self.executor_class = executor.__name__
-        self.executor = executor()
-        self.executor.start()
+        self.executor = executor
+        self.executor_class = executor.__class__.__name__
         self.start_date = datetime.now()
         self.latest_heartbeat = datetime.now()
 
@@ -540,9 +541,10 @@ class BackfillJob(BaseJob):
         Runs a dag for a specified date range.
         """
         session = settings.Session()
-        executor = self.executor
         self.dag = dag
         pickle = DagPickle(dag, self)
+        executor = self.executor
+        executor.start()
         session.add(pickle)
         session.commit()
 
@@ -868,25 +870,17 @@ class DAG(Base):
             self, dag_id,
             schedule_interval=timedelta(days=1),
             start_date=None, end_date=None, parallelism=0,
-            executor=DEFAULT_EXECUTOR):
+            filepath=None):
 
         utils.validate_key(dag_id)
         self.dag_id = dag_id
-        self._executor = executor
         self.end_date = end_date or datetime.now()
         self.parallelism = parallelism
         self.schedule_interval = schedule_interval
-        self.filepath = inspect.getouterframes(inspect.currentframe())[3][1]
+        self.filepath = filepath if filepath else ''
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
-
-    @property
-    def executor(self):
-        if hasattr(self, 'dagbag'):
-            return self.dagbag.executor
-        else:
-            return self._executor
 
     @property
     def task_ids(self):
@@ -1020,9 +1014,11 @@ class DAG(Base):
         session.merge(self)
         session.commit()
 
-    def run(self, start_date=None, end_date=None, mark_success=False):
+    def run(
+            self, start_date=None, end_date=None, mark_success=False, 
+            executor=DEFAULT_EXECUTOR):
         session = settings.Session()
-        job = BackfillJob(executor=self.executor)
+        job = BackfillJob(executor=executor)
         session.add(job)
         session.commit()
         job.run(self, start_date, end_date, mark_success)

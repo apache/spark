@@ -6,7 +6,7 @@ TODO
 * Fix datepicker
 
 #### Command line
-* backfill: add support for --force
+* New ascii art on command line
 
 #### Write unittests
 * For each existing operator
