@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.io.PrintStream
+
 import scala.collection.JavaConversions._
 
 import org.apache.commons.logging.LogFactory
@@ -69,6 +71,10 @@ object HiveThriftServer2 extends Logging {
     logInfo("Starting SparkContext")
     SparkSQLEnv.init()
     SessionState.start(ss)
+    SparkSQLEnv.hiveContext.sessionState.err =
+      new PrintStream(SparkSQLEnv.hiveContext.outputBuffer, true, "UTF-8")
+    SparkSQLEnv.hiveContext.sessionState.out =
+      new PrintStream(SparkSQLEnv.hiveContext.outputBuffer, true, "UTF-8")
 
     Runtime.getRuntime.addShutdownHook(
       new Thread() {

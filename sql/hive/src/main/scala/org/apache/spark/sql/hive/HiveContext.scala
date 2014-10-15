@@ -195,7 +195,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
-  protected lazy val outputBuffer =  new java.io.OutputStream {
+  protected[hive] lazy val outputBuffer =  new java.io.OutputStream {
     var pos: Int = 0
     var buffer = new Array[Int](10240)
     def write(i: Int): Unit = {
