@@ -67,6 +67,8 @@ private[spark] class Worker(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
+  val RECONNECT_ATTEMPT_INTERVAL_MILLIS = conf.getLong("spark.worker.reconnect.interval", 60) * 1000
+
   val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
   // How often worker will clean up old app folders
   val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
@@ -94,6 +96,7 @@ private[spark] class Worker(
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
   val finishedDrivers = new HashMap[String, DriverRunner]
+  var scheduledReconnectMessage: Option[Cancellable] = None
 
   val publicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -197,6 +200,8 @@ private[spark] class Worker(
         context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
           CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
       }
+      scheduledReconnectMessage.foreach(_.cancel())
+      scheduledReconnectMessage = None
 
     case SendHeartbeat =>
       if (connected) { master ! Heartbeat(workerId) }
@@ -242,6 +247,10 @@ private[spark] class Worker(
         logError("Worker registration failed: " + message)
         System.exit(1)
       }
+
+    case ReconnectWorker(masterUrl) =>
+      logWarning(s"Master with url $masterUrl requested this worker to reconnect.")
+      scheduleAttemptsToReconnectToMaster()
 
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
@@ -365,6 +374,16 @@ private[spark] class Worker(
   def masterDisconnected() {
     logError("Connection to master failed! Waiting for master to reconnect...")
     connected = false
+    scheduleAttemptsToReconnectToMaster()
+  }
+
+  def scheduleAttemptsToReconnectToMaster() {
+    if (!scheduledReconnectMessage.isDefined) {
+      scheduledReconnectMessage = Some(context.system.scheduler.schedule(
+        Duration Zero, RECONNECT_ATTEMPT_INTERVAL_MILLIS millis) {
+          tryRegisterAllMasters()
+        })
+    }
   }
 
   def generateWorkerId(): String = {
@@ -374,6 +393,7 @@ private[spark] class Worker(
   override def postStop() {
     metricsSystem.report()
     registrationRetryTimer.foreach(_.cancel())
+    scheduledReconnectMessage.foreach(_.cancel())
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
     webUi.stop()
