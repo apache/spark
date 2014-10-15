@@ -68,7 +68,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     assume(bootstrapDriver != null, "SPARK_SUBMIT_BOOTSTRAP_DRIVER must be set")
 
     // Parse the properties file for the equivalent spark.driver.* configs
-    val properties = SparkSubmitArguments.getPropertiesFromFile(new File(propertiesFile)).toMap
+    val properties = Utils.getPropertiesFromFile(propertiesFile)
     val confDriverMemory = properties.get("spark.driver.memory")
     val confLibraryPath = properties.get("spark.driver.extraLibraryPath")
     val confClasspath = properties.get("spark.driver.extraClassPath")

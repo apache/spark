@@ -18,12 +18,14 @@
 package org.apache.spark.deploy.history
 
 import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
 /**
  * Command-line parser for the master.
  */
 private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) {
   private var logDir: String = null
+  private var propertiesFile: String = null
 
   parse(args.toList)
 
@@ -32,10 +34,15 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
       case ("--dir" | "-d") :: value :: tail =>
         logDir = value
         conf.set("spark.history.fs.logDirectory", value)
+        System.setProperty("spark.history.fs.logDirectory", value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
+
+      case ("--properties-file") :: value :: tail =>
+        propertiesFile = value
+        parse(tail)
 
       case Nil =>
 
@@ -44,10 +51,17 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
     }
   }
 
+   // This mutates the SparkConf, so all accesses to it must be made after this line
+   Utils.loadDefaultSparkProperties(conf, propertiesFile)
+
   private def printUsageAndExit(exitCode: Int) {
     System.err.println(
       """
-      |Usage: HistoryServer
+      |Usage: HistoryServer [options]
+      |
+      |Options:
+      |  --properties-file FILE      Path to a custom Spark properties file.
+      |                              Default is conf/spark-defaults.conf.
       |
       |Configuration options can be set by setting the corresponding JVM system property.
       |History Server options are always available; additional options depend on the provider.

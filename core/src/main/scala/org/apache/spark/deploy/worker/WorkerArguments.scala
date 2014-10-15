@@ -33,6 +33,7 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var memory = inferDefaultMemory()
   var masters: Array[String] = null
   var workDir: String = null
+  var propertiesFile: String = null
 
   // Check for settings in environment variables
   if (System.getenv("SPARK_WORKER_PORT") != null) {
@@ -47,14 +48,18 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
   if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
   }
-  if (conf.contains("spark.worker.ui.port")) {
-    webUiPort = conf.get("spark.worker.ui.port").toInt
-  }
   if (System.getenv("SPARK_WORKER_DIR") != null) {
     workDir = System.getenv("SPARK_WORKER_DIR")
   }
 
   parse(args.toList)
+
+  // This mutates the SparkConf, so all accesses to it must be made after this line
+  propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+
+  if (conf.contains("spark.worker.ui.port")) {
+    webUiPort = conf.get("spark.worker.ui.port").toInt
+  }
 
   checkWorkerMemory()
 
@@ -89,7 +94,11 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       webUiPort = value
       parse(tail)
 
-    case ("--help" | "-h") :: tail =>
+    case ("--properties-file") :: value :: tail =>
+      propertiesFile = value
+      parse(tail)
+
+    case ("--help") :: tail =>
       printUsageAndExit(0)
 
     case value :: tail =>
@@ -124,7 +133,9 @@ private[spark] class WorkerArguments(args: Array[String], conf: SparkConf) {
       "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
       "  -h HOST, --host HOST     Hostname to listen on\n" +
       "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
-      "  --webui-port PORT        Port for web UI (default: 8081)")
+      "  --webui-port PORT        Port for web UI (default: 8081)\n" +
+      "  --properties-file FILE   Path to a custom Spark properties file.\n" +
+      "                           Default is conf/spark-defaults.conf.")
     System.exit(exitCode)
   }
 
