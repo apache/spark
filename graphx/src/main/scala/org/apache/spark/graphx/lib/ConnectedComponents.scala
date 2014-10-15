@@ -50,6 +50,7 @@ object ConnectedComponents {
     Pregel(ccGraph, initialMessage, activeDirection = EdgeDirection.Either)(
       vprog = (id, attr, msg) => math.min(attr, msg),
       sendMsg = sendMessage,
-      mergeMsg = (a, b) => math.min(a, b))
+      mergeMsg = (a, b) => math.min(a, b),
+      sendMsgUsesSrcAttr = true, sendMsgUsesDstAttr = true)
   } // end of connectedComponents
 }
