@@ -32,14 +32,15 @@ object MimaBuild {
       ProblemFilters.exclude[MissingMethodProblem](fullName),
       // Sometimes excluded methods have default arguments and 
       // they are translated into public methods/fields($default$) in generated
-      // bytecode. It is not possible to exhustively list everything.
+      // bytecode. It is not possible to exhaustively list everything.
       // But this should be okay.
       ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$2"),
       ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$1"),
       ProblemFilters.exclude[MissingFieldProblem](fullName),
       ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
       ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
-      ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName)
+      ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName),
+      ProblemFilters.exclude[AbstractClassProblem](fullName)
     )
 
   // Exclude a single class and its corresponding object

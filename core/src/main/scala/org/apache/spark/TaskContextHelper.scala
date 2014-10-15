@@ -15,24 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util;
+package org.apache.spark
 
-import org.apache.spark.TaskContext;
+private [spark] object TaskContextHelper {
 
+  def setTaskContext(tc: TaskContext): Unit = TaskContext.setTaskContext(tc)
 
-/**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
- */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
-
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
-  }
+  def unset(): Unit = TaskContext.unset()
+  
 }

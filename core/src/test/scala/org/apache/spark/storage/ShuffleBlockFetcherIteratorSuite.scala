@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{TaskContextImpl, TaskContext}
 import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
 
 import org.mockito.Mockito._
@@ -62,7 +62,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     )
 
     val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContext(0, 0, 0),
+      new TaskContextImpl(0, 0, 0),
       transfer,
       blockManager,
       blocksByAddress,
@@ -120,7 +120,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     )
 
     val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContext(0, 0, 0),
+      new TaskContextImpl(0, 0, 0),
       transfer,
       blockManager,
       blocksByAddress,
@@ -169,7 +169,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       (bmId, Seq((blId1, 1L), (blId2, 1L))))
 
     val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContext(0, 0, 0),
+      new TaskContextImpl(0, 0, 0),
       transfer,
       blockManager,
       blocksByAddress,
