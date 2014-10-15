@@ -591,7 +591,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   private[java] def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
     new SerializableMapWrapper(underlying)
 
-  private class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
+  private[java] class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
     extends MapWrapper(underlying) with Serializable
 
 
