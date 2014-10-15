@@ -127,12 +127,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def mapTriplets[ED2: ClassTag](
-      map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
     mapUsesSrcAttr: Boolean, mapUsesDstAttr: Boolean): Graph[VD, ED2] = {
     vertices.cache()
     replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
     val newEdges = replicatedVertexView.edges.mapEdgePartitions { (pid, part) =>
-      part.map(map(pid, part.tripletIterator(mapUsesSrcAttr, mapUsesDstAttr)))
+      part.map(f(pid, part.tripletIterator(mapUsesSrcAttr, mapUsesDstAttr)))
     }
     new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
   }
