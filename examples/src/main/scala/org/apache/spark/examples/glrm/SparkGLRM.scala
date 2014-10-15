@@ -189,17 +189,17 @@ object SparkGLRM {
     val sc = new SparkContext(sparkConf)
 
     // Number of movies
-    val M = 1000000
+    val M = 1000
     // Number of users
-    val U = 100000
+    val U = 1000
     // Number of non-zeros per row
-    val NNZ = 1000
+    val NNZ = 10
     // Number of features
     val rank = 2
     // Number of iterations
     val numIterations = 100
     // regularization parameter
-    val regPen = 0.1
+    val regPen = 0.001
 
     // Number of partitions for data, set to number of cores in cluster
     val numChunks = 4
