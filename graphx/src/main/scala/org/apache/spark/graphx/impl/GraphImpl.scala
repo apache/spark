@@ -176,8 +176,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     vertices.cache()
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
-    // val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
-    // val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
     replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
     val view = activeSetOpt match {
       case Some((activeSet, _)) =>
@@ -250,14 +248,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  /** Test whether the closure accesses the the attribute with name `attrName`. */
-  private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
-    try {
-      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
-    } catch {
-      case _: ClassNotFoundException => true // if we don't know, be conservative
-    }
-  }
 } // end of class GraphImpl
 
 
