@@ -271,7 +271,15 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
-      ssc.sparkContext.runJob(tempRDD, startReceiver)
+      try {
+        ssc.sparkContext.runJob(tempRDD, startReceiver)
+      } catch {
+        case e : Throwable => 
+          logError("receiver job crashed, detail:" + e.getStackTraceString)
+          // find a better way to stop the application ? make other stages depend on  tempRdd ?
+          ssc.stop()
+          System.exit(1)
+      }
       logInfo("All of the receivers have been terminated")
     }
 
