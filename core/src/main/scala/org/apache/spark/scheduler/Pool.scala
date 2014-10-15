@@ -19,11 +19,11 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+
+import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * An Schedulable entity that represent collection of Pools or TaskSetManagers
@@ -34,8 +34,7 @@ private[spark] class Pool(
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
     initWeight: Int)
-  extends Schedulable
-  with Logging {
+  extends Schedulable with Logging {
 
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
@@ -88,11 +87,12 @@ private[spark] class Pool(
   }
 
   override def checkSpeculatableTasks(): Boolean = {
-    var shouldRevive = false
     for (schedulable <- schedulableQueue) {
-      shouldRevive |= schedulable.checkSpeculatableTasks()
+      if (schedulable.checkSpeculatableTasks()) {
+        return true
+      }
     }
-    shouldRevive
+    false
   }
 
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
