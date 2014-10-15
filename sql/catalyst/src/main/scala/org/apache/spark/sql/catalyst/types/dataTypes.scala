@@ -401,11 +401,6 @@ case class StructField(
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
 
-  override def toString: String = {
-    // Do not add metadata to be consistent with CaseClassStringParser.
-    s"StructField($name,$dataType,$nullable)"
-  }
-
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
