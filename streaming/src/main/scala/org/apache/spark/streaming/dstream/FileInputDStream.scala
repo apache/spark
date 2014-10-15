@@ -27,7 +27,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.UnionRDD
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.util.TimeStampedHashMap
-import scala.collection.mutable.ArrayBuffer
 
 
 private[streaming]
