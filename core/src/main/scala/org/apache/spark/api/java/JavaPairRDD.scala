@@ -17,7 +17,6 @@
 
 package org.apache.spark.api.java
 
-import java.io.Serializable
 import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
 
@@ -266,10 +265,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: JFunction2[V, V, V]): java.util.Map[K, V] =
-    mapAsJavaMap(rdd.reduceByKeyLocally(func))
+    mapAsSerializableJavaMap(rdd.reduceByKeyLocally(func))
 
   /** Count the number of elements for each key, and return the result to the master as a Map. */
-  def countByKey(): java.util.Map[K, Long] = mapAsJavaMap(rdd.countByKey())
+  def countByKey(): java.util.Map[K, Long] = mapAsSerializableJavaMap(rdd.countByKey())
 
   /**
    * :: Experimental ::
@@ -278,7 +277,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   @Experimental
   def countByKeyApprox(timeout: Long): PartialResult[java.util.Map[K, BoundedDouble]] =
-    rdd.countByKeyApprox(timeout).map(mapAsJavaMap)
+    rdd.countByKeyApprox(timeout).map(mapAsSerializableJavaMap)
 
   /**
    * :: Experimental ::
@@ -288,7 +287,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   @Experimental
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
   : PartialResult[java.util.Map[K, BoundedDouble]] =
-    rdd.countByKeyApprox(timeout, confidence).map(mapAsJavaMap)
+    rdd.countByKeyApprox(timeout, confidence).map(mapAsSerializableJavaMap)
 
   /**
    * Aggregate the values of each key, using given combine functions and a neutral "zero value".
@@ -615,10 +614,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return the key-value pairs in this RDD to the master as a Map.
    */
-  def collectAsMap(): java.util.Map[K, V] = new SerializableMapWrapper(rdd.collectAsMap())
+  def collectAsMap(): java.util.Map[K, V] = mapAsSerializableJavaMap(rdd.collectAsMap())
 
-  class SerializableMapWrapper(underlying: collection.Map[K, V])
-    extends MapWrapper(underlying) with Serializable
 
   /**
    * Pass each value in the key-value pair RDD through a map function without changing the keys;

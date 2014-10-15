@@ -17,6 +17,7 @@
 
 package org.apache.spark.api.java
 
+import java.io.Serializable
 import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable, Long => JLong}
 
@@ -390,7 +391,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): java.util.Map[T, java.lang.Long] =
-    mapAsJavaMap(rdd.countByValue().map((x => (x._1, new java.lang.Long(x._2)))))
+    mapAsSerializableJavaMap(rdd.countByValue().map((x => (x._1, new java.lang.Long(x._2)))))
 
   /**
    * (Experimental) Approximate version of countByValue().
@@ -399,13 +400,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     timeout: Long,
     confidence: Double
     ): PartialResult[java.util.Map[T, BoundedDouble]] =
-    rdd.countByValueApprox(timeout, confidence).map(mapAsJavaMap)
+    rdd.countByValueApprox(timeout, confidence).map(mapAsSerializableJavaMap)
 
   /**
    * (Experimental) Approximate version of countByValue().
    */
   def countByValueApprox(timeout: Long): PartialResult[java.util.Map[T, BoundedDouble]] =
-    rdd.countByValueApprox(timeout).map(mapAsJavaMap)
+    rdd.countByValueApprox(timeout).map(mapAsSerializableJavaMap)
 
   /**
    * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
@@ -586,5 +587,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     import org.apache.spark.SparkContext._
     rdd.foreachAsync(x => f.call(x))
   }
+
+  private[java] def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
+    new SerializableMapWrapper(underlying)
+
+  private class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
+    extends MapWrapper(underlying) with Serializable
+
 
 }
