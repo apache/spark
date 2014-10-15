@@ -168,6 +168,20 @@ private[spark] object Utils extends Logging {
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
   private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
+  // Add a shutdown hook to delete the temp dirs when the JVM exits
+  Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dirs") {
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      logDebug("Shutdown hook called")
+      shutdownDeletePaths.foreach { dirPath =>
+        try {
+          Utils.deleteRecursively(new File(dirPath))
+        } catch {
+          case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
+        }
+      }
+    }
+  })
+
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
@@ -252,14 +266,6 @@ private[spark] object Utils extends Logging {
     }
 
     registerShutdownDeleteDir(dir)
-
-    // Add a shutdown hook to delete the temp dir when the JVM exits
-    Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
-      override def run() {
-        // Attempt to delete if some patch which is parent of this is not already registered.
-        if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
-      }
-    })
     dir
   }
 
@@ -334,8 +340,8 @@ private[spark] object Utils extends Logging {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
-    uri.getScheme match {
-      case "http" | "https" | "ftp" =>
+    Option(uri.getScheme) match {
+      case Some("http") | Some("https") | Some("ftp") =>
         logInfo("Fetching " + url + " to " + tempFile)
 
         var uc: URLConnection = null
@@ -368,7 +374,7 @@ private[spark] object Utils extends Logging {
           }
         }
         Files.move(tempFile, targetFile)
-      case "file" | null =>
+      case Some("file") | None =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
@@ -397,7 +403,7 @@ private[spark] object Utils extends Logging {
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
-      case _ =>
+      case Some(other) =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
@@ -666,15 +672,30 @@ private[spark] object Utils extends Logging {
    */
   def deleteRecursively(file: File) {
     if (file != null) {
-      if (file.isDirectory() && !isSymlink(file)) {
-        for (child <- listFilesSafely(file)) {
-          deleteRecursively(child)
+      try {
+        if (file.isDirectory && !isSymlink(file)) {
+          var savedIOException: IOException = null
+          for (child <- listFilesSafely(file)) {
+            try {
+              deleteRecursively(child)
+            } catch {
+              // In case of multiple exceptions, only last one will be thrown
+              case ioe: IOException => savedIOException = ioe
+            }
+          }
+          if (savedIOException != null) {
+            throw savedIOException
+          }
+          shutdownDeletePaths.synchronized {
+            shutdownDeletePaths.remove(file.getAbsolutePath)
+          }
         }
-      }
-      if (!file.delete()) {
-        // Delete can also fail if the file simply did not exist
-        if (file.exists()) {
-          throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      } finally {
+        if (!file.delete()) {
+          // Delete can also fail if the file simply did not exist
+          if (file.exists()) {
+            throw new IOException("Failed to delete: " + file.getAbsolutePath)
+          }
         }
       }
     }
@@ -713,7 +734,7 @@ private[spark] object Utils extends Logging {
    */
   def doesDirectoryContainAnyNewFiles(dir: File, cutoff: Long): Boolean = {
     if (!dir.isDirectory) {
-      throw new IllegalArgumentException("$dir is not a directory!")
+      throw new IllegalArgumentException(s"$dir is not a directory!")
     }
     val filesAndDirs = dir.listFiles()
     val cutoffTimeInMillis = System.currentTimeMillis - (cutoff * 1000)
@@ -1347,16 +1368,17 @@ private[spark] object Utils extends Logging {
     if (uri.getPath == null) {
       throw new IllegalArgumentException(s"Given path is malformed: $uri")
     }
-    uri.getScheme match {
-      case windowsDrive(d) if windows =>
+
+    Option(uri.getScheme) match {
+      case Some(windowsDrive(d)) if windows =>
         new URI("file:/" + uri.toString.stripPrefix("/"))
-      case null =>
+      case None =>
         // Preserve fragments for HDFS file name substitution (denoted by "#")
         // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
         val fragment = uri.getFragment
         val part = new File(uri.getPath).toURI
         new URI(part.getScheme, part.getPath, fragment)
-      case _ =>
+      case Some(other) =>
         uri
     }
   }
@@ -1378,13 +1400,62 @@ private[spark] object Utils extends Logging {
     } else {
       paths.split(",").filter { p =>
         val formattedPath = if (windows) formatWindowsPath(p) else p
-        new URI(formattedPath).getScheme match {
-          case windowsDrive(d) if windows => false
-          case "local" | "file" | null => false
-          case _ => true
+        val uri = new URI(formattedPath)
+        Option(uri.getScheme) match {
+          case Some(windowsDrive(d)) if windows => false
+          case Some("local") | Some("file") | None => false
+          case Some(other) => true
         }
       }
     }
+  }
+
+  /**
+   * Load default Spark properties from the given file. If no file is provided,
+   * use the common defaults file. This mutates state in the given SparkConf and
+   * in this JVM's system properties if the config specified in the file is not
+   * already set. Return the path of the properties file used.
+   */
+  def loadDefaultSparkProperties(conf: SparkConf, filePath: String = null): String = {
+    val path = Option(filePath).getOrElse(getDefaultPropertiesFile())
+    Option(path).foreach { confFile =>
+      getPropertiesFromFile(confFile).filter { case (k, v) =>
+        k.startsWith("spark.")
+      }.foreach { case (k, v) =>
+        conf.setIfMissing(k, v)
+        sys.props.getOrElseUpdate(k, v)
+      }
+    }
+    path
+  }
+
+  /** Load properties present in the given file. */
+  def getPropertiesFromFile(filename: String): Map[String, String] = {
+    val file = new File(filename)
+    require(file.exists(), s"Properties file $file does not exist")
+    require(file.isFile(), s"Properties file $file is not a normal file")
+
+    val inReader = new InputStreamReader(new FileInputStream(file), "UTF-8")
+    try {
+      val properties = new Properties()
+      properties.load(inReader)
+      properties.stringPropertyNames().map(k => (k, properties(k).trim)).toMap
+    } catch {
+      case e: IOException =>
+        throw new SparkException(s"Failed when loading Spark properties from $filename", e)
+    } finally {
+      inReader.close()
+    }
+  }
+
+  /** Return the path of the default Spark properties file. */
+  def getDefaultPropertiesFile(env: Map[String, String] = sys.env): String = {
+    env.get("SPARK_CONF_DIR")
+      .orElse(env.get("SPARK_HOME").map { t => s"$t${File.separator}conf" })
+      .map { t => new File(s"$t${File.separator}spark-defaults.conf")}
+      .filter(_.isFile)
+      .map(_.getAbsolutePath)
+      .orNull
   }
 
   /** Return a nice string representation of the exception, including the stack trace. */
