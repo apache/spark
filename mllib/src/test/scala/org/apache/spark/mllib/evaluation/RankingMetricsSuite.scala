@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.LocalSparkContext
 
@@ -33,18 +34,18 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     val metrics = new RankingMetrics(predictionAndLabels)
     val map = metrics.meanAveragePrecision
 
-    assert(metrics.precision(1) ~== 0.5 absTol eps)
-    assert(metrics.precision(2) ~== 0.5 absTol eps)
-    assert(metrics.precision(3) ~== 0.5 absTol eps)
-    assert(metrics.precision(4) ~== 0.375 absTol eps)
-    assert(metrics.precision(10) ~== 0.4 absTol eps)
+    assert(metrics.precisionAt(1) ~== 0.5 absTol eps)
+    assert(metrics.precisionAt(2) ~== 0.5 absTol eps)
+    assert(metrics.precisionAt(3) ~== 0.5 absTol eps)
+    assert(metrics.precisionAt(4) ~== 0.375 absTol eps)
+    assert(metrics.precisionAt(10) ~== 0.4 absTol eps)
 
     assert(map ~== 0.532539 absTol eps)
 
-    assert(metrics.ndcg(3) ~== 0.5 absTol eps)
-    assert(metrics.ndcg(5) ~== 0.493182 absTol eps)
-    assert(metrics.ndcg(10) ~== 0.731869 absTol eps)
-    assert(metrics.ndcg(15) ~== metrics.ndcg(10) absTol eps)
+    assert(metrics.ndcgAt(3) ~== 0.5 absTol eps)
+    assert(metrics.ndcgAt(5) ~== 0.493182 absTol eps)
+    assert(metrics.ndcgAt(10) ~== 0.731869 absTol eps)
+    assert(metrics.ndcgAt(15) ~== metrics.ndcgAt(10) absTol eps)
 
   }
 }
