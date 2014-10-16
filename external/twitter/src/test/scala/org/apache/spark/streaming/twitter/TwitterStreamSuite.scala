@@ -63,7 +63,7 @@ class TwitterStreamSuite extends TestSuiteBase {
     val test14: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), count, follow, filters)
     val test15: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, Some(authorization), count, follow, filters, locations))
+      TwitterUtils.createStream(ssc, Some(authorization), count, follow, filters, locations)
     val test16: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), count, follow, filters, locations,
         storage)
