@@ -167,7 +167,7 @@ private[hive] class SparkExecuteStatementOperation(
           if (sparkRow.isNullAt(curCol)) {
             row += null
           } else {
-            row += addNonNullColumnValue(sparkRow, row, curCol)
+            addNonNullColumnValue(sparkRow, row, curCol)
           }
           curCol += 1
         }
