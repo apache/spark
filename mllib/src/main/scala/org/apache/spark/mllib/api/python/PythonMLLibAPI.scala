@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
+import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -27,6 +28,7 @@ import net.razorvine.pickle._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.feature.Word2Vec
@@ -639,13 +641,24 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  var initialized = false
+  // This should be called before trying to serialize any above classes
+  // In cluster mode, this should be put in the closure
   def initialize(): Unit = {
-    new DenseVectorPickler().register()
-    new DenseMatrixPickler().register()
-    new SparseVectorPickler().register()
-    new LabeledPointPickler().register()
-    new RatingPickler().register()
+    SerDeUtil.initialize()
+    synchronized {
+      if (!initialized) {
+        new DenseVectorPickler().register()
+        new DenseMatrixPickler().register()
+        new SparseVectorPickler().register()
+        new LabeledPointPickler().register()
+        new RatingPickler().register()
+        initialized = true
+      }
+    }
   }
+  // will not called in Executor automatically
+  initialize()
 
   def dumps(obj: AnyRef): Array[Byte] = {
     new Pickler().dumps(obj)
@@ -658,5 +671,34 @@ private[spark] object SerDe extends Serializable {
   /* convert object into Tuple */
   def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
     rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
+  }
+
+  /**
+   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      new PythonRDD.AutoBatchedPickler(iter)
+    }
+  }
+
+  /**
+   * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
+   */
+  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj.asInstanceOf[JArrayList[_]].asScala
+        } else {
+          Seq(obj)
+        }
+      }
+    }.toJavaRDD()
   }
 }
