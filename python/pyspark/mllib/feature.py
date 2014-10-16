@@ -112,11 +112,11 @@ class Normalizer(VectorTransformer):
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
     >>> nor.transform(v)
-    DenseVector([0.0, 0.3333333333333333, 0.6666666666666666])
+    DenseVector([0.0, 0.3333, 0.6667])
 
     >>> rdd = sc.parallelize([v])
     >>> nor.transform(rdd).collect()
-    [DenseVector([0.0, 0.3333333333333333, 0.6666666666666666])]
+    [DenseVector([0.0, 0.3333, 0.6667])]
     """
     def __init__(self, p=2):
         """
@@ -182,8 +182,8 @@ class StandardScaler(object):
     >>> model = standardizer.fit(dataset)
     >>> result = model.transform(dataset)
     >>> for r in result.collect(): r
-    DenseVector([-0.7071067811865475, 0.7071067811865475, -0.7071067811865476])
-    DenseVector([0.7071067811865475, -0.7071067811865475, 0.7071067811865476])
+    DenseVector([-0.7071, 0.7071, -0.7071])
+    DenseVector([0.7071, -0.7071, 0.7071])
     """
     def __init__(self, withMean=False, withStd=True):
         """
@@ -287,8 +287,8 @@ class IDF(object):
     >>> model = idf.fit(data)
     >>> tfidf = model.transform(data)
     >>> for r in tfidf.collect(): r
-    SparseVector(4, {1: 0.0, 3: 0.575364144904})
-    DenseVector([0.0, 0.0, 1.3862943611198906, 0.8630462173553426])
+    SparseVector(4, {1: 0.0, 3: 0.5754})
+    DenseVector([0.0, 0.0, 1.3863, 0.863])
     SparseVector(4, {1: 0.0})
     """
     def __init__(self, minDocFreq=0):
