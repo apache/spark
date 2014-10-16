@@ -96,7 +96,7 @@ private[spark] class Worker(
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
   val finishedDrivers = new HashMap[String, DriverRunner]
-  var scheduledReconnectMessage: Option[Cancellable] = None
+  var scheduledReconnectTask: Option[Cancellable] = None
 
   val publicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -159,7 +159,7 @@ private[spark] class Worker(
         throw new SparkException("Invalid spark URL: " + x)
     }
     connected = true
-    scheduledReconnectMessage.foreach(_.cancel())
+    scheduledReconnectTask.foreach(_.cancel())
   }
 
   def tryRegisterAllMasters() {
@@ -201,8 +201,8 @@ private[spark] class Worker(
         context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
           CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
       }
-      scheduledReconnectMessage.foreach(_.cancel())
-      scheduledReconnectMessage = None
+      scheduledReconnectTask.foreach(_.cancel())
+      scheduledReconnectTask = None
 
     case SendHeartbeat =>
       if (connected) { master ! Heartbeat(workerId) }
@@ -379,8 +379,8 @@ private[spark] class Worker(
   }
 
   def scheduleAttemptsToReconnectToMaster() {
-    if (!scheduledReconnectMessage.isDefined) {
-      scheduledReconnectMessage = Some(context.system.scheduler.schedule(
+    if (!scheduledReconnectTask.isDefined) {
+      scheduledReconnectTask = Some(context.system.scheduler.schedule(
         Duration Zero, RECONNECT_ATTEMPT_INTERVAL_MILLIS millis) {
           tryRegisterAllMasters()
         })
@@ -394,7 +394,7 @@ private[spark] class Worker(
   override def postStop() {
     metricsSystem.report()
     registrationRetryTimer.foreach(_.cancel())
-    scheduledReconnectMessage.foreach(_.cancel())
+    scheduledReconnectTask.foreach(_.cancel())
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
     webUi.stop()

@@ -345,6 +345,9 @@ private[spark] class Master(
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
               " Asking it to re-register.")
             sender ! ReconnectWorker(masterUrl)
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
           }
       }
     }
