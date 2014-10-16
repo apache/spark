@@ -23,6 +23,7 @@ import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
 
@@ -828,7 +829,7 @@ private[spark] object PythonRDD extends Logging {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]]
+          obj.asInstanceOf[JArrayList[_]].asScala
         } else {
           Seq(obj)
         }

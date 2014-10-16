@@ -20,9 +20,7 @@ package org.apache.spark.mllib.api.python
 import java.io.OutputStream
 import java.util.{ArrayList => JArrayList}
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -696,7 +694,7 @@ object SerDe extends Serializable {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]]
+          obj.asInstanceOf[JArrayList[_]].asScala
         } else {
           Seq(obj)
         }
