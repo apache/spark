@@ -159,6 +159,7 @@ private[spark] class Worker(
         throw new SparkException("Invalid spark URL: " + x)
     }
     connected = true
+    scheduledReconnectMessage.foreach(_.cancel())
   }
 
   def tryRegisterAllMasters() {
