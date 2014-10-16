@@ -47,7 +47,7 @@ val graph: Graph[(String, Int), Int] = Graph(vertexRDD, edgeRDD)
 graph.vertices.filter{
   case (id, (name, age)) => age > 30
 }.collect.foreach{
-  case (id, (name, age)) => println(s"$name is $age")
+  case (id, (name, age)) => println(s"${name} is ${age}")
 }
 
 for(triplet <- graph.triplets.collect){
