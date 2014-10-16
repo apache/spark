@@ -46,8 +46,9 @@ private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
     twitterAuth: Option[Authorization],
-    filters: Seq[String],
     count: Int,
+    follow: Seq[Long],
+    track: Seq[String],
     locations: Seq[BoundingBox],
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
@@ -59,15 +60,16 @@ class TwitterInputDStream(
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
 
   override def getReceiver(): Receiver[Status] = {
-    new TwitterReceiver(authorization, filters, count, locations, storageLevel)
+    new TwitterReceiver(authorization, count, follow, track, locations, storageLevel)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
     twitterAuth: Authorization,
-    filters: Seq[String],
     count: Int,
+    follow: Seq[Long],
+    track: Seq[String],
     locations: Seq[BoundingBox],
     storageLevel: StorageLevel
   ) extends Receiver[Status](storageLevel) with Logging {
@@ -94,20 +96,19 @@ class TwitterReceiver(
         }
       })
 
-      if ((filters.size > 0) || (locations.size > 0)) {
-        val query = new FilterQuery
-        query.count(count)
-        if (filters.size > 0) {
-          query.track(filters.toArray)
-        }
-        if (locations.size > 0) {
-          query.locations(locations.flatMap(box => 
-            Seq(Array(box.west, box.south), Array(box.east, box.north))).toArray)
-        }
-        newTwitterStream.filter(query)
-      } else {
-        newTwitterStream.sample()
+      val query = new FilterQuery
+      query.count(count)
+      if (follow.size > 0) {
+        query.follow(follow.toArray)
       }
+      if (track.size > 0) {
+        query.track(track.toArray)
+      }
+      if (locations.size > 0) {
+        query.locations(locations.flatMap(box =>
+          Seq(Array(box.west, box.south), Array(box.east, box.north))).toArray)
+      }
+      newTwitterStream.filter(query)
       setTwitterStream(newTwitterStream)
       logInfo("Twitter receiver started")
       stopped = false

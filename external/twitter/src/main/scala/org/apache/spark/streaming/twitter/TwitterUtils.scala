@@ -32,23 +32,43 @@ object TwitterUtils {
    *        authorization; this uses the system properties twitter4j.oauth.consumerKey,
    *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    *        twitter4j.oauth.accessTokenSecret
-   * @param filters Set of filter strings to get only those tweets that match them
-   * @param count Indicates the number of previous statuses to stream before transitioning to the
-   *        live stream
-   * @param locations   Bounding boxes to get only geotagged tweets within them. Example: 
-            Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. If locations and
-            filters are both nonempty, then any tweet matching either condition may be returned.
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   * @param locations   Bounding boxes to get geotagged tweets within them. Example:
+   *        Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. Note that if other
+   *        filters (such as track) are specified, tweets matching the locations or the other
+   *        filters may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       ssc: StreamingContext,
       twitterAuth: Option[Authorization],
-      filters: Seq[String] = Nil,
       count: Int = 0,
+      follow: Seq[Long] = Nil,
+      track: Seq[String] = Nil,
       locations: Seq[BoundingBox] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[Status] = {
-    new TwitterInputDStream(ssc, twitterAuth, filters, count, locations, storageLevel)
+    new TwitterInputDStream(ssc, twitterAuth, count, follow, track, locations, storageLevel)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param ssc         StreamingContext object
+   * @param twitterAuth Twitter4J authentication, or None to use Twitter4J's default OAuth
+   *        authorization; this uses the system properties twitter4j.oauth.consumerKey,
+   *        twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
+   *        twitter4j.oauth.accessTokenSecret
+   * @param filters Set of filter strings to get only those tweets that match them
+   */
+  def createStream(
+      ssc: StreamingContext,
+      twitterAuth: Option[Authorization],
+      filters: Seq[String]
+    ): ReceiverInputDStream[Status] = {
+    createStream(ssc, twitterAuth, 0, Nil, filters)
   }
 
   /**
@@ -67,7 +87,7 @@ object TwitterUtils {
       filters: Seq[String],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[Status] = {
-    createStream(ssc, twitterAuth, filters, 0, Nil, storageLevel)
+    createStream(ssc, twitterAuth, 0, Nil, filters, Nil, storageLevel)
   }
 
   /**
@@ -93,7 +113,7 @@ object TwitterUtils {
    */
   def createStream(jssc: JavaStreamingContext, filters: Array[String]
       ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, filters)
+    createStream(jssc.ssc, None, 0, Nil, filters)
   }
 
   /**
@@ -110,7 +130,7 @@ object TwitterUtils {
       filters: Array[String],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, filters, 0, Nil, storageLevel)
+    createStream(jssc.ssc, None, 0, Nil, filters, Nil, storageLevel)
   }
 
   /**
@@ -130,7 +150,7 @@ object TwitterUtils {
       filters: Array[String],
       locations: Array[BoundingBox]
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, filters, 0, locations)
+    createStream(jssc.ssc, None, 0, Nil, filters, locations)
   }
 
   /**
@@ -151,7 +171,7 @@ object TwitterUtils {
       locations: Array[BoundingBox],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, filters, 0, locations, storageLevel)
+    createStream(jssc.ssc, None, 0, Nil, filters, locations, storageLevel)
   }
 
   /**
@@ -177,7 +197,7 @@ object TwitterUtils {
       twitterAuth: Authorization,
       filters: Array[String]
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), filters)
+    createStream(jssc.ssc, Some(twitterAuth), 0, Nil, filters)
   }
 
   /**
@@ -193,7 +213,7 @@ object TwitterUtils {
       filters: Array[String],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), filters, 0, Nil, storageLevel)
+    createStream(jssc.ssc, Some(twitterAuth), 0, Nil, filters, Nil, storageLevel)
   }
 
   /**
@@ -212,7 +232,7 @@ object TwitterUtils {
       filters: Array[String],
       locations: Array[BoundingBox]
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), filters, 0, locations)
+    createStream(jssc.ssc, Some(twitterAuth), 0, Nil, filters, locations)
   }
 
   /**
@@ -232,6 +252,6 @@ object TwitterUtils {
       locations: Array[BoundingBox],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), filters, 0, locations, storageLevel)
+    createStream(jssc.ssc, Some(twitterAuth), 0, Nil, filters, locations, storageLevel)
   }
 }
