@@ -215,7 +215,7 @@ class DenseVector(Vector):
         return "[" + ",".join([str(v) for v in self.array]) + "]"
 
     def __repr__(self):
-        return "DenseVector(%r)" % self.array
+        return "DenseVector(%r)" % list(self.array)
 
     def __eq__(self, other):
         return isinstance(other, DenseVector) and self.array == other.array
