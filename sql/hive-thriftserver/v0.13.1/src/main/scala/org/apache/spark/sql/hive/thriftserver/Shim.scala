@@ -22,27 +22,25 @@ import java.sql.Timestamp
 import java.util.concurrent.Future
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
-import org.apache.hadoop.hive.ql.session.SessionState
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.math._
 
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.plans.logical.SetCommand
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
-import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveContext}
+import org.apache.spark.sql.{Row => SparkRow, SchemaRDD}
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
 /**
@@ -52,7 +50,7 @@ private[thriftserver] object HiveShim {
   val version = "0.13.1"
 
   def setServerUserName(sparkServiceUGI: UserGroupInformation, sparkCliService:SparkSQLCLIService) = {
-    setSuperField(sparkCliService, "serviceUGI", sparkServiceUGI)// is this alright?
+    setSuperField(sparkCliService, "serviceUGI", sparkServiceUGI)
   }
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
@@ -117,6 +115,39 @@ private[hive] class SparkExecuteStatementOperation(
     logDebug("CLOSING")
   }
 
+  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any],  ordinal: Int) {
+    dataTypes(ordinal) match {
+      case StringType =>
+        to += from.get(ordinal).asInstanceOf[String]
+      case IntegerType =>
+        to += from.getInt(ordinal)
+      case BooleanType =>
+        to += from.getBoolean(ordinal)
+      case DoubleType =>
+        to += from.getDouble(ordinal)
+      case FloatType =>
+        to += from.getFloat(ordinal)
+      case DecimalType =>
+        to += from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+      case LongType =>
+        to += from.getLong(ordinal)
+      case ByteType =>
+        to += from.getByte(ordinal)
+      case ShortType =>
+        to += from.getShort(ordinal)
+      case TimestampType =>
+        to +=  from.get(ordinal).asInstanceOf[Timestamp]
+      case BinaryType =>
+        to += from.get(ordinal).asInstanceOf[String]
+      case _: ArrayType =>
+        to += from.get(ordinal).asInstanceOf[String]
+      case _: StructType =>
+        to += from.get(ordinal).asInstanceOf[String]
+      case _: MapType =>
+        to += from.get(ordinal).asInstanceOf[String]
+    }
+  }
+
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
@@ -133,40 +164,14 @@ private[hive] class SparkExecuteStatementOperation(
         val row = ArrayBuffer[Any]()
         var curCol = 0
         while (curCol < sparkRow.length) {
-          dataTypes(curCol) match {
-            case StringType =>
-              row += sparkRow.get(curCol).asInstanceOf[String]
-            case IntegerType =>
-              row += sparkRow.getInt(curCol)
-            case BooleanType =>
-              row += sparkRow.getBoolean(curCol)
-            case DoubleType =>
-              row += sparkRow.getDouble(curCol)
-            case FloatType =>
-              row += sparkRow.getFloat(curCol)
-            case DecimalType =>
-              row += sparkRow.get(curCol).asInstanceOf[BigDecimal].bigDecimal
-            case LongType =>
-              row += sparkRow.getLong(curCol)
-            case ByteType =>
-              row += sparkRow.getByte(curCol)
-            case ShortType =>
-              row += sparkRow.getShort(curCol)
-            case TimestampType =>
-              row +=  sparkRow.get(curCol).asInstanceOf[Timestamp]
-            case BinaryType =>
-              row += sparkRow.get(curCol).asInstanceOf[String]
-            case _: ArrayType =>
-              row += sparkRow.get(curCol).asInstanceOf[String]
-            case _: StructType =>
-              row += sparkRow.get(curCol).asInstanceOf[String]
-            case _: MapType =>
-              row += sparkRow.get(curCol).asInstanceOf[String]
+          if (sparkRow.isNullAt(curCol)) {
+            row += null
+          } else {
+            row += addNonNullColumnValue(sparkRow, row, curCol)
           }
           curCol += 1
         }
         reultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
-        row.clear()
         curRow += 1
       }
       reultRowSet

@@ -20,20 +20,20 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList, Map => JMap}
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.math._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.SetCommand
 import org.apache.spark.sql.catalyst.types._
@@ -49,7 +49,7 @@ private[thriftserver] object HiveShim {
 
   def setServerUserName(sparkServiceUGI: UserGroupInformation, sparkCliService:SparkSQLCLIService) = {
     val serverUserName = ShimLoader.getHadoopShims.getShortUserName(sparkServiceUGI)
-    setSuperField(sparkCliService, "serverUserName", serverUserName)// is this alright?
+    setSuperField(sparkCliService, "serverUserName", serverUserName)
   }
 
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
