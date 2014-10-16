@@ -746,6 +746,7 @@ private[spark] object PythonRDD extends Logging {
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
+      SerDeUtil.initialize()
       iter.flatMap { row =>
         unpickle.loads(row) match {
           // in case of objects are pickled in batch mode
@@ -785,7 +786,7 @@ private[spark] object PythonRDD extends Logging {
     }.toJavaRDD()
   }
 
-  private class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
+  private[spark] class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
     private val pickle = new Pickler()
     private var batch = 1
     private val buffer = new mutable.ArrayBuffer[Any]
@@ -822,6 +823,7 @@ private[spark] object PythonRDD extends Logging {
     */
   def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
     pyRDD.rdd.mapPartitions { iter =>
+      SerDeUtil.initialize()
       val unpickle = new Unpickler
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
