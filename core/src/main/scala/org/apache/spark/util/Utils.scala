@@ -280,12 +280,29 @@ private[spark] object Utils extends Logging {
         // When both streams are File stream, use transferTo to improve copy performance.
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
+        val initialPos = outChannel.position()
         val size = inChannel.size()
 
         // In case transferTo method transferred less data than we have required.
         while (count < size) {
           count += inChannel.transferTo(count, size - count, outChannel)
         }
+
+        // Check the position after transferTo loop to see if it is in the right position and
+        // give user information if not.
+        // Position will not be increased to the expected length after calling transferTo in
+        // kernel version 2.6.32, this issue can be seen in
+        // scalastyle:off
+        // https://bugs.openjdk.java.net/browse/JDK-7052359?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel)
+        // scalastyle:on
+        // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
+        val finalPos = outChannel.position()
+        assert(finalPos == initialPos + size,
+          s"""
+             |Current position $finalPos do not equal to expected position ${initialPos + count}
+             |after transferTo, please check your kernel version to see if it is 2.6.32,
+             |this is a kernel bug which will lead to unexpected behavior when using transferTo.
+           """.stripMargin)
       } else {
         val buf = new Array[Byte](8192)
         var n = 0
@@ -727,7 +744,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Determines if a directory contains any files newer than cutoff seconds.
-   * 
+   *
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
    * @param cutoff measured in seconds. Returns true if there are any files or directories in the
    *               given directory whose last modified time is later than this many seconds ago

@@ -705,7 +705,7 @@ private[spark] class ExternalSorter[K, V, C](
       var out: FileOutputStream = null
       var in: FileInputStream = null
       try {
-        out = new FileOutputStream(outputFile)
+        out = new FileOutputStream(outputFile, true)
         for (i <- 0 until numPartitions) {
           in = new FileInputStream(partitionWriters(i).fileSegment().file)
           val size = org.apache.spark.util.Utils.copyStream(in, out, false)
