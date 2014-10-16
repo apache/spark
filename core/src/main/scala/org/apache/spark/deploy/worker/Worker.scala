@@ -250,7 +250,7 @@ private[spark] class Worker(
       }
 
     case ReconnectWorker(masterUrl) =>
-      logWarning(s"Master with url $masterUrl requested this worker to reconnect.")
+      logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
       scheduleAttemptsToReconnectToMaster()
 
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
