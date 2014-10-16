@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import scala.language.implicitConversions
-
 import java.io._
 import java.net.URI
 import java.util.Arrays
@@ -38,7 +37,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 import akka.actor.Props
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -52,6 +50,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
+import org.apache.spark.executor.TaskMetrics
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -62,6 +61,8 @@ import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, Metadat
  */
 
 class SparkContext(config: SparkConf) extends Logging {
+  
+  private[spark] var executionContext:JobExecutionContext = new DefaultExecutionContext
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -245,8 +246,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val startTime = System.currentTimeMillis()
 
-  // Add each JAR given through the constructor
-  if (jars != null) {
+  // Add each JAR given through the constructor only if execution is managed by SPARK
+  if (jars != null && !master.startsWith("execution-context:")) {
     jars.foreach(addJar)
   }
 
@@ -563,17 +564,8 @@ class SparkContext(config: SparkConf) extends Logging {
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
-    // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
-    val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
-    val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
-    new HadoopRDD(
-      this,
-      confBroadcast,
-      Some(setInputPathsFunc),
-      inputFormatClass,
-      keyClass,
-      valueClass,
-      minPartitions).setName(path)
+    this.executionContext.
+        hadoopFile(this, path, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
   /**
@@ -642,10 +634,7 @@ class SparkContext(config: SparkConf) extends Logging {
       kClass: Class[K],
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
-    val job = new NewHadoopJob(conf)
-    NewFileInputFormat.addInputPath(job, new Path(path))
-    val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
+    this.executionContext.newAPIHadoopFile(this, path, fClass, kClass, vClass, conf)
   }
 
   /**
@@ -814,9 +803,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * The variable will be sent to each cluster only once.
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
-    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
-    cleaner.foreach(_.registerBroadcastForCleanup(bc))
-    bc
+    this.executionContext.broadcast(this, value)
   }
 
   /**
@@ -1099,15 +1086,7 @@ class SparkContext(config: SparkConf) extends Logging {
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    if (dagScheduler == null) {
-      throw new SparkException("SparkContext has been shutdown")
-    }
-    val callSite = getCallSite
-    val cleanedFunc = clean(func)
-    logInfo("Starting job: " + callSite.shortForm)
-    dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
-      resultHandler, localProperties.get)
-    rdd.doCheckpoint()
+    this.executionContext.runJob(this, rdd, func, partitions, allowLocal, resultHandler)
   }
 
   /**
@@ -1310,15 +1289,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
-    if (taskScheduler != null) {
-      val schedulingMode = getSchedulingMode.toString
-      val addedJarPaths = addedJars.keys.toSeq
-      val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails =
-        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
-      val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
-      listenerBus.post(environmentUpdate)
-    }
+    val schedulingMode = getSchedulingMode.toString
+    val addedJarPaths = addedJars.keys.toSeq
+    val addedFilePaths = addedFiles.keys.toSeq
+    val environmentDetails =
+      SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+    val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
+    listenerBus.post(environmentUpdate)
   }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
@@ -1510,6 +1487,8 @@ object SparkContext extends Logging {
     val MESOS_REGEX = """(mesos|zk)://.*""".r
     // Regular expression for connection to Simr cluster
     val SIMR_REGEX = """simr://(.*)""".r
+    // Regular expression for custom execution context
+    val EXECUTION_CONTEXT = """execution-context:(.*)""".r
 
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
@@ -1641,13 +1620,35 @@ object SparkContext extends Logging {
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
         scheduler
-
+      
+      case EXECUTION_CONTEXT(sparkUrl) =>
+        logInfo("Will use custom job execution context " + sparkUrl)
+        sc.executionContext = Class.forName(sparkUrl).newInstance().
+            asInstanceOf[JobExecutionContext]
+        new NoOpTaskScheduler
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
   }
 }
-
+/**
+ * No-op implementation of TaskScheduler which is used in cases where 
+ * execution of Spark DAG is delegate to an external execution environment,
+ * thus not relying on DAGScheduler nor TaskScheduler
+ */
+private class NoOpTaskScheduler extends TaskScheduler {
+  def rootPool: Pool = throw new UnsupportedOperationException("This method must never " +
+                "be called in the context of this TaskScheduler")
+  def schedulingMode: SchedulingMode.SchedulingMode = SchedulingMode.NONE
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def submitTasks(taskSet: TaskSet): Unit = {}
+  def cancelTasks(stageId: Int, interruptThread: Boolean) = {}
+  def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
+  def defaultParallelism(): Int = 1
+  def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+    blockManagerId: BlockManagerId): Boolean = true
+}
 /**
  * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
  * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
