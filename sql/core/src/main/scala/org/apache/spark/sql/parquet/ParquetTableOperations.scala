@@ -424,6 +424,9 @@ private[parquet] class FilteringParquetRowInputFormat
       footers: JList[Footer]): JList[ParquetInputSplit] = {
 
     import FilteringParquetRowInputFormat.blockLocationCache
+    import parquet.filter2.compat.FilterCompat;
+    import parquet.filter2.compat.FilterCompat.Filter;
+    import parquet.filter2.compat.RowGroupFilter;
 
     val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, false)
 
@@ -450,8 +453,14 @@ private[parquet] class FilteringParquetRowInputFormat
         globalMetaData.getKeyValueMetaData(),
         globalMetaData.getSchema()))
 
+    val filter: Filter = ParquetInputFormat.getFilter(configuration)
+    var rowGroupsDropped :Long = 0
+    var totalRowGroups :Long  = 0
+
+    //Ugly hack, stuck with it until mentioned PR is resolved
     val generateSplits =
-      classOf[ParquetInputFormat[_]].getDeclaredMethods.find(_.getName == "generateSplits").get
+      Class.forName("parquet.hadoop.ClientSideMetadataSplitStrategy")
+       .getDeclaredMethods.find(_.getName == "generateSplits").get
     generateSplits.setAccessible(true)
 
     for (footer <- footers) {
@@ -460,27 +469,43 @@ private[parquet] class FilteringParquetRowInputFormat
       val status = fileStatuses.getOrElse(file, fs.getFileStatus(file))
       val parquetMetaData = footer.getParquetMetadata
       val blocks = parquetMetaData.getBlocks
-      var blockLocations: Array[BlockLocation] = null
-      if (!cacheMetadata) {
-        blockLocations = fs.getFileBlockLocations(status, 0, status.getLen)
-      } else {
-        blockLocations = blockLocationCache.get(status, new Callable[Array[BlockLocation]] {
-          def call(): Array[BlockLocation] = fs.getFileBlockLocations(status, 0, status.getLen)
-        })
-      }
-      splits.addAll(
-        generateSplits.invoke(
-          null,
-          blocks,
-          blockLocations,
-          status,
-          parquetMetaData.getFileMetaData,
-          readContext.getRequestedSchema.toString,
-          readContext.getReadSupportMetadata,
-          minSplitSize,
-          maxSplitSize).asInstanceOf[JList[ParquetInputSplit]])
+      totalRowGroups = totalRowGroups + blocks.size
+      val filteredBlocks = RowGroupFilter.filterRowGroups(
+        filter,
+        blocks,
+        parquetMetaData.getFileMetaData.getSchema)
+      rowGroupsDropped = rowGroupsDropped + (blocks.size - filteredBlocks.size)
+      
+      if(!filteredBlocks.isEmpty){
+          var blockLocations: Array[BlockLocation] = null
+          if (!cacheMetadata) {
+            blockLocations = fs.getFileBlockLocations(status, 0, status.getLen)
+          } else {
+            blockLocations = blockLocationCache.get(status, new Callable[Array[BlockLocation]] {
+              def call(): Array[BlockLocation] = fs.getFileBlockLocations(status, 0, status.getLen)
+            })
+          }
+          splits.addAll(
+            generateSplits.invoke(
+              null,
+              filteredBlocks,
+              blockLocations,
+              status,
+              readContext.getRequestedSchema.toString,
+              readContext.getReadSupportMetadata,
+              minSplitSize,
+              maxSplitSize).asInstanceOf[JList[ParquetInputSplit]])
+        }
     }
 
+    if(rowGroupsDropped > 0 && totalRowGroups > 0){
+      val percentDropped = ((rowGroupsDropped/totalRowGroups.toDouble) * 100).toInt
+      logInfo("Dropping " + rowGroupsDropped + " row groups that do not pass filter predicate! ("
+        + percentDropped + "%)") 
+    }
+    else {
+      logInfo("There were no row groups that could be dropped due to filter predicates")
+    }
     splits
   }
 }
