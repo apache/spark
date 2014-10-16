@@ -19,8 +19,8 @@ import numpy as np
 from numpy import array
 
 from pyspark import SparkContext
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
 
 __all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
@@ -131,7 +131,7 @@ def _regression_train_wrapper(sc, train_func, modelClass, data, initial_weights)
     # use AutoBatchedSerializer before cache to reduce the memory
     # overhead in JVM
     cached = data._reserialize(AutoBatchedSerializer(ser)).cache()
-    ans = train_func(cached._to_java_object_rdd(), initial_bytes)
+    ans = train_func(_to_java_object_rdd(cached), initial_bytes)
     assert len(ans) == 2, "JVM call result had unexpected length"
     weights = ser.loads(str(ans[0]))
     return modelClass(weights, ans[1])

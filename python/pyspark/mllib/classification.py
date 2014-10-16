@@ -21,7 +21,7 @@ import numpy
 from numpy import array
 
 from pyspark import SparkContext, PickleSerializer
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
 
@@ -244,7 +244,7 @@ class NaiveBayes(object):
         :param lambda_: The smoothing parameter
         """
         sc = data.context
-        jlist = sc._jvm.PythonMLLibAPI().trainNaiveBayes(data._to_java_object_rdd(), lambda_)
+        jlist = sc._jvm.PythonMLLibAPI().trainNaiveBayes(_to_java_object_rdd(data), lambda_)
         labels, pi, theta = PickleSerializer().loads(str(sc._jvm.SerDe.dumps(jlist)))
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 

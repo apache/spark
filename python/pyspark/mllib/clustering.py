@@ -17,7 +17,7 @@
 
 from pyspark import SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
 
 __all__ = ['KMeansModel', 'KMeans']
 
@@ -85,7 +85,7 @@ class KMeans(object):
         # cache serialized data to avoid objects over head in JVM
         cached = rdd.map(_convert_to_vector)._reserialize(AutoBatchedSerializer(ser)).cache()
         model = sc._jvm.PythonMLLibAPI().trainKMeansModel(
-            cached._to_java_object_rdd(), k, maxIterations, runs, initializationMode)
+            _to_java_object_rdd(cached), k, maxIterations, runs, initializationMode)
         bytes = sc._jvm.SerDe.dumps(model.clusterCenters())
         centers = ser.loads(str(bytes))
         return KMeansModel([c.toArray() for c in centers])
