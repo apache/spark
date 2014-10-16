@@ -22,7 +22,6 @@ import java.io.{File, InputStream}
 import scala.collection.mutable
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -48,7 +47,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
   private var testDirPath: Path = _
 
   before {
-    testDir = Files.createTempDir()
+    testDir = Utils.createTempDir()
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
