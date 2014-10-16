@@ -138,19 +138,15 @@ object TwitterUtils {
    * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
    * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    * twitter4j.oauth.accessTokenSecret.
-   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
-   * @param jssc      JavaStreamingContext object
-   * @param filters   Set of filter strings to get only those tweets that match them
-   * @param locations Bounding boxes to get only geotagged tweets within them. Example: 
-            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
-            filters are both nonempty, then any tweet matching either condition may be returned.
+   * @param jssc         JavaStreamingContext object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
    */
   def createStream(
       jssc: JavaStreamingContext,
-      filters: Array[String],
-      locations: Array[BoundingBox]
+      count: Int
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, 0, Nil, filters, locations)
+    createStream(jssc.ssc, None, count)
   }
 
   /**
@@ -159,19 +155,88 @@ object TwitterUtils {
    * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
    * twitter4j.oauth.accessTokenSecret.
    * @param jssc         JavaStreamingContext object
-   * @param filters      Set of filter strings to get only those tweets that match them
-   * @param locations    Bounding boxes to get only geotagged tweets within them. Example: 
-            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
-            filters are both nonempty, then any tweet matching either condition may be returned.
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      count: Int,
+      follow: Array[Long]
+    ): JavaReceiverInputDStream[Status] = {
+    createStream(jssc.ssc, None, count, follow)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
+   * twitter4j.oauth.accessTokenSecret.
+   * @param jssc         JavaStreamingContext object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      count: Int,
+      follow: Array[Long],
+      track: Array[String]
+    ): JavaReceiverInputDStream[Status] = {
+    createStream(jssc.ssc, None, count, follow, track)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
+   * twitter4j.oauth.accessTokenSecret.
+   * @param jssc         JavaStreamingContext object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   * @param locations   Bounding boxes to get geotagged tweets within them. Example:
+   *        Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. Note that if other
+   *        filters (such as track) are specified, tweets matching the locations or the other
+   *        filters may be returned.
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      count: Int,
+      follow: Array[Long],
+      track: Array[String],
+      locations: Array[BoundingBox]
+    ): JavaReceiverInputDStream[Status] = {
+    createStream(jssc.ssc, None, count, follow, track, locations)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * twitter4j.oauth.consumerSecret, twitter4j.oauth.accessToken and
+   * twitter4j.oauth.accessTokenSecret.
+   * @param jssc         JavaStreamingContext object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   * @param locations   Bounding boxes to get geotagged tweets within them. Example:
+   *        Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. Note that if other
+   *        filters (such as track) are specified, tweets matching the locations or the other
+   *        filters may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       jssc: JavaStreamingContext,
-      filters: Array[String],
+      count: Int,
+      follow: Array[Long],
+      track: Array[String],
       locations: Array[BoundingBox],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, 0, Nil, filters, locations, storageLevel)
+    createStream(jssc.ssc, None, count, follow, track, locations, storageLevel)
   }
 
   /**
@@ -218,40 +283,102 @@ object TwitterUtils {
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
-   * @param jssc        JavaStreamingContext object
-   * @param twitterAuth Twitter4J Authorization
-   * @param filters     Set of filter strings to get only those tweets that match them
-   * @param locations   Bounding boxes to get only geotagged tweets within them. Example: 
-            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
-            filters are both nonempty, then any tweet matching either condition may be returned.
+   * @param jssc         JavaStreamingContext object
+   * @param twitterAuth  Twitter4J Authorization object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
    */
   def createStream(
       jssc: JavaStreamingContext,
       twitterAuth: Authorization,
-      filters: Array[String],
-      locations: Array[BoundingBox]
+      count: Int
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), 0, Nil, filters, locations)
+    createStream(jssc.ssc, Some(twitterAuth), count)
   }
 
   /**
    * Create a input stream that returns tweets received from Twitter.
    * @param jssc         JavaStreamingContext object
    * @param twitterAuth  Twitter4J Authorization object
-   * @param filters      Set of filter strings to get only those tweets that match them
-   * @param locations    Bounding boxes to get only geotagged tweets within them. Example: 
-            {BoundingBox(-180.0,-90.0,180.0,90.0)} gives any geotagged tweet. If locations and
-            filters are both nonempty, then any tweet matching either condition may be returned.
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      twitterAuth: Authorization,
+      count: Int,
+      follow: Array[Long]
+    ): JavaReceiverInputDStream[Status] = {
+    createStream(jssc.ssc, Some(twitterAuth), count, follow)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param jssc         JavaStreamingContext object
+   * @param twitterAuth  Twitter4J Authorization object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      twitterAuth: Authorization,
+      count: Int,
+      follow: Array[Long],
+      track: Array[String]
+    ): JavaReceiverInputDStream[Status] = {
+    createStream(jssc.ssc, Some(twitterAuth), count, follow, track)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param jssc         JavaStreamingContext object
+   * @param twitterAuth  Twitter4J Authorization object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   * @param locations   Bounding boxes to get geotagged tweets within them. Example:
+   *        Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. Note that if other
+   *        filters (such as track) are specified, tweets matching the locations or the other
+   *        filters may be returned.
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      twitterAuth: Authorization,
+      count: Int,
+      follow: Array[Long],
+      track: Array[String],
+      locations: Array[BoundingBox]
+    ): JavaReceiverInputDStream[Status] = {
+    createStream(jssc.ssc, Some(twitterAuth), count, follow, track, locations)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param jssc         JavaStreamingContext object
+   * @param twitterAuth  Twitter4J Authorization object
+   * @param count       Indicates the number of previous statuses to stream before transitioning to
+   *                    the live stream
+   * @param follow      Specifies the users, by ID, to receive public tweets from
+   * @param track       Specifies keywords to track
+   * @param locations   Bounding boxes to get geotagged tweets within them. Example:
+   *        Seq(BoundingBox(-180.0,-90.0,180.0,90.0)) gives any geotagged tweet. Note that if other
+   *        filters (such as track) are specified, tweets matching the locations or the other
+   *        filters may be returned.
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
       jssc: JavaStreamingContext,
       twitterAuth: Authorization,
-      filters: Array[String],
+      count: Int,
+      follow: Array[Long],
+      track: Array[String],
       locations: Array[BoundingBox],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), 0, Nil, filters, locations, storageLevel)
+    createStream(jssc.ssc, Some(twitterAuth), count, follow, track, locations, storageLevel)
   }
 }

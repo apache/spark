@@ -30,6 +30,7 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
+    Long[] follow = (Long[])Arrays.<Long>asList(1, 2).toArray();
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
     BoundingBox[] locations = {new BoundingBox(-180.0,-90.0,180.0,90.0)};
     Authorization auth = NullAuthorization.getInstance();
@@ -43,11 +44,18 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
     JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth, filters);
     JavaDStream<Status> test6 = TwitterUtils.createStream(ssc,
       auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test7 = TwitterUtils.createStream(ssc, filters, locations);
-    JavaDStream<Status> test8 = TwitterUtils.createStream(
-      ssc, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test9 = TwitterUtils.createStream(ssc, auth, filters, locations);
-    JavaDStream<Status> test10 = TwitterUtils.createStream(ssc,
-      auth, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test7 = TwitterUtils.createStream(ssc, 0);
+    JavaDStream<Status> test8 = TwitterUtils.createStream(ssc, 0, follow);
+    JavaDStream<Status> test9 = TwitterUtils.createStream(ssc, 0, follow, filters);
+    JavaDStream<Status> test10 = TwitterUtils.createStream(ssc, 0, follow, filters, locations);
+    JavaDStream<Status> test11 = TwitterUtils.createStream(ssc,
+       0, follow, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test12 = TwitterUtils.createStream(ssc, auth, 0);
+    JavaDStream<Status> test13 = TwitterUtils.createStream(ssc, auth, 0, follow);
+    JavaDStream<Status> test14 = TwitterUtils.createStream(ssc, auth, 0, follow, filters);
+    JavaDStream<Status> test15 = TwitterUtils.createStream(ssc,
+      auth, 0, follow, filters, locations);
+    JavaDStream<Status> test16 = TwitterUtils.createStream(ssc,
+      auth, 0, follow, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }
