@@ -1281,7 +1281,6 @@
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
@@ -1296,6 +1295,9 @@
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
       <properties>
         <hive.version>0.13.1</hive.version>
         <hive.version.short>0.13.1</hive.version.short>
