@@ -215,6 +215,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.worker.memory.limit</code></td>
+  <td>(none)</td>
+  <td>
+    The maximum size of the python worker's virtual memory (address space), the memory
+    usage cannot go above this limit. It's not limited by default. (It only works in Linux)
+  </td>
+</tr>
+<tr>
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>

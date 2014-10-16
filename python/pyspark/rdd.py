@@ -31,7 +31,10 @@ import bisect
 from random import Random
 from math import sqrt, log, isinf, isnan
 
+from py4j.java_collections import ListConverter, MapConverter
+
 from pyspark.accumulators import PStatsParam
+from pyspark.conf import _parse_memory
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
@@ -44,8 +47,6 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
     get_used_memory, ExternalSorter
 from pyspark.traceback_utils import SCCallSiteSync
-
-from py4j.java_collections import ListConverter, MapConverter
 
 
 __all__ = ["RDD"]
@@ -94,22 +95,6 @@ class BoundedFloat(float):
         obj.low = low
         obj.high = high
         return obj
-
-
-def _parse_memory(s):
-    """
-    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MB
-
-    >>> _parse_memory("256m")
-    256
-    >>> _parse_memory("2g")
-    2048
-    """
-    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
-    if s[-1] not in units:
-        raise ValueError("invalid format: " + s)
-    return int(float(s[:-1]) * units[s[-1].lower()])
 
 
 class RDD(object):

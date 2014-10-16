@@ -54,7 +54,7 @@ private[spark] class PythonRDD(
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
   val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
-  val memoryLimit = conf.getInt("spark.executor.python.memory.limit", 0)
+  val memoryLimit = conf.get("spark.python.worker.memory.limit", "")
 
   override def getPartitions = parent.partitions
 
@@ -69,8 +69,8 @@ private[spark] class PythonRDD(
     if (reuseWorker) {
       envVars += ("SPARK_REUSE_WORKER" -> "1")
     }
-    if (memoryLimit > 0) {
-      envVars += ("SPARK_WORKER_MEMORY_LIMIT" -> memoryLimit.toString)
+    if (!memoryLimit.isEmpty) {
+      envVars += ("PYSPARK_WORKER_MEMORY_LIMIT" -> memoryLimit)
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
