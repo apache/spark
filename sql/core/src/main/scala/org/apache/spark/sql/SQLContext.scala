@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.optimizer.{Optimizer, SparkOptimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataType
@@ -68,7 +68,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new Analyzer(catalog, functionRegistry, caseSensitive = true)
 
   @transient
-  protected[sql] lazy val optimizer: Optimizer = Optimizer
+  protected[sql] lazy val optimizer: Optimizer = SparkOptimizer
 
   @transient
   protected[sql] val sqlParser = {
