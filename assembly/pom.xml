@@ -196,6 +196,20 @@
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-hive_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.avro</groupId>
+              <artifactId>avro-mapred</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <!-- spark-hive already depends on avro-mapred but classifier is not applied
+         on transitive dependency so assembly always contains the default version, hadoop1. -->
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro-mapred</artifactId>
+          <version>${avro.version}</version>
+          <classifier>${avro.mapred.classifier}</classifier>
         </dependency>
         <dependency>
           <groupId>org.apache.spark</groupId>
