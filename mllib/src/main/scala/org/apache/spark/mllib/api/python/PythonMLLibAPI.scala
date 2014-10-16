@@ -508,7 +508,7 @@ class PythonMLLibAPI extends Serializable {
 /**
  * SerDe utility functions for PythonMLLibAPI.
  */
-object SerDe extends Serializable {
+private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
 
