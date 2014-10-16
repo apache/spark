@@ -25,9 +25,9 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.ui.{WebUI, SparkUI, UIUtils}
+import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.SignalLogger
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -52,10 +52,7 @@ class HistoryServer(
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
-      val ui = provider.getAppUI(key)
-      if (ui == null) {
-        throw new NoSuchElementException()
-      }
+      val ui = provider.getAppUI(key).getOrElse(throw new NoSuchElementException())
       attachSparkUI(ui)
       ui
     }
@@ -177,7 +174,7 @@ object HistoryServer extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     initSecurity()
-    val args = new HistoryServerArguments(conf, argStrings)
+    new HistoryServerArguments(conf, argStrings)
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")

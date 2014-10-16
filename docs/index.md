@@ -12,7 +12,7 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
 contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
-scratch, visit [building Spark with Maven](building-with-maven.html).
+scratch, visit [Building Spark](building-spark.html).
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
@@ -103,8 +103,11 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
-* [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
+* Integration with other storage systems:
+  * [OpenStack Swift](storage-openstack-swift.html)
+* [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
+* [Supplemental Projects](https://cwiki.apache.org/confluence/display/SPARK/Supplemental+Spark+Projects): related third party Spark projects
 
 **External Resources:**
 

@@ -32,7 +32,7 @@ in your operations) and performance. It provides two serialization libraries:
   [`java.io.Externalizable`](http://docs.oracle.com/javase/6/docs/api/java/io/Externalizable.html).
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
-* [Kryo serialization](http://code.google.com/p/kryo/): Spark can also use
+* [Kryo serialization](https://github.com/EsotericSoftware/kryo): Spark can also use
   the Kryo library (version 2) to serialize objects more quickly. Kryo is significantly
   faster and more compact than Java serialization (often as much as 10x), but does not support all
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
@@ -68,7 +68,7 @@ conf.set("spark.kryo.registrator", "mypackage.MyRegistrator")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-The [Kryo documentation](http://code.google.com/p/kryo/) describes more advanced
+The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes more advanced
 registration options, such as adding custom serialization code.
 
 If your objects are large, you may also need to increase the `spark.kryoserializer.buffer.mb`

@@ -22,7 +22,6 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
 import org.apache.commons.lang3.StringEscapeUtils
@@ -190,8 +189,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("interacting with files") {
-    val tempDir = Files.createTempDir()
-    tempDir.deleteOnExit()
+    val tempDir = Utils.createTempDir()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
@@ -256,6 +254,33 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
+
+  test("SPARK-2576 importing SQLContext.createSchemaRDD.") {
+    // We need to use local-cluster to test this case.
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+        |import sqlContext.createSchemaRDD
+        |case class TestCaseClass(value: Int)
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toSchemaRDD.collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-2632 importing a method from non serializable class and not using it.") {
+    val output = runInterpreter("local",
+    """
+      |class TestClass() { def testMethod = 3 }
+      |val t = new TestClass
+      |import t.testMethod
+      |case class TestCaseClass(value: Int)
+      |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect
+    """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",

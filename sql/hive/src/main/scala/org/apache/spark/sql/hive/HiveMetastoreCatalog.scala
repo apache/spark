@@ -19,30 +19,28 @@ package org.apache.spark.sql.hive
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, SerDeInfo, StorageDescriptor, Partition => TPartition, Table => TTable}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.Deserializer
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.{SQLContext, Logging}
-import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.analysis.Catalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.hive.execution.HiveTableScan
+import org.apache.spark.util.Utils
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
 private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
-  import HiveMetastoreTypes._
+  import org.apache.spark.sql.hive.HiveMetastoreTypes._
 
   /** Connection to hive metastore.  Usages should lock on `this`. */
   protected[hive] val client = Hive.get(hive.hiveconf)
@@ -53,8 +51,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = synchronized {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+    val (databaseName, tblName) = processDatabaseAndTableName(
+                                    db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
     val table = client.getTable(databaseName, tblName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
@@ -95,10 +93,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     serDeInfo.setParameters(Map[String, String]())
     sd.setSerdeInfo(serDeInfo)
 
-    try client.createTable(table) catch {
-      case e: org.apache.hadoop.hive.ql.metadata.HiveException
-        if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
-           allowExisting => // Do nothing.
+    synchronized {
+      try client.createTable(table) catch {
+        case e: org.apache.hadoop.hive.ql.metadata.HiveException
+          if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
+             allowExisting => // Do nothing.
+      }
     }
   }
 
@@ -108,18 +108,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case InsertIntoCreatedTable(db, tableName, child) =>
+      // Wait until children are resolved.
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case CreateTableAsSelect(db, tableName, child) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        createTable(databaseName, tblName, child.output)
-
-        InsertIntoTable(
-          EliminateAnalysisOperators(
-            lookupRelation(Some(databaseName), tblName, None)),
-          Map.empty,
-          child,
-          overwrite = false)
+        CreateTableAsSelect(Some(databaseName), tableName, child)
     }
   }
 
@@ -129,23 +125,17 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object PreInsertionCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-      // Wait until children are resolved
+      // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
-        castChildOutput(p, table, child)
-
-      case p @ logical.InsertIntoTable(
-                 InMemoryRelation(_, _,
-                   HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
     def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan) = {
       val childOutputDataTypes = child.output.map(_.dataType)
-      // Only check attributes, not partitionKeys since they are always strings.
-      // TODO: Fully support inserting into partitioned tables.
-      val tableOutputDataTypes = table.attributes.map(_.dataType)
+      val tableOutputDataTypes =
+        (table.attributes ++ table.partitionKeys).take(child.output.length).map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
@@ -196,6 +186,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
     "decimal" ^^^ DecimalType |
+    "date" ^^^ DateType |
     "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
 
@@ -245,8 +236,10 @@ object HiveMetastoreTypes extends RegexParsers {
     case LongType => "bigint"
     case BinaryType => "binary"
     case BooleanType => "boolean"
+    case DateType => "date"
     case DecimalType => "decimal"
     case TimestampType => "timestamp"
+    case NullType => "void"
   }
 }
 
@@ -264,9 +257,9 @@ private[hive] case class MetastoreRelation
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
 
-  @transient lazy val hiveQlTable = new Table(table)
+  @transient val hiveQlTable = new Table(table)
 
-  def hiveQlPartitions = partitions.map { p =>
+  @transient val hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
 
@@ -277,16 +270,19 @@ private[hive] case class MetastoreRelation
       // relatively cheap if parameters for the table are populated into the metastore.  An
       // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
       // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
-      // `rawDataSize` keys that we can look at in the future.
+      // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
       BigInt(
-        Option(hiveQlTable.getParameters.get("totalSize"))
+        Option(hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE))
           .map(_.toLong)
           .getOrElse(sqlContext.defaultSizeInBytes))
     }
   )
 
   val tableDesc = new TableDesc(
-    Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],
+    Class.forName(
+      hiveQlTable.getSerializationLib,
+      true,
+      Utils.getContextOrSparkClassLoader).asInstanceOf[Class[Deserializer]],
     hiveQlTable.getInputFormatClass,
     // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
     // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
@@ -302,14 +298,14 @@ private[hive] case class MetastoreRelation
       HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = tableName +: alias.toSeq)
+    )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
   // Must be a stable value since new attributes are born here.
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = table.getSd.getCols.map(_.toAttribute)
+  val attributes = hiveQlTable.getCols.map(_.toAttribute) 
 
   val output = attributes ++ partitionKeys
 }

@@ -17,21 +17,120 @@
 
 package org.apache.spark.sql.hive
 
+import org.scalatest.BeforeAndAfterAll
+
 import scala.reflect.ClassTag
 
+
 import org.apache.spark.sql.{SQLConf, QueryTest}
-import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
-class StatisticsSuite extends QueryTest {
+class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
+  TestHive.reset()
+  TestHive.cacheTables = false
+
+  test("parse analyze commands") {
+    def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
+      val parsed = HiveQl.parseSql(analyzeCommand)
+      val operators = parsed.collect {
+        case a: AnalyzeTable => a
+        case o => o
+      }
+
+      assert(operators.size === 1)
+      if (operators(0).getClass() != c) {
+        fail(
+          s"""$analyzeCommand expected command: $c, but got ${operators(0)}
+             |parsed command:
+             |$parsed
+           """.stripMargin)
+      }
+    }
+
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
+      classOf[NativeCommand])
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
+      classOf[NativeCommand])
+
+    assertAnalyzeCommand(
+      "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
+      classOf[AnalyzeTable])
+  }
+
+  test("analyze MetastoreRelations") {
+    def queryTotalSize(tableName: String): BigInt =
+      catalog.lookupRelation(None, tableName).statistics.sizeInBytes
+
+    // Non-partitioned table
+    sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
+    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+
+    assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
+
+    sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
+
+    assert(queryTotalSize("analyzeTable") === BigInt(11624))
+
+    sql("DROP TABLE analyzeTable").collect()
+
+    // Partitioned table
+    sql(
+      """
+        |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+
+    assert(queryTotalSize("analyzeTable_part") === defaultSizeInBytes)
+
+    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
+
+    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+
+    sql("DROP TABLE analyzeTable_part").collect()
+
+    // Try to analyze a temp table
+    sql("""SELECT * FROM src""").registerTempTable("tempTable")
+    intercept[NotImplementedError] {
+      analyze("tempTable")
+    }
+    catalog.unregisterTable(None, "tempTable")
+  }
 
   test("estimates the size of a test MetastoreRelation") {
-    val rdd = hql("""SELECT * FROM src""")
+    val rdd = sql("""SELECT * FROM src""")
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
-    assert(sizes.size === 1)
+    assert(sizes.size === 1, s"Size wrong for:\n ${rdd.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
       s"expected exact size 5812 for test table 'src', got: ${sizes(0)}")
   }
@@ -45,13 +144,14 @@ class StatisticsSuite extends QueryTest {
         ct: ClassTag[_]) = {
       before()
 
-      var rdd = hql(query)
+      var rdd = sql(query)
 
       // Assert src has a size smaller than the threshold.
       val sizes = rdd.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold,
+      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold
+        && sizes(1) <= autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
@@ -65,8 +165,8 @@ class StatisticsSuite extends QueryTest {
       TestHive.settings.synchronized {
         val tmp = autoBroadcastJoinThreshold
 
-        hql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
-        rdd = hql(query)
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+        rdd = sql(query)
         bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
@@ -74,7 +174,7 @@ class StatisticsSuite extends QueryTest {
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        hql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
       }
 
       after()

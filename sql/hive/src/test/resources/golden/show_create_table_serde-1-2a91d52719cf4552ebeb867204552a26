@@ -1,0 +1,15 @@
+CREATE  TABLE tmp_showcrt1(
+  key int, 
+  value string, 
+  newvalue bigint)
+COMMENT 'temporary table'
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe' 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.RCFileInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.RCFileOutputFormat'
+LOCATION
+  'file:/tmp/sparkHiveWarehouse1280221975983654134/tmp_showcrt1'
+TBLPROPERTIES (
+  'transient_lastDdlTime'='1407132115')

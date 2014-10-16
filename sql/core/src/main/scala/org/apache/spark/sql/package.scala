@@ -32,8 +32,6 @@ import org.apache.spark.annotation.DeveloperApi
  */
 package object sql {
 
-  protected[sql] type Logging = com.typesafe.scalalogging.slf4j.Logging
-
   /**
    * :: DeveloperApi ::
    *
@@ -166,6 +164,16 @@ package object sql {
    */
   @DeveloperApi
   val TimestampType = catalyst.types.TimestampType
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * The data type representing `java.sql.Date` values.
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  val DateType = catalyst.types.DateType
 
   /**
    * :: DeveloperApi ::

@@ -63,17 +63,16 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
   test("loadLibSVMFile") {
     val lines =
       """
-        |+1 1:1.0 3:2.0 5:3.0
-        |-1
-        |-1 2:4.0 4:5.0 6:6.0
+        |1 1:1.0 3:2.0 5:3.0
+        |0
+        |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    val tempDir = Files.createTempDir()
-    tempDir.deleteOnExit()
+    val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
     Files.write(lines, file, Charsets.US_ASCII)
     val path = tempDir.toURI.toString
 
-    val pointsWithNumFeatures = loadLibSVMFile(sc, path, multiclass = false, 6).collect()
+    val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
     val pointsWithoutNumFeatures = loadLibSVMFile(sc, path).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
@@ -86,11 +85,11 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       assert(points(2).features === Vectors.sparse(6, Seq((1, 4.0), (3, 5.0), (5, 6.0))))
     }
 
-    val multiclassPoints = loadLibSVMFile(sc, path, multiclass = true).collect()
+    val multiclassPoints = loadLibSVMFile(sc, path).collect()
     assert(multiclassPoints.length === 3)
     assert(multiclassPoints(0).label === 1.0)
-    assert(multiclassPoints(1).label === -1.0)
-    assert(multiclassPoints(2).label === -1.0)
+    assert(multiclassPoints(1).label === 0.0)
+    assert(multiclassPoints(2).label === 0.0)
 
     Utils.deleteRecursively(tempDir)
   }
@@ -100,7 +99,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       LabeledPoint(1.1, Vectors.sparse(3, Seq((0, 1.23), (2, 4.56)))),
       LabeledPoint(0.0, Vectors.dense(1.01, 2.02, 3.03))
     ), 2)
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "output")
     MLUtils.saveAsLibSVMFile(examples, outputDir.toURI.toString)
     val lines = outputDir.listFiles()
@@ -166,7 +165,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       Vectors.sparse(2, Array(1), Array(-1.0)),
       Vectors.dense(0.0, 1.0)
     ), 2)
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "vectors")
     val path = outputDir.toURI.toString
     vectors.saveAsTextFile(path)
@@ -181,7 +180,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))),
       LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
     ), 2)
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "points")
     val path = outputDir.toURI.toString
     points.saveAsTextFile(path)

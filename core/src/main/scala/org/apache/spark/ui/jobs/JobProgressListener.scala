@@ -43,12 +43,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   // How many stages to remember
   val retainedStages = conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
 
-  val activeStages = HashMap[Int, StageInfo]()
+  // Map from stageId to StageInfo
+  val activeStages = new HashMap[Int, StageInfo]
+
+  // Map from (stageId, attemptId) to StageUIData
+  val stageIdToData = new HashMap[(Int, Int), StageUIData]
+
   val completedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
 
-  val stageIdToData = new HashMap[Int, StageUIData]
-
+  // Map from pool name to a hash map (map from stage id to StageInfo).
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
 
   val executorIdToBlockManagerId = HashMap[String, BlockManagerId]()
@@ -59,14 +63,19 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
-    val stageId = stage.stageId
-    val stageData = stageIdToData.getOrElseUpdate(stageId, {
-      logWarning("Stage completed for unknown stage " + stageId)
+    val stageData = stageIdToData.getOrElseUpdate((stage.stageId, stage.attemptId), {
+      logWarning("Stage completed for unknown stage " + stage.stageId)
       new StageUIData
     })
 
-    poolToActiveStages.get(stageData.schedulingPool).foreach(_.remove(stageId))
-    activeStages.remove(stageId)
+    for ((id, info) <- stageCompleted.stageInfo.accumulables) {
+      stageData.accumulables(id) = info
+    }
+
+    poolToActiveStages.get(stageData.schedulingPool).foreach { hashMap =>
+      hashMap.remove(stage.stageId)
+    }
+    activeStages.remove(stage.stageId)
     if (stage.failureReason.isEmpty) {
       completedStages += stage
       trimIfNecessary(completedStages)
@@ -80,7 +89,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   private def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
       val toRemove = math.max(retainedStages / 10, 1)
-      stages.take(toRemove).foreach { s => stageIdToData.remove(s.stageId) }
+      stages.take(toRemove).foreach { s => stageIdToData.remove((s.stageId, s.attemptId)) }
       stages.trimStart(toRemove)
     }
   }
@@ -94,21 +103,21 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
 
-    val stageData = stageIdToData.getOrElseUpdate(stage.stageId, new StageUIData)
+    val stageData = stageIdToData.getOrElseUpdate((stage.stageId, stage.attemptId), new StageUIData)
     stageData.schedulingPool = poolName
 
     stageData.description = Option(stageSubmitted.properties).flatMap {
       p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
     }
 
-    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo]())
+    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo])
     stages(stage.stageId) = stage
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val taskInfo = taskStart.taskInfo
     if (taskInfo != null) {
-      val stageData = stageIdToData.getOrElseUpdate(taskStart.stageId, {
+      val stageData = stageIdToData.getOrElseUpdate((taskStart.stageId, taskStart.stageAttemptId), {
         logWarning("Task start for unknown stage " + taskStart.stageId)
         new StageUIData
       })
@@ -124,43 +133,35 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val info = taskEnd.taskInfo
-    if (info != null) {
-      val stageData = stageIdToData.getOrElseUpdate(taskEnd.stageId, {
+    // If stage attempt id is -1, it means the DAGScheduler had no idea which attempt this task
+    // compeletion event is for. Let's just drop it here. This means we might have some speculation
+    // tasks on the web ui that's never marked as complete.
+    if (info != null && taskEnd.stageAttemptId != -1) {
+      val stageData = stageIdToData.getOrElseUpdate((taskEnd.stageId, taskEnd.stageAttemptId), {
         logWarning("Task end for unknown stage " + taskEnd.stageId)
         new StageUIData
       })
 
-      // create executor summary map if necessary
-      val executorSummaryMap = stageData.executorSummary
-      executorSummaryMap.getOrElseUpdate(key = info.executorId, op = new ExecutorSummary)
-
-      executorSummaryMap.get(info.executorId).foreach { y =>
-        // first update failed-task, succeed-task
-        taskEnd.reason match {
-          case Success =>
-            y.succeededTasks += 1
-          case _ =>
-            y.failedTasks += 1
-        }
-
-        // update duration
-        y.taskTime += info.duration
-
-        val metrics = taskEnd.taskMetrics
-        if (metrics != null) {
-          metrics.inputMetrics.foreach { y.inputBytes += _.bytesRead }
-          metrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
-          metrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
-          y.memoryBytesSpilled += metrics.memoryBytesSpilled
-          y.diskBytesSpilled += metrics.diskBytesSpilled
-        }
+      for (accumulableInfo <- info.accumulables) {
+        stageData.accumulables(accumulableInfo.id) = accumulableInfo
       }
 
+      val execSummaryMap = stageData.executorSummary
+      val execSummary = execSummaryMap.getOrElseUpdate(info.executorId, new ExecutorSummary)
+
+      taskEnd.reason match {
+        case Success =>
+          execSummary.succeededTasks += 1
+        case _ =>
+          execSummary.failedTasks += 1
+      }
+      execSummary.taskTime += info.duration
       stageData.numActiveTasks -= 1
 
       val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
         taskEnd.reason match {
           case org.apache.spark.Success =>
+            stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             (None, Option(taskEnd.taskMetrics))
           case e: ExceptionFailure =>  // Handle ExceptionFailure because we might have metrics
@@ -171,28 +172,81 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             (Some(e.toErrorString), None)
         }
 
+      if (!metrics.isEmpty) {
+        val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.taskMetrics)
+        updateAggregateMetrics(stageData, info.executorId, metrics.get, oldMetrics)
+      }
 
-      val taskRunTime = metrics.map(_.executorRunTime).getOrElse(0L)
-      stageData.executorRunTime += taskRunTime
-      val inputBytes = metrics.flatMap(_.inputMetrics).map(_.bytesRead).getOrElse(0L)
-      stageData.inputBytes += inputBytes
-
-      val shuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L)
-      stageData.shuffleReadBytes += shuffleRead
-
-      val shuffleWrite =
-        metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L)
-      stageData.shuffleWriteBytes += shuffleWrite
-
-      val memoryBytesSpilled = metrics.map(_.memoryBytesSpilled).getOrElse(0L)
-      stageData.memoryBytesSpilled += memoryBytesSpilled
-
-      val diskBytesSpilled = metrics.map(_.diskBytesSpilled).getOrElse(0L)
-      stageData.diskBytesSpilled += diskBytesSpilled
-
-      stageData.taskData(info.taskId) = new TaskUIData(info, metrics, errorMessage)
+      val taskData = stageData.taskData.getOrElseUpdate(info.taskId, new TaskUIData(info))
+      taskData.taskInfo = info
+      taskData.taskMetrics = metrics
+      taskData.errorMessage = errorMessage
     }
-  }  // end of onTaskEnd
+  }
+
+  /**
+   * Upon receiving new metrics for a task, updates the per-stage and per-executor-per-stage
+   * aggregate metrics by calculating deltas between the currently recorded metrics and the new
+   * metrics.
+   */
+  def updateAggregateMetrics(
+      stageData: StageUIData,
+      execId: String,
+      taskMetrics: TaskMetrics,
+      oldMetrics: Option[TaskMetrics]) {
+    val execSummary = stageData.executorSummary.getOrElseUpdate(execId, new ExecutorSummary)
+
+    val shuffleWriteDelta =
+      (taskMetrics.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L)
+      - oldMetrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L))
+    stageData.shuffleWriteBytes += shuffleWriteDelta
+    execSummary.shuffleWrite += shuffleWriteDelta
+
+    val shuffleReadDelta =
+      (taskMetrics.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L)
+      - oldMetrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L))
+    stageData.shuffleReadBytes += shuffleReadDelta
+    execSummary.shuffleRead += shuffleReadDelta
+
+    val inputBytesDelta =
+      (taskMetrics.inputMetrics.map(_.bytesRead).getOrElse(0L)
+      - oldMetrics.flatMap(_.inputMetrics).map(_.bytesRead).getOrElse(0L))
+    stageData.inputBytes += inputBytesDelta
+    execSummary.inputBytes += inputBytesDelta
+
+    val diskSpillDelta =
+      taskMetrics.diskBytesSpilled - oldMetrics.map(_.diskBytesSpilled).getOrElse(0L)
+    stageData.diskBytesSpilled += diskSpillDelta
+    execSummary.diskBytesSpilled += diskSpillDelta
+
+    val memorySpillDelta =
+      taskMetrics.memoryBytesSpilled - oldMetrics.map(_.memoryBytesSpilled).getOrElse(0L)
+    stageData.memoryBytesSpilled += memorySpillDelta
+    execSummary.memoryBytesSpilled += memorySpillDelta
+
+    val timeDelta =
+      taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)
+    stageData.executorRunTime += timeDelta
+  }
+
+  override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
+    for ((taskId, sid, sAttempt, taskMetrics) <- executorMetricsUpdate.taskMetrics) {
+      val stageData = stageIdToData.getOrElseUpdate((sid, sAttempt), {
+        logWarning("Metrics update for task in unknown stage " + sid)
+        new StageUIData
+      })
+      val taskData = stageData.taskData.get(taskId)
+      taskData.map { t =>
+        if (!t.taskInfo.finished) {
+          updateAggregateMetrics(stageData, executorMetricsUpdate.execId, taskMetrics,
+            t.taskMetrics)
+
+          // Overwrite task metrics
+          t.taskMetrics = Some(taskMetrics)
+        }
+      }
+    }
+  }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {

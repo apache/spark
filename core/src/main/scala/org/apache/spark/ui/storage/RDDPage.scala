@@ -27,8 +27,6 @@ import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -36,8 +34,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val storageStatusList = listener.storageStatusList
     val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
       // Rather than crashing, render an "RDD Not Found" page
-      return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "RDD Not Found",
-        parent.headerTabs, parent)
+      return UIUtils.headerSparkPage("RDD Not Found", Seq[Node](), parent)
     }
 
     // Worker table
@@ -45,12 +42,13 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
-    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    val blocks = blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-    }
+    val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
+    val blocks = storageStatusList
+      .flatMap(_.rddBlocksById(rddId))
+      .sortWith(_._1.name < _._1.name)
+      .map { case (blockId, status) =>
+        (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+      }
     val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
 
     val content =
@@ -95,8 +93,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, basePath, appName, "RDD Storage Info for " + rddInfo.name,
-      parent.headerTabs, parent)
+    UIUtils.headerSparkPage("RDD Storage Info for " + rddInfo.name, content, parent)
   }
 
   /** Header fields for the worker table */
@@ -119,10 +116,10 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     <tr>
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
-        {Utils.bytesToString(status.memUsedByRDD(rddId))}
+        {Utils.bytesToString(status.memUsedByRdd(rddId))}
         ({Utils.bytesToString(status.memRemaining)} Remaining)
       </td>
-      <td>{Utils.bytesToString(status.diskUsedByRDD(rddId))}</td>
+      <td>{Utils.bytesToString(status.diskUsedByRdd(rddId))}</td>
     </tr>
   }
 

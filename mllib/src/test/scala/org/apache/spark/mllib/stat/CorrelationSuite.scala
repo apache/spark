@@ -31,12 +31,24 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
   // test input data
   val xData = Array(1.0, 0.0, -2.0)
   val yData = Array(4.0, 5.0, 3.0)
+  val zeros = new Array[Double](3)
   val data = Seq(
     Vectors.dense(1.0, 0.0, 0.0, -2.0),
     Vectors.dense(4.0, 5.0, 0.0, 3.0),
     Vectors.dense(6.0, 7.0, 0.0, 8.0),
     Vectors.dense(9.0, 0.0, 0.0, 1.0)
   )
+
+  test("corr(x, y) pearson, 1 value in data") {
+    val x = sc.parallelize(Array(1.0))
+    val y = sc.parallelize(Array(4.0))
+    intercept[RuntimeException] {
+      Statistics.corr(x, y, "pearson")
+    }
+    intercept[RuntimeException] {
+      Statistics.corr(x, y, "spearman")
+    }
+  }
 
   test("corr(x, y) default, pearson") {
     val x = sc.parallelize(xData)
@@ -46,6 +58,18 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
     val p1 = Statistics.corr(x, y, "pearson")
     assert(approxEqual(expected, default))
     assert(approxEqual(expected, p1))
+
+    // numPartitions >= size for input RDDs
+    for (numParts <- List(xData.size, xData.size * 2)) {
+      val x1 = sc.parallelize(xData, numParts)
+      val y1 = sc.parallelize(yData, numParts)
+      val p2 = Statistics.corr(x1, y1)
+      assert(approxEqual(expected, p2))
+    }
+
+    // RDD of zero variance
+    val z = sc.parallelize(zeros)
+    assert(Statistics.corr(x, z).isNaN)
   }
 
   test("corr(x, y) spearman") {
@@ -54,6 +78,18 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
     val expected = 0.5
     val s1 = Statistics.corr(x, y, "spearman")
     assert(approxEqual(expected, s1))
+
+    // numPartitions >= size for input RDDs
+    for (numParts <- List(xData.size, xData.size * 2)) {
+      val x1 = sc.parallelize(xData, numParts)
+      val y1 = sc.parallelize(yData, numParts)
+      val s2 = Statistics.corr(x1, y1, "spearman")
+      assert(approxEqual(expected, s2))
+    }
+
+    // RDD of zero variance => zero variance in ranks
+    val z = sc.parallelize(zeros)
+    assert(Statistics.corr(x, z, "spearman").isNaN)
   }
 
   test("corr(X) default, pearson") {

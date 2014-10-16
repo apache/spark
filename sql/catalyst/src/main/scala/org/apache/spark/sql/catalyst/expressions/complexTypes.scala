@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.Map
+
 import org.apache.spark.sql.catalyst.types._
 
 /**
@@ -29,7 +31,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   /** `Null` is returned for invalid ordinals. */
   override def nullable = true
   override def foldable = child.foldable && ordinal.foldable
-  override def references = children.flatMap(_.references).toSet
+
   def dataType = child.dataType match {
     case ArrayType(dt, _) => dt
     case MapType(_, vt, _) => vt

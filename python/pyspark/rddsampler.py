@@ -20,6 +20,7 @@ import random
 
 
 class RDDSamplerBase(object):
+
     def __init__(self, withReplacement, seed=None):
         try:
             import numpy
@@ -95,6 +96,7 @@ class RDDSamplerBase(object):
 
 
 class RDDSampler(RDDSamplerBase):
+
     def __init__(self, withReplacement, fraction, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fraction = fraction
@@ -113,7 +115,9 @@ class RDDSampler(RDDSamplerBase):
                 if self.getUniformSample(split) <= self._fraction:
                     yield obj
 
+
 class RDDStratifiedSampler(RDDSamplerBase):
+
     def __init__(self, withReplacement, fractions, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fractions = fractions

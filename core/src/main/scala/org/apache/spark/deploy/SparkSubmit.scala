@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -53,6 +53,8 @@ object SparkSubmit {
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
+
+  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
@@ -170,9 +172,18 @@ object SparkSubmit {
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
+        sysProp = "spark.driver.memory"),
+      OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraClassPath"),
+      OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraJavaOptions"),
+      OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
+      OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
@@ -184,7 +195,7 @@ object SparkSubmit {
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
 
       // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name", sysProp = "spark.app.name"),
+      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
@@ -195,12 +206,6 @@ object SparkSubmit {
       OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
 
       // Other options
-      OptionAssigner(args.driverExtraClassPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraClassPath"),
-      OptionAssigner(args.driverExtraJavaOptions, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraJavaOptions"),
-      OptionAssigner(args.driverExtraLibraryPath, STANDALONE | YARN, CLUSTER,
-        sysProp = "spark.driver.extraLibraryPath"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
@@ -257,7 +262,7 @@ object SparkSubmit {
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
-    if (clusterManager == YARN && deployMode == CLUSTER) {
+    if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
         childArgs += ("--jar", args.primaryResource)
@@ -268,13 +273,16 @@ object SparkSubmit {
       }
     }
 
-    // Read from default spark properties, if any
-    for ((k, v) <- args.getDefaultSparkProperties) {
+    // Properties given with --conf are superceded by other options, but take precedence over
+    // properties in the defaults file.
+    for ((k, v) <- args.sparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
 
-    // Spark properties included on command line take precedence
-    sysProps ++= args.sparkProperties
+    // Read from default spark properties, if any
+    for ((k, v) <- args.defaultSparkProperties) {
+      sysProps.getOrElseUpdate(k, v)
+    }
 
     (childArgs, childClasspath, sysProps, childMainClass)
   }
@@ -305,8 +313,24 @@ object SparkSubmit {
       System.setProperty(key, value)
     }
 
-    val mainClass = Class.forName(childMainClass, true, loader)
+    var mainClass: Class[_] = null
+
+    try {
+      mainClass = Class.forName(childMainClass, true, loader)
+    } catch {
+      case e: ClassNotFoundException =>
+        e.printStackTrace(printStream)
+        if (childMainClass.contains("thriftserver")) {
+          println(s"Failed to load main class $childMainClass.")
+          println("You need to build Spark with -Phive.")
+        }
+        System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+    }
+
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
+    if (!Modifier.isStatic(mainMethod.getModifiers)) {
+      throw new IllegalStateException("The main method in the given main class must be static")
+    }
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {

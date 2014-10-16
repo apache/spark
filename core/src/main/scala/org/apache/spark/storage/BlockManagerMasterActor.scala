@@ -31,7 +31,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -39,7 +39,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus: LiveListenerBus)
-  extends Actor with Logging {
+  extends Actor with ActorLogReceive with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
@@ -52,24 +52,21 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
-  val slaveTimeout = conf.get("spark.storage.blockManagerSlaveTimeoutMs",
-    "" + (BlockManager.getHeartBeatFrequency(conf) * 3)).toLong
+  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
+    math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
 
-  val checkTimeoutInterval = conf.get("spark.storage.blockManagerTimeoutIntervalMs",
-    "60000").toLong
+  val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
 
   var timeoutCheckingTask: Cancellable = null
 
   override def preStart() {
-    if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
-      import context.dispatcher
-      timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-        checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
-    }
+    import context.dispatcher
+    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
+      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     super.preStart()
   }
 
-  def receive = {
+  override def receiveWithLogging = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
@@ -86,8 +83,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetLocationsMultipleBlockIds(blockIds) =>
       sender ! getLocationsMultipleBlockIds(blockIds)
 
-    case GetPeers(blockManagerId, size) =>
-      sender ! getPeers(blockManagerId, size)
+    case GetPeers(blockManagerId) =>
+      sender ! getPeers(blockManagerId)
 
     case GetMemoryStatus =>
       sender ! memoryStatus
@@ -119,7 +116,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       sender ! true
 
     case StopBlockManagerMaster =>
-      logInfo("Stopping BlockManagerMaster")
       sender ! true
       if (timeoutCheckingTask != null) {
         timeoutCheckingTask.cancel()
@@ -129,8 +125,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case ExpireDeadHosts =>
       expireDeadHosts()
 
-    case HeartBeat(blockManagerId) =>
-      sender ! heartBeat(blockManagerId)
+    case BlockManagerHeartbeat(blockManagerId) =>
+      sender ! heartbeatReceived(blockManagerId)
 
     case other =>
       logWarning("Got unknown message: " + other)
@@ -177,11 +173,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    * from the executors, but not from the driver.
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
-    // TODO: Consolidate usages of <driver>
     import context.dispatcher
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
     val requiredBlockManagers = blockManagerInfo.values.filter { info =>
-      removeFromDriver || info.blockManagerId.executorId != "<driver>"
+      removeFromDriver || !info.blockManagerId.isDriver
     }
     Future.sequence(
       requiredBlockManagers.map { bm =>
@@ -207,7 +202,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
         blockLocations.remove(blockId)
       }
     }
-    listenerBus.post(SparkListenerBlockManagerRemoved(blockManagerId))
+    listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
   }
 
   private def expireDeadHosts() {
@@ -216,7 +211,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val minSeenTime = now - slaveTimeout
     val toRemove = new mutable.HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
-      if (info.lastSeenMs < minSeenTime) {
+      if (info.lastSeenMs < minSeenTime && !info.blockManagerId.isDriver) {
         logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
           + (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
         toRemove += info.blockManagerId
@@ -230,9 +225,13 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
-  private def heartBeat(blockManagerId: BlockManagerId): Boolean = {
+  /**
+   * Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
     if (!blockManagerInfo.contains(blockManagerId)) {
-      blockManagerId.executorId == "<driver>" && !isLocal
+      blockManagerId.isDriver && !isLocal
     } else {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       true
@@ -264,9 +263,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   private def storageStatus: Array[StorageStatus] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
-      val blockMap = mutable.Map[BlockId, BlockStatus](info.blocks.toSeq: _*)
-      new StorageStatus(blockManagerId, info.maxMem, blockMap)
+    blockManagerInfo.map { case (blockManagerId, info) =>
+      new StorageStatus(blockManagerId, info.maxMem, info.blocks)
     }.toArray
   }
 
@@ -326,6 +324,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+    val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(manager) =>
@@ -341,9 +340,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
         id.hostPort, Utils.bytesToString(maxMemSize)))
 
       blockManagerInfo(id) =
-        new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
+        new BlockManagerInfo(id, time, maxMemSize, slaveActor)
     }
-    listenerBus.post(SparkListenerBlockManagerAdded(id, maxMemSize))
+    listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
 
   private def updateBlockInfo(
@@ -355,7 +354,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       tachyonSize: Long) {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
-      if (blockManagerId.executorId == "<driver>" && !isLocal) {
+      if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
         sender ! true
@@ -403,16 +402,14 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockIds.map(blockId => getLocations(blockId))
   }
 
-  private def getPeers(blockManagerId: BlockManagerId, size: Int): Seq[BlockManagerId] = {
-    val peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
-
-    val selfIndex = peers.indexOf(blockManagerId)
-    if (selfIndex == -1) {
-      throw new SparkException("Self index for " + blockManagerId + " not found")
+  /** Get the list of the peers of the given block manager */
+  private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
+    val blockManagerIds = blockManagerInfo.keySet
+    if (blockManagerIds.contains(blockManagerId)) {
+      blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
+    } else {
+      Seq.empty
     }
-
-    // Note that this logic will select the same node multiple times if there aren't enough peers
-    Array.tabulate[BlockManagerId](size) { i => peers((selfIndex + i + 1) % peers.length) }.toSeq
   }
 }
 
@@ -421,7 +418,14 @@ case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
-    tachyonSize: Long)
+    tachyonSize: Long) {
+  def isCached: Boolean = memSize + diskSize + tachyonSize > 0
+}
+
+@DeveloperApi
+object BlockStatus {
+  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+}
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,

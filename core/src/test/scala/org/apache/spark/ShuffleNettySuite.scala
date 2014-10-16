@@ -28,6 +28,6 @@ class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   override def afterAll() {
-    System.setProperty("spark.shuffle.use.netty", "false")
+    System.clearProperty("spark.shuffle.use.netty")
   }
 }

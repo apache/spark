@@ -45,7 +45,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
-            { providerConfig.map(e => <li><strong>{e._1}:</strong> {e._2}</li>) }
+            {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
           </ul>
           {
             if (allApps.size > 0) {
@@ -67,6 +67,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   }
 
   private val appHeader = Seq(
+    "App ID",
     "App Name",
     "Started",
     "Completed",
@@ -81,7 +82,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val duration = UIUtils.formatDuration(info.endTime - info.startTime)
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
-      <td><a href={uiAddress}>{info.name}</a></td>
+      <td><a href={uiAddress}>{info.id}</a></td>
+      <td>{info.name}</td>
       <td>{startTime}</td>
       <td>{endTime}</td>
       <td>{duration}</td>

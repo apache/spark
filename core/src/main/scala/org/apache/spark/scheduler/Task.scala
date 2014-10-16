@@ -26,6 +26,8 @@ import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.Utils
+
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -43,12 +45,19 @@ import org.apache.spark.util.ByteBufferInputStream
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
   final def run(attemptId: Long): T = {
-    context = new TaskContext(stageId, partitionId, attemptId, runningLocally = false)
+    context = new TaskContext(stageId, partitionId, attemptId, false)
+    TaskContext.setTaskContext(context)
+    context.taskMetrics.hostname = Utils.localHostName()
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
-    runTask(context)
+    try {
+      runTask(context)
+    } finally {
+      context.markTaskCompleted()
+      TaskContext.unset()
+    }
   }
 
   def runTask(context: TaskContext): T
@@ -84,12 +93,12 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   def kill(interruptThread: Boolean) {
     _killed = true
     if (context != null) {
-      context.interrupted = true
+      context.markInterrupted()
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-  }
+  }  
 }
 
 /**

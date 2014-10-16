@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.util.Random
+import java.util.{Properties, Random}
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
@@ -35,12 +35,13 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, CallSite, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils, CallSite}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
@@ -207,7 +208,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Get the preferred locations of a partition (as hostnames), taking into account whether the
+   * Get the preferred locations of a partition, taking into account whether the
    * RDD is checkpointed.
    */
   final def preferredLocations(split: Partition): Seq[String] = {
@@ -331,7 +332,7 @@ abstract class RDD[T: ClassTag](
       val distributePartition = (index: Int, items: Iterator[T]) => {
         var position = (new Random(index)).nextInt(numPartitions)
         items.map { t =>
-          // Note that the hash code of the key will just be the key itself. The HashPartitioner 
+          // Note that the hash code of the key will just be the key itself. The HashPartitioner
           // will mod it with the number of total partitions.
           position = position + 1
           (position, t)
@@ -340,7 +341,7 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -351,8 +352,8 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, 
-      fraction: Double, 
+  def sample(withReplacement: Boolean,
+      fraction: Double,
       seed: Long = Utils.random.nextLong): RDD[T] = {
     require(fraction >= 0.0, "Negative fraction value: " + fraction)
     if (withReplacement) {
@@ -508,7 +509,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
-   * mapping to that key.
+   * mapping to that key. The ordering of elements within each group is not guaranteed, and
+   * may even differ each time the resulting RDD is evaluated.
    *
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
@@ -519,7 +521,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
-   * mapping to that key.
+   * mapping to that key. The ordering of elements within each group is not guaranteed, and
+   * may even differ each time the resulting RDD is evaluated.
    *
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
@@ -530,7 +533,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
-   * mapping to that key.
+   * mapping to that key. The ordering of elements within each group is not guaranteed, and
+   * may even differ each time the resulting RDD is evaluated.
    *
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
@@ -618,6 +622,7 @@ abstract class RDD[T: ClassTag](
    * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
+  @deprecated("use TaskContext.get", "1.2.0")
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = {
@@ -992,7 +997,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = {
-    require(p >= 4, s"p ($p) must be greater than 0")
+    require(p >= 4, s"p ($p) must be at least 4")
     require(sp <= 32, s"sp ($sp) cannot be greater than 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)
@@ -1003,7 +1008,7 @@ abstract class RDD[T: ClassTag](
       },
       (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
         h1.addAll(h2)
-        h2
+        h1
       }).cardinality()
   }
 
@@ -1026,8 +1031,14 @@ abstract class RDD[T: ClassTag](
    * Zips this RDD with its element indices. The ordering is first based on the partition index
    * and then the ordering of items within each partition. So the first item in the first
    * partition gets index 0, and the last item in the last partition receives the largest index.
+   *
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   *
+   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The index assigned to each element is therefore not guaranteed,
+   * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
+   * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
 
@@ -1035,6 +1046,11 @@ abstract class RDD[T: ClassTag](
    * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   *
+   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The unique ID assigned to each element is therefore not guaranteed,
+   * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
+   * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithUniqueId(): RDD[(T, Long)] = {
     val n = this.partitions.size.toLong
@@ -1063,16 +1079,17 @@ abstract class RDD[T: ClassTag](
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
       if (partsScanned > 0) {
-        // If we didn't find any rows after the first iteration, just try all partitions next.
-        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
-        // by 50%.
+        // If we didn't find any rows after the previous iteration, quadruple and retry. Otherwise,
+        // interpolate the number of partitions we need to try, but overestimate it by 50%.
+        // We also cap the estimation in the end.
         if (buf.size == 0) {
-          numPartsToTry = totalParts - 1
+          numPartsToTry = partsScanned * 4
         } else {
-          numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
+          // the left side of max is >=1 whenever partsScanned >= 2
+          numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
         }
       }
-      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = num - buf.size
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
@@ -1127,15 +1144,19 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
-    mapPartitions { items =>
-      // Priority keeps the largest elements, so let's reverse the ordering.
-      val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-      queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
-      Iterator.single(queue)
-    }.reduce { (queue1, queue2) =>
-      queue1 ++= queue2
-      queue1
-    }.toArray.sorted(ord)
+    if (num == 0) {
+      Array.empty
+    } else {
+      mapPartitions { items =>
+        // Priority keeps the largest elements, so let's reverse the ordering.
+        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+        queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
+        Iterator.single(queue)
+      }.reduce { (queue1, queue2) =>
+        queue1 ++= queue2
+        queue1
+      }.toArray.sorted(ord)
+    }
   }
 
   /**
@@ -1206,16 +1227,12 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed: Boolean = {
-    checkpointData.map(_.isCheckpointed).getOrElse(false)
-  }
+  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile: Option[String] = {
-    checkpointData.flatMap(_.getCheckpointFile)
-  }
+  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
 
   // =======================================================================
   // Other internal methods and fields
@@ -1224,7 +1241,8 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val creationSite = Utils.getCallSite
+  @transient private[spark] val creationSite = sc.getCallSite()
+
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
@@ -1236,8 +1254,30 @@ abstract class RDD[T: ClassTag](
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
+  /** Returns the jth parent RDD: e.g. rdd.parent[T](0) is equivalent to rdd.firstParent[T] */
+  protected[spark] def parent[U: ClassTag](j: Int) = {
+    dependencies(j).rdd.asInstanceOf[RDD[U]]
+  }
+
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context = sc
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(cls: Class[T]): RDD[T] = {
+    val classTag: ClassTag[T] = ClassTag.apply(cls)
+    this.retag(classTag)
+  }
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(implicit classTag: ClassTag[T]): RDD[T] = {
+    this.mapPartitions(identity, preservesPartitioning = true)(classTag)
+  }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false
@@ -1280,6 +1320,19 @@ abstract class RDD[T: ClassTag](
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
+    // Get a debug description of an rdd without its children
+    def debugSelf (rdd: RDD[_]): Seq[String] = {
+      import Utils.bytesToString
+
+      val persistence = storageLevel.description
+      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+        "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize),
+          bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
+
+      s"$rdd [$persistence]" +: storageInfo
+    }
+
     // Apply a different rule to the last child
     def debugChildren(rdd: RDD[_], prefix: String): Seq[String] = {
       val len = rdd.dependencies.length
@@ -1305,7 +1358,11 @@ abstract class RDD[T: ClassTag](
       val partitionStr = "(" + rdd.partitions.size + ")"
       val leftOffset = (partitionStr.length - 1) / 2
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
-      Seq(partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix $desc"
+      } ++ debugChildren(rdd, nextPrefix)
     }
     def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
       val partitionStr = "(" + rdd.partitions.size + ")"
@@ -1315,7 +1372,11 @@ abstract class RDD[T: ClassTag](
         thisPrefix
         + (if (isLastChild) "  " else "| ")
         + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
-      Seq(thisPrefix + "+-" + partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix$desc"
+      } ++ debugChildren(rdd, nextPrefix)
     }
     def debugString(rdd: RDD[_],
                     prefix: String = "",
@@ -1323,9 +1384,8 @@ abstract class RDD[T: ClassTag](
                     isLastChild: Boolean = false): Seq[String] = {
       if (isShuffle) {
         shuffleDebugString(rdd, prefix, isLastChild)
-      }
-      else {
-        Seq(prefix + rdd) ++ debugChildren(rdd, prefix)
+      } else {
+        debugSelf(rdd).map(prefix + _) ++ debugChildren(rdd, prefix)
       }
     }
     firstDebugString(this).mkString("\n")

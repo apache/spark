@@ -29,7 +29,8 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{FileLogger, JsonProtocol}
+import org.apache.spark.SPARK_VERSION
+import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -42,33 +43,28 @@ import org.apache.spark.util.{FileLogger, JsonProtocol}
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
 private[spark] class EventLoggingListener(
-    appName: String,
+    appId: String,
+    logBaseDir: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration())
+    hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
+
+  def this(appId: String, logBaseDir: String, sparkConf: SparkConf) =
+    this(appId, logBaseDir, sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
-  private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
-  val logDir = logBaseDir + "/" + name
-
+  val logDir = EventLoggingListener.getLogDirPath(logBaseDir, appId)
+  val logDirName: String = logDir.split("/").last
   protected val logger = new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize,
     shouldCompress, shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
-
-  /**
-   * Return only the unique application directory without the base directory.
-   */
-  def getApplicationLogDir(): String = {
-    name
-  }
 
   /**
    * Begin logging events.
@@ -82,7 +78,7 @@ private[spark] class EventLoggingListener(
         sparkConf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
       logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
     }
-    logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)
+    logger.newFile(SPARK_VERSION_PREFIX + SPARK_VERSION)
     logger.newFile(LOG_PREFIX + logger.fileIndex)
   }
 
@@ -127,6 +123,8 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   override def onApplicationEnd(event: SparkListenerApplicationEnd) =
     logEvent(event, flushLogger = true)
+  // No-op because logging every update would be overkill
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) { }
 
   /**
    * Stop logging events.
@@ -178,6 +176,18 @@ private[spark] object EventLoggingListener extends Logging {
   }
 
   /**
+   * Return a file-system-safe path to the log directory for the given application.
+   *
+   * @param logBaseDir A base directory for the path to the log directory for given application.
+   * @param appId A unique app ID.
+   * @return A path which consists of file-system-safe characters.
+   */
+  def getLogDirPath(logBaseDir: String, appId: String): String = {
+    val name = appId.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_").toLowerCase
+    Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
+  }
+
+  /**
    * Parse the event logging information associated with the logs in the given directory.
    *
    * Specifically, this looks for event log files, the Spark version file, the compression
@@ -215,7 +225,7 @@ private[spark] object EventLoggingListener extends Logging {
     } catch {
       case e: Exception =>
         logError("Exception in parsing logging info from directory %s".format(logDir), e)
-      EventLoggingInfo.empty
+        EventLoggingInfo.empty
     }
   }
 

@@ -17,18 +17,28 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable
+import scala.collection.JavaConversions._
+
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 
-object SQLConf {
+private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
+  val COLUMN_BATCH_SIZE = "spark.sql.inMemoryColumnarStorage.batchSize"
+  val IN_MEMORY_PARTITION_PRUNING = "spark.sql.inMemoryColumnarStorage.partitionPruning"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
-  val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
-  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
   val CODEGEN_ENABLED = "spark.sql.codegen"
+  val DIALECT = "spark.sql.dialect"
+  val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
+  val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
+  val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
+  val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
+
+  // This is only used for the thriftserver
+  val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -39,37 +49,57 @@ object SQLConf {
  * A trait that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
- * into Spark SQL's query functions (sql(), hql(), etc.). Otherwise, users of this trait can
+ * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this trait can
  * modify the hints by programmatically calling the setters and getters of this trait.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-trait SQLConf {
+private[sql] trait SQLConf {
   import SQLConf._
 
+  /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
 
+  /**
+   * The SQL dialect that is used when parsing queries.  This defaults to 'sql' which uses
+   * a simple SQL parser provided by Spark SQL.  This is currently the only option for users of
+   * SQLContext.
+   *
+   * When using a HiveContext, this value defaults to 'hiveql', which uses the Hive 0.12.0 HiveQL
+   * parser.  Users can change this to 'sql' if they want to run queries that aren't supported by
+   * HiveQL (e.g., SELECT 1).
+   *
+   * Note that the choice of dialect does not affect things like what tables are available or
+   * how query execution is performed.
+   */
+  private[spark] def dialect: String = getConf(DIALECT, "sql")
+
   /** When true tables cached using the in-memory columnar caching will be compressed. */
-  private[spark] def useCompression: Boolean = get(COMPRESS_CACHED, "false").toBoolean
+  private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED, "false").toBoolean
+
+  /** The compression codec for writing to a Parquetfile */
+  private[spark] def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION, "snappy")
+
+  /** The number of rows that will be  */
+  private[spark] def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE, "1000").toInt
 
   /** Number of partitions to use for shuffle operators. */
-  private[spark] def numShufflePartitions: Int = get(SHUFFLE_PARTITIONS, "200").toInt
+  private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS, "200").toInt
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
    * than interpreted evaluation, but there are significant start-up costs due to compilation.
-   * As a result codegen is only benificial when queries run for a long time, or when the same
+   * As a result codegen is only beneficial when queries run for a long time, or when the same
    * expressions are used multiple times.
    *
    * Defaults to false as this feature is currently experimental.
    */
-  private[spark] def codegenEnabled: Boolean =
-    if (get(CODEGEN_ENABLED, "false") == "true") true else false
+  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, "false").toBoolean
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
@@ -79,49 +109,64 @@ trait SQLConf {
    * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is also 10000.
    */
   private[spark] def autoBroadcastJoinThreshold: Int =
-    get(AUTO_BROADCASTJOIN_THRESHOLD, "10000").toInt
+    getConf(AUTO_BROADCASTJOIN_THRESHOLD, "10000").toInt
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
-   * it is set to a larger value than `autoConvertJoinSize`, hence any logical operator without a
-   * properly implemented estimation of this statistic will not be incorrectly broadcasted in joins.
+   * it is set to a larger value than `autoBroadcastJoinThreshold`, hence any logical operator
+   * without a properly implemented estimation of this statistic will not be incorrectly broadcasted
+   * in joins.
    */
   private[spark] def defaultSizeInBytes: Long =
-    getOption(DEFAULT_SIZE_IN_BYTES).map(_.toLong).getOrElse(autoBroadcastJoinThreshold + 1)
+    getConf(DEFAULT_SIZE_IN_BYTES, (autoBroadcastJoinThreshold + 1).toString).toLong
+
+  /**
+   * When set to true, we always treat byte arrays in Parquet files as strings.
+   */
+  private[spark] def isParquetBinaryAsString: Boolean =
+    getConf(PARQUET_BINARY_AS_STRING, "false").toBoolean
+
+  /**
+   * When set to true, partition pruning for in-memory columnar tables is enabled.
+   */
+  private[spark] def inMemoryPartitionPruning: Boolean =
+    getConf(IN_MEMORY_PARTITION_PRUNING, "false").toBoolean
+
+  private[spark] def columnNameOfCorruptRecord: String =
+    getConf(COLUMN_NAME_OF_CORRUPT_RECORD, "_corrupt_record")
 
   /** ********************** SQLConf functionality methods ************ */
 
-  def set(props: Properties): Unit = {
-    settings.synchronized {
-      props.asScala.foreach { case (k, v) => settings.put(k, v) }
-    }
+  /** Set Spark SQL configuration properties. */
+  def setConf(props: Properties): Unit = settings.synchronized {
+    props.foreach { case (k, v) => settings.put(k, v) }
   }
 
-  def set(key: String, value: String): Unit = {
+  /** Set the given Spark SQL configuration property. */
+  def setConf(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
     settings.put(key, value)
   }
 
-  def get(key: String): String = {
+  /** Return the value of Spark SQL configuration property for the given key. */
+  def getConf(key: String): String = {
     Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
   }
 
-  def get(key: String, defaultValue: String): String = {
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`.
+   */
+  def getConf(key: String, defaultValue: String): String = {
     Option(settings.get(key)).getOrElse(defaultValue)
   }
 
-  def getAll: Array[(String, String)] = settings.synchronized { settings.asScala.toArray }
-
-  def getOption(key: String): Option[String] = Option(settings.get(key))
-
-  def contains(key: String): Boolean = settings.containsKey(key)
-
-  def toDebugString: String = {
-    settings.synchronized {
-      settings.asScala.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
-    }
-  }
+  /**
+   * Return all the configuration properties that have been set (i.e. not the default).
+   * This creates a new copy of the config properties in the form of a Map.
+   */
+  def getAllConfs: immutable.Map[String, String] = settings.synchronized { settings.toMap }
 
   private[spark] def clear() {
     settings.clear()

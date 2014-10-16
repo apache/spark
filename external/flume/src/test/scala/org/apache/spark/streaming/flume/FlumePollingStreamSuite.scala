@@ -20,6 +20,9 @@ package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{Callable, ExecutorCompletionService, Executors}
+import java.util.Random
+
+import org.apache.spark.TestUtils
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
@@ -34,26 +37,45 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingContext}
 import org.apache.spark.streaming.flume.sink._
+import org.apache.spark.util.Utils
 
 class FlumePollingStreamSuite extends TestSuiteBase {
 
-  val testPort = 9999
   val batchCount = 5
   val eventsPerBatch = 100
   val totalEventsPerChannel = batchCount * eventsPerBatch
   val channelCapacity = 5000
+  val maxAttempts = 5
 
   test("flume polling test") {
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort)),
-        StorageLevel.MEMORY_AND_DISK, eventsPerBatch, 1)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
-    outputStream.register()
+    testMultipleTimes(testFlumePolling)
+  }
 
+  test("flume polling test multiple hosts") {
+    testMultipleTimes(testFlumePollingMultipleHost)
+  }
+
+  /**
+   * Run the given test until no more java.net.BindException's are thrown.
+   * Do this only up to a certain attempt limit.
+   */
+  private def testMultipleTimes(test: () => Unit): Unit = {
+    var testPassed = false
+    var attempt = 0
+    while (!testPassed && attempt < maxAttempts) {
+      try {
+        test()
+        testPassed = true
+      } catch {
+        case e: Exception if Utils.isBindCollision(e) =>
+          logWarning("Exception when running flume polling test: " + e)
+          attempt += 1
+      }
+    }
+    assert(testPassed, s"Test failed after $attempt attempts!")
+  }
+
+  private def testFlumePolling(): Unit = {
     // Start the channel and sink.
     val context = new Context()
     context.put("capacity", channelCapacity.toString)
@@ -64,10 +86,19 @@ class FlumePollingStreamSuite extends TestSuiteBase {
 
     val sink = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(0))
     Configurables.configure(sink, context)
     sink.setChannel(channel)
     sink.start()
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(conf, batchDuration)
+    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
+      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", sink.getPort())),
+        StorageLevel.MEMORY_AND_DISK, eventsPerBatch, 1)
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    outputStream.register()
     ssc.start()
 
     writeAndVerify(Seq(channel), ssc, outputBuffer)
@@ -76,18 +107,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
     channel.stop()
   }
 
-  test("flume polling test multiple hosts") {
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val addresses = Seq(testPort, testPort + 1).map(new InetSocketAddress("localhost", _))
-    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
-        eventsPerBatch, 5)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
-    outputStream.register()
-
+  private def testFlumePollingMultipleHost(): Unit = {
     // Start the channel and sink.
     val context = new Context()
     context.put("capacity", channelCapacity.toString)
@@ -101,17 +121,29 @@ class FlumePollingStreamSuite extends TestSuiteBase {
 
     val sink = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(0))
     Configurables.configure(sink, context)
     sink.setChannel(channel)
     sink.start()
 
     val sink2 = new SparkSink()
     context.put(SparkSinkConfig.CONF_HOSTNAME, "localhost")
-    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(testPort + 1))
+    context.put(SparkSinkConfig.CONF_PORT, String.valueOf(0))
     Configurables.configure(sink2, context)
     sink2.setChannel(channel2)
     sink2.start()
+
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(conf, batchDuration)
+    val addresses = Seq(sink.getPort(), sink2.getPort()).map(new InetSocketAddress("localhost", _))
+    val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
+      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
+        eventsPerBatch, 5)
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    outputStream.register()
+
     ssc.start()
     writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
     assertChannelIsEmpty(channel)
@@ -166,7 +198,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   def assertChannelIsEmpty(channel: MemoryChannel) = {
-    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining");
+    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining")
     queueRemaining.setAccessible(true)
     val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
     assert(m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] === 5000)

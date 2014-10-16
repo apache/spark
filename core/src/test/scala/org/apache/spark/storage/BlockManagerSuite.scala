@@ -19,27 +19,33 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
+import java.util.concurrent.TimeUnit
+
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.implicitConversions
+import scala.language.postfixOps
 
 import akka.actor._
-import org.apache.spark.SparkConf
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import akka.pattern.ask
+import akka.util.Timeout
+
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+
+import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.Matchers
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
 import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.language.implicitConversions
-import scala.language.postfixOps
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   with PrivateMethodTester {
@@ -53,6 +59,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
+  val shuffleManager = new HashShuffleManager(conf)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer.mb", "1")
@@ -63,8 +70,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
 
   private def makeBlockManager(maxMem: Long, name: String = "<driver>"): BlockManager = {
-    new BlockManager(
-      name, actorSystem, master, serializer, maxMem, conf, securityMgr, mapOutputTracker)
+    val transfer = new NioBlockTransferService(conf, securityMgr)
+    new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+      mapOutputTracker, shuffleManager, transfer)
   }
 
   before {
@@ -76,14 +84,13 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     oldArch = System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
-    conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
-      conf)
+      conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
@@ -130,9 +137,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("BlockManagerId object caching") {
-    val id1 = BlockManagerId("e1", "XXX", 1, 0)
-    val id2 = BlockManagerId("e1", "XXX", 1, 0) // this should return the same object as id1
-    val id3 = BlockManagerId("e1", "XXX", 2, 0) // this should return a different object
+    val id1 = BlockManagerId("e1", "XXX", 1)
+    val id2 = BlockManagerId("e1", "XXX", 1) // this should return the same object as id1
+    val id3 = BlockManagerId("e1", "XXX", 2) // this should return a different object
     assert(id2 === id1, "id2 is not same as id1")
     assert(id2.eq(id1), "id2 is not the same object as id1")
     assert(id3 != id1, "id3 is same as id1")
@@ -180,7 +187,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = makeBlockManager(2000, "exec1")
     store2 = makeBlockManager(2000, "exec2")
 
-    val peers = master.getPeers(store.blockManagerId, 1)
+    val peers = master.getPeers(store.blockManagerId)
     assert(peers.size === 1, "master did not return the other manager as a peer")
     assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
 
@@ -344,7 +351,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("reregistration on heart beat") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
 
@@ -356,13 +362,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    store invokePrivate heartBeat()
-    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
+    implicit val timeout = Timeout(30, TimeUnit.SECONDS)
+    val reregister = !Await.result(
+      master.driverActor ? BlockManagerHeartbeat(store.blockManagerId),
+      timeout.duration).asInstanceOf[Boolean]
+    assert(reregister == true)
   }
 
   test("reregistration on block update") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+    store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
 
@@ -380,7 +388,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("reregistration doesn't dead lock") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     val a2 = List(new Array[Byte](400))
@@ -400,7 +407,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       }
       val t3 = new Thread {
         override def run() {
-          store invokePrivate heartBeat()
+          store.reregister()
         }
       }
 
@@ -439,7 +446,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
-    System.out.println(list2DiskGet)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
     assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
     assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
@@ -783,8 +789,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
+    val transfer = new NioBlockTransferService(conf, securityMgr)
     store = new BlockManager("<driver>", actorSystem, master, new JavaSerializer(conf), 1200, conf,
-      securityMgr, mapOutputTracker)
+      mapOutputTracker, shuffleManager, transfer)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -814,12 +821,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     // be nice to refactor classes involved in disk storage in a way that
     // allows for easier testing.
     val blockManager = mock(classOf[BlockManager])
-    val shuffleBlockManager = mock(classOf[ShuffleBlockManager])
-    when(shuffleBlockManager.conf).thenReturn(conf)
-    val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
-      System.getProperty("java.io.tmpdir"))
-
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
+    val diskBlockManager = new DiskBlockManager(blockManager, conf)
+
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
     val mapped = diskStoreMapped.getBytes(blockId).get

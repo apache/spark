@@ -34,6 +34,8 @@ class RDDInfo(
   var diskSize = 0L
   var tachyonSize = 0L
 
+  def isCached: Boolean = (memSize + diskSize + tachyonSize > 0) && numCachedPartitions > 0
+
   override def toString = {
     import Utils.bytesToString
     ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +

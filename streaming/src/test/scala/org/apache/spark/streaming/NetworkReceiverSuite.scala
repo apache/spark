@@ -18,9 +18,9 @@
 package org.apache.spark.streaming
 
 import java.nio.ByteBuffer
+import java.util.concurrent.Semaphore
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.postfixOps
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -37,6 +37,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
 
     val receiver = new FakeReceiver
     val executor = new FakeReceiverSupervisor(receiver)
+    val executorStarted = new Semaphore(0)
 
     assert(executor.isAllEmpty)
 
@@ -44,6 +45,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     val executingThread = new Thread() {
       override def run() {
         executor.start()
+        executorStarted.release(1)
         executor.awaitTermination()
       }
     }
@@ -57,6 +59,9 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
         executingThread.join()
       }
     }
+
+    // Ensure executor is started
+    executorStarted.acquire()
 
     // Verify that receiver was started
     assert(receiver.onStartCalled)
@@ -187,10 +192,10 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
    * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
    */
   class FakeReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
-    var otherThread: Thread = null
-    var receiving = false
-    var onStartCalled = false
-    var onStopCalled = false
+    @volatile var otherThread: Thread = null
+    @volatile var receiving = false
+    @volatile var onStartCalled = false
+    @volatile var onStopCalled = false
 
     def onStart() {
       otherThread = new Thread() {

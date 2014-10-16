@@ -49,8 +49,8 @@ private[spark] case class CoalescedRDDPartition(
   }
 
   /**
-   * Computes how many of the parents partitions have getPreferredLocation
-   * as one of their preferredLocations
+   * Computes the fraction of the parents' partitions containing preferredLocation within
+   * their getPreferredLocs.
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction: Double = {

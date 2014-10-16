@@ -46,6 +46,11 @@ private[spark] class ApplicationInfo(
 
   init()
 
+  private def readObject(in: java.io.ObjectInputStream): Unit = {
+    in.defaultReadObject()
+    init()
+  }
+
   private def init() {
     state = ApplicationState.WAITING
     executors = new mutable.HashMap[Int, ExecutorInfo]
@@ -91,10 +96,12 @@ private[spark] class ApplicationInfo(
 
   def retryCount = _retryCount
 
-  def incrementRetryCount = {
+  def incrementRetryCount() = {
     _retryCount += 1
     _retryCount
   }
+
+  def resetRetryCount() = _retryCount = 0
 
   def markFinished(endState: ApplicationState.Value) {
     state = endState

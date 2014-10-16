@@ -33,6 +33,26 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.2") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx")
+          ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
+          Seq(
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.TaskLocation"),
+            // Added normL1 and normL2 to trait MultivariateStatisticalSummary
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2"),
+            // MapStatus should be private[spark]
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.MapStatus")
+          )
+
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
@@ -41,6 +61,9 @@ object MimaExcludes {
           Seq(
             // Adding new method to JavaRDLike trait - we should probably mark this as a developer API.
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitions"),
+            // Should probably mark this as Experimental
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
             // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
             // for countApproxDistinct* functions, which does not work in Java. We later removed
             // them, and use the following to tell Mima to not care about them.
@@ -59,8 +82,21 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.DiskStore.getValues"),
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
+          Seq(
+            // Serializer interface change. See SPARK-3045.
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.DeserializationStream"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.Serializer"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.SerializationStream"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.serializer.SerializerInstance")
+          )++
           Seq(
             // Renamed putValues -> putArray + putIterator
             ProblemFilters.exclude[MissingMethodProblem](
@@ -71,7 +107,12 @@ object MimaExcludes {
               "org.apache.spark.storage.TachyonStore.putValues")
           ) ++
           Seq(
-            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.flume.FlumeReceiver.this"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaUtils.createStream"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.streaming.kafka.KafkaReceiver.this")
           ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
@@ -90,6 +131,8 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("storage.Values") ++
           MimaBuild.excludeSparkClass("storage.Entry") ++
           MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
+          // Class was missing "@DeveloperApi" annotation in 1.0.
+          MimaBuild.excludeSparkClass("scheduler.SparkListenerApplicationStart") ++
           Seq(
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
@@ -97,6 +140,29 @@ object MimaExcludes {
               "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Variance.calculate")
+          ) ++
+          Seq( // Package-private classes removed in SPARK-2341
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.BinaryLabelParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.BinaryLabelParser$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.LabelParser$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.util.MulticlassLabelParser$")
+          ) ++
+          Seq( // package-private classes removed in MLlib
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.regression.GeneralizedLinearAlgorithm.org$apache$spark$mllib$regression$GeneralizedLinearAlgorithm$$prependOne")
+          ) ++
+          Seq( // new Vector methods in MLlib (binary compatible assuming users do not implement Vector)
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.copy")
+          ) ++
+          Seq( // synthetic methods generated in LabeledPoint
+            ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.mllib.regression.LabeledPoint$"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.regression.LabeledPoint.apply"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.regression.LabeledPoint.toString")
+          ) ++
+          Seq ( // Scala 2.11 compatibility fix
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.StreamingContext.<init>$default$2")
           )
         case v if v.startsWith("1.0") =>
           Seq(

@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
 private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveContext)
@@ -40,7 +40,7 @@ private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveCo
 
   private def getResultSetSchema(query: context.QueryExecution): Schema = {
     val analyzed = query.analyzed
-    logger.debug(s"Result Schema: ${analyzed.output}")
+    logDebug(s"Result Schema: ${analyzed.output}")
     if (analyzed.output.size == 0) {
       new Schema(new FieldSchema("Response code", "string", "") :: Nil, null)
     } else {
@@ -53,16 +53,15 @@ private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveCo
   }
 
   override def run(command: String): CommandProcessorResponse = {
-    val execution = context.executePlan(context.hql(command).logicalPlan)
-
     // TODO unify the error code
     try {
+      val execution = context.executePlan(context.sql(command).logicalPlan)
       hiveResponse = execution.stringResult()
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
       case cause: Throwable =>
-        logger.error(s"Failed in [$command]", cause)
+        logError(s"Failed in [$command]", cause)
         new CommandProcessorResponse(-3, ExceptionUtils.getFullStackTrace(cause), null)
     }
   }

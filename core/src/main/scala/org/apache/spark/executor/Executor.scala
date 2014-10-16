@@ -23,9 +23,11 @@ import java.nio.ByteBuffer
 import java.util.concurrent._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
@@ -48,6 +50,8 @@ private[spark] class Executor(
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
+  @volatile private var isStopped = false
+
   // No ip or host:port - just hostname
   Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
   // must not have port specified.
@@ -60,16 +64,6 @@ private[spark] class Executor(
   val conf = new SparkConf(true)
   conf.setAll(properties)
 
-  // If we are in yarn mode, systems can have different disk layouts so we must set it
-  // to what Yarn on this system said was available. This will be used later when SparkEnv
-  // created.
-  if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
-    conf.set("spark.local.dir", getYarnLocalDirs())
-  } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
-    conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
-  }
-
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
@@ -80,6 +74,7 @@ private[spark] class Executor(
   val executorSource = new ExecutorSource(this, executorId)
 
   // Initialize Spark environment (using system properties read above)
+  conf.set("spark.executor.id", "executor." + executorId)
   private val env = {
     if (!isLocal) {
       val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
@@ -97,6 +92,9 @@ private[spark] class Executor(
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
+  // Set the classloader for serializer
+  env.serializer.setDefaultClassLoader(urlClassLoader)
+
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
@@ -106,6 +104,8 @@ private[spark] class Executor(
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
+
+  startDriverHeartbeater()
 
   def launchTask(
       context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
@@ -121,27 +121,22 @@ private[spark] class Executor(
     }
   }
 
-  /** Get the Yarn approved local directories. */
-  private def getYarnLocalDirs(): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(System.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
-
-    if (localDirs.isEmpty) {
-      throw new Exception("Yarn Local dirs can't be empty")
+  def stop() {
+    env.metricsSystem.report()
+    isStopped = true
+    threadPool.shutdown()
+    if (!isLocal) {
+      env.stop()
     }
-    localDirs
   }
 
   class TaskRunner(
-      execBackend: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer)
+      execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
-    @volatile private var task: Task[Any] = _
+    @volatile var task: Task[Any] = _
+    @volatile var attemptedTask: Option[Task[Any]] = None
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -153,18 +148,15 @@ private[spark] class Executor(
 
     override def run() {
       val startTime = System.currentTimeMillis()
-      SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
-      var attemptedTask: Option[Task[Any]] = None
       var taskStart: Long = 0
       def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
       val startGCTime = gcTime
 
       try {
-        SparkEnv.set(env)
         Accumulators.clear()
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
@@ -200,7 +192,6 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.hostname = Utils.localHostName()
           m.executorDeserializeTime = taskStart - startTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
@@ -267,10 +258,7 @@ private[spark] class Executor(
         }
       } finally {
         // Release memory used by this thread for shuffles
-        val shuffleMemoryMap = env.shuffleMemoryMap
-        shuffleMemoryMap.synchronized {
-          shuffleMemoryMap.remove(Thread.currentThread().getId)
-        }
+        env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
         runningTasks.remove(taskId)
@@ -310,9 +298,9 @@ private[spark] class Executor(
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader],
-          classOf[Boolean])
-        constructor.newInstance(classUri, parent, userClassPathFirst)
+        val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
+          classOf[ClassLoader], classOf[Boolean])
+        constructor.newInstance(conf, classUri, parent, userClassPathFirst)
       } catch {
         case _: ClassNotFoundException =>
           logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")
@@ -329,16 +317,19 @@ private[spark] class Executor(
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
+          hadoopConf)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
+          hadoopConf)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
@@ -349,5 +340,58 @@ private[spark] class Executor(
         }
       }
     }
+  }
+
+  def startDriverHeartbeater() {
+    val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    val retryAttempts = AkkaUtils.numRetries(conf)
+    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
+    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+
+    val t = new Thread() {
+      override def run() {
+        // Sleep a random interval so the heartbeats don't end up in sync
+        Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
+
+        while (!isStopped) {
+          val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
+          for (taskRunner <- runningTasks.values()) {
+            if (!taskRunner.attemptedTask.isEmpty) {
+              Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
+                metrics.updateShuffleReadMetrics
+                if (isLocal) {
+                  // JobProgressListener will hold an reference of it during
+                  // onExecutorMetricsUpdate(), then JobProgressListener can not see
+                  // the changes of metrics any more, so make a deep copy of it
+                  val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
+                  tasksMetrics += ((taskRunner.taskId, copiedMetrics))
+                } else {
+                  // It will be copied by serialization
+                  tasksMetrics += ((taskRunner.taskId, metrics))
+                }
+              }
+            }
+          }
+
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+          try {
+            val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
+              retryAttempts, retryIntervalMs, timeout)
+            if (response.reregisterBlockManager) {
+              logWarning("Told to re-register on heartbeat")
+              env.blockManager.reregister()
+            }
+          } catch {
+            case NonFatal(t) => logWarning("Issue communicating with driver in heartbeater", t)
+          }
+
+          Thread.sleep(interval)
+        }
+      }
+    }
+    t.setDaemon(true)
+    t.setName("Driver Heartbeater")
+    t.start()
   }
 }

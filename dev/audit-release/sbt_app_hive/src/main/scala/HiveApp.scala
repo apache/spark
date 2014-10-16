@@ -22,7 +22,7 @@ import scala.collection.mutable.{ListBuffer, Queue}
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.hive.LocalHiveContext
+import org.apache.spark.sql.hive.HiveContext
 
 case class Person(name: String, age: Int)
 
@@ -34,13 +34,13 @@ object SparkSqlExample {
       case None => new SparkConf().setAppName("Simple Sql App")
     }
     val sc = new SparkContext(conf)
-    val hiveContext = new LocalHiveContext(sc)
+    val hiveContext = new HiveContext(sc)
 
     import hiveContext._
-    hql("DROP TABLE IF EXISTS src")
-    hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    hql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")
-    val results = hql("FROM src SELECT key, value WHERE key >= 0 AND KEY < 5").collect()
+    sql("DROP TABLE IF EXISTS src")
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    sql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")
+    val results = sql("FROM src SELECT key, value WHERE key >= 0 AND KEY < 5").collect()
     results.foreach(println)
     
     def test(f: => Boolean, failureMsg: String) = {

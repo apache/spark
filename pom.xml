@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>1.1.0-SNAPSHOT</version>
+  <version>1.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -118,22 +118,27 @@
     <mesos.version>0.18.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <akka.group>org.spark-project.akka</akka.group>
-    <akka.version>2.2.3-shaded-protobuf</akka.version>
+    <akka.version>2.3.4-spark</akka.version>
     <slf4j.version>1.7.5</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
-    <hive.version>0.12.0</hive.version>
+    <hive.version>0.12.0-protobuf-2.5</hive.version>
     <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <chill.version>0.3.6</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
+    <avro.mapred.classifier></avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
+    <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
+    <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
+    <commons.httpclient.version>4.2.6</commons.httpclient.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -141,11 +146,10 @@
 
   <repositories>
     <repository>
-      <id>maven-repo</id>
+      <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <!-- HTTPS is unavailable for Maven Central -->
-      <url>http://repo.maven.apache.org/maven2</url>
+      <url>https://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -211,7 +215,19 @@
     <repository>
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
-      <url>http://repo.spring.io/libs-release</url>
+      <url>https://repo.spring.io/libs-release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!-- This is temporarily included to fix issues with Hive 0.12 -->
+      <id>spark-staging</id>
+      <name>Spring Staging Repository</name>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -220,6 +236,18 @@
       </snapshots>
     </repository>
   </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>central</id>
+      <url>https://repo1.maven.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
 
   <dependencyManagement>
     <dependencies>
@@ -247,6 +275,7 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>14.0.1</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -303,7 +332,7 @@
       <dependency>
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
-        <version>1.0.5</version>
+        <version>1.1.1.3</version>
       </dependency>
       <dependency>
         <groupId>net.jpountz.lz4</groupId>
@@ -407,7 +436,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.17.Final</version>
+        <version>4.0.23.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -594,6 +623,7 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
+        <classifier>${avro.mapred.classifier}</classifier>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -660,6 +690,35 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-common</artifactId>
         <version>${yarn.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-yarn-server-tests</artifactId>
+        <version>${yarn.version}</version>
+        <classifier>tests</classifier>
+        <scope>test</scope>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -780,7 +839,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.1.6</version>
+          <version>3.2.0</version>
           <executions>
             <execution>
               <id>scala-compile-first</id>
@@ -812,7 +871,6 @@
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
               <arg>-feature</arg>
-              <arg>-language:postfixOps</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -861,17 +919,19 @@
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
-          <version>1.0-RC2</version>
+          <version>1.0</version>
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
-            <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
+            <filereports>SparkTestSuite.txt</filereports>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
-            <environmentVariables>
-              <SPARK_HOME>${session.executionRootDirectory}</SPARK_HOME>
-              <SPARK_TESTING>1</SPARK_TESTING>
-            </environmentVariables>
+            <systemProperties>
+              <java.awt.headless>true</java.awt.headless>
+              <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+              <spark.testing>1</spark.testing>
+              <spark.ui.enabled>false</spark.ui.enabled>
+            </systemProperties>
           </configuration>
           <executions>
             <execution>
@@ -1003,11 +1063,34 @@
 
   <profiles>
 
+    <!--
+      This profile is enabled automatically by the sbt built. It changes the scope for the guava
+      dependency, since we don't shade it in the artifacts generated by the sbt build.
+    -->
+    <profile>
+      <id>sbt</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+          <scope>compile</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
       <id>spark-ganglia-lgpl</id>
       <modules>
         <module>extras/spark-ganglia-lgpl</module>
+      </modules>
+    </profile>
+
+    <!-- Kinesis integration is not included by default due to ASL-licensed code -->
+    <profile>
+      <id>kinesis-asl</id>
+      <modules>
+        <module>extras/kinesis-asl</module>
       </modules>
     </profile>
 
@@ -1057,6 +1140,7 @@
       <properties>
         <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
 
@@ -1066,6 +1150,7 @@
         <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
 
@@ -1075,6 +1160,7 @@
         <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
 
@@ -1093,16 +1179,47 @@
     </profile>
 
     <profile>
-      <id>mapr</id>
+      <id>mapr3</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
       <properties>
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
-        <yarn.version>2.3.0-mapr-4.0.0-beta</yarn.version>
-        <hbase.version>0.94.17-mapr-1403</hbase.version>
-        <zookeeper.version>3.4.5-mapr-1401</zookeeper.version>
+        <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
+        <hbase.version>0.94.17-mapr-1405</hbase.version>
+        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
       </properties>
+    </profile>
+
+    <profile>
+      <id>mapr4</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <properties>
+        <hadoop.version>2.3.0-mapr-4.0.0-FCS</hadoop.version>
+        <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
+        <hbase.version>0.94.17-mapr-1405-4.0.0-FCS</hbase.version>
+        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.curator</groupId>
+          <artifactId>curator-recipes</artifactId>
+          <version>2.4.0</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.zookeeper</groupId>
+              <artifactId>zookeeper</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+          <version>3.4.5-mapr-1406</version>
+        </dependency>
+      </dependencies>
     </profile>
 
     <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
@@ -1157,7 +1274,7 @@
     </profile>
 
     <profile>
-      <id>hive-thriftserver</id>
+      <id>hive</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>

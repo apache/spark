@@ -20,4 +20,5 @@ package org.apache.spark.metrics.sink
 private[spark] trait Sink {
   def start: Unit
   def stop: Unit
+  def report(): Unit
 }

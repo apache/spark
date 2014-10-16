@@ -25,7 +25,8 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
-import org.apache.spark.sql.Logging
+import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
@@ -33,14 +34,25 @@ import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
  * `HiveThriftServer2` thrift server.
  */
-private[hive] object HiveThriftServer2 extends Logging {
+object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
+
+  /**
+   * :: DeveloperApi ::
+   * Starts a new thrift server with the given context.
+   */
+  @DeveloperApi
+  def startWithContext(sqlContext: HiveContext): Unit = {
+    val server = new HiveThriftServer2(sqlContext)
+    server.init(sqlContext.hiveconf)
+    server.start()
+  }
+
 
   def main(args: Array[String]) {
     val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
 
     if (!optionsProcessor.process(args)) {
-      logger.warn("Error starting HiveThriftServer2 with given arguments")
       System.exit(-1)
     }
 
@@ -49,19 +61,19 @@ private[hive] object HiveThriftServer2 extends Logging {
     // Set all properties specified via command line.
     val hiveConf: HiveConf = ss.getConf
     hiveConf.getAllProperties.toSeq.sortBy(_._1).foreach { case (k, v) =>
-      logger.debug(s"HiveConf var: $k=$v")
+      logDebug(s"HiveConf var: $k=$v")
     }
 
     SessionState.start(ss)
 
-    logger.info("Starting SparkContext")
+    logInfo("Starting SparkContext")
     SparkSQLEnv.init()
     SessionState.start(ss)
 
     Runtime.getRuntime.addShutdownHook(
       new Thread() {
         override def run() {
-          SparkSQLEnv.sparkContext.stop()
+          SparkSQLEnv.stop()
         }
       }
     )
@@ -70,10 +82,10 @@ private[hive] object HiveThriftServer2 extends Logging {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
       server.init(hiveConf)
       server.start()
-      logger.info("HiveThriftServer2 started")
+      logInfo("HiveThriftServer2 started")
     } catch {
       case e: Exception =>
-        logger.error("Error starting HiveThriftServer2", e)
+        logError("Error starting HiveThriftServer2", e)
         System.exit(-1)
     }
   }

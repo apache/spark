@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.Map
+
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.types._
 
@@ -44,8 +46,6 @@ abstract class Generator extends Expression {
     ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
 
   override def nullable = false
-
-  override def references = children.flatMap(_.references).toSet
 
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
@@ -84,19 +84,19 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
   private lazy val elementTypes = child.dataType match {
-    case ArrayType(et, _) => et :: Nil
-    case MapType(kt,vt, _) => kt :: vt :: Nil
+    case ArrayType(et, containsNull) => (et, containsNull) :: Nil
+    case MapType(kt, vt, valueContainsNull) => (kt, false) :: (vt, valueContainsNull) :: Nil
   }
 
   // TODO: Move this pattern into Generator.
   protected def makeOutput() =
     if (attributeNames.size == elementTypes.size) {
       attributeNames.zip(elementTypes).map {
-        case (n, t) => AttributeReference(n, t, nullable = true)()
+        case (n, (t, nullable)) => AttributeReference(n, t, nullable)()
       }
     } else {
       elementTypes.zipWithIndex.map {
-        case (t, i) => AttributeReference(s"c_$i", t, nullable = true)()
+        case ((t, nullable), i) => AttributeReference(s"c_$i", t, nullable)()
       }
     }
 

@@ -15,22 +15,22 @@
 # limitations under the License.
 #
 
-import numpy
+from math import exp
 
-from numpy import array, shape
-from pyspark import SparkContext
-from pyspark.mllib._common import \
-    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
-    _serialize_double_matrix, _deserialize_double_matrix, \
-    _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
-from pyspark.mllib.linalg import SparseVector
-from pyspark.mllib.regression import LabeledPoint, LinearModel
-from math import exp, log
+import numpy
+from numpy import array
+
+from pyspark import SparkContext, PickleSerializer
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
+
+
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'SVMModel',
+           'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
 
 
 class LogisticRegressionModel(LinearModel):
+
     """A linear binary classification model derived from logistic regression.
 
     >>> data = [
@@ -60,28 +60,60 @@ class LogisticRegressionModel(LinearModel):
     >>> lrm.predict(SparseVector(2, {1: 0.0})) <= 0
     True
     """
+
     def predict(self, x):
-        _linear_predictor_typecheck(x, self._coeff)
-        margin = _dot(x, self._coeff) + self._intercept
+        margin = self.weights.dot(x) + self._intercept
         if margin > 0:
             prob = 1 / (1 + exp(-margin))
         else:
-            prob = 1 - 1 / (1 + exp(margin))
+            exp_margin = exp(margin)
+            prob = exp_margin / (1 + exp_margin)
         return 1 if prob > 0.5 else 0
 
 
 class LogisticRegressionWithSGD(object):
+
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0, initialWeights=None):
-        """Train a logistic regression model on the given data."""
+    def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
+              initialWeights=None, regParam=1.0, regType="none", intercept=False):
+        """
+        Train a logistic regression model on the given data.
+
+        :param data:              The training data.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
+                                  (default: 1.0).
+        :param miniBatchFraction: Fraction of data to be used for each SGD
+                                  iteration.
+        :param initialWeights:    The initial weights (default: None).
+        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regType:           The type of regularizer used for training
+                                  our model.
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater
+                                     - "l2" for using SquaredL2Updater
+                                     - "none" for no regularizer
+
+                                     (default: "none")
+
+        @param intercept:         Boolean parameter which indicates the use
+                                  or not of the augmented representation for
+                                  training data (i.e. whether bias features
+                                  are activated or not).
+        """
         sc = data.context
-        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
-            d._jrdd, iterations, step, miniBatchFraction, i)
-        return _regression_train_wrapper(sc, train_func, LogisticRegressionModel, data,
+
+        def train(jdata, i):
+            return sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
+                jdata, iterations, step, miniBatchFraction, i, regParam, regType, intercept)
+
+        return _regression_train_wrapper(sc, train, LogisticRegressionModel, data,
                                          initialWeights)
 
 
 class SVMModel(LinearModel):
+
     """A support vector machine.
 
     >>> data = [
@@ -105,24 +137,54 @@ class SVMModel(LinearModel):
     >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
     True
     """
+
     def predict(self, x):
-        _linear_predictor_typecheck(x, self._coeff)
-        margin = _dot(x, self._coeff) + self._intercept
+        margin = self.weights.dot(x) + self.intercept
         return 1 if margin >= 0 else 0
 
 
 class SVMWithSGD(object):
+
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
-              miniBatchFraction=1.0, initialWeights=None):
-        """Train a support vector machine on the given data."""
+              miniBatchFraction=1.0, initialWeights=None, regType="none", intercept=False):
+        """
+        Train a support vector machine on the given data.
+
+        :param data:              The training data.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
+                                  (default: 1.0).
+        :param regParam:          The regularizer parameter (default: 1.0).
+        :param miniBatchFraction: Fraction of data to be used for each SGD
+                                  iteration.
+        :param initialWeights:    The initial weights (default: None).
+        :param regType:           The type of regularizer used for training
+                                  our model.
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater
+                                     - "l2" for using SquaredL2Updater,
+                                     - "none" for no regularizer.
+
+                                     (default: "none")
+
+        @param intercept:         Boolean parameter which indicates the use
+                                  or not of the augmented representation for
+                                  training data (i.e. whether bias features
+                                  are activated or not).
+        """
         sc = data.context
-        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
-            d._jrdd, iterations, step, regParam, miniBatchFraction, i)
-        return _regression_train_wrapper(sc, train_func, SVMModel, data, initialWeights)
+
+        def train(jrdd, i):
+            return sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
+                jrdd, iterations, step, regParam, miniBatchFraction, i, regType, intercept)
+
+        return _regression_train_wrapper(sc, train, SVMModel, data, initialWeights)
 
 
 class NaiveBayesModel(object):
+
     """
     Model for Naive Bayes classifiers.
 
@@ -159,10 +221,12 @@ class NaiveBayesModel(object):
 
     def predict(self, x):
         """Return the most likely class for a data vector x"""
-        return self.labels[numpy.argmax(self.pi + _dot(x, self.theta.transpose()))]
+        x = _convert_to_vector(x)
+        return self.labels[numpy.argmax(self.pi + x.dot(self.theta.transpose()))]
 
 
 class NaiveBayes(object):
+
     @classmethod
     def train(cls, data, lambda_=1.0):
         """
@@ -174,18 +238,15 @@ class NaiveBayes(object):
         classification.  By making every vector a 0-1 vector, it can also be
         used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
 
-        @param data: RDD of NumPy vectors, one per element, where the first
+        :param data: RDD of NumPy vectors, one per element, where the first
                coordinate is the label and the rest is the feature vector
                (e.g. a count vector).
-        @param lambda_: The smoothing parameter
+        :param lambda_: The smoothing parameter
         """
         sc = data.context
-        dataBytes = _get_unmangled_labeled_point_rdd(data)
-        ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
-        return NaiveBayesModel(
-            _deserialize_double_vector(ans[0]),
-            _deserialize_double_vector(ans[1]),
-            _deserialize_double_matrix(ans[2]))
+        jlist = sc._jvm.PythonMLLibAPI().trainNaiveBayes(data._to_java_object_rdd(), lambda_)
+        labels, pi, theta = PickleSerializer().loads(str(sc._jvm.SerDe.dumps(jlist)))
+        return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 
 def _test():

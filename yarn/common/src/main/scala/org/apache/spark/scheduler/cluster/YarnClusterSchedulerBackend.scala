@@ -27,19 +27,34 @@ private[spark] class YarnClusterSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
 
-  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
+  var totalExpectedExecutors = 0
+
+  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
     minRegisteredRatio = 0.8
-    ready = false
   }
 
   override def start() {
     super.start()
-    var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
+    totalExpectedExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
     if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
-      numExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES")).getOrElse(numExecutors)
+      totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))
+        .getOrElse(totalExpectedExecutors)
     }
     // System property can override environment variable.
-    numExecutors = sc.getConf.getInt("spark.executor.instances", numExecutors)
-    totalExpectedExecutors.set(numExecutors)
+    totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
   }
+
+  override def sufficientResourcesRegistered(): Boolean = {
+    totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+  }
+
+  override def applicationId(): String =
+    // In YARN Cluster mode, spark.yarn.app.id is expect to be set
+    // before user application is launched.
+    // So, if spark.yarn.app.id is not set, it is something wrong.
+    sc.getConf.getOption("spark.yarn.app.id").getOrElse {
+      logError("Application ID is not set.")
+      super.applicationId
+    }
+
 }

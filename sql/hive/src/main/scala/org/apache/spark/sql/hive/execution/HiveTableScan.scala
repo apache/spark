@@ -64,31 +64,36 @@ case class HiveTableScan(
     BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
+  // Create a local copy of hiveconf,so that scan specific modifications should not impact 
+  // other queries
   @transient
-  private[this] val hadoopReader = new HadoopTableReader(attributes, relation, context)
+  private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
+
+  @transient
+  private[this] val hadoopReader = 
+    new HadoopTableReader(attributes, relation, context, hiveExtraConf)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
   }
 
   private def addColumnMetadataToConf(hiveConf: HiveConf) {
-    // Specifies IDs and internal names of columns to be scanned.
-    val neededColumnIDs = attributes.map(a => relation.output.indexWhere(_.name == a.name): Integer)
-    val columnInternalNames = neededColumnIDs.map(HiveConf.getColumnInternalName(_)).mkString(",")
+    // Specifies needed column IDs for those non-partitioning columns.
+    val neededColumnIDs =
+      attributes.map(a =>
+        relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
 
-    if (attributes.size == relation.output.size) {
-      // SQLContext#pruneFilterProject guarantees no duplicated value in `attributes`
-      ColumnProjectionUtils.setFullyReadColumns(hiveConf)
-    } else {
-      ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
-    }
-
+    ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
     ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
+
+    val tableDesc = relation.tableDesc
+    val deserializer = tableDesc.getDeserializerClass.newInstance
+    deserializer.initialize(hiveConf, tableDesc.getProperties)
 
     // Specifies types and object inspectors of columns to be scanned.
     val structOI = ObjectInspectorUtils
       .getStandardObjectInspector(
-        relation.tableDesc.getDeserializer.getObjectInspector,
+        deserializer.getObjectInspector,
         ObjectInspectorCopyOption.JAVA)
       .asInstanceOf[StructObjectInspector]
 
@@ -99,10 +104,10 @@ case class HiveTableScan(
       .mkString(",")
 
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
-    hiveConf.set(serdeConstants.LIST_COLUMNS, columnInternalNames)
+    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
   }
 
-  addColumnMetadataToConf(context.hiveconf)
+  addColumnMetadataToConf(hiveExtraConf)
 
   /**
    * Prunes partitions not involve the query plan.

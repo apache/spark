@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -131,6 +133,26 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       mapData.limit(1),
       mapData.take(1).toSeq)
+  }
+
+  test("SPARK-3395 limit distinct") {
+    val filtered = TestData.testData2
+      .distinct()
+      .orderBy(SortOrder('a, Ascending), SortOrder('b, Ascending))
+      .limit(1)
+      .registerTempTable("onerow")
+    checkAnswer(
+      sql("select * from onerow inner join testData2 on onerow.a = testData2.a"),
+      (1, 1, 1, 1) ::
+      (1, 1, 1, 2) :: Nil)
+  }
+
+  test("SPARK-3858 generator qualifiers are discarded") {
+    checkAnswer(
+      arrayData.as('ad)
+        .generate(Explode("data" :: Nil, 'data), alias = Some("ex"))
+        .select("ex.data".attr),
+      Seq(1, 2, 3, 2, 3, 4).map(Seq(_)))
   }
 
   test("average") {

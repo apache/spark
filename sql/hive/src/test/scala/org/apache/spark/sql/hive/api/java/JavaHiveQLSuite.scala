@@ -25,72 +25,64 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.TestSQLContext
 
 // Implicits
 import scala.collection.JavaConversions._
 
 class JavaHiveQLSuite extends FunSuite {
-  lazy val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
+  lazy val javaCtx = new JavaSparkContext(TestHive.sparkContext)
 
   // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
   lazy val javaHiveCtx = new JavaHiveContext(javaCtx) {
     override val sqlContext = TestHive
   }
 
-  ignore("SELECT * FROM src") {
+  test("SELECT * FROM src") {
     assert(
-      javaHiveCtx.hql("SELECT * FROM src").collect().map(_.getInt(0)) ===
+      javaHiveCtx.sql("SELECT * FROM src").collect().map(_.getInt(0)) ===
         TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
   }
 
-  private val explainCommandClassName =
-    classOf[ExplainCommand].getSimpleName.stripSuffix("$")
-
   def isExplanation(result: JavaSchemaRDD) = {
     val explanation = result.collect().map(_.getString(0))
-    explanation.size > 1 && explanation.head.startsWith(explainCommandClassName)
+    explanation.size > 1 && explanation.head.startsWith("== Physical Plan ==")
   }
 
-  ignore("Query Hive native command execution result") {
+  test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
     assertResult(0) {
-      javaHiveCtx.hql(s"DROP TABLE IF EXISTS $tableName").count()
+      javaHiveCtx.sql(s"DROP TABLE IF EXISTS $tableName").count()
     }
 
     assertResult(0) {
-      javaHiveCtx.hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+      javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
     }
-
-    javaHiveCtx.hql("SHOW TABLES").registerAsTable("show_tables")
 
     assert(
       javaHiveCtx
-        .hql("SELECT result FROM show_tables")
+        .sql("SHOW TABLES")
         .collect()
         .map(_.getString(0))
         .contains(tableName))
 
-    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      javaHiveCtx.hql(s"DESCRIBE $tableName").registerAsTable("describe_table")
-
+    assertResult(Array(Array("key", "int"), Array("value", "string"))) {
       javaHiveCtx
-        .hql("SELECT result FROM describe_table")
+        .sql(s"describe $tableName")
         .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
+        .map(row => Array(row.get(0).asInstanceOf[String], row.get(1).asInstanceOf[String]))
         .toArray
     }
 
-    assert(isExplanation(javaHiveCtx.hql(
+    assert(isExplanation(javaHiveCtx.sql(
       s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
   }
 
-  ignore("Exactly once semantics for DDL and command statements") {
+  test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
-    val q0 = javaHiveCtx.hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    val q0 = javaHiveCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
     // If the table was not created, the following assertion would fail
     assert(Try(TestHive.table(tableName)).isSuccess)

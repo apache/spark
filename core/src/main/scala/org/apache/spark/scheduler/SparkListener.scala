@@ -39,7 +39,8 @@ case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Propert
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent
+case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: TaskInfo)
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
@@ -47,6 +48,7 @@ case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListe
 @DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
+    stageAttemptId: Int,
     taskType: String,
     reason: TaskEndReason,
     taskInfo: TaskInfo,
@@ -65,19 +67,30 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerBlockManagerAdded(blockManagerId: BlockManagerId, maxMem: Long)
+case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
+case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockManagerId)
   extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+/**
+ * Periodic updates from executors.
+ * @param execId executor id
+ * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
+ */
 @DeveloperApi
-case class SparkListenerApplicationStart(appName: String, time: Long, sparkUser: String)
+case class SparkListenerExecutorMetricsUpdate(
+    execId: String,
+    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
   extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerApplicationStart(appName: String, appId: Option[String], time: Long,
+  sparkUser: String) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
@@ -158,6 +171,11 @@ trait SparkListener {
    * Called when the application ends
    */
   def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) { }
+
+  /**
+   * Called when the driver receives task metrics from an executor in a heartbeat.
+   */
+  def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) { }
 }
 
 /**

@@ -36,15 +36,21 @@ import org.apache.spark.serializer.JavaSerializer
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
+ * @param name human-readable name for use in Spark's web UI
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] (
     @transient initialValue: R,
-    param: AccumulableParam[R, T])
+    param: AccumulableParam[R, T],
+    val name: Option[String])
   extends Serializable {
 
-  val id = Accumulators.newId
+  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
+    this(initialValue, param, None)
+
+  val id: Long = Accumulators.newId
+
   @transient private var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
@@ -219,8 +225,10 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T])
-  extends Accumulable[T,T](initialValue, param)
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
+    extends Accumulable[T,T](initialValue, param, name) {
+  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+}
 
 /**
  * A simpler version of [[org.apache.spark.AccumulableParam]] where the only data type you can add
@@ -281,4 +289,7 @@ private object Accumulators {
       }
     }
   }
+
+  def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
+  def stringifyValue(value: Any) = "%s".format(value)
 }

@@ -28,7 +28,7 @@ case class TestData(key: Int, value: String)
 class InsertIntoHiveTableSuite extends QueryTest {
   val testData = TestHive.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
-  testData.registerAsTable("testData")
+  testData.registerTempTable("testData")
 
   test("insertInto() HiveTable") {
     createTable[TestData]("createAndInsertTest")

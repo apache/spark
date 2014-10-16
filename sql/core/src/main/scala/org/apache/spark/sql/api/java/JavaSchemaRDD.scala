@@ -22,7 +22,6 @@ import java.util.{List => JList}
 import org.apache.spark.Partitioner
 import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.sql.api.java.types.StructType
 import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -112,6 +111,8 @@ class JavaSchemaRDD(
     val arr: java.util.Collection[Row] = baseSchemaRDD.collect().toSeq.map(new Row(_))
     new java.util.ArrayList(arr)
   }
+
+  override def count(): Long = baseSchemaRDD.count
 
   override def take(num: Int): JList[Row] = {
     import scala.collection.JavaConversions._
