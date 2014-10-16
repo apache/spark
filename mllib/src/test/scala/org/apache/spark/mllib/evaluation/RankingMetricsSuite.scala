@@ -38,7 +38,9 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     assert(metrics.precisionAt(2) ~== 0.5 absTol eps)
     assert(metrics.precisionAt(3) ~== 0.5 absTol eps)
     assert(metrics.precisionAt(4) ~== 0.375 absTol eps)
+    assert(metrics.precisionAt(5) ~== 0.4 absTol eps)
     assert(metrics.precisionAt(10) ~== 0.4 absTol eps)
+    assert(metrics.precisionAt(15) ~== 0.266666 absTol eps)
 
     assert(map ~== 0.532539 absTol eps)
 
