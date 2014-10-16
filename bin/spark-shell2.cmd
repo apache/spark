@@ -17,7 +17,6 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-rem This is the entry point for running Spark submit. To avoid polluting the
-rem environment, it just launches a new cmd to do the real work.
+set SPARK_HOME=%~dp0..
 
-cmd /V /E /C %~dp0spark-submit2.cmd %*
+cmd /V /E /C %SPARK_HOME%\bin\spark-submit.cmd --class org.apache.spark.repl.Main %* spark-shell
