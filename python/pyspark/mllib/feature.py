@@ -166,7 +166,7 @@ class StandardScalerModel(JavaModelWrapper):
         :return: Standardized vector. If the variance of a column is zero,
                 it will return default `0.0` for the column with zero variance.
         """
-        JavaModelWrapper.transform(vector)
+        return JavaModelWrapper.transform(self, vector)
 
 
 class StandardScaler(object):
@@ -261,7 +261,7 @@ class IDFModel(JavaModelWrapper):
         :param dataset: an RDD of term frequency vectors
         :return: an RDD of TF-IDF vectors
         """
-        JavaModelWrapper.transform(dataset)
+        return JavaModelWrapper.transform(self, dataset)
 
 
 class IDF(object):
