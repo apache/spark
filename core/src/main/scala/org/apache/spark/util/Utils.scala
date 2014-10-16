@@ -340,8 +340,8 @@ private[spark] object Utils extends Logging {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
-    Option(uri.getScheme) match {
-      case Some("http") | Some("https") | Some("ftp") =>
+    Option(uri.getScheme).getOrElse("file") match {
+      case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
 
         var uc: URLConnection = null
@@ -374,7 +374,7 @@ private[spark] object Utils extends Logging {
           }
         }
         Files.move(tempFile, targetFile)
-      case Some("file") | None =>
+      case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
@@ -403,7 +403,7 @@ private[spark] object Utils extends Logging {
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
-      case Some(other) =>
+      case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
@@ -1401,10 +1401,10 @@ private[spark] object Utils extends Logging {
       paths.split(",").filter { p =>
         val formattedPath = if (windows) formatWindowsPath(p) else p
         val uri = new URI(formattedPath)
-        Option(uri.getScheme) match {
-          case Some(windowsDrive(d)) if windows => false
-          case Some("local") | Some("file") | None => false
-          case Some(other) => true
+        Option(uri.getScheme).getOrElse("file") match {
+          case windowsDrive(d) if windows => false
+          case "local" | "file" => false
+          case _ => true
         }
       }
     }
