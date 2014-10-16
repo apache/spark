@@ -88,7 +88,10 @@ private[yarn] abstract class YarnAllocator(
   private val executorIdCounter = new AtomicInteger()
   private val numExecutorsFailed = new AtomicInteger()
 
-  private val maxExecutors = args.numExecutors
+  private var maxExecutors = args.numExecutors
+
+  // Keep track of which container is running which executor to remove the executors later
+  private val executorIdToContainer = new HashMap[String, Container]
 
   protected val executorMemory = args.executorMemory
   protected val executorCores = args.executorCores
@@ -110,6 +113,25 @@ private[yarn] abstract class YarnAllocator(
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
+
+  /**
+   * Lazily request a container for each executor requested to be added.
+   * This happens lazily because we already allocate missing resources periodically.
+   */
+  def requestExecutors(numExecutors: Int): Unit = {
+    maxExecutors += numExecutors
+  }
+
+  /**
+   * Release the container running the given executor.
+   */
+  def killExecutor(executorId: String): Unit = {
+    if (!executorIdToContainer.contains(executorId)) {
+      logWarning(s"Attempted to kill unknown executor $executorId!")
+      return
+    }
+    releaseContainer(executorIdToContainer(executorId))
+  }
 
   def allocateResources() = {
     val missing = maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get()
@@ -269,6 +291,7 @@ private[yarn] abstract class YarnAllocator(
             CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
           logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
+          executorIdToContainer(executorId) = container
 
           // To be safe, remove the container from `releasedContainers`.
           releasedContainers.remove(containerId)

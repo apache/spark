@@ -66,7 +66,15 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
 
-  case class AddWebUIFilter(filterName:String, filterParams: Map[String, String], proxyBase :String)
+  case class AddWebUIFilter(filterName:String, filterParams: Map[String, String], proxyBase: String)
     extends CoarseGrainedClusterMessage
+
+  // Messages exchanged between the driver and the cluster manager for dynamic executor allocation
+
+  case object RegisterClusterManager extends CoarseGrainedClusterMessage
+
+  case class RequestExecutors(numExecutors: Int) extends CoarseGrainedClusterMessage
+
+  case class KillExecutor(executorId: String) extends CoarseGrainedClusterMessage
 
 }
