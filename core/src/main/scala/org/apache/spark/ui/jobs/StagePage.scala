@@ -103,7 +103,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val taskHeaders: Seq[String] =
         Seq(
-          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor",
+          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor ID / Host",
           "Launch Time", "Duration", "GC Time", "Accumulators") ++
         {if (hasInput) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
@@ -282,7 +282,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         }</td>
         <td>{info.status}</td>
         <td>{info.taskLocality}</td>
-        <td>{info.host}</td>
+        <td>{info.executorId} / {info.host}</td>
         <td>{UIUtils.formatDate(new Date(info.launchTime))}</td>
         <td sorttable_customkey={duration.toString}>
           {formatDuration}

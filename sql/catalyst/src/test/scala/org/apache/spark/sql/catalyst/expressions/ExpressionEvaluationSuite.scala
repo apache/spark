@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+
+import scala.collection.immutable.HashSet
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 import org.scalautils.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
+
 
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -145,6 +148,24 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
   }
 
+  test("INSET") {
+    val hS = HashSet[Any]() + 1 + 2
+    val nS = HashSet[Any]() + 1 + 2 + null
+    val one = Literal(1)
+    val two = Literal(2)
+    val three = Literal(3)
+    val nl = Literal(null)
+    val s = Seq(one, two)
+    val nullS = Seq(one, two, null)
+    checkEvaluation(InSet(one, hS, one +: s), true)
+    checkEvaluation(InSet(two, hS, two +: s), true)
+    checkEvaluation(InSet(two, nS, two +: nullS), true)
+    checkEvaluation(InSet(nl, nS, nl +: nullS), true)
+    checkEvaluation(InSet(three, hS, three +: s), false)
+    checkEvaluation(InSet(three, nS, three +: nullS), false)
+    checkEvaluation(InSet(one, hS, one +: s) && InSet(two, hS, two +: s), true)
+  }
+ 
   test("MaxOf") {
     checkEvaluation(MaxOf(1, 2), 2)
     checkEvaluation(MaxOf(2, 1), 2)
@@ -231,8 +252,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.1"
-    val ts = Timestamp.valueOf(sts)
+    val sd = "1970-01-01"
+    val d = Date.valueOf(sd)
+    val sts = sd + " 00:00:02"
+    val nts = sts + ".1"
+    val ts = Timestamp.valueOf(nts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
     checkEvaluation("abdef" cast DecimalType, null)
@@ -245,8 +269,15 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
-    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
+    checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), d)
+    checkEvaluation(Cast(Literal(nts) cast TimestampType, StringType), nts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
+    // all convert to string type to check
+    checkEvaluation(
+      Cast(Cast(Literal(nts) cast TimestampType, DateType), StringType), sd)
+    checkEvaluation(
+      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), sts)
 
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
@@ -295,11 +326,28 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
 
+  test("date") {
+    val d1 = Date.valueOf("1970-01-01")
+    val d2 = Date.valueOf("1970-01-02")
+    checkEvaluation(Literal(d1) < Literal(d2), true)
+  }
+
   test("timestamp") {
     val ts1 = new Timestamp(12)
     val ts2 = new Timestamp(123)
     checkEvaluation(Literal("ab") < Literal("abc"), true)
     checkEvaluation(Literal(ts1) < Literal(ts2), true)
+  }
+
+  test("date casting") {
+    val d = Date.valueOf("1970-01-01")
+    checkEvaluation(Cast(d, ShortType), null)
+    checkEvaluation(Cast(d, IntegerType), null)
+    checkEvaluation(Cast(d, LongType), null)
+    checkEvaluation(Cast(d, FloatType), null)
+    checkEvaluation(Cast(d, DoubleType), null)
+    checkEvaluation(Cast(d, StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
   }
 
   test("timestamp casting") {

@@ -31,8 +31,9 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
@@ -67,15 +68,18 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
   /** Sets up the system initially or after a RESET command */
-  protected def configure() {
+  protected def configure(): Unit = {
     setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
     setConf("hive.metastore.warehouse.dir", warehousePath)
+    Utils.registerShutdownDeleteDir(new File(warehousePath))
+    Utils.registerShutdownDeleteDir(new File(metastorePath))
   }
 
   val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
   testTempDir.delete()
   testTempDir.mkdir()
+  Utils.registerShutdownDeleteDir(testTempDir)
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
@@ -121,8 +125,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
-  hiveFilesTemp.deleteOnExit()
-
+  Utils.registerShutdownDeleteDir(hiveFilesTemp)
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -154,7 +157,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
-        case CacheCommand(tbl, _) => tbl :: Nil
+        case CacheTableCommand(tbl, _, _) => tbl :: Nil
         case _ => Nil
       }
 
