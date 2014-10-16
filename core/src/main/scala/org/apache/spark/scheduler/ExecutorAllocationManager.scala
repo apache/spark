@@ -49,14 +49,14 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  *   spark.dynamicAllocation.minExecutors - Lower bound on the number of executors
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
  *
- *   spark.dynamicAllocation.addExecutorThreshold - How long before new executors are added (N)
- *   spark.dynamicAllocation.addExecutorInterval - How often to add new executors (M)
- *   spark.dynamicAllocation.removeExecutorThreshold - How long before an executor is removed (K)
+ *   spark.dynamicAllocation.addExecutorThresholdSeconds - How long before new executors are added
+ *   spark.dynamicAllocation.addExecutorIntervalSeconds - How often to add new executors
+ *   spark.dynamicAllocation.removeExecutorThresholdSeconds - How long before an executor is removed
  *
- *   spark.dynamicAllocation.addExecutorRetryInterval - How often to retry adding executors
- *   spark.dynamicAllocation.removeExecutorRetryInterval - How often to retry removing executors
- *   spark.dynamicAllocation.maxAddExecutorRetryAttempts - Max retries in re-adding executors
- *   spark.dynamicAllocation.maxRemoveExecutorRetryAttempts - Max retries in re-removing executors
+ *   spark.dynamicAllocation.addExecutorRetryIntervalSeconds - How often to retry an add
+ *   spark.dynamicAllocation.removeExecutorRetryIntervalSeconds - How often to retry a remove
+ *   spark.dynamicAllocation.maxAddExecutorRetryAttempts - Max retries in retrying an add
+ *   spark.dynamicAllocation.maxRemoveExecutorRetryAttempts - Max retries in retrying a remove
  *
  * Synchronization: Because the schedulers in Spark are single-threaded, contention should only
  * arise when new executors register or when existing executors have been removed, both of which
@@ -81,15 +81,15 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
 
   // How frequently to add and remove executors (seconds)
   private val addThreshold =
-    conf.getLong("spark.dynamicAllocation.addExecutorThreshold", 60)
+    conf.getLong("spark.dynamicAllocation.addExecutorThresholdSeconds", 60)
   private val addInterval =
-    conf.getLong("spark.dynamicAllocation.addExecutorInterval", addThreshold)
+    conf.getLong("spark.dynamicAllocation.addExecutorIntervalSeconds", addThreshold)
   private val addRetryInterval =
-    conf.getLong("spark.dynamicAllocation.addExecutorRetryInterval", addInterval)
+    conf.getLong("spark.dynamicAllocation.addExecutorRetryIntervalSeconds", addInterval)
   private val removeThreshold =
-    conf.getLong("spark.dynamicAllocation.removeExecutorThreshold", 600)
+    conf.getLong("spark.dynamicAllocation.removeExecutorThresholdSeconds", 600)
   private val removeRetryInterval =
-    conf.getLong("spark.dynamicAllocation.removeExecutorRetryInterval", 300)
+    conf.getLong("spark.dynamicAllocation.removeExecutorRetryIntervalSeconds", 300)
 
   // Number of executors to add in the next round
   private var numExecutorsToAdd = 1
