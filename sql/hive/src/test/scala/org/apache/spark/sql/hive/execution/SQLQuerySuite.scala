@@ -87,4 +87,10 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT case when 1|0=1 then 1 else 0 end FROM src"),
       sql("SELECT 1 FROM src").collect().toSeq)
   }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(
+      sql("SELECT case when 1^0=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
 }

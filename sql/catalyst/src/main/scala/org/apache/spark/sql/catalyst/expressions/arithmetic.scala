@@ -117,27 +117,48 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }
 
+/**
+ * A function that calculates bitwise and(&) of two numbers.
+ */
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "&"
 
   override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
-      case ByteType => (evalE1.asInstanceOf[Byte] & evalE2.asInstanceOf[Byte]).toByte
-      case ShortType => (evalE1.asInstanceOf[Short] & evalE2.asInstanceOf[Short]).toShort
-      case IntegerType => evalE1.asInstanceOf[Int] & evalE2.asInstanceOf[Int]
-      case LongType => evalE1.asInstanceOf[Long] & evalE2.asInstanceOf[Long]
-      case other => sys.error(s"Unsupported bitwise & operation on ${other}")
+    case ByteType => (evalE1.asInstanceOf[Byte] & evalE2.asInstanceOf[Byte]).toByte
+    case ShortType => (evalE1.asInstanceOf[Short] & evalE2.asInstanceOf[Short]).toShort
+    case IntegerType => evalE1.asInstanceOf[Int] & evalE2.asInstanceOf[Int]
+    case LongType => evalE1.asInstanceOf[Long] & evalE2.asInstanceOf[Long]
+    case other => sys.error(s"Unsupported bitwise & operation on ${other}")
   }
 }
 
+/**
+ * A function that calculates bitwise or(|) of two numbers.
+ */
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "&"
 
   override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
-      case ByteType => (evalE1.asInstanceOf[Byte] | evalE2.asInstanceOf[Byte]).toByte
-      case ShortType => (evalE1.asInstanceOf[Short] | evalE2.asInstanceOf[Short]).toShort
-      case IntegerType => evalE1.asInstanceOf[Int] | evalE2.asInstanceOf[Int]
-      case LongType => evalE1.asInstanceOf[Long] | evalE2.asInstanceOf[Long]
-      case other => sys.error(s"Unsupported bitwise | operation on ${other}")
+    case ByteType => (evalE1.asInstanceOf[Byte] | evalE2.asInstanceOf[Byte]).toByte
+    case ShortType => (evalE1.asInstanceOf[Short] | evalE2.asInstanceOf[Short]).toShort
+    case IntegerType => evalE1.asInstanceOf[Int] | evalE2.asInstanceOf[Int]
+    case LongType => evalE1.asInstanceOf[Long] | evalE2.asInstanceOf[Long]
+    case other => sys.error(s"Unsupported bitwise | operation on ${other}")
+  }
+}
+
+/**
+ * A function that calculates bitwise xor(^) of two numbers.
+ */
+case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
+  def symbol = "^"
+
+  override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
+    case ByteType => (evalE1.asInstanceOf[Byte] ^ evalE2.asInstanceOf[Byte]).toByte
+    case ShortType => (evalE1.asInstanceOf[Short] ^ evalE2.asInstanceOf[Short]).toShort
+    case IntegerType => evalE1.asInstanceOf[Int] ^ evalE2.asInstanceOf[Int]
+    case LongType => evalE1.asInstanceOf[Long] ^ evalE2.asInstanceOf[Long]
+    case other => sys.error(s"Unsupported bitwise ^ operation on ${other}")
   }
 }
 

@@ -70,6 +70,7 @@ package object dsl {
     def % (other: Expression) = Remainder(expr, other)
     def & (other: Expression) = BitwiseAnd(expr, other)
     def | (other: Expression) = BitwiseOr(expr, other)
+    def ^ (other: Expression) = BitwiseXor(expr, other)
 
     def && (other: Expression) = And(expr, other)
     def || (other: Expression) = Or(expr, other)
