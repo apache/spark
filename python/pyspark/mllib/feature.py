@@ -211,12 +211,12 @@ class StandardScaler(object):
         return StandardScalerModel(sc, jmodel)
 
 
-class HashTF(object):
+class HashingTF(object):
     """
     :: Experimental ::
     Maps a sequence of terms to their term frequencies using the hashing trick.
 
-    >>> htf = HashTF(100)
+    >>> htf = HashingTF(100)
     >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
     SparseVector(100, {1: 1.0, 14: 1.0, 31: 2.0, 44: 2.0})
