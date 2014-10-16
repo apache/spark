@@ -94,8 +94,10 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   // Number of executors to add in the next round
   private var numExecutorsToAdd = 1
 
-  // Pending executors that have not actually been added/removed yet
+  // Number of executors that have been requested but have not registered yet
   private var numExecutorsPendingToAdd = 0
+
+  // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
 
   // Retry attempts
@@ -133,7 +135,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   private var addThresholdCrossed = false
 
   // Loop interval (ms)
-  private val intervalMs = 100
+  private val intervalMillis = 100
 
   // Scheduler backend through which requests to add/remove executors are made
   // Note that this assumes the backend has already initialized when this is first used
@@ -150,18 +152,12 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
 
   initialize()
 
-  private def initialize(): Unit = {
-    // Keep track of all known executors
-    scheduler.executorIdToHost.keys.foreach(executorAdded)
-    startPolling()
-  }
-
   /**
    * Start the main polling thread that keeps track of when to add and remove executors.
    * During each interval, this thread checks if any of the timers have expired, and, if
    * so, triggers the relevant timer actions.
    */
-  def startPolling(): Unit = {
+  def initialize(): Unit = {
     val thread = new Thread {
       override def run() {
         while (true) {
@@ -196,18 +192,18 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
               logError("Exception encountered in dynamic executor allocation thread!", e)
           } finally {
             // Advance all timers that are enabled
-            Thread.sleep(intervalMs)
+            Thread.sleep(intervalMillis)
             if (addTimer > 0) {
-              addTimer += intervalMs
+              addTimer += intervalMillis
             }
             if (addRetryTimer > 0) {
-              addRetryTimer += intervalMs
+              addRetryTimer += intervalMillis
             }
             removeTimers.foreach { case (id, _) =>
-              removeTimers(id) += intervalMs
+              removeTimers(id) += intervalMillis
             }
             removeRetryTimers.foreach { case (id, _) =>
-              removeRetryTimers(id) += intervalMs
+              removeRetryTimers(id) += intervalMillis
             }
           }
         }
@@ -230,7 +226,6 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     if (numExecutorsPendingToAdd > 0) {
       logInfo(s"Not adding executors because there are still " +
         s"$numExecutorsPendingToAdd request(s) in flight")
-      numExecutorsToAdd = 1
       return
     }
 
@@ -251,7 +246,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     logInfo(s"Pending tasks are building up! Adding $actualNumExecutorsToAdd " +
       s"new executor(s) (new total is $newTotalExecutors)")
     numExecutorsToAdd *= 2
-    numExecutorsPendingToAdd += actualNumExecutorsToAdd
+    numExecutorsPendingToAdd = actualNumExecutorsToAdd
     backend.requestExecutors(actualNumExecutorsToAdd)
     startAddRetryTimer()
   }
