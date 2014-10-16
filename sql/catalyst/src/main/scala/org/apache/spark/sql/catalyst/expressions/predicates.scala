@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.BooleanType
-
 
 object InterpretedPredicate {
   def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
@@ -92,6 +92,23 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def eval(input: Row): Any = {
     val evaluatedValue = value.eval(input)
     list.exists(e => e.eval(input) == evaluatedValue)
+  }
+}
+
+/**
+ * Optimized version of In clause, when all filter values of In clause are
+ * static.
+ */
+case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+  extends Predicate {
+
+  def children = child
+
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$value INSET ${hset.mkString("(", ",", ")")}"
+
+  override def eval(input: Row): Any = {
+    hset.contains(value.eval(input))
   }
 }
 

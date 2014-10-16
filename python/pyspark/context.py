@@ -29,7 +29,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, CompressedSerializer
+    PairDeserializer, CompressedSerializer, AutoBatchedSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -67,27 +67,28 @@ class SparkContext(object):
     _default_batch_size_for_serialized_input = 10
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-                 environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
-                 gateway=None):
+                 environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
+                 gateway=None, jsc=None):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
 
-        @param master: Cluster URL to connect to
+        :param master: Cluster URL to connect to
                (e.g. mesos://host:port, spark://host:port, local[4]).
-        @param appName: A name for your job, to display on the cluster web UI.
-        @param sparkHome: Location where Spark is installed on cluster nodes.
-        @param pyFiles: Collection of .zip or .py files to send to the cluster
+        :param appName: A name for your job, to display on the cluster web UI.
+        :param sparkHome: Location where Spark is installed on cluster nodes.
+        :param pyFiles: Collection of .zip or .py files to send to the cluster
                and add to PYTHONPATH.  These can be paths on the local file
                system or HDFS, HTTP, HTTPS, or FTP URLs.
-        @param environment: A dictionary of environment variables to set on
+        :param environment: A dictionary of environment variables to set on
                worker nodes.
-        @param batchSize: The number of Python objects represented as a single
-               Java object.  Set 1 to disable batching or -1 to use an
-               unlimited batch size.
-        @param serializer: The serializer for RDDs.
-        @param conf: A L{SparkConf} object setting Spark properties.
-        @param gateway: Use an existing gateway and JVM, otherwise a new JVM
+        :param batchSize: The number of Python objects represented as a single
+               Java object. Set 1 to disable batching, 0 to automatically choose
+               the batch size based on object sizes, or -1 to use an unlimited
+               batch size
+        :param serializer: The serializer for RDDs.
+        :param conf: A L{SparkConf} object setting Spark properties.
+        :param gateway: Use an existing gateway and JVM, otherwise a new JVM
                will be instantiated.
 
 
@@ -103,20 +104,22 @@ class SparkContext(object):
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf)
+                          conf, jsc)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf):
+                 conf, jsc):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
         if batchSize == 1:
             self.serializer = self._unbatched_serializer
+        elif batchSize == 0:
+            self.serializer = AutoBatchedSerializer(self._unbatched_serializer)
         else:
             self.serializer = BatchedSerializer(self._unbatched_serializer,
                                                 batchSize)
@@ -151,7 +154,7 @@ class SparkContext(object):
                 self.environment[varName] = v
 
         # Create the Java SparkContext through Py4J
-        self._jsc = self._initialize_context(self._conf._jconf)
+        self._jsc = jsc or self._initialize_context(self._conf._jconf)
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -410,22 +413,23 @@ class SparkContext(object):
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
         The mechanism is as follows:
+
             1. A Java RDD is created from the SequenceFile or other InputFormat, and the key
                and value Writable classes
             2. Serialization is attempted via Pyrolite pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
             4. C{PickleSerializer} is used to deserialize pickled objects on the Python side
 
-        @param path: path to sequncefile
-        @param keyClass: fully qualified classname of key Writable class
+        :param path: path to sequncefile
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.Text")
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.LongWritable")
-        @param keyConverter:
-        @param valueConverter:
-        @param minSplits: minimum splits in dataset
+        :param keyConverter:
+        :param valueConverter:
+        :param minSplits: minimum splits in dataset
                (default min(2, sc.defaultParallelism))
-        @param batchSize: The number of Python objects represented as a single
+        :param batchSize: The number of Python objects represented as a single
                Java object. (default sc._default_batch_size_for_serialized_input)
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
@@ -445,18 +449,18 @@ class SparkContext(object):
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java
 
-        @param path: path to Hadoop file
-        @param inputFormatClass: fully qualified classname of Hadoop InputFormat
+        :param path: path to Hadoop file
+        :param inputFormatClass: fully qualified classname of Hadoop InputFormat
                (e.g. "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.Text")
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.LongWritable")
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop configuration, passed in as a dict
                (None by default)
-        @param batchSize: The number of Python objects represented as a single
+        :param batchSize: The number of Python objects represented as a single
                Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
@@ -475,17 +479,17 @@ class SparkContext(object):
         This will be converted into a Configuration in Java.
         The mechanism is the same as for sc.sequenceFile.
 
-        @param inputFormatClass: fully qualified classname of Hadoop InputFormat
+        :param inputFormatClass: fully qualified classname of Hadoop InputFormat
                (e.g. "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.Text")
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.LongWritable")
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop configuration, passed in as a dict
                (None by default)
-        @param batchSize: The number of Python objects represented as a single
+        :param batchSize: The number of Python objects represented as a single
                Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
@@ -506,18 +510,18 @@ class SparkContext(object):
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java.
 
-        @param path: path to Hadoop file
-        @param inputFormatClass: fully qualified classname of Hadoop InputFormat
+        :param path: path to Hadoop file
+        :param inputFormatClass: fully qualified classname of Hadoop InputFormat
                (e.g. "org.apache.hadoop.mapred.TextInputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.Text")
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.LongWritable")
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop configuration, passed in as a dict
                (None by default)
-        @param batchSize: The number of Python objects represented as a single
+        :param batchSize: The number of Python objects represented as a single
                Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
@@ -536,17 +540,17 @@ class SparkContext(object):
         This will be converted into a Configuration in Java.
         The mechanism is the same as for sc.sequenceFile.
 
-        @param inputFormatClass: fully qualified classname of Hadoop InputFormat
+        :param inputFormatClass: fully qualified classname of Hadoop InputFormat
                (e.g. "org.apache.hadoop.mapred.TextInputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.Text")
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.LongWritable")
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop configuration, passed in as a dict
                (None by default)
-        @param batchSize: The number of Python objects represented as a single
+        :param batchSize: The number of Python objects represented as a single
                Java object. (default sc._default_batch_size_for_serialized_input)
         """
         jconf = self._dictToJavaMap(conf)
