@@ -372,13 +372,13 @@ private[spark] class Worker(
     }
   }
 
-  def masterDisconnected() {
+  private def masterDisconnected() {
     logError("Connection to master failed! Waiting for master to reconnect...")
     connected = false
     scheduleAttemptsToReconnectToMaster()
   }
 
-  def scheduleAttemptsToReconnectToMaster() {
+  private def scheduleAttemptsToReconnectToMaster() {
     if (!scheduledReconnectTask.isDefined) {
       scheduledReconnectTask = Some(context.system.scheduler.schedule(
         Duration Zero, RECONNECT_ATTEMPT_INTERVAL_MILLIS millis) {
