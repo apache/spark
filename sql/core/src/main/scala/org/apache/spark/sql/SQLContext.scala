@@ -68,7 +68,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new Analyzer(catalog, functionRegistry, caseSensitive = true)
 
   @transient
-  protected[sql] val optimizer = Optimizer
+  protected[sql] lazy val optimizer: Optimizer = Optimizer
 
   @transient
   protected[sql] val sqlParser = {
