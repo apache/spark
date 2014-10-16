@@ -26,16 +26,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 import org.apache.hadoop.hive.ql.io.orc._
-import org.apache.hadoop.hive.ql.io.orc.OrcProto.Type.Kind
-import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 
 import org.apache.spark.sql.parquet.FileSystemHelper
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedException, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.hive.HiveMetastoreTypes
 
 private[sql] case class OrcRelation(
     path: String,
@@ -49,85 +47,20 @@ private[sql] case class OrcRelation(
 
   var rowClass: Class[_] = null
 
-  val fieldIdCache: mutable.Map[String, Int] = new mutable.HashMap[String, Int]
-
-  val fieldNameTypeCache: mutable.Map[String, String] = new mutable.HashMap[String, String]
-
   override val output = orcSchema
 
+  // TODO: use statistics in ORC file
   override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
 
   private def orcSchema: Seq[Attribute] = {
+    // get the schema info through ORC Reader
     val origPath = new Path(path)
     val reader = OrcFileOperator.getMetaDataReader(origPath, conf)
+    val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+    // data types that is inspected by this inspector
+    val schema = inspector.getTypeName
 
-    if (null != reader) {
-      val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-      val fields = inspector.getAllStructFieldRefs
-
-      if (fields.size() == 0) {
-        return Seq.empty
-      }
-
-      val totalType = reader.getTypes.get(0)
-      val keys = totalType.getFieldNamesList
-      val types = totalType.getSubtypesList
-      logInfo("field names are {}", keys)
-      logInfo("types are {}", types)
-
-      val colBuff = new StringBuilder
-      val typeBuff = new StringBuilder
-      for (i <- 0 until fields.size()) {
-        val fieldName = fields.get(i).getFieldName
-        val typeName = fields.get(i).getFieldObjectInspector.getTypeName
-        colBuff.append(fieldName)
-        fieldNameTypeCache.put(fieldName, typeName)
-        fieldIdCache.put(fieldName, i)
-        colBuff.append(",")
-        typeBuff.append(typeName)
-        typeBuff.append(":")
-      }
-      colBuff.setLength(colBuff.length - 1)
-      typeBuff.setLength(typeBuff.length - 1)
-      prop.setProperty("columns", colBuff.toString())
-      prop.setProperty("columns.types", typeBuff.toString())
-      logInfo(s"columns are ${colBuff}, columns.types are $typeBuff")
-      val attributes = convertToAttributes(reader, keys, types)
-      attributes
-    } else {
-      Seq.empty
-    }
-  }
-
-  def convertToAttributes(
-      reader: Reader,
-      keys: java.util.List[String],
-      types: java.util.List[Integer]): Seq[Attribute] = {
-    val range = 0.until(keys.size())
-    range.map {
-      i => reader.getTypes.get(types.get(i)).getKind match {
-        case Kind.BOOLEAN =>
-          new AttributeReference(keys.get(i), BooleanType, false)()
-        case Kind.STRING =>
-          new AttributeReference(keys.get(i), StringType, true)()
-        case Kind.BYTE =>
-          new AttributeReference(keys.get(i), ByteType, true)()
-        case Kind.SHORT =>
-          new AttributeReference(keys.get(i), ShortType, true)()
-        case Kind.INT =>
-          new AttributeReference(keys.get(i), IntegerType, true)()
-        case Kind.LONG =>
-          new AttributeReference(keys.get(i), LongType, false)()
-        case Kind.FLOAT =>
-          new AttributeReference(keys.get(i), FloatType, false)()
-        case Kind.DOUBLE =>
-          new AttributeReference(keys.get(i), DoubleType, false)()
-        case _ => {
-          logInfo("unsupported datatype")
-          null
-        }
-      }
-    }
+    HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType].toAttributes
   }
 
   override def newInstance() = OrcRelation(path, conf, sqlContext).asInstanceOf[this.type]
@@ -174,38 +107,26 @@ private[sql] object OrcRelation {
       sqlContext: SQLContext): OrcRelation = {
     val path = checkPath(pathString, allowExisting, conf)
 
-    /** set compression kind in hive 0.13.1
+    /** TODO: set compression kind in hive 0.13.1
       * conf.set(
       *   HiveConf.ConfVars.OHIVE_ORC_DEFAULT_COMPRESS.varname,
       *   shortOrcCompressionCodecNames.getOrElse(
       *    sqlContext.orcCompressionCodec.toUpperCase, CompressionKind.NONE).name)
       */
-    val orcRelation = new OrcRelation(path.toString, Some(conf), sqlContext)
-
-    orcRelation
+    new OrcRelation(path.toString, Some(conf), sqlContext)
   }
 
   private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {
-    if (pathStr == null) {
-      throw new IllegalArgumentException("Unable to create OrcRelation: path is null")
-    }
+    require(pathStr != null, "Unable to create OrcRelation: path is null")
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
-    if (fs == null) {
-      throw new IllegalArgumentException(
-        s"Unable to create OrcRelation: incorrectly formatted path $pathStr")
-    }
+    require(fs != null, s"Unable to create OrcRelation: incorrectly formatted path $pathStr")
     val path = origPath.makeQualified(fs)
-    if (!allowExisting && fs.exists(path)) {
-      sys.error(s"File $pathStr already exists.")
+    if (!allowExisting) {
+      require(!fs.exists(path), s"File $pathStr already exists.")
     }
-
-    if (fs.exists(path) &&
-      !fs.getFileStatus(path)
-        .getPermission
-        .getUserAction
-        .implies(FsAction.READ_WRITE)) {
-      throw new IOException(
+    if (fs.exists(path)) {
+      require(fs.getFileStatus(path).getPermission.getUserAction.implies(FsAction.READ_WRITE),
         s"Unable to create OrcRelation: path $path not read-writable")
     }
     path

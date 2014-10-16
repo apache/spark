@@ -22,12 +22,13 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.orc.{InsertIntoOrcTable, OrcRelation, OrcTableScan}
+import org.apache.spark.sql.hive.orc.{WriteToOrcFile, InsertIntoOrcTable, OrcRelation, OrcTableScan}
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
@@ -224,7 +225,7 @@ private[hive] trait HiveStrategies {
 
   object OrcOperations extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.WriteToOrcFile(path, child) =>
+      case WriteToOrcFile(path, child) =>
         val relation =
           OrcRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
         InsertIntoOrcTable(relation, planLater(child), overwrite = true) :: Nil

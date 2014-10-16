@@ -41,6 +41,20 @@ import org.apache.spark.sql.parquet.FileSystemHelper
 import org.apache.spark.{TaskContext, SerializableWritable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode => LogicalUnaryNode}
+import org.apache.spark.sql.execution.UnaryNode
+import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.hive.HiveMetastoreTypes
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
+
+/**
+ * logical plan of writing to ORC file
+ */
+case class WriteToOrcFile(
+    path: String,
+    child: LogicalPlan) extends LogicalUnaryNode {
+  def output = child.output
+}
 
 /**
  * orc table scan operator. Imports the file that backs the given
@@ -107,7 +121,7 @@ case class OrcTableScan(
       FileInputFormat.addInputPath(job, path)
     }
 
-    setColumnIds(output, relation, conf)
+    addColumnIds(output, relation, conf)
     val inputClass = classOf[OrcInputFormat].asInstanceOf[
       Class[_ <: org.apache.hadoop.mapred.InputFormat[Void, Row]]]
 
@@ -117,34 +131,64 @@ case class OrcTableScan(
   }
 
   /**
+   * add column ids and names
    * @param output
    * @param relation
    * @param conf
    */
-  def setColumnIds(output: Seq[Attribute], relation: OrcRelation, conf: Configuration) {
-    val idBuff = new StringBuilder()
+  def addColumnIds(output: Seq[Attribute], relation: OrcRelation, conf: Configuration) {
+    val fieldIdMap = relation.output.zipWithIndex.toMap
 
-    output.map(att => {
+    val ids = output.map(att => {
       val realName = att.name.toLowerCase(Locale.ENGLISH)
-      val id = relation.fieldIdCache.getOrElse(realName, null)
-      if (null != id) {
-        idBuff.append(id)
-        idBuff.append(",")
-      }
-    })
-    if (idBuff.length > 0) {
-      idBuff.setLength(idBuff.length - 1)
+      fieldIdMap.getOrElse(realName, -1)
+    }).filter(_ >= 0)
+    if (ids != null && !ids.isEmpty) {
+      ColumnProjectionUtils.appendReadColumnIDs(conf, ids)
     }
-    conf.set(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR, idBuff.toString())
+
+    val names = output.map(_.name)
+    if (names != null && !names.isEmpty) {
+      ColumnProjectionUtils.appendReadColumnNames(conf, names)
+    }
   }
 
-  /**
-   *
-   * @param data
-   * @tparam A
-   * @return
-   */
+  // Transform all given raw `Writable`s into `Row`s.
+  def fillObject(
+      iterator: scala.collection.Iterator[Writable],
+      nonPartitionKeyAttrs: Seq[(Attribute, Int)],
+      mutableRow: MutableRow): Iterator[Row] = {
+    val schema =  StructType.fromAttributes(relation.output)
+    val orcSchema = HiveMetastoreTypes.toMetastoreType(schema)
+    val deserializer = new OrcSerde
+    val typeInfo: TypeInfo = TypeInfoUtils.getTypeInfoFromTypeString(orcSchema)
+    val soi = relation.getObjectInspector
+
+    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
+      case (attr, ordinal) =>
+        soi.getStructFieldRef(attr.name) -> ordinal
+    }.unzip
+
+    val unwrappers = HadoopTypeConverter.unwrappers(fieldRefs)
+    // Map each tuple to a row object
+    iterator.map { value =>
+      val raw = deserializer.deserialize(value)
+      var i = 0
+      while (i < fieldRefs.length) {
+        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+        if (fieldValue == null) {
+          mutableRow.setNullAt(fieldOrdinals(i))
+        } else {
+          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        }
+        i += 1
+      }
+      mutableRow: Row
+    }
+  }
+
   def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
+    val mutableRow = new SpecificMutableRow(output.map(_.dataType))
     data.mapPartitions {
       iterator =>
         if (iterator.isEmpty) {

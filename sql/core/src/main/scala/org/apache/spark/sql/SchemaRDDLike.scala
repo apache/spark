@@ -77,18 +77,6 @@ private[sql] trait SchemaRDDLike {
   }
 
   /**
-   * Saves the contents of this `SchemaRDD` as a ORC file, preserving the schema.  Files that
-   * are written out using this method can be read back in as a SchemaRDD using the `orcFile`
-   * function.
-   * Note: you can only use it in HiveContext
-   *
-   * @group schema
-   */
-  def saveAsOrcFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToOrcFile(path, logicalPlan)).toRdd
-  }
-
-  /**
    * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
    * table is tied to the [[SQLContext]] that was used to create this SchemaRDD.
    *

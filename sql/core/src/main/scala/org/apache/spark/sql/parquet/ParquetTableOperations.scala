@@ -540,7 +540,7 @@ private[sql] object FileSystemHelper {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
-      case nameP(taskid) => taskid.toInt                                                 r
+      case nameP(taskid) => taskid.toInt
       case hiddenFileP() => 0
       case other: String => {
         sys.error(s"ERROR: attempting to append to set of $extension files and found file" +
