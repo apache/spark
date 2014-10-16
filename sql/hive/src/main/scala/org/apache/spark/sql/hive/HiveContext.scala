@@ -304,12 +304,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           driver.setMaxRows(maxRows)
           driver.getResults(results)
           driver.close()
-          results.map { r =>
-            r match {
-              case s: String => s
-              case o => o.toString
-            }
-          }
+          HiveShim.processResults(results)
         case _ =>
           sessionState.out.println(tokens(0) + " " + cmd_1)
           Seq(proc.run(cmd_1).getResponseCode.toString)

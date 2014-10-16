@@ -56,6 +56,15 @@ private[hive] object HiveShim {
 
   def createDriverResultsArray = new JArrayList[Object]
 
+  def processResults(results: JArrayList[Object]) = {
+    results.map { r =>
+      r match {
+        case s: String => s
+        case a: Array[Object] => a(0).asInstanceOf[String]
+      }
+    }
+  }
+
   def getStatsSetupConstTotalSize = StatsSetupConst.TOTAL_SIZE
 
   def createDefaultDBIfNeeded(context: HiveContext) = {
