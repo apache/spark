@@ -109,16 +109,28 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
   private val executorIds = new mutable.HashSet[String]
 
-  // Timers for keeping track of when to add/remove executors (ms)
-  private var addTimer = 0
-  private var addRetryTimer = 0
-  private val removeTimers = new mutable.HashMap[String, Long]
-  private val retryRemoveTimers = new mutable.HashMap[String, Long]
+  // A counter in milliseconds of how long the timer to add new executors has been started for,
+  // or -1 if the timer is not started. This timer is started when there are pending tasks built
+  // up, and canceled when there are no more pending tasks.
+  private var addTimer = -1
 
-  // Additional variables used for adding executors
+  // A counter in milliseconds of how long the timer to retry adding new executors has been
+  // started for, or -1 if the timer is not started. This timer is started when an attempt to add
+  // new executors is made, and canceled when all executors pending to be added have registered.
+  private var addRetryTimer = -1
+
+  // A counter in milliseconds for each executor of how long the executor has been idle for.
+  // This timer is started when the executor first registers and when it finishes running a task,
+  // and canceled when the executor is scheduled to run a new task.
+  private val removeTimers = new mutable.HashMap[String, Long]
+
+  // A counter in milliseconds for each executor of how long the timer to retry removing the
+  // executor has been started for. This timer is started when an attempt to remove the executor
+  // is made, and canceled when the executor is actually removed.
+  private val removeRetryTimers = new mutable.HashMap[String, Long]
+
+  // Whether the add timer will expire on `addInterval` instead of `addThreshold`
   private var addThresholdCrossed = false
-  private var addTimerEnabled = false
-  private var addRetryTimerEnabled = false
 
   // Loop interval (ms)
   private val intervalMs = 100
@@ -154,7 +166,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
       override def run() {
         while (true) {
           try {
-            if (addTimerEnabled) {
+            if (addTimer > 0) {
               val threshold = if (addThresholdCrossed) addInterval else addThreshold
               if (addTimer > threshold * 1000) {
                 addThresholdCrossed = true
@@ -162,7 +174,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
               }
             }
 
-            if (addRetryTimerEnabled) {
+            if (addRetryTimer > 0) {
               if (addRetryTimer > addRetryInterval * 1000) {
                 retryAddExecutors()
               }
@@ -174,7 +186,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
               }
             }
 
-            retryRemoveTimers.foreach { case (id, t) =>
+            removeRetryTimers.foreach { case (id, t) =>
               if (t > removeRetryInterval * 1000) {
                 retryRemoveExecutors(id)
               }
@@ -185,17 +197,17 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
           } finally {
             // Advance all timers that are enabled
             Thread.sleep(intervalMs)
-            if (addTimerEnabled) {
+            if (addTimer > 0) {
               addTimer += intervalMs
             }
-            if (addRetryTimerEnabled) {
+            if (addRetryTimer > 0) {
               addRetryTimer += intervalMs
             }
             removeTimers.foreach { case (id, _) =>
               removeTimers(id) += intervalMs
             }
-            retryRemoveTimers.foreach { case (id, _) =>
-              retryRemoveTimers(id) += intervalMs
+            removeRetryTimers.foreach { case (id, _) =>
+              removeRetryTimers(id) += intervalMs
             }
           }
         }
@@ -290,7 +302,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     // Do not kill the executor again if it is already pending to be killed (should never happen)
     if (executorsPendingToRemove.contains(executorId) ||
         removeRetryAttempts.contains(executorId) ||
-        retryRemoveTimers.contains(executorId)) {
+        removeRetryTimers.contains(executorId)) {
       logWarning(s"Executor $executorId is already pending to be removed!")
       cancelRemoveTimer(executorId)
       return
@@ -395,13 +407,13 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   /**
    * Return whether the add timer is already running.
    */
-  def isAddTimerRunning: Boolean = addTimerEnabled || addRetryTimerEnabled
+  def isAddTimerRunning: Boolean = addTimer > 0 || addRetryTimer > 0
 
   /**
    * Return whether the remove timer for the given executor is already running.
    */
   def isRemoveTimerRunning(executorId: String): Boolean = {
-    removeTimers.contains(executorId) || retryRemoveTimers.contains(executorId)
+    removeTimers.contains(executorId) || removeRetryTimers.contains(executorId)
   }
 
   /**
@@ -414,7 +426,6 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     val threshold = if (addThresholdCrossed) addInterval else addThreshold
     logDebug(s"Starting add executor timer (to expire in $threshold seconds)")
     addTimer = 0
-    addTimerEnabled = true
   }
 
   /**
@@ -436,7 +447,6 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   private def startAddRetryTimer(): Unit = {
     logDebug(s"Starting add executor retry timer (to expire in $addRetryInterval seconds)")
     addRetryTimer = 0
-    addRetryTimerEnabled = true
   }
 
   /**
@@ -447,7 +457,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   private def startRemoveRetryTimer(executorId: String): Unit = {
     logDebug(s"Starting remove executor retry timer for $executorId " +
       s"(to expire in $removeRetryInterval seconds)")
-    retryRemoveTimers(executorId) = 0
+    removeRetryTimers(executorId) = 0
   }
 
   /**
@@ -455,8 +465,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    */
   def cancelAddTimer(): Unit = {
     logDebug(s"Canceling add executor timer")
-    addTimer = 0
-    addTimerEnabled = false
+    addTimer = -1
     addThresholdCrossed = false
     cancelAddRetryTimer()
   }
@@ -477,9 +486,8 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    */
   private def cancelAddRetryTimer(): Unit = {
     logDebug(s"Canceling add executor retry timer")
-    addRetryTimer = 0
+    addRetryTimer = -1
     addRetryAttempts = 0
-    addRetryTimerEnabled = false
   }
 
   /**
@@ -490,7 +498,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   private def cancelRemoveRetryTimer(executorId: String): Unit = {
     logDebug(s"Canceling remove executor retry timer for $executorId")
     removeRetryAttempts.remove(executorId)
-    retryRemoveTimers.remove(executorId)
+    removeRetryTimers.remove(executorId)
   }
 
 }
