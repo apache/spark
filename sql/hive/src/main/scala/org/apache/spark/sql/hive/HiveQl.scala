@@ -932,6 +932,7 @@ private[hive] object HiveQl {
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
+    case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
     case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))

@@ -62,6 +62,7 @@ package object dsl {
 
     def unary_- = UnaryMinus(expr)
     def unary_! = Not(expr)
+    def unary_~ = BitwiseNot(expr)
 
     def + (other: Expression) = Add(expr, other)
     def - (other: Expression) = Subtract(expr, other)

@@ -162,6 +162,33 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   }
 }
 
+/**
+ * A function that calculates bitwise not(~) of a number.
+ */
+case class BitwiseNot(child: Expression) extends UnaryExpression {
+  type EvaluatedType = Any
+
+  def dataType = child.dataType
+  override def foldable = child.foldable
+  def nullable = child.nullable
+  override def toString = s"-$child"
+
+  override def eval(input: Row): Any = {
+    val evalE = child.eval(input)
+    if (evalE == null) {
+      null
+    } else {
+      dataType match {
+        case ByteType => (~(evalE.asInstanceOf[Byte])).toByte
+        case ShortType => (~(evalE.asInstanceOf[Short])).toShort
+        case IntegerType => ~(evalE.asInstanceOf[Int])
+        case LongType => ~(evalE.asInstanceOf[Long])
+        case other => sys.error(s"Unsupported bitwise ~ operation on ${other}")
+      }
+    }
+  }
+}
+
 case class MaxOf(left: Expression, right: Expression) extends Expression {
   type EvaluatedType = Any
 

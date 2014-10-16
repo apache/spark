@@ -327,6 +327,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | "(" ~> expression <~ ")"
     | function
     | "-" ~> literal ^^ UnaryMinus
+    | "~" ~> expression ^^ BitwiseNot
     | dotExpressionHeader
     | ident ^^ UnresolvedAttribute
     | "*" ^^^ Star(None)

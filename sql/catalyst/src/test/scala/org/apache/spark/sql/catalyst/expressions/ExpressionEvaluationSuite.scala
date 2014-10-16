@@ -697,8 +697,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(BitwiseXor(c1, Literal(null, IntegerType)), null, row)
     checkEvaluation(BitwiseXor(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
 
+    checkEvaluation(BitwiseNot(c4), null, row)
+    checkEvaluation(BitwiseNot(c1), -2, row)
+    checkEvaluation(BitwiseNot(Literal(null, IntegerType)), null, row)
+
     checkEvaluation(c1 & c2, 0, row)
     checkEvaluation(c1 | c2, 3, row)
     checkEvaluation(c1 ^ c2, 3, row)
+    checkEvaluation(~c1, -2, row)
   }
 }
