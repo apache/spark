@@ -1035,9 +1035,12 @@ Currently, the following output operations are defined:
 <table class="table">
 <tr><th style="width:30%">Output Operation</th><th>Meaning</th></tr>
 <tr>
-  <td> <b>print</b>() (<b>pprint<b>() in Python)</td>
+  <td> <b>print</b>()</td>
   <td> Prints first ten elements of every batch of data in a DStream on the driver. 
-  This is useful for development and debugging. </td>
+  This is useful for development and debugging. 
+  <br/>
+  <b>PS</b>: called <b>pprint</b>() in Python)
+  </td>
 </tr>
 <tr>
   <td> <b>saveAsObjectFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
@@ -1105,7 +1108,7 @@ dstream.foreachRDD(sendRecord)
 </div>
 </div>
 
-This is incorrect as this requires the connection object to be serialized and sent from the driver to the worker. Such connection objects are rarely transferrable across machines. This error may manifest as serialization errors (connection object not serializable), initialization errors (connection object needs to be initialized at the workers), etc. The correct solution is to create the connection object at the worker.
+  This is incorrect as this requires the connection object to be serialized and sent from the driver to the worker. Such connection objects are rarely transferrable across machines. This error may manifest as serialization errors (connection object not serializable), initialization errors (connection object needs to be initialized at the workers), etc. The correct solution is to create the connection object at the worker.
 
 - However, this can lead to another common mistake - creating a new connection for every record. For example,
 
@@ -1137,7 +1140,7 @@ dstream.foreachRDD(lambda rdd: rdd.foreach(sendRecord))
 </div>
 </div>
 
-Typically, creating a connection object has time and resource overheads. Therefore, creating and destroying a connection object for each record can incur unnecessarily high overheads and can significantly reduce the overall throughput of the system. A better solution is to use `rdd.foreachPartition` - create a single connection object and send all the records in a RDD partition using that connection.
+  Typically, creating a connection object has time and resource overheads. Therefore, creating and destroying a connection object for each record can incur unnecessarily high overheads and can significantly reduce the overall throughput of the system. A better solution is to use `rdd.foreachPartition` - create a single connection object and send all the records in a RDD partition using that connection.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1165,7 +1168,7 @@ dstream.foreachRDD(lambda rdd: rdd.foreachPartition(sendPartition))
 </div>
 </div>    
 
-This amortizes the connection creation overheads over many records.
+  This amortizes the connection creation overheads over many records.
 
 - Finally, this can be further optimized by reusing connection objects across multiple RDDs/batches.
 	One can maintain a static pool of connection objects than can be reused as
