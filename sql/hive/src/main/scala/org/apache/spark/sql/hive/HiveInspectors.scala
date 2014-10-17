@@ -254,7 +254,7 @@ private[hive] trait HiveInspectors {
       val valueOI = toInspector(valueType)
       map.foreach (entry => value.put(wrap(entry._1, keyOI), wrap(entry._2, valueOI)))
       ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, value)
-    case Literal(_, _) => sys.error("Hive doesn't support the constant complicated type.")
+    case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
     case _ => toInspector(expr.dataType)
   }
 

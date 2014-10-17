@@ -157,17 +157,15 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
     isUDFDeterministic && children.foldLeft(true)((prev, n) => prev && n.foldable)
   }
 
-  protected lazy val deferedObjects = Array.fill[DeferredObject](children.length)({
-    new DeferredObjectAdapter
-  })
+  @transient
+  protected lazy val deferedObjects =
+    argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
 
   // Adapter from Catalyst ExpressionResult to Hive DeferredObject
-  class DeferredObjectAdapter extends DeferredObject {
+  class DeferredObjectAdapter(oi: ObjectInspector) extends DeferredObject {
     private var func: () => Any = _
-    private var oi: ObjectInspector = _
-    def set(func: () => Any, oi: ObjectInspector) {
+    def set(func: () => Any) {
       this.func = func
-      this.oi = oi
     }
     override def prepare(i: Int) = {}
     override def get(): AnyRef = wrap(func(), oi)
@@ -183,7 +181,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
       deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(
         () => {
           children(idx).eval(input)
-        }, argumentInspectors(i))
+        })
       i += 1
     }
     unwrap(function.evaluate(deferedObjects), returnInspector)
