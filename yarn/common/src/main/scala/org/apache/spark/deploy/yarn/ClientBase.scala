@@ -143,7 +143,8 @@ private[spark] trait ClientBase extends Logging {
     val nns = getNameNodesToAccess(sparkConf) + dst
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
-    val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
+    val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
+      fs.getDefaultReplication(dst)).toShort
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
