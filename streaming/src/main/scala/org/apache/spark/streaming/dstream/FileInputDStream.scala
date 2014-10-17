@@ -166,26 +166,11 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   }
 
   /**
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> support depth
    * Find new files for the batch of `currentTime`. This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
-<<<<<<< HEAD
-=======
-=======
-   * Find files which have modification timestamp <= current time and  a 3-tuple of
-=======
-   * Find files which have modification timestamp <= current time and return a 3-tuple of
->>>>>>> support depth
-   * (new files found, latest modification time among them, files with latest modification time)
->>>>>>> change Nit
->>>>>>> support depth
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
@@ -280,8 +265,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
         Array.empty
     }
   }
-
-<<<<<<< HEAD
   /**
    * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
    * accepted, it has to pass the following criteria.
@@ -330,29 +313,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     }
     logDebug(s"$pathStr accepted with mod time $modTime")
     return true
-=======
-  def getPathList(path:Path, fs:FileSystem):List[Path]={
-    var pathList = List[Path]()
-    pathList = path:: pathList
-    var tmp =List[Path]()
-    tmp=path::tmp
-    for(i <- 0 until depth){
-      tmp =getSubPathList(tmp,fs)
-      pathList=tmp:::pathList
-    }
-    pathList
-  }
-
-  def getSubPathList(path:List[Path],fs:FileSystem):List[Path]={
-    val filter = new SubPathFilter()
-    var pathList = List[Path]()
-    path.map(subPath=>{
-     fs.listStatus(subPath,filter).map(x=>{
-        pathList = x.getPath()::pathList
-     })
-    })
-    pathList
->>>>>>> support depth
   }
 
   /** Generate one RDD from an array of files */
