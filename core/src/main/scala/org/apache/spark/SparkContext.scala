@@ -818,6 +818,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val callSite = getCallSite
+    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
