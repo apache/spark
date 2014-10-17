@@ -417,3 +417,5 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
     }
   }
+}
+
