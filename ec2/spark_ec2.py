@@ -162,6 +162,12 @@ def parse_args():
     parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
+    parser.add_option(
+        "--pip-install", type="string", default="",
+        help="Python packages (pip name) that should be installed on whole cluster separated by ,")
+    parser.add_option(
+        "--pip-upgrade", type="string", default="",
+        help="Python packages (pip name) that should be updated on whole cluster separated by ,")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -593,6 +599,23 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     print "Done!"
 
 
+def setup_pip_packages(master_nodes, slave_nodes, opts):
+    """
+    installs pip and then upgrades and installs packages selected in parameters.
+    """
+    if opts.pip_install == "" and opts.pip_upgrade == "":
+        print "No python packages to install"
+    else:
+        nodes = master_nodes + slave_nodes
+        for node in nodes:
+            ssh(node.public_dns_name, opts, 'yum install python-pip -y')
+        for node in nodes:
+            for package in opts.pip_upgrade.split(','):
+                ssh(node.public_dns_name, opts, 'pip install ' + package + ' --upgrade')
+            for package in opts.pip_install.split(','):
+                ssh(node.public_dns_name, opts, 'pip install ' + package)
+
+
 def setup_standalone_cluster(master, slave_nodes, opts):
     slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
     ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
@@ -944,6 +967,7 @@ def real_main():
             cluster_state='ssh-ready',
             opts=opts
         )
+        setup_pip_packages(master_nodes, slave_nodes, opts)
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
