@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow2, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -43,34 +43,14 @@ trait HashJoin {
 
   override def output = left.output ++ right.output
 
-  @transient protected lazy val buildSideKeyGenerator = newProjection(buildKeys, buildPlan.output)
-  @transient protected lazy val streamSideKeyGenerator =
+  @transient protected lazy val buildSideKeyGenerator: Projection =
+    newProjection(buildKeys, buildPlan.output)
+
+  @transient protected lazy val streamSideKeyGenerator: () => MutableProjection =
     newMutableProjection(streamedKeys, streamedPlan.output)
 
-  protected def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] =
+  protected def hashJoin(streamIter: Iterator[Row], hashedRelation: HashedRelation): Iterator[Row] =
   {
-    // TODO: Use Spark's HashMap implementation.
-
-    val hashTable = new java.util.HashMap[Row, CompactBuffer[Row]]()
-    var currentRow: Row = null
-
-    // Create a mapping of buildKeys -> rows
-    while (buildIter.hasNext) {
-      currentRow = buildIter.next()
-      val rowKey = buildSideKeyGenerator(currentRow)
-      if (!rowKey.anyNull) {
-        val existingMatchList = hashTable.get(rowKey)
-        val matchList = if (existingMatchList == null) {
-          val newMatchList = new CompactBuffer[Row]()
-          hashTable.put(rowKey, newMatchList)
-          newMatchList
-        } else {
-          existingMatchList
-        }
-        matchList += currentRow.copy()
-      }
-    }
-
     new Iterator[Row] {
       private[this] var currentStreamedRow: Row = _
       private[this] var currentHashMatches: CompactBuffer[Row] = _
@@ -107,7 +87,7 @@ trait HashJoin {
         while (currentHashMatches == null && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
           if (!joinKeys(currentStreamedRow).anyNull) {
-            currentHashMatches = hashTable.get(joinKeys.currentValue)
+            currentHashMatches = hashedRelation.get(joinKeys.currentValue)
           }
         }
 

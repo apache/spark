@@ -21,6 +21,8 @@ import java.util.concurrent.Semaphore
 
 import scala.concurrent.future
 import scala.concurrent.ExecutionContext.Implicits.global
+import org.apache.spark.{TaskContextImpl, TaskContext}
+import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
 
 import org.mockito.Mockito._
 import org.mockito.Matchers.{any, eq => meq}
@@ -90,7 +92,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     )
 
     val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContext(0, 0, 0),
+      new TaskContextImpl(0, 0, 0),
       transfer,
       blockManager,
       blocksByAddress,
@@ -155,7 +157,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
 
-    val taskContext = new TaskContext(0, 0, 0)
+    val taskContext = new TaskContextImpl(0, 0, 0)
     val iterator = new ShuffleBlockFetcherIterator(
       taskContext,
       transfer,
@@ -218,7 +220,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
 
-    val taskContext = new TaskContext(0, 0, 0)
+    val taskContext = new TaskContextImpl(0, 0, 0)
     val iterator = new ShuffleBlockFetcherIterator(
       taskContext,
       transfer,
