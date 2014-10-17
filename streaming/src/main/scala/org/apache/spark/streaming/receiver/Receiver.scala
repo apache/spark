@@ -111,6 +111,11 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   def preferredLocation : Option[String] = None
 
   /**
+   * Override this if the receiver on only run locally
+   */
+  def localOnly(): Boolean = false
+
+  /**
    * Store a single item of received data to Spark's memory.
    * These single items will be aggregated together into data blocks before
    * being pushed into Spark's memory.

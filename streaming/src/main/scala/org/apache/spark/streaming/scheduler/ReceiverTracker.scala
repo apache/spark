@@ -202,7 +202,31 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
     @transient val thread  = new Thread() {
       override def run() {
         try {
-          startReceivers()
+          // initialize all the receivers
+          val receivers = receiverInputStreams.map(nis => {
+            val rcvr = nis.getReceiver()
+            rcvr.setReceiverId(nis.id)
+            rcvr
+          })
+
+          // start local receiver
+          val t1 = new Thread() {
+            override def run(): Unit = {
+              startLocalReceivers(receivers.filter(_.localOnly))
+            }
+          }
+          t1.start()
+
+          // start other receivers
+          val t2 = new Thread() {
+            override def run(): Unit = {
+              startReceivers(receivers.filterNot(_.localOnly))
+            }
+          }
+          t2.start()
+
+          t1.join()
+          t2.join()
         } catch {
           case ie: InterruptedException => logInfo("ReceiverLauncher interrupted")
         }
@@ -230,16 +254,29 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
     }
 
     /**
+     * Start the receivers which can only run in the driver
+     */
+    private def startLocalReceivers(receivers: Seq[Receiver[_]]): Unit = {
+      // run each receiver in separated thread
+      val threads = receivers.map{ receiver =>
+        new Thread() {
+          override def run(): Unit = {
+            val executor = new ReceiverSupervisorImpl(receiver, SparkEnv.get)
+            executor.start()
+            executor.awaitTermination()
+          }
+        }
+      }
+      threads.foreach(_.start())
+      // waiting for all threads
+      threads.foreach(_.join())
+    }
+
+    /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
      * worker nodes as a parallel collection, and runs them.
      */
-    private def startReceivers() {
-      val receivers = receiverInputStreams.map(nis => {
-        val rcvr = nis.getReceiver()
-        rcvr.setReceiverId(nis.id)
-        rcvr
-      })
-
+    private def startReceivers(receivers: Seq[Receiver[_]]) {
       // Right now, we only honor preferences if all receivers have them
       val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
 
