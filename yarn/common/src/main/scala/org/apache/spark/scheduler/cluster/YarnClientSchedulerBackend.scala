@@ -59,6 +59,9 @@ private[spark] class YarnClientSchedulerBackend(
     argsArrayBuf += ("--arg", hostport)
     argsArrayBuf ++= getExtraClientArguments
 
+    // Start the actor before the AM is launched because we expect a registration message from it
+    startYarnSchedulerActor()
+
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
     totalExpectedExecutors = args.numExecutors
@@ -66,7 +69,6 @@ private[spark] class YarnClientSchedulerBackend(
     appId = client.submitApplication()
     waitForApplication()
     asyncMonitorApplication()
-    startYarnSchedulerActor()
   }
 
   /**
