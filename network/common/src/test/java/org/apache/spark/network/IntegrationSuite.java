@@ -119,7 +119,6 @@ public class IntegrationSuite {
   }
 
   private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
-    System.out.println("----------------------------------------------------------------");
     SluiceClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
 

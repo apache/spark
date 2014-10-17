@@ -84,13 +84,11 @@ public class SluiceClientFactory implements Closeable {
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     SluiceClient cachedClient = connectionPool.get(address);
     if (cachedClient != null && cachedClient.isActive()) {
-      System.out.println("Reusing cached client: " + cachedClient);
       return cachedClient;
     } else if (cachedClient != null) {
       connectionPool.remove(address, cachedClient); // Remove inactive clients.
     }
 
-    System.out.println("Creating new client: " + cachedClient);
     logger.debug("Creating new connection to " + address);
 
     Bootstrap bootstrap = new Bootstrap();

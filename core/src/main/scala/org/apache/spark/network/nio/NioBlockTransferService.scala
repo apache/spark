@@ -157,7 +157,6 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
           case e: Exception =>
             logError("Exception handling buffer message", e)
             Some(Message.createErrorMessage(e, msg.id))
-          }
         }
 
       case otherMessage: Any =>
