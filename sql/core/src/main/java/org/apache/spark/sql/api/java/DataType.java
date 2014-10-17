@@ -45,6 +45,11 @@ public abstract class DataType {
   public static final BooleanType BooleanType = new BooleanType();
 
   /**
+   * Gets the DateType object.
+   */
+  public static final DateType DateType = new DateType();
+
+  /**
    * Gets the TimestampType object.
    */
   public static final TimestampType TimestampType = new TimestampType();

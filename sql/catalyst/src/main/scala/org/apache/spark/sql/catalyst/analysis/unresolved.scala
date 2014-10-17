@@ -88,7 +88,7 @@ case class Star(
     mapFunction: Attribute => Expression = identity[Attribute])
   extends Attribute with trees.LeafNode[Expression] {
 
-  override def name = throw new UnresolvedException(this, "exprId")
+  override def name = throw new UnresolvedException(this, "name")
   override def exprId = throw new UnresolvedException(this, "exprId")
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def nullable = throw new UnresolvedException(this, "nullable")

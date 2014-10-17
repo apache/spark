@@ -23,10 +23,9 @@ import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
-import scala.reflect.ClassTag
-import scala.util.{Try, Success, Failure}
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
@@ -42,7 +41,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 private[spark] class PythonRDD(
-    parent: RDD[_],
+    @transient parent: RDD[_],
     command: Array[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
@@ -55,9 +54,9 @@ private[spark] class PythonRDD(
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
   val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
 
-  override def getPartitions = parent.partitions
+  override def getPartitions = firstParent.partitions
 
-  override val partitioner = if (preservePartitoning) parent.partitioner else None
+  override val partitioner = if (preservePartitoning) firstParent.partitioner else None
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
@@ -196,7 +195,6 @@ private[spark] class PythonRDD(
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
-        SparkEnv.set(env)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         // Partition index
@@ -235,7 +233,7 @@ private[spark] class PythonRDD(
         dataOut.writeInt(command.length)
         dataOut.write(command)
         // Data values
-        PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
+        PythonRDD.writeIteratorToStream(firstParent.iterator(split, context), dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.flush()
       } catch {
@@ -248,6 +246,11 @@ private[spark] class PythonRDD(
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
           worker.shutdownOutput()
+      } finally {
+        // Release memory used by this thread for shuffles
+        env.shuffleMemoryManager.releaseMemoryForThisThread()
+        // Release memory used by this thread for unrolling blocks
+        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
       }
     }
   }
@@ -752,6 +755,7 @@ private[spark] object PythonRDD extends Logging {
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
+      SerDeUtil.initialize()
       iter.flatMap { row =>
         unpickle.loads(row) match {
           // in case of objects are pickled in batch mode
@@ -791,7 +795,7 @@ private[spark] object PythonRDD extends Logging {
     }.toJavaRDD()
   }
 
-  private class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
+  private[spark] class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
     private val pickle = new Pickler()
     private var batch = 1
     private val buffer = new mutable.ArrayBuffer[Any]
@@ -828,11 +832,12 @@ private[spark] object PythonRDD extends Logging {
     */
   def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
     pyRDD.rdd.mapPartitions { iter =>
+      SerDeUtil.initialize()
       val unpickle = new Unpickler
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]]
+          obj.asInstanceOf[JArrayList[_]].asScala
         } else {
           Seq(obj)
         }

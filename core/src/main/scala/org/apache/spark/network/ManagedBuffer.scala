@@ -66,13 +66,27 @@ sealed abstract class ManagedBuffer {
 final class FileSegmentManagedBuffer(val file: File, val offset: Long, val length: Long)
   extends ManagedBuffer {
 
+  /**
+   * Memory mapping is expensive and can destabilize the JVM (SPARK-1145, SPARK-3889).
+   * Avoid unless there's a good reason not to.
+   */
+  private val MIN_MEMORY_MAP_BYTES = 2 * 1024 * 1024;
+
   override def size: Long = length
 
   override def nioByteBuffer(): ByteBuffer = {
     var channel: FileChannel = null
     try {
       channel = new RandomAccessFile(file, "r").getChannel
-      channel.map(MapMode.READ_ONLY, offset, length)
+      // Just copy the buffer if it's sufficiently small, as memory mapping has a high overhead.
+      if (length < MIN_MEMORY_MAP_BYTES) {
+        val buf = ByteBuffer.allocate(length.toInt)
+        channel.read(buf, offset)
+        buf.flip()
+        buf
+      } else {
+        channel.map(MapMode.READ_ONLY, offset, length)
+      }
     } catch {
       case e: IOException =>
         Try(channel.size).toOption match {
