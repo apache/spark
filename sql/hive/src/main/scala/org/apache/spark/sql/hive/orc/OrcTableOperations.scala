@@ -21,7 +21,6 @@ package org.apache.spark.sql.hive.orc
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
-import scala.collection.JavaConversions._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
@@ -39,12 +38,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.FileSystemHelper
 import org.apache.spark.{TaskContext, SerializableWritable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode => LogicalUnaryNode}
 import org.apache.spark.sql.execution.UnaryNode
-import org.apache.spark.sql.hive.HadoopTableReader
+import org.apache.spark.sql.hive.{HiveMetastoreTypes, HadoopTableReader}
 
 import scala.collection.JavaConversions._
+import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
+import org.apache.spark.sql.execution.PhysicalRDD
 
 /**
  * logical plan of writing to ORC file
@@ -79,12 +80,12 @@ case class OrcTableScan(
     val job = new Job(sc.hadoopConfiguration)
 
     val conf: Configuration = job.getConfiguration
-    val fileList = FileSystemHelper.listFiles(relation.path, conf)
-
-    // add all paths in the directory but skip "hidden" ones such
-    // as "_SUCCESS"
-    for (path <- fileList if !path.getName.startsWith("_")) {
-      FileInputFormat.addInputPath(job, path)
+    relation.path.split(",").foreach { curPath =>
+      val qualifiedPath = {
+        val path = new Path(curPath)
+        path.getFileSystem(conf).makeQualified(path)
+      }
+      FileInputFormat.addInputPath(job, qualifiedPath)
     }
 
     addColumnIds(output, relation, conf)
@@ -132,6 +133,7 @@ case class OrcTableScan(
    * @return Pruned TableScan.
    */
   def pruneColumns(prunedAttributes: Seq[Attribute]): OrcTableScan = {
+    // Todo: prune projection
     OrcTableScan(prunedAttributes, relation, columnPruningPred)
   }
 }
@@ -152,31 +154,13 @@ private[sql] case class InsertIntoOrcTable(
 
   override def output = child.output
 
-  val inputClass = getInputClass.getName
-
   @transient val sc = sqlContext.sparkContext
 
-  @transient lazy val orcSerde = initFieldInfo
+  @transient lazy val orcSerde = initSerde
 
-  private def getInputClass: Class[_] = {
-    val existRdd = child.asInstanceOf[PhysicalRDD]
-    val productClass = existRdd.rdd.firstParent.elementClassTag.runtimeClass
-    logInfo("productClass is " + productClass)
-    val clazz = productClass
-    if (null == relation.rowClass) {
-      relation.rowClass = clazz
-    }
-    clazz
-  }
-
-  private def getInspector(clazz: Class[_]): ObjectInspector = {
-    val inspector = ObjectInspectorFactory.getReflectionObjectInspector(clazz,
-      ObjectInspectorFactory.ObjectInspectorOptions.JAVA)
-    inspector
-  }
-
-  private def initFieldInfo(): OrcSerde = {
+  private def initSerde(): OrcSerde = {
     val serde: OrcSerde = new OrcSerde
+    serde.initialize(null, relation.prop)
     serde
   }
 
@@ -203,30 +187,36 @@ private[sql] case class InsertIntoOrcTable(
               + s" to InsertIntoOrcTable:\n${e.toString}")
       }
     }
+    val structType =  StructType.fromAttributes(relation.output)
+    val orcSchema = HiveMetastoreTypes.toMetastoreType(structType)
 
-    val existRdd = child.asInstanceOf[PhysicalRDD]
-    val parentRdd = existRdd.rdd.firstParent[Product]
-    val writableRdd = parentRdd.mapPartitions { iter =>
-      val objSnspector = ObjectInspectorFactory.getReflectionObjectInspector(
-        getContextOrSparkClassLoader.loadClass(inputClass),
-        ObjectInspectorFactory.ObjectInspectorOptions.JAVA)
-      iter.map(obj => orcSerde.serialize(obj, objSnspector))
+    val writableRdd = childRdd.mapPartitions { iter =>
+      val typeInfo: TypeInfo =
+        TypeInfoUtils.getTypeInfoFromTypeString(orcSchema)
+      val standardOI = TypeInfoUtils
+        .getStandardJavaObjectInspectorFromTypeInfo(typeInfo)
+        .asInstanceOf[StructObjectInspector]
+      val fieldOIs = standardOI
+        .getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+      val outputData = new Array[Any](fieldOIs.length)
+      iter.map { row =>
+        var i = 0
+        while (i < row.length) {
+          outputData(i) = HadoopTableReader.unwrapData(row(i), fieldOIs(i))
+          i = 1
+        }
+        orcSerde.serialize(outputData, standardOI)
+      }
     }
 
-    saveAsHadoopFile(writableRdd, relation.rowClass, relation.path, conf)
+    saveAsHadoopFile(writableRdd, relation.path, conf)
 
     // We return the child RDD to allow chaining (alternatively, one could return nothing).
     childRdd
   }
 
-
-  // based on ``saveAsNewAPIHadoopFile`` in [[PairRDDFunctions]]
-  // TODO: Maybe PairRDDFunctions should use Product2 instead of Tuple2?
-  // .. then we could use the default one and could use [[MutablePair]]
-  // instead of ``Tuple2``
   private def saveAsHadoopFile(
       rdd: RDD[Writable],
-      rowClass: Class[_],
       path: String,
       @transient conf: Configuration) {
     val job = new Job(conf)
@@ -251,11 +241,12 @@ private[sql] case class InsertIntoOrcTable(
       }
 
     def getWriter(
-                   outFormat: OrcOutputFormat,
-                   conf: Configuration,
-                   path: Path,
-                   reporter: Reporter) = {
+        outFormat: OrcOutputFormat,
+        conf: Configuration,
+        path: Path,
+        reporter: Reporter) = {
       val fs = path.getFileSystem(conf)
+
       outFormat.getRecordWriter(fs, conf.asInstanceOf[JobConf], path.toUri.getPath, reporter).
         asInstanceOf[org.apache.hadoop.mapred.RecordWriter[NullWritable, Writable]]
     }
