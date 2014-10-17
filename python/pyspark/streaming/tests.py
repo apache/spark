@@ -504,7 +504,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         receiver = MyReceiver(StorageLevel.MEMORY_AND_DISK_SER)
         dstream = self.ssc.receiverStream(receiver)
         self.assertEqual(range(10), self._take(dstream, 10))
-        self.assertGreaterEqual(receiver.streamId, 0)
+        self.assertTrue(receiver.streamId >= 0)
         self.assertTrue(receiver.isStarted())
         receiver.restart("manually restart")
         self.assertTrue(receiver.isStarted())
