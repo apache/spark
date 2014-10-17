@@ -455,21 +455,20 @@ private[spark] class BlockManagerInfo(
 
     updateLastSeenMs()
 
-    if (storageLevel.isValid) {
-      // isValid means it is either stored in-memory, on-disk or on-Tachyon.
-       
-      if (_blocks.containsKey(blockId)) {
-        // The block exists on the slave already.
-        val blockStatus: BlockStatus = _blocks.get(blockId)
-        val originalLevel: StorageLevel = blockStatus.storageLevel
-        val originalMemSize: Long = blockStatus.memSize
+    if (_blocks.containsKey(blockId)) {
+      // The block exists on the slave already.
+      val blockStatus: BlockStatus = _blocks.get(blockId)
+      val originalLevel: StorageLevel = blockStatus.storageLevel
+      val originalMemSize: Long = blockStatus.memSize
 
-        if (originalLevel.useMemory) {
-          _remainingMem += originalMemSize
-        }
+      if (originalLevel.useMemory) {
+        _remainingMem += originalMemSize
       }
-      
-      /* The memSize here indicates the data size in or dropped from memory,
+    }
+
+    if (storageLevel.isValid) {
+      /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
+       * The memSize here indicates the data size in or dropped from memory,
        * tachyonSize here indicates the data size in or dropped from Tachyon,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
@@ -496,7 +495,6 @@ private[spark] class BlockManagerInfo(
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
       if (blockStatus.storageLevel.useMemory) {
-        _remainingMem += blockStatus.memSize
         logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
           Utils.bytesToString(_remainingMem)))
