@@ -18,8 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.net.Socket
-import scala.collection.JavaConversions._
-import scala.util._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records._
