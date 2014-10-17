@@ -50,7 +50,11 @@ object MimaExcludes {
               "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2"),
             // MapStatus should be private[spark]
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
-              "org.apache.spark.scheduler.MapStatus")
+              "org.apache.spark.scheduler.MapStatus"),
+            // TaskContext was promoted to Abstract class
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.TaskContext")
+
           )
 
         case v if v.startsWith("1.1") =>

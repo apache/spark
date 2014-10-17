@@ -18,131 +18,55 @@
 package org.apache.spark;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import scala.Function0;
 import scala.Function1;
 import scala.Unit;
-import scala.collection.JavaConversions;
 
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.util.TaskCompletionListener;
-import org.apache.spark.util.TaskCompletionListenerException;
 
 /**
-* :: DeveloperApi ::
-* Contextual information about a task which can be read or mutated during execution.
-*/
-@DeveloperApi
-public class TaskContext implements Serializable {
-
-  private int stageId;
-  private int partitionId;
-  private long attemptId;
-  private boolean runningLocally;
-  private TaskMetrics taskMetrics;
-
+ * Contextual information about a task which can be read or mutated during
+ * execution. To access the TaskContext for a running task use
+ * TaskContext.get().
+ */
+public abstract class TaskContext implements Serializable {
   /**
-   * :: DeveloperApi ::
-   * Contextual information about a task which can be read or mutated during execution.
-   *
-   * @param stageId stage id
-   * @param partitionId index of the partition
-   * @param attemptId the number of attempts to execute this task
-   * @param runningLocally whether the task is running locally in the driver JVM
-   * @param taskMetrics performance metrics of the task
+   * Return the currently active TaskContext. This can be called inside of
+   * user functions to access contextual information about running tasks.
    */
-  @DeveloperApi
-  public TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally,
-                     TaskMetrics taskMetrics) {
-    this.attemptId = attemptId;
-    this.partitionId = partitionId;
-    this.runningLocally = runningLocally;
-    this.stageId = stageId;
-    this.taskMetrics = taskMetrics;
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Contextual information about a task which can be read or mutated during execution.
-   *
-   * @param stageId stage id
-   * @param partitionId index of the partition
-   * @param attemptId the number of attempts to execute this task
-   * @param runningLocally whether the task is running locally in the driver JVM
-   */
-  @DeveloperApi
-  public TaskContext(int stageId, int partitionId, long attemptId, boolean runningLocally) {
-    this.attemptId = attemptId;
-    this.partitionId = partitionId;
-    this.runningLocally = runningLocally;
-    this.stageId = stageId;
-    this.taskMetrics = TaskMetrics.empty();
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Contextual information about a task which can be read or mutated during execution.
-   *
-   * @param stageId stage id
-   * @param partitionId index of the partition
-   * @param attemptId the number of attempts to execute this task
-   */
-  @DeveloperApi
-  public TaskContext(int stageId, int partitionId, long attemptId) {
-    this.attemptId = attemptId;
-    this.partitionId = partitionId;
-    this.runningLocally = false;
-    this.stageId = stageId;
-    this.taskMetrics = TaskMetrics.empty();
+  public static TaskContext get() {
+    return taskContext.get();
   }
 
   private static ThreadLocal<TaskContext> taskContext =
     new ThreadLocal<TaskContext>();
 
-  /**
-   * :: Internal API ::
-   * This is spark internal API, not intended to be called from user programs.
-   */
-  public static void setTaskContext(TaskContext tc) {
+  static void setTaskContext(TaskContext tc) {
     taskContext.set(tc);
   }
 
-  public static TaskContext get() {
-    return taskContext.get();
-  }
-
-  /** :: Internal API ::  */
-  public static void unset() {
+  static void unset() {
     taskContext.remove();
   }
 
-  // List of callback functions to execute when the task completes.
-  private transient List<TaskCompletionListener> onCompleteCallbacks =
-    new ArrayList<TaskCompletionListener>();
-
-  // Whether the corresponding task has been killed.
-  private volatile boolean interrupted = false;
-
-  // Whether the task has completed.
-  private volatile boolean completed = false;
+  /**
+   * Whether the task has completed.
+   */
+  public abstract boolean isCompleted();
 
   /**
-   * Checks whether the task has completed.
+   * Whether the task has been killed.
    */
-  public boolean isCompleted() {
-    return completed;
-  }
+  public abstract boolean isInterrupted();
 
-  /**
-   * Checks whether the task has been killed.
-   */
-  public boolean isInterrupted() {
-    return interrupted;
-  }
+  /** @deprecated: use isRunningLocally() */
+  @Deprecated
+  public abstract boolean runningLocally();
+
+  public abstract boolean isRunningLocally();
 
   /**
    * Add a (Java friendly) listener to be executed on task completion.
@@ -150,10 +74,7 @@ public class TaskContext implements Serializable {
    * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
-  public TaskContext addTaskCompletionListener(TaskCompletionListener listener) {
-    onCompleteCallbacks.add(listener);
-    return this;
-  }
+  public abstract TaskContext addTaskCompletionListener(TaskCompletionListener listener);
 
   /**
    * Add a listener in the form of a Scala closure to be executed on task completion.
@@ -161,109 +82,27 @@ public class TaskContext implements Serializable {
    * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
-  public TaskContext addTaskCompletionListener(final Function1<TaskContext, Unit> f) {
-    onCompleteCallbacks.add(new TaskCompletionListener() {
-      @Override
-      public void onTaskCompletion(TaskContext context) {
-        f.apply(context);
-      }
-    });
-    return this;
-  }
+  public abstract TaskContext addTaskCompletionListener(final Function1<TaskContext, Unit> f);
 
   /**
    * Add a callback function to be executed on task completion. An example use
    * is for HadoopRDD to register a callback to close the input stream.
    * Will be called in any situation - success, failure, or cancellation.
    *
-   * Deprecated: use addTaskCompletionListener
-   * 
+   * @deprecated: use addTaskCompletionListener
+   *
    * @param f Callback function.
    */
   @Deprecated
-  public void addOnCompleteCallback(final Function0<Unit> f) {
-    onCompleteCallbacks.add(new TaskCompletionListener() {
-      @Override
-      public void onTaskCompletion(TaskContext context) {
-        f.apply();
-      }
-    });
-  }
+  public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
-  /**
-   * ::Internal API::
-   * Marks the task as completed and triggers the listeners.
-   */
-  public void markTaskCompleted() throws TaskCompletionListenerException {
-    completed = true;
-    List<String> errorMsgs = new ArrayList<String>(2);
-    // Process complete callbacks in the reverse order of registration
-    List<TaskCompletionListener> revlist =
-      new ArrayList<TaskCompletionListener>(onCompleteCallbacks);
-    Collections.reverse(revlist);
-    for (TaskCompletionListener tcl: revlist) {
-      try {
-        tcl.onTaskCompletion(this);
-      } catch (Throwable e) {
-        errorMsgs.add(e.getMessage());
-      }
-    }
+  public abstract int stageId();
 
-    if (!errorMsgs.isEmpty()) {
-      throw new TaskCompletionListenerException(JavaConversions.asScalaBuffer(errorMsgs));
-    }
-  }
+  public abstract int partitionId();
 
-  /**
-   * ::Internal API::
-   * Marks the task for interruption, i.e. cancellation.
-   */
-  public void markInterrupted() {
-    interrupted = true;
-  }
+  public abstract long attemptId();
 
-  @Deprecated
-  /** Deprecated: use getStageId() */
-  public int stageId() {
-    return stageId;
-  }
-
-  @Deprecated
-  /** Deprecated: use getPartitionId() */
-  public int partitionId() {
-    return partitionId;
-  }
-
-  @Deprecated
-  /** Deprecated: use getAttemptId() */
-  public long attemptId() {
-    return attemptId;
-  }
-
-  @Deprecated
-  /** Deprecated: use isRunningLocally() */
-  public boolean runningLocally() {
-    return runningLocally;
-  }
-
-  public boolean isRunningLocally() {
-    return runningLocally;
-  }
-
-  public int getStageId() {
-    return stageId;
-  }
-
-  public int getPartitionId() {
-    return partitionId;
-  }
-
-  public long getAttemptId() {
-    return attemptId;
-  }  
-
-  /** ::Internal API:: */
-  public TaskMetrics taskMetrics() {
-    return taskMetrics;
-  }
+  /** ::DeveloperApi:: */
+  @DeveloperApi
+  public abstract TaskMetrics taskMetrics();
 }
