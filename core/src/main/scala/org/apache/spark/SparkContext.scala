@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
+import java.util.Arrays
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
@@ -237,7 +238,6 @@ class SparkContext(config: SparkConf) extends Logging {
       // For tests, do not enable the UI
       None
     }
-  ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
@@ -340,6 +340,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   postEnvironmentUpdate()
   postApplicationStart()
+
+  // Bind the SparkUI after starting the task scheduler
+  // because certain pages and listeners depend on it
+  ui.foreach(_.bind())
 
   private[spark] var checkpointDir: Option[String] = None
 
@@ -814,6 +818,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val callSite = getCallSite
+    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
@@ -1429,7 +1435,10 @@ object SparkContext extends Logging {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+      // getBytes method returns array which is longer then data to be returned
+      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
+    )
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =

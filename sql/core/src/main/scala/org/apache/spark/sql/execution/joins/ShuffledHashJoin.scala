@@ -42,8 +42,9 @@ case class ShuffledHashJoin(
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   override def execute() = {
-    buildPlan.execute().zipPartitions(streamedPlan.execute()) {
-      (buildIter, streamIter) => joinIterators(buildIter, streamIter)
+    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
+      val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
+      hashJoin(streamIter, hashed)
     }
   }
 }

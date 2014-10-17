@@ -39,6 +39,8 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     }
     new GenericRow(outputArray)
   }
+
+  override def toString = s"Row => [${exprArray.mkString(",")}]"
 }
 
 /**
