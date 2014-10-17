@@ -51,12 +51,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  // Submit tasks only after (registered resources / total expected resources) 
+  // Submit tasks only after (registered resources / total expected resources)
   // is equal to at least this value, that is double between 0 and 1.
   var minRegisteredRatio =
     math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
-  // if minRegisteredRatio has not yet been reached  
+  // if minRegisteredRatio has not yet been reached
   val maxRegisteredWaitingTime =
     conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
@@ -283,15 +283,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   }
 
   // Add filters to the SparkUI
-  def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
+  def addWebUIFilter(filterName: String, filterParams: Map[String, String], proxyBase: String) {
     if (proxyBase != null && proxyBase.nonEmpty) {
       System.setProperty("spark.ui.proxyBase", proxyBase)
     }
 
-    if (Seq(filterName, filterParams).forall(t => t != null && t.nonEmpty)) {
+    val hasFilter = (filterName != null && filterName.nonEmpty &&
+      filterParams != null && filterParams.nonEmpty)
+    if (hasFilter) {
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       conf.set("spark.ui.filters", filterName)
-      conf.set(s"spark.$filterName.params", filterParams)
+      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }

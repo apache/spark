@@ -33,7 +33,6 @@ import org.apache.spark.scheduler.SplitInfo
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 /**
  * An application master that allocates executors on behalf of a driver that is running outside
@@ -144,11 +143,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
   // add the yarn amIpFilter that Yarn requires for properly securing the UI
   private def addAmIpFilter() {
-    val proxy = WebAppUtils.getProxyHostAndPort(conf)
-    val parts = proxy.split(":")
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-    val uriBase = "http://" + proxy + proxyBase
-    val amFilter = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
+    val amFilter = YarnStableUtils.getAmIpFilterParams(yarnConf, proxyBase)
     val amFilterName = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     actor ! AddWebUIFilter(amFilterName, amFilter, proxyBase)
   }

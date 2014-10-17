@@ -185,7 +185,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val parts = proxy.split(":")
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     val uriBase = "http://" + proxy + proxyBase
-    val amFilter = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
+    val amFilter = Map("PROXY_HOST" -> parts(0), "PROXY_URI_BASE" -> uriBase)
     val amFilterName = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     actor ! AddWebUIFilter(amFilterName, amFilter, proxyBase)
   }
