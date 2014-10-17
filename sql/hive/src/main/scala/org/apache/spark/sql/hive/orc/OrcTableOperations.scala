@@ -32,7 +32,6 @@ import org.apache.hadoop.mapreduce.{TaskID, TaskAttemptContext, Job}
 import org.apache.hadoop.hive.ql.io.orc.{OrcSerde, OrcInputFormat, OrcOutputFormat}
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
-import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.mapred.{SparkHadoopMapRedUtil, Reporter, JobConf}
 
 import org.apache.spark.sql.execution._
@@ -43,9 +42,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode => LogicalUnaryNode}
 import org.apache.spark.sql.execution.UnaryNode
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.hive.HiveMetastoreTypes
-import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
+import org.apache.spark.sql.hive.HadoopTableReader
+
+import scala.collection.JavaConversions._
 
 /**
  * logical plan of writing to ORC file
@@ -69,43 +68,10 @@ case class OrcTableScan(
   @transient
   lazy val serde: OrcSerde = initSerde
 
-  @transient
-  lazy val getFieldValue: Seq[Product => Any] = {
-    val inspector = serde.getObjectInspector.asInstanceOf[StructObjectInspector]
-    output.map(attr => {
-      val ref = inspector.getStructFieldRef(attr.name.toLowerCase(Locale.ENGLISH))
-      row: Product => {
-        val fieldData = row.productElement(1)
-        val data = inspector.getStructFieldData(fieldData, ref)
-        unwrapData(data, ref.getFieldObjectInspector)
-      }
-    })
-  }
-
   private def initSerde(): OrcSerde = {
     val serde = new OrcSerde
     serde.initialize(null, relation.prop)
     serde
-  }
-
-  def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
-    case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
-    case li: ListObjectInspector =>
-      Option(li.getList(data))
-        .map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq)
-        .orNull
-    case mi: MapObjectInspector =>
-      Option(mi.getMap(data)).map(
-        _.map {
-          case (k, v) =>
-            (unwrapData(k, mi.getMapKeyObjectInspector),
-              unwrapData(v, mi.getMapValueObjectInspector))
-        }.toMap).orNull
-    case si: StructObjectInspector =>
-      val allRefs = si.getAllStructFieldRefs
-      new GenericRow(
-        allRefs.map(r =>
-          unwrapData(si.getStructFieldData(data, r), r.getFieldObjectInspector)).toArray)
   }
 
   override def execute(): RDD[Row] = {
@@ -123,10 +89,16 @@ case class OrcTableScan(
 
     addColumnIds(output, relation, conf)
     val inputClass = classOf[OrcInputFormat].asInstanceOf[
-      Class[_ <: org.apache.hadoop.mapred.InputFormat[Void, Row]]]
+      Class[_ <: org.apache.hadoop.mapred.InputFormat[NullWritable, Writable]]]
 
-    val rowRdd = productToRowRdd(sc.hadoopRDD[Void, Row](
-      conf.asInstanceOf[JobConf], inputClass, classOf[Void], classOf[Row]))
+    // use SpecificMutableRow to decrease GC garbage
+    val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+    val attrsWithIndex = output.zipWithIndex
+    val rowRdd = sc.hadoopRDD[NullWritable, Writable](conf.asInstanceOf[JobConf], inputClass,
+      classOf[NullWritable], classOf[Writable]).map(_._2).mapPartitions { iter =>
+      val deserializer = serde
+      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow)
+    }
     rowRdd
   }
 
@@ -137,77 +109,19 @@ case class OrcTableScan(
    * @param conf
    */
   def addColumnIds(output: Seq[Attribute], relation: OrcRelation, conf: Configuration) {
-    val fieldIdMap = relation.output.zipWithIndex.toMap
+    val fieldIdMap = relation.output.map(_.name).zipWithIndex.toMap
 
     val ids = output.map(att => {
       val realName = att.name.toLowerCase(Locale.ENGLISH)
       fieldIdMap.getOrElse(realName, -1)
     }).filter(_ >= 0)
     if (ids != null && !ids.isEmpty) {
-      ColumnProjectionUtils.appendReadColumnIDs(conf, ids)
+      ColumnProjectionUtils.appendReadColumnIDs(conf, ids.asInstanceOf[java.util.List[Integer]])
     }
 
     val names = output.map(_.name)
     if (names != null && !names.isEmpty) {
       ColumnProjectionUtils.appendReadColumnNames(conf, names)
-    }
-  }
-
-  // Transform all given raw `Writable`s into `Row`s.
-  def fillObject(
-      iterator: scala.collection.Iterator[Writable],
-      nonPartitionKeyAttrs: Seq[(Attribute, Int)],
-      mutableRow: MutableRow): Iterator[Row] = {
-    val schema =  StructType.fromAttributes(relation.output)
-    val orcSchema = HiveMetastoreTypes.toMetastoreType(schema)
-    val deserializer = new OrcSerde
-    val typeInfo: TypeInfo = TypeInfoUtils.getTypeInfoFromTypeString(orcSchema)
-    val soi = relation.getObjectInspector
-
-    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map {
-      case (attr, ordinal) =>
-        soi.getStructFieldRef(attr.name) -> ordinal
-    }.unzip
-
-    val unwrappers = HadoopTypeConverter.unwrappers(fieldRefs)
-    // Map each tuple to a row object
-    iterator.map { value =>
-      val raw = deserializer.deserialize(value)
-      var i = 0
-      while (i < fieldRefs.length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
-        }
-        i += 1
-      }
-      mutableRow: Row
-    }
-  }
-
-  def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
-    val mutableRow = new SpecificMutableRow(output.map(_.dataType))
-    data.mapPartitions {
-      iterator =>
-        if (iterator.isEmpty) {
-          Iterator.empty
-        } else {
-          val bufferedIterator = iterator.buffered
-          bufferedIterator.map {r =>
-            val values = getFieldValue.map(_(r))
-            new GenericRow(values.map {
-              case n: String if n.toLowerCase == "null" => ""
-              case varchar: HiveVarchar => varchar.getValue
-              case decimal: HiveDecimal =>
-                BigDecimal(decimal.bigDecimalValue)
-              case null => ""
-              case other => other
-
-            }.toArray)
-          }
-        }
     }
   }
 

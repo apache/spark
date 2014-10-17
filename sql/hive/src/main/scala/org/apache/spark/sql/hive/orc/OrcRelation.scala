@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 import java.io.IOException
-import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
@@ -34,6 +33,8 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedException, MultiInstanc
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hive.HiveMetastoreTypes
+
+import scala.collection.JavaConversions._
 
 private[sql] case class OrcRelation(
     path: String,
@@ -59,6 +60,14 @@ private[sql] case class OrcRelation(
     val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
     // data types that is inspected by this inspector
     val schema = inspector.getTypeName
+
+    // set prop here, initial OrcSerde need it
+    val fields = inspector.getAllStructFieldRefs
+    val (columns, columnTypes) = fields.map { f =>
+      f.getFieldName -> f.getFieldObjectInspector.getTypeName
+    }.unzip
+    prop.setProperty("columns", columns.mkString(","))
+    prop.setProperty("columns.types", columnTypes.mkString(":"))
 
     HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType].toAttributes
   }
