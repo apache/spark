@@ -19,6 +19,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.client.SluiceClient;
 
+/** Test RpcHandler which always returns a zero-sized success. */
 public class NoOpRpcHandler implements RpcHandler {
   @Override
   public void receive(SluiceClient client, byte[] message, RpcResponseCallback callback) {

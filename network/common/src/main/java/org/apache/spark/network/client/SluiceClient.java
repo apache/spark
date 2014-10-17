@@ -71,7 +71,7 @@ public class SluiceClient implements Closeable {
   }
 
   public boolean isActive() {
-    return channel.isOpen() || channel.isRegistered() || channel.isActive();
+    return channel.isOpen() || channel.isActive();
   }
 
   /**

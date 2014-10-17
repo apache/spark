@@ -151,8 +151,9 @@ public class SluiceResponseHandler extends MessageHandler<ResponseMessage> {
     }
   }
 
+  /** Returns total number of outstanding requests (fetch requests + rpcs) */
   @VisibleForTesting
   public int numOutstandingRequests() {
-    return outstandingFetches.size();
+    return outstandingFetches.size() + outstandingRpcs.size();
   }
 }

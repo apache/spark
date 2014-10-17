@@ -28,12 +28,15 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
+import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.SluiceResponseHandler;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.response.ChunkFetchFailure;
 import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.response.RpcFailure;
+import org.apache.spark.network.protocol.response.RpcResponse;
 
-public class SluiceClientHandlerSuite {
+public class SluiceResponseHandlerSuite {
   @Test
   public void handleSuccessfulFetch() {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
@@ -77,6 +80,37 @@ public class SluiceClientHandlerSuite {
     verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
     verify(callback, times(1)).onFailure(eq(1), (Throwable) any());
     verify(callback, times(1)).onFailure(eq(2), (Throwable) any());
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void handleSuccessfulRPC() {
+    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    handler.addRpcRequest(12345, callback);
+    assertEquals(1, handler.numOutstandingRequests());
+
+    handler.handle(new RpcResponse(54321, new byte[7])); // should be ignored
+    assertEquals(1, handler.numOutstandingRequests());
+
+    byte[] arr = new byte[10];
+    handler.handle(new RpcResponse(12345, arr));
+    verify(callback, times(1)).onSuccess(eq(arr));
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void handleFailedRPC() {
+    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    handler.addRpcRequest(12345, callback);
+    assertEquals(1, handler.numOutstandingRequests());
+
+    handler.handle(new RpcFailure(54321, "uh-oh!")); // should be ignored
+    assertEquals(1, handler.numOutstandingRequests());
+
+    handler.handle(new RpcFailure(12345, "oh no"));
+    verify(callback, times(1)).onFailure((Throwable) any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 }

@@ -48,7 +48,7 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.DefaultConfigProvider;
 import org.apache.spark.network.util.SluiceConfig;
 
-public class IntegrationSuite {
+public class ChunkFetchIntegrationSuite {
   static final long STREAM_ID = 1;
   static final int BUFFER_CHUNK_INDEX = 0;
   static final int FILE_CHUNK_INDEX = 1;

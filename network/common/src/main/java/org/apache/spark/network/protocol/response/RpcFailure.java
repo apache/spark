@@ -52,7 +52,7 @@ public final class RpcFailure implements ResponseMessage {
     int numErrorStringBytes = buf.readInt();
     byte[] errorBytes = new byte[numErrorStringBytes];
     buf.readBytes(errorBytes);
-    return new RpcFailure(tag, new String(errorBytes));
+    return new RpcFailure(tag, new String(errorBytes, Charsets.UTF_8));
   }
 
   @Override

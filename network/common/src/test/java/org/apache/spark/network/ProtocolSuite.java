@@ -25,10 +25,13 @@ import static org.junit.Assert.assertEquals;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.request.ChunkFetchRequest;
+import org.apache.spark.network.protocol.request.RpcRequest;
 import org.apache.spark.network.protocol.response.ChunkFetchFailure;
 import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.response.MessageDecoder;
 import org.apache.spark.network.protocol.response.MessageEncoder;
+import org.apache.spark.network.protocol.response.RpcFailure;
+import org.apache.spark.network.protocol.response.RpcResponse;
 import org.apache.spark.network.util.NettyUtils;
 
 public class ProtocolSuite {
@@ -63,19 +66,21 @@ public class ProtocolSuite {
   }
 
   @Test
-  public void s2cChunkFetchSuccess() {
+  public void requests() {
+    testClientToServer(new ChunkFetchRequest(new StreamChunkId(1, 2)));
+    testClientToServer(new RpcRequest(12345, new byte[0]));
+    testClientToServer(new RpcRequest(12345, new byte[100]));
+  }
+
+  @Test
+  public void responses() {
     testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, 2), new TestManagedBuffer(10)));
     testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, 2), new TestManagedBuffer(0)));
-  }
-
-  @Test
-  public void s2cBlockFetchFailure() {
     testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, 2), "this is an error"));
     testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, 2), ""));
-  }
-
-  @Test
-  public void c2sChunkFetchRequest() {
-    testClientToServer(new ChunkFetchRequest(new StreamChunkId(1, 2)));
+    testServerToClient(new RpcResponse(12345, new byte[0]));
+    testServerToClient(new RpcResponse(12345, new byte[1000]));
+    testServerToClient(new RpcFailure(0, "this is an error"));
+    testServerToClient(new RpcFailure(0, ""));
   }
 }

@@ -57,7 +57,7 @@ public final class ChunkFetchFailure implements ResponseMessage {
     int numErrorStringBytes = buf.readInt();
     byte[] errorBytes = new byte[numErrorStringBytes];
     buf.readBytes(errorBytes);
-    return new ChunkFetchFailure(streamChunkId, new String(errorBytes));
+    return new ChunkFetchFailure(streamChunkId, new String(errorBytes, Charsets.UTF_8));
   }
 
   @Override
