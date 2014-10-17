@@ -129,8 +129,6 @@ public class SluiceClientFactory implements Closeable {
       // in the "inactive" state, and someone else simultaneously tried to create another client to
       // the same server. This is an error condition, as the first client failed to connect.
       throw new IllegalStateException("Client was unset! Must have been immediately inactive.");
-    } else if (!client.isActive()) {
-      throw new IllegalStateException("Failed to create active client.");
     }
     return client;
   }
