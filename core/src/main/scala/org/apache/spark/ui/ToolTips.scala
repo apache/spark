@@ -18,6 +18,9 @@
 package org.apache.spark.ui
 
 private[spark] object ToolTips {
+  val EXECUTOR_LAUNCH_TIME =
+    """Overhead associated with launching the task in its own thread on the executor."""
+
   val SCHEDULER_DELAY =
     """Scheduler delay includes time to ship the task from the scheduler to
        the executor, and time to send the task result from the executor to the scheduler. If

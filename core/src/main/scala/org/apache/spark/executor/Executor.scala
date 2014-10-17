@@ -110,10 +110,15 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
+  // Time when the task arrived on the executor. Used to track the overhead of getting a thread for
+  // the task to run in.
+  private val taskStartTimes = new ConcurrentHashMap[Long, Long]
+
   startDriverHeartbeater()
 
   def launchTask(
       context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
+    taskStartTimes.put(taskId, System.currentTimeMillis)
     val tr = new TaskRunner(context, taskId, taskName, serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
@@ -152,7 +157,7 @@ private[spark] class Executor(
     }
 
     override def run() {
-      val startTime = System.currentTimeMillis()
+      val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -197,7 +202,8 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - startTime
+          m.executorLaunchTime = deserializeStartTime - taskStartTimes.get(taskId)
+          m.executorDeserializeTime = taskStart - deserializeStartTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
           m.resultSerializationTime = afterSerialization - beforeSerialization
@@ -267,6 +273,7 @@ private[spark] class Executor(
         // Release memory used by this thread for unrolling blocks
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
         runningTasks.remove(taskId)
+        taskStartTimes.remove(taskId)
       }
     }
   }

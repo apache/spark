@@ -154,6 +154,15 @@ class JsonProtocolSuite extends FunSuite {
     assert(newMetrics.inputMetrics.isEmpty)
   }
 
+  test("TaskMetrics.executorLaunchTime backward compatibility") {
+    // executorLaunchTime was added after 1.1.
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Executor Launch Time" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.executorLaunchTime === 0L)
+  }
+
   test("BlockManager events backward compatibility") {
     // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
@@ -554,6 +563,7 @@ class JsonProtocolSuite extends FunSuite {
     val t = new TaskMetrics
     val sw = new ShuffleWriteMetrics
     t.hostname = "localhost"
+    t.executorLaunchTime = c + d
     t.executorDeserializeTime = a
     t.executorRunTime = b
     t.resultSize = c
@@ -796,6 +806,7 @@ class JsonProtocolSuite extends FunSuite {
       |  },
       |  "Task Metrics": {
       |    "Host Name": "localhost",
+      |    "Executor Launch Time": 1100,
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -879,6 +890,7 @@ class JsonProtocolSuite extends FunSuite {
       |  },
       |  "Task Metrics": {
       |    "Host Name": "localhost",
+      |    "Executor Launch Time": 1100,
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
