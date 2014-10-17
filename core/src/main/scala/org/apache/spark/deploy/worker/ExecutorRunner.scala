@@ -111,13 +111,14 @@ private[spark] class ExecutorRunner(
     case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
+    case "{{APP_ID}}" => appId
     case other => other
   }
 
   def getCommandSeq = {
     val command = Command(
       appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
+      appDesc.command.arguments.map(substituteVariables),
       appDesc.command.environment,
       appDesc.command.classPathEntries,
       appDesc.command.libraryPathEntries,

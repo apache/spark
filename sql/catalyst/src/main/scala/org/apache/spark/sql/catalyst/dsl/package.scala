@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
@@ -119,6 +119,7 @@ package object dsl {
     implicit def floatToLiteral(f: Float) = Literal(f)
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
+    implicit def dateToLiteral(d: Date) = Literal(d)
     implicit def decimalToLiteral(d: BigDecimal) = Literal(d)
     implicit def timestampToLiteral(t: Timestamp) = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
@@ -173,6 +174,9 @@ package object dsl {
 
       /** Creates a new AttributeReference of type string */
       def string = AttributeReference(s, StringType, nullable = true)()
+
+      /** Creates a new AttributeReference of type date */
+      def date = AttributeReference(s, DateType, nullable = true)()
 
       /** Creates a new AttributeReference of type decimal */
       def decimal = AttributeReference(s, DecimalType, nullable = true)()

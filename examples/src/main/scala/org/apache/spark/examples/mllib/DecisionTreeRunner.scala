@@ -62,7 +62,7 @@ object DecisionTreeRunner {
       minInfoGain: Double = 0.0,
       numTrees: Int = 1,
       featureSubsetStrategy: String = "auto",
-      fracTest: Double = 0.2)
+      fracTest: Double = 0.2) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -138,8 +138,10 @@ object DecisionTreeRunner {
 
   def run(params: Params) {
 
-    val conf = new SparkConf().setAppName("DecisionTreeRunner")
+    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
     val sc = new SparkContext(conf)
+
+    println(s"DecisionTreeRunner with parameters:\n$params")
 
     // Load training data and cache it.
     val origExamples = params.dataFormat match {
@@ -235,7 +237,10 @@ object DecisionTreeRunner {
           minInstancesPerNode = params.minInstancesPerNode,
           minInfoGain = params.minInfoGain)
     if (params.numTrees == 1) {
+      val startTime = System.nanoTime()
       val model = DecisionTree.train(training, strategy)
+      val elapsedTime = (System.nanoTime() - startTime) / 1e9
+      println(s"Training time: $elapsedTime seconds")
       if (model.numNodes < 20) {
         println(model.toDebugString) // Print full model.
       } else {
@@ -259,8 +264,11 @@ object DecisionTreeRunner {
     } else {
       val randomSeed = Utils.random.nextInt()
       if (params.algo == Classification) {
+        val startTime = System.nanoTime()
         val model = RandomForest.trainClassifier(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
+        val elapsedTime = (System.nanoTime() - startTime) / 1e9
+        println(s"Training time: $elapsedTime seconds")
         if (model.totalNumNodes < 30) {
           println(model.toDebugString) // Print full model.
         } else {
@@ -275,8 +283,11 @@ object DecisionTreeRunner {
         println(s"Test accuracy = $testAccuracy")
       }
       if (params.algo == Regression) {
+        val startTime = System.nanoTime()
         val model = RandomForest.trainRegressor(training, strategy, params.numTrees,
           params.featureSubsetStrategy, randomSeed)
+        val elapsedTime = (System.nanoTime() - startTime) / 1e9
+        println(s"Training time: $elapsedTime seconds")
         if (model.totalNumNodes < 30) {
           println(model.toDebugString) // Print full model.
         } else {
