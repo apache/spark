@@ -72,7 +72,7 @@ private[streaming]
 class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     @transient ssc_ : StreamingContext,
     directory: String,
-    depth: Int = 1,
+    depth: Int = 0,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
@@ -137,7 +137,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
    * Finds the files that were modified since the last time this method was called and makes
    * a union RDD out of them. Note that this maintains the list of files that were processed
    * in the latest modification time in the previous call to this method. This is because the
-   * modification time ed by the FileStatus API seems to  times only at the
+   * modification time returned by the FileStatus API seems to return times only at the
    * granularity of seconds. And new files may have the same modification time as the
    * latest modification time in the previous call to this method yet was not reported in
    * the previous call.
@@ -166,11 +166,26 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   }
 
   /**
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> support depth
    * Find new files for the batch of `currentTime`. This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
+<<<<<<< HEAD
+=======
+=======
+   * Find files which have modification timestamp <= current time and  a 3-tuple of
+=======
+   * Find files which have modification timestamp <= current time and return a 3-tuple of
+>>>>>>> support depth
+   * (new files found, latest modification time among them, files with latest modification time)
+>>>>>>> change Nit
+>>>>>>> support depth
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
@@ -266,6 +281,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     }
   }
 
+<<<<<<< HEAD
   /**
    * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
    * accepted, it has to pass the following criteria.
@@ -314,6 +330,29 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     }
     logDebug(s"$pathStr accepted with mod time $modTime")
     return true
+=======
+  def getPathList(path:Path, fs:FileSystem):List[Path]={
+    var pathList = List[Path]()
+    pathList = path:: pathList
+    var tmp =List[Path]()
+    tmp=path::tmp
+    for(i <- 0 until depth){
+      tmp =getSubPathList(tmp,fs)
+      pathList=tmp:::pathList
+    }
+    pathList
+  }
+
+  def getSubPathList(path:List[Path],fs:FileSystem):List[Path]={
+    val filter = new SubPathFilter()
+    var pathList = List[Path]()
+    path.map(subPath=>{
+     fs.listStatus(subPath,filter).map(x=>{
+        pathList = x.getPath()::pathList
+     })
+    })
+    pathList
+>>>>>>> support depth
   }
 
   /** Generate one RDD from an array of files */
@@ -404,17 +443,17 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   }
 }
 
-private[streaming]
-object FileInputDStream {
+  private[streaming]
+  object FileInputDStream {
 
-  def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
+    def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
-  /**
-   * Calculate the number of last batches to remember, such that all the files selected in
-   * at least last minRememberDurationS duration can be remembered.
-   */
-  def calculateNumBatchesToRemember(batchDuration: Duration,
-                                    minRememberDurationS: Duration): Int = {
-    math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
+    /**
+     * Calculate the number of last batches to remember, such that all the files selected in
+     * at least last minRememberDurationS duration can be remembered.
+     */
+    def calculateNumBatchesToRemember(batchDuration: Duration,
+                                      minRememberDurationS: Duration): Int = {
+      math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
+    }
   }
-}

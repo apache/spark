@@ -157,12 +157,162 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
+<<<<<<< HEAD
   test("file input stream - newFilesOnly = true") {
     testFileStream(newFilesOnly = true)
   }
+=======
+  test("file input stream -depth = 0  ") {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+
+    // Set up the streaming context and input streams
+    val testDir = Utils.createTempDir()
+    val ssc = new StreamingContext(conf, batchDuration)
+    val fileStream = ssc.textFileStream(testDir.toString)
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    def output = outputBuffer.flatMap(x => x)
+    val outputStream = new TestOutputStream(fileStream, outputBuffer)
+    outputStream.register()
+    ssc.start()
+
+    // Create files in the temporary directory so that Spark Streaming can read data from it
+    val input = Seq(1, 2, 3, 4, 5)
+    val expectedOutput = input.map(_.toString)
+    Thread.sleep(1000)
+    for (i <- 0 until input.size) {
+      val file = new File(testDir, i.toString)
+      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
+      logInfo("Created file " + file)
+      Thread.sleep(batchDuration.milliseconds)
+      Thread.sleep(1000)
+    }
+    val startTime = System.currentTimeMillis()
+    Thread.sleep(1000)
+    val timeTaken = System.currentTimeMillis() - startTime
+    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
+    logInfo("Stopping context")
+    ssc.stop()
+
+    // Verify whether data received by Spark Streaming was as expected
+    logInfo("--------------------------------")
+    logInfo("output, size = " + outputBuffer.size)
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output, size = " + expectedOutput.size)
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    // (whether the elements were received one in each interval is not verified)
+    assert(output.toList === expectedOutput.toList)
+
+    Utils.deleteRecursively(testDir)
+>>>>>>> support depth
 
   test("file input stream - newFilesOnly = false") {
     testFileStream(newFilesOnly = false)
+  }
+
+  test("file input stream -depth = 1") {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+
+    // Set up the streaming context and input streams
+    val testDir = Utils.createTempDir()
+    val subDir = Utils.createTempDir(testDir.toString)
+    val ssc = new StreamingContext(conf, batchDuration)
+    val fileStream = ssc.textFileStream(testDir.toString,1)
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    def output = outputBuffer.flatMap(x => x)
+    val outputStream = new TestOutputStream(fileStream, outputBuffer)
+    outputStream.register()
+    ssc.start()
+
+    // Create files in the temporary directory so that Spark Streaming can read data from it
+    val input = Seq(1, 2, 3, 4, 5)
+    val expectedOutput = input.map(_.toString)
+    Thread.sleep(1000)
+    for (i <- 0 until input.size) {
+      val file = new File(subDir, i.toString)
+      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
+      logInfo("Created file " + file)
+      Thread.sleep(batchDuration.milliseconds)
+      Thread.sleep(1000)
+    }
+    val startTime = System.currentTimeMillis()
+    Thread.sleep(1000)
+    val timeTaken = System.currentTimeMillis() - startTime
+    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
+    logInfo("Stopping context")
+    ssc.stop()
+
+    // Verify whether data received by Spark Streaming was as expected
+    logInfo("--------------------------------")
+    logInfo("output, size = " + outputBuffer.size)
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output, size = " + expectedOutput.size)
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    // (whether the elements were received one in each interval is not verified)
+    assert(output.toList === expectedOutput.toList)
+
+    Utils.deleteRecursively(testDir)
+
+    // Enable manual clock back again for other tests
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+  }
+
+  test("file input stream  -depth = 2") {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+
+    // Set up the streaming context and input streams
+    val testDir = Utils.createTempDir()
+    val subDir = Utils.createTempDir(testDir.toString)
+    val triDir = Utils.createTempDir(subDir.toString)
+    val ssc = new StreamingContext(conf, batchDuration)
+    val fileStream = ssc.textFileStream(testDir.toString,2)
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    def output = outputBuffer.flatMap(x => x)
+    val outputStream = new TestOutputStream(fileStream, outputBuffer)
+    outputStream.register()
+    ssc.start()
+
+    // Create files in the temporary directory so that Spark Streaming can read data from it
+    val input = Seq(1, 2, 3, 4, 5)
+    val expectedOutput = input.map(_.toString)
+    Thread.sleep(1000)
+    for (i <- 0 until input.size) {
+      val file = new File(triDir, i.toString)
+      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
+      Thread.sleep(batchDuration.milliseconds)
+      Thread.sleep(1000)
+    }
+    val startTime = System.currentTimeMillis()
+    Thread.sleep(1000)
+    val timeTaken = System.currentTimeMillis() - startTime
+    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
+    logInfo("Stopping context")
+    ssc.stop()
+
+    // Verify whether data received by Spark Streaming was as expected
+    logInfo("--------------------------------")
+    logInfo("output, size = " + outputBuffer.size)
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output, size = " + expectedOutput.size)
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    // (whether the elements were received one in each interval is not verified)
+    assert(output.toList === expectedOutput.toList)
+
+    Utils.deleteRecursively(testDir)
+
+    // Enable manual clock back again for other tests
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
   }
 
   test("multi-thread receiver") {
