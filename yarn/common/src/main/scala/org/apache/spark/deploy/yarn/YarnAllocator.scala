@@ -130,7 +130,9 @@ private[yarn] abstract class YarnAllocator(
       logWarning(s"Attempted to kill unknown executor $executorId!")
       return
     }
-    releaseContainer(executorIdToContainer(executorId))
+    internalReleaseContainer(executorIdToContainer(executorId))
+    numExecutorsRunning.decrementAndGet()
+    maxExecutors -= 1
   }
 
   def allocateResources() = {
