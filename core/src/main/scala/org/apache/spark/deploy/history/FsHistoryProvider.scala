@@ -46,8 +46,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   private def warnUpdateInterval(value: String): String = {
     logWarning("Using spark.history.fs.updateInterval to set interval " +
-        "between each check for event log updates is deprecated, " +
-        "please use spark.history.fs.update.interval.seconds instead.")
+      "between each check for event log updates is deprecated, " +
+      "please use spark.history.fs.update.interval.seconds instead.")
     value
   }
 
@@ -73,7 +73,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // The schedule thread pool size must be one, otherwise it will have concurrent issues about fs
   // and applications between check task and clean task..
   private val pool = Executors.newScheduledThreadPool(1, new ThreadFactoryBuilder()
-      .setNameFormat("spark-history-thread-%d").setDaemon(true).build())
+    .setNameFormat("spark-history-task-%d").setDaemon(true).build())
 
   // The modification time of the newest log detected during the last scan. This is used
   // to ignore logs that are older during subsequent scans, to avoid processing data that
