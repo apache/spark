@@ -162,7 +162,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
       override def run() {
         while (true) {
           try {
-            if (addTimer > 0) {
+            if (addTimer >= 0) {
               val threshold = if (addThresholdCrossed) addInterval else addThreshold
               if (addTimer > threshold * 1000) {
                 addThresholdCrossed = true
@@ -170,7 +170,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
               }
             }
 
-            if (addRetryTimer > 0) {
+            if (addRetryTimer >= 0) {
               if (addRetryTimer > addRetryInterval * 1000) {
                 retryAddExecutors()
               }
@@ -193,10 +193,10 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
           } finally {
             // Advance all timers that are enabled
             Thread.sleep(intervalMillis)
-            if (addTimer > 0) {
+            if (addTimer >= 0) {
               addTimer += intervalMillis
             }
-            if (addRetryTimer > 0) {
+            if (addRetryTimer >= 0) {
               addRetryTimer += intervalMillis
             }
             removeTimers.foreach { case (id, _) =>
@@ -402,7 +402,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   /**
    * Return whether the add timer is already running.
    */
-  def isAddTimerRunning: Boolean = addTimer > 0 || addRetryTimer > 0
+  def isAddTimerRunning: Boolean = addTimer >= 0 || addRetryTimer >= 0
 
   /**
    * Return whether the remove timer for the given executor is already running.
