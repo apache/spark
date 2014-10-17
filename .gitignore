@@ -1,3 +1,4 @@
+airflow.db
 env
 logs
 build

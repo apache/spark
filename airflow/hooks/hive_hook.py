@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import sys
 import os
 from airflow import settings
@@ -16,7 +17,7 @@ from hive_service import ThriftHive
 from airflow.hooks.base_hook import BaseHook
 
 METASTORE_THRIFT_HOST = "localhost"
-METASTORE_THRIFT_PORT = 10000
+METASTORE_THRIFT_PORT = 8083
 
 
 class HiveHook(BaseHook):
@@ -65,6 +66,12 @@ class HiveHook(BaseHook):
             self.hive.execute("USE " + schema)
         self.hive.execute(hql)
         self.transport.close()
+
+    def run_cli(self, hql, schema=None):
+        if schema:
+            hql = "USE {schema};\n{hql}".format(**locals())
+        sp = subprocess.Popen(['hive', '-e', hql])
+        sp.wait()
 
 if __name__ == "__main__":
     hh = HiveHook()

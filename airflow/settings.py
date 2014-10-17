@@ -21,8 +21,8 @@ LOG_FORMAT = \
     '[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s'
 
 Session = sessionmaker()
-engine = create_engine('mysql://airflow:airflow@localhost/airflow')
-# engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )
+#engine = create_engine('mysql://airflow:airflow@localhost/airflow')
+engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )
 Session.configure(bind=engine)
 HEADER = """\
        .__         _____.__                 
