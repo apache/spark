@@ -69,8 +69,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
     case Heartbeat(executorId, taskMetrics, blockManagerId,
       broadcastInfo) =>
       val response = HeartbeatResponse(
-        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId,
-          broadcastInfo))
+        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
       sender ! response
     case ExpireDeadHosts =>
       expireDeadHosts()

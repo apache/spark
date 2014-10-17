@@ -80,6 +80,9 @@ private[spark] class BlockManager(
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
+  // save the updated broadcastBlock info within a heartbeat interval
+  private var broadcastBlockUpdate: Map[BlockId, BlockStatus] = Map[BlockId, BlockStatus]()
+
   // Actual storage of where blocks are kept
   private var tachyonInitialized = false
   private[spark] val memoryStore = new MemoryStore(this, maxMemory)
@@ -868,6 +871,9 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
+    // update the broadcastBlockUpdate
+    broadcastBlockUpdate ++= updatedBlocks.filter(_._1.isBroadcast).toMap
+
     updatedBlocks
   }
 
@@ -1104,6 +1110,17 @@ private[spark] class BlockManager(
         if (!removedFromMemory && !removedFromDisk && !removedFromTachyon) {
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
             "the disk, memory, or tachyon store")
+        }
+        // update broadcastBlockUpdate
+        if (blockId.isBroadcast) {
+          val bs = getStatus(blockId)
+          broadcastBlockUpdate = broadcastBlockUpdate ++ {
+            if (bs != None) {
+              Map(blockId -> bs.get)
+            } else {
+              Map()
+            }
+          }
         }
         blockInfo.remove(blockId)
         if (tellMaster && info.tellMaster) {

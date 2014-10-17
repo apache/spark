@@ -36,14 +36,11 @@ class StorageStatusListener extends SparkListener {
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
-    println("update blocks in storageStatusListener")
     executorIdToStorageStatus.get(formatExecutorId(execId)).foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
         if (updatedStatus.storageLevel == StorageLevel.NONE) {
-          println("removing %s in storageStatusListener".format(updatedBlocks))
           storageStatus.removeBlock(blockId)
         } else {
-          println("updating %s in storageStatusListener".format(updatedBlocks))
           storageStatus.updateBlock(blockId, updatedStatus)
         }
       }

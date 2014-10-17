@@ -40,15 +40,23 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
 @DeveloperApi
 class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
+<<<<<<< HEAD
   private[ui] val _broadcastInfoMap = mutable.Map[Long, BroadcastInfo]()
+=======
+  private[ui] val _broadcastInfoMap = mutable.Map[BlockId, BlockStatus]()
+>>>>>>> report broadcast var in UI
 
   def storageStatusList = storageStatusListener.storageStatusList
 
   /** Filter RDD info to include only those with cached partitions */
   def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
 
+<<<<<<< HEAD
   /** Filter broadcast info to include only those with cached partitions */
   def broadcastInfoList = _broadcastInfoMap.values.toSeq
+=======
+  def broadcastVarSeq = storageStatusList.flatMap(_.blocks).toSeq
+>>>>>>> report broadcast var in UI
 
   /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {
