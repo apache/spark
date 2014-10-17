@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.RDDInfo
+import org.apache.spark.storage.{BlockId, BlockStatus, RDDInfo}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -31,8 +31,10 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
-    val content = UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))
-    UIUtils.headerSparkPage("Storage", content, parent)
+    val rddContent = UIUtils.listingTable(rddHeader, rddRow, rdds)
+    val broadcastContent = UIUtils.listingTable(broadcastHeader, blockRow, List())
+    UIUtils.headerSparkPageWithMultipleTables("Storage", parent, None,
+      subTitleContentPair = ("RDDs", rddContent), ("Broadcast", broadcastContent))
   }
 
   /** Header fields for the RDD table */
@@ -44,6 +46,33 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Size in Memory",
     "Size in Tachyon",
     "Size on Disk")
+
+  private def broadcastHeader = Seq(
+    "Variable Name",
+    "Storage Level",
+    "Size in Memory",
+    "Size in Tachyon",
+    "Size on Disk")
+
+  /** Render an HTML row representing an block variable */
+  private def blockRow(blockIdStatusPair: (BlockId, BlockStatus)): Seq[Node] = {
+    val blockId = blockIdStatusPair._1
+    val blockStatus = blockIdStatusPair._2
+    // scalastyle:off
+    <tr>
+      <td>
+        <a href={"%s/storage/broadcast?id=%s".format(UIUtils.prependBaseUri(parent.basePath), blockId)}>
+          {blockId}
+        </a>
+      </td>
+      <td>{blockStatus.storageLevel.description}
+      </td>
+      <td sorttable_customkey={blockStatus.memSize.toString}>{Utils.bytesToString(blockStatus.memSize)}</td>
+      <td sorttable_customkey={blockStatus.tachyonSize.toString}>{Utils.bytesToString(blockStatus.tachyonSize)}</td>
+      <td sorttable_customkey={blockStatus.diskSize.toString} >{Utils.bytesToString(blockStatus.diskSize)}</td>
+    </tr>
+    // scalastyle:on
+  }
 
   /** Render an HTML row representing an RDD */
   private def rddRow(rdd: RDDInfo): Seq[Node] = {
