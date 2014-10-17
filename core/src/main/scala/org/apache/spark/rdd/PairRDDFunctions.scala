@@ -1031,17 +1031,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
       writer.setup(context.getStageId, context.getPartitionId, attemptNumber)
       writer.open()
-      var count = 0
       try {
         while (iter.hasNext) {
           val record = iter.next()
-          count += 1
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
         }
       } finally {
         writer.close()
       }
-      logInfo(s"$count records are written")
       writer.commit()
     }
 
