@@ -725,7 +725,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>600</td>
+  <td>6000</td>
   <td>
      This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
      enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
