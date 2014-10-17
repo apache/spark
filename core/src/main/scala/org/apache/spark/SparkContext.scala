@@ -238,7 +238,6 @@ class SparkContext(config: SparkConf) extends Logging {
       // For tests, do not enable the UI
       None
     }
-  ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
@@ -341,6 +340,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   postEnvironmentUpdate()
   postApplicationStart()
+
+  // Bind the SparkUI after starting the task scheduler
+  // because certain pages and listeners depend on it
+  ui.foreach(_.bind())
 
   private[spark] var checkpointDir: Option[String] = None
 
@@ -815,6 +818,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val callSite = getCallSite
+    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
