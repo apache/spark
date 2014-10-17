@@ -21,6 +21,7 @@ import java.io._
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
+import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
@@ -72,11 +73,10 @@ private[spark] class DriverRunner(
       override def run() {
         try {
           val driverDir = createWorkingDirectory()
-          val localJarFilename = downloadUserJar(driverDir)
+          val localJarFiles: ArrayBuffer[String] = downloadUserJars(driverDir)
 
           // Make sure user application jar is on the classpath
-          // TODO: If we add ability to submit multiple jars they should also be added here
-          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
+          val classPath = driverDesc.command.classPathEntries ++ localJarFiles.toSeq
           val newCommand = Command(
             driverDesc.command.mainClass,
             driverDesc.command.arguments.map(substituteVariables),
@@ -138,12 +138,24 @@ private[spark] class DriverRunner(
   }
 
   /**
+   * Download the user multiple jars into the supplied directory and return its local multiple paths.
+   */
+  private def downloadUserJars(driverDir: File): ArrayBuffer[String] = {
+    val localJarFiles = new ArrayBuffer[String]
+    val jars: Seq[String] = driverDesc.jarUrl.split(",").filter(_.size != 0).toSeq
+    for( jar <- jars){
+      localJarFiles+= downloadUserJar(jar, driverDir)
+    }
+    localJarFiles
+  }
+
+  /**
    * Download the user jar into the supplied directory and return its local path.
    * Will throw an exception if there are errors downloading the jar.
    */
-  private def downloadUserJar(driverDir: File): String = {
+  private def downloadUserJar(jarUrl: String, driverDir: File): String = {
 
-    val jarPath = new Path(driverDesc.jarUrl)
+    val jarPath = new Path(jarUrl)
 
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val jarFileSystem = jarPath.getFileSystem(hadoopConf)
