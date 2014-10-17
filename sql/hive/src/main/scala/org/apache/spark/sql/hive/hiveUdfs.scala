@@ -22,6 +22,8 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory
 import org.apache.hadoop.hive.ql.exec.{UDF, UDAF}
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
@@ -117,12 +119,18 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
   lazy val dataType = javaClassToDataType(method.getReturnType)
 
   @transient
+  lazy val returnInspector = ObjectInspectorFactory.getReflectionObjectInspector(
+    method.getGenericReturnType(), ObjectInspectorOptions.JAVA)
+
+  @transient
   protected lazy val cached = new Array[AnyRef](children.length)
 
   // TODO: Finish input output types.
   override def eval(input: Row): Any = {
-    unwrap(FunctionRegistry.invoke(method, function, conversionHelper
-      .convertIfNecessary(wrap(children.map(c => c.eval(input)), arguments, cached): _*): _*))
+    unwrap(
+      FunctionRegistry.invoke(method, function, conversionHelper
+        .convertIfNecessary(wrap(children.map(c => c.eval(input)), arguments, cached): _*): _*),
+      returnInspector)
   }
 }
 
@@ -178,7 +186,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
         }, argumentInspectors(i))
       i += 1
     }
-    unwrap(function.evaluate(deferedObjects))
+    unwrap(function.evaluate(deferedObjects), returnInspector)
   }
 }
 
@@ -266,15 +274,14 @@ private[hive] case class HiveGenericUdtf(
   protected lazy val inputInspectors = children.map(_.dataType).map(toInspector)
 
   @transient
-  protected lazy val outputInspectors = {
-    val structInspector = function.initialize(inputInspectors.toArray)
-    structInspector.getAllStructFieldRefs.map(_.getFieldObjectInspector)
-  }
+  protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
 
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
 
-  protected lazy val outputDataTypes = outputInspectors.map(inspectorToDataType)
+  protected lazy val outputDataTypes = outputInspector.getAllStructFieldRefs.map {
+    field => inspectorToDataType(field.getFieldObjectInspector)
+  }
 
   override protected def makeOutput() = {
     // Use column names when given, otherwise c_1, c_2, ... c_n.
@@ -292,7 +299,7 @@ private[hive] case class HiveGenericUdtf(
   }
 
   override def eval(input: Row): TraversableOnce[Row] = {
-    outputInspectors // Make sure initialized.
+    outputInspector // Make sure initialized.
 
     val inputProjection = new InterpretedProjection(children)
     val collector = new UDTFCollector
@@ -308,7 +315,7 @@ private[hive] case class HiveGenericUdtf(
       // We need to clone the input here because implementations of
       // GenericUDTF reuse the same object. Luckily they are always an array, so
       // it is easy to clone.
-      collected += new GenericRow(input.asInstanceOf[Array[_]].map(unwrap))
+      collected += unwrap(input, outputInspector).asInstanceOf[Row]
     }
 
     def collectRows() = {
@@ -349,7 +356,7 @@ private[hive] case class HiveUdafFunction(
   private val buffer =
     function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
 
-  override def eval(input: Row): Any = unwrapData(function.evaluate(buffer), returnInspector)
+  override def eval(input: Row): Any = unwrap(function.evaluate(buffer), returnInspector)
 
   @transient
   val inputProjection = new InterpretedProjection(exprs)

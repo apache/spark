@@ -233,7 +233,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Sort with Limit clause causes failure.
     "ctas",
-    "ctas_hadoop20"
+    "ctas_hadoop20",
+
+    // timestamp in array, the output format of Hive contains double quotes, while
+    // Spark SQL doesn't
+    "udf_sort_array"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
