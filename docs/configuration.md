@@ -954,7 +954,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'</code><br />
     For example: <br />
     <code>-Dspark.ui.filters=com.test.filter1</code> <br />
-    <code>-Dspark.com.test.filter1.params='param1=foo,param2=testing'</code>
+    <code>-Dspark.com.test.filter1.params='param1=foo,param2=testing'</code>.
   </td>
 </tr>
 <tr>
