@@ -28,30 +28,31 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTableBase(
-    stages: Seq[StageInfo],
-    parent: JobProgressTab,
-    killEnabled: Boolean = false) {
+                                  stages: Seq[StageInfo],
+                                  parent: JobProgressTab,
+                                  killEnabled: Boolean = false) {
 
   private val listener = parent.listener
   protected def isFairScheduler = parent.isFairScheduler
 
   protected def columns: Seq[Node] = {
     <th>Stage Id</th> ++
-    {if (isFairScheduler) {<th>Pool Name</th>} else Seq.empty} ++
-    <th>Description</th>
-    <th>Submitted</th>
-    <th>Duration</th>
-    <th>Tasks: Succeeded/Total</th>
-    <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
-    <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
-    <th>
-      <!-- Place the shuffle write tooltip on the left (rather than the default position
+      {if (isFairScheduler) {<th>Pool Name</th>} else Seq.empty} ++
+      <th>Description</th>
+        <th>Submitted</th>
+        <th>Duration</th>
+        <th>Estimated Time Left</th>
+        <th>Tasks: Succeeded/Total</th>
+        <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+        <th>
+          <!-- Place the shuffle write tooltip on the left (rather than the default position
         of on top) because the shuffle write column is the last column on the right side and
         the tooltip is wider than the column, so it doesn't fit on top. -->
-      <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
-        Shuffle Write
-      </span>
-    </th>
+          <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+            Shuffle Write
+          </span>
+        </th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -146,6 +147,7 @@ private[ui] class StageTableBase(
       if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
+    val numericDuration = duration.map(d => d).getOrElse(-1)
 
     val inputRead = stageData.inputBytes
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
@@ -172,6 +174,7 @@ private[ui] class StageTableBase(
     <td>{makeDescription(s)}</td>
     <td valign="middle">{submissionTime}</td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
+    <td sorttable_customkey={duration.getOrElse(-1).toString}>{estimateTime(s.numTasks,stageData.completedIndices.size,duration.getOrElse(-1))}</td>
     <td class="progress-cell">
       {makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,
         stageData.numFailedTasks, s.numTasks)}
@@ -179,7 +182,20 @@ private[ui] class StageTableBase(
     <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
     <td sorttable_customkey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
     <td sorttable_customkey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
+
+
   }
+
+  /** Estimate the time left based on task completion rate and remaining tasks */
+   def estimateTime(total:Long, completed:Long, duration:Long) = {
+   if(total==completed)  {"Done" }
+   val rate = completed.toFloat/duration.toFloat //time per task
+   val remaining=total.toFloat-completed.toFloat
+   val estimate=remaining*rate
+   UIUtils.formatDuration(estimate.toLong*1000)//convert to millis
+  }
+
+
 
   /** Render an HTML row that represents a stage */
   private def renderStageRow(s: StageInfo): Seq[Node] = <tr>{stageRow(s)}</tr>
