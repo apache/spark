@@ -272,11 +272,13 @@ private[spark] object Utils extends Logging {
   /** Copy all data from an InputStream to an OutputStream */
   def copyStream(in: InputStream,
                  out: OutputStream,
-                 closeStreams: Boolean = false): Long =
+                 closeStreams: Boolean = false,
+                 transferToEnabled: Boolean = true): Long =
   {
     var count = 0L
     try {
-      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]) {
+      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
+        && transferToEnabled) {
         // When both streams are File stream, use transferTo to improve copy performance.
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
@@ -292,9 +294,7 @@ private[spark] object Utils extends Logging {
         // give user information if not.
         // Position will not be increased to the expected length after calling transferTo in
         // kernel version 2.6.32, this issue can be seen in
-        // scalastyle:off
-        // https://bugs.openjdk.java.net/browse/JDK-7052359?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel)
-        // scalastyle:on
+        // https://bugs.openjdk.java.net/browse/JDK-7052359
         // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
         val finalPos = outChannel.position()
         assert(finalPos == initialPos + size,
@@ -302,6 +302,7 @@ private[spark] object Utils extends Logging {
              |Current position $finalPos do not equal to expected position ${initialPos + count}
              |after transferTo, please check your kernel version to see if it is 2.6.32,
              |this is a kernel bug which will lead to unexpected behavior when using transferTo.
+             |You can set spark.file.transferTo = false to disable this NIO feature.
            """.stripMargin)
       } else {
         val buf = new Array[Byte](8192)
