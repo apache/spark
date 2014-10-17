@@ -25,7 +25,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.linalg import Vectors, _to_java_object_rdd
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashTF', 'IDFModel', 'IDF',
@@ -46,7 +46,7 @@ _picklable_classes = [
 def _py2java(sc, a):
     """ Convert Python object into Java """
     if isinstance(a, RDD):
-        a = a._to_java_object_rdd()
+        a = _to_java_object_rdd(a)
     elif not isinstance(a, (int, long, float, bool, basestring)):
         bytes = bytearray(PickleSerializer().dumps(a))
         a = sc._jvm.SerDe.loads(bytes)
@@ -59,7 +59,7 @@ def _java2py(sc, r):
         if clsName in ("RDD", "JavaRDD"):
             if clsName == "RDD":
                 r = r.toJavaRDD()
-            jrdd = sc._jvm.PythonRDD.javaToPython(r)
+            jrdd = sc._jvm.SerDe.javaToPython(r)
             return RDD(jrdd, sc, AutoBatchedSerializer(PickleSerializer()))
 
         elif clsName in _picklable_classes:
