@@ -117,7 +117,16 @@ private[nio] class ConnectionManager(
     conf.getInt("spark.core.connection.connect.threads.max", 8),
     conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-connect-executor"))
+    Utils.namedThreadFactory("handle-connect-executor")) {
+
+    override def afterExecute(r: Runnable, t: Throwable): Unit = {
+      super.afterExecute(r, t)
+      if (t != null && NonFatal(t)) {
+        logError("Error in handleConnectExecutor is not handled properly", t)
+      }
+    }
+
+  }
 
   private val serverChannel = ServerSocketChannel.open()
   // used to track the SendingConnections waiting to do SASL negotiation
