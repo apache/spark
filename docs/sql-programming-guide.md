@@ -687,39 +687,6 @@ for teenName in teenNames.collect():
 
 </div>
 
-### Configuration
-
-Configuration of ORC can be done using the `setConf` method on HiveContext or by running
-`SET key=value` commands using SQL.
-
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.sql.parquet.binaryAsString</code></td>
-  <td>false</td>
-  <td>
-    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
-    not differentiate between binary data and strings when writing out the Parquet schema.  This
-    flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.sql.parquet.cacheMetadata</code></td>
-  <td>false</td>
-  <td>
-    Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.sql.parquet.compression.codec</code></td>
-  <td>snappy</td>
-  <td>
-    Sets the compression codec use when writing Parquet files. Acceptable values include:
-    uncompressed, snappy, gzip, lzo.
-  </td>
-</tr>
-</table>
-
 ## JSON Datasets
 <div class="codetabs">
 
