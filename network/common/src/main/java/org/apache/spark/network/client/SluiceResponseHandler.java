@@ -79,23 +79,31 @@ public class SluiceResponseHandler extends MessageHandler<ResponseMessage> {
     for (Map.Entry<StreamChunkId, ChunkReceivedCallback> entry : outstandingFetches.entrySet()) {
       entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
     }
+    for (Map.Entry<Long, RpcResponseCallback> entry : outstandingRpcs.entrySet()) {
+      entry.getValue().onFailure(cause);
+    }
+
     // It's OK if new fetches appear, as they will fail immediately.
     outstandingFetches.clear();
+    outstandingRpcs.clear();
   }
 
   @Override
   public void channelUnregistered() {
-    if (outstandingFetches.size() > 0) {
+    if (numOutstandingRequests() > 0) {
       String remoteAddress = NettyUtils.getRemoteAddress(channel);
-      logger.error("Still have {} requests outstanding when contention from {} is closed",
-        outstandingFetches.size(), remoteAddress);
+      logger.error("Still have {} requests outstanding when connection from {} is closed",
+        numOutstandingRequests(), remoteAddress);
       failOutstandingRequests(new RuntimeException("Connection from " + remoteAddress + " closed"));
     }
   }
 
   @Override
   public void exceptionCaught(Throwable cause) {
-    if (outstandingFetches.size() > 0) {
+    if (numOutstandingRequests() > 0) {
+      String remoteAddress = NettyUtils.getRemoteAddress(channel);
+      logger.error("Still have {} requests outstanding when connection from {} is closed",
+        numOutstandingRequests(), remoteAddress);
       failOutstandingRequests(cause);
     }
   }
