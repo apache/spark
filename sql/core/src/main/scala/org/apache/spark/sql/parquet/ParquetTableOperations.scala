@@ -497,7 +497,7 @@ private[parquet] object FilteringParquetRowInputFormat {
     .build[FileStatus, Array[BlockLocation]]()
 }
 
-private[sql] object FileSystemHelper extends Logging{
+private[sql] object FileSystemHelper {
   def listFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -526,7 +526,6 @@ private[sql] object FileSystemHelper extends Logging{
     if (fs.exists(path)) {
       fs.listStatus(path).map(_.getPath).filter(p => p.getName.endsWith(extension))
     } else {
-      println(s"${path.toString} not exists")
       Seq.empty
     }
   }
