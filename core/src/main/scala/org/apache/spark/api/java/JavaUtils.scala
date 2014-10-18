@@ -19,10 +19,20 @@ package org.apache.spark.api.java
 
 import com.google.common.base.Optional
 
+import scala.collection.convert.Wrappers.MapWrapper
+
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
     option match {
       case Some(value) => Optional.of(value)
       case None => Optional.absent()
     }
+
+  // Workaround for SPARK-3926 / SI-8911
+  def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
+    new SerializableMapWrapper(underlying)
+
+  class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
+    extends MapWrapper(underlying) with java.io.Serializable
+
 }
