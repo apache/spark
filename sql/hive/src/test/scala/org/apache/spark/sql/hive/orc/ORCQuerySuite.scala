@@ -51,12 +51,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
       .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
 
     data.saveAsOrcFile(tempDir)
-
     checkAnswer(
       TestHive.orcFile(tempDir),
       data.toSchemaRDD.collect().toSeq)
 
-    Utils.deleteRecursively(new File(tempDir))
+//    Utils.deleteRecursively(new File(tempDir))
   }
 
   test("Compression options for writing to a Orcfile") {
@@ -69,6 +68,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
     var actualCodec = OrcFileOperator.getMetaDataReader(new Path(tempDir), Some(new Configuration())).getCompression.name
     assert(actualCodec == "ZLIB")
 
-    Utils.deleteRecursively(new File(tempDir))
+//    Utils.deleteRecursively(new File(tempDir))
+  }
+
+  test("Orc metadata reader") {
+    val path = new Path("/private/var/folders/q7/whr53mh905l1xm_zqgk00j3m0000gn/T/orcTest5484580860941213910")
+    val reader = OrcFileOperator.getMetaDataReader(path, Some(TestHive.sparkContext.hadoopConfiguration))
+    reader
   }
 }

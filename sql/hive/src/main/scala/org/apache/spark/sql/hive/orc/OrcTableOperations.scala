@@ -45,7 +45,6 @@ import org.apache.spark.sql.hive.{HiveMetastoreTypes, HadoopTableReader}
 import scala.collection.JavaConversions._
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
-import org.apache.spark.sql.execution.PhysicalRDD
 
 /**
  * logical plan of writing to ORC file
@@ -115,9 +114,9 @@ case class OrcTableScan(
     val ids = output.map(att => {
       val realName = att.name.toLowerCase(Locale.ENGLISH)
       fieldIdMap.getOrElse(realName, -1)
-    }).filter(_ >= 0)
+    }).filter(_ >= 0).map(_.asInstanceOf[Integer])
     if (ids != null && !ids.isEmpty) {
-      ColumnProjectionUtils.appendReadColumnIDs(conf, ids.asInstanceOf[java.util.List[Integer]])
+      ColumnProjectionUtils.appendReadColumnIDs(conf, ids)
     }
 
     val names = output.map(_.name)
@@ -188,6 +187,7 @@ private[sql] case class InsertIntoOrcTable(
       }
     }
     val structType =  StructType.fromAttributes(relation.output)
+    // get Type String to build typeInfo
     val orcSchema = HiveMetastoreTypes.toMetastoreType(structType)
 
     val writableRdd = childRdd.mapPartitions { iter =>
@@ -203,7 +203,7 @@ private[sql] case class InsertIntoOrcTable(
         var i = 0
         while (i < row.length) {
           outputData(i) = HadoopTableReader.unwrapData(row(i), fieldOIs(i))
-          i = 1
+          i += 1
         }
         orcSerde.serialize(outputData, standardOI)
       }

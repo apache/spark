@@ -37,6 +37,7 @@ import org.apache.spark.sql.hive.HiveMetastoreTypes
 import scala.collection.JavaConversions._
 
 private[sql] case class OrcRelation(
+    attributes: Seq[Attribute],
     path: String,
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
@@ -46,9 +47,7 @@ private[sql] case class OrcRelation(
 
   val prop: Properties = new Properties
 
-  var rowClass: Class[_] = null
-
-  override val output = orcSchema
+  override lazy val output = attributes ++ orcSchema
 
   // TODO: use statistics in ORC file
   override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
@@ -57,6 +56,10 @@ private[sql] case class OrcRelation(
     // get the schema info through ORC Reader
     val origPath = new Path(path)
     val reader = OrcFileOperator.getMetaDataReader(origPath, conf)
+    if (reader == null) {
+      // return empty seq when saveAsOrcFile
+      return Seq.empty
+    }
     val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
     // data types that is inspected by this inspector
     val schema = inspector.getTypeName
@@ -72,7 +75,8 @@ private[sql] case class OrcRelation(
     HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType].toAttributes
   }
 
-  override def newInstance() = OrcRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance() =
+    OrcRelation(attributes, path, conf, sqlContext).asInstanceOf[this.type]
 }
 
 private[sql] object OrcRelation {
@@ -96,33 +100,8 @@ private[sql] object OrcRelation {
         child,
         "Attempt to create Orc table from unresolved child")
     }
-    createEmpty(pathString, child.output, false, conf, sqlContext)
-  }
-
-  /**
-   * Creates an empty OrcRelation and underlying Orcfile that only
-   * consists of the Metadata for the given schema.
-   *
-   * @param pathString The directory the Orcfile will be stored in.
-   * @param attributes The schema of the relation.
-   * @param conf A configuration to be used.
-   * @return An empty OrcRelation.
-   */
-  def createEmpty(
-      pathString: String,
-      attributes: Seq[Attribute],
-      allowExisting: Boolean,
-      conf: Configuration,
-      sqlContext: SQLContext): OrcRelation = {
-    val path = checkPath(pathString, allowExisting, conf)
-
-    /** TODO: set compression kind in hive 0.13.1
-      * conf.set(
-      *   HiveConf.ConfVars.OHIVE_ORC_DEFAULT_COMPRESS.varname,
-      *   shortOrcCompressionCodecNames.getOrElse(
-      *    sqlContext.orcCompressionCodec.toUpperCase, CompressionKind.NONE).name)
-      */
-    new OrcRelation(path.toString, Some(conf), sqlContext)
+    val path = checkPath(pathString, false, conf)
+    new OrcRelation(child.output, path.toString, Some(conf), sqlContext)
   }
 
   private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {
@@ -147,26 +126,14 @@ private[sql] object OrcFileOperator {
     val conf = configuration.getOrElse(new Configuration())
     val fs: FileSystem = origPath.getFileSystem(conf)
     val orcFiles = FileSystemHelper.listFiles(origPath, conf, ".orc")
-    require(orcFiles != Seq.empty, "orcFiles is empty")
+    if (orcFiles == Seq.empty) {
+      // should return null when write to orc file
+      return null
+    }
     if (fs.exists(origPath)) {
       OrcFile.createReader(fs, orcFiles(0))
     } else {
       throw new IOException(s"File not found: $origPath")
-    }
-  }
-
-
-  def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration) {
-    require(origPath != null, "Unable to write ORC metadata: path is null")
-    val fs = origPath.getFileSystem(conf)
-    if (fs == null) {
-      throw new IllegalArgumentException(
-        s"Unable to write Orc metadata: path $origPath is incorrectly formatted")
-    }
-
-    val path = origPath.makeQualified(fs)
-    if (fs.exists(path) && !fs.getFileStatus(path).isDir) {
-      throw new IllegalArgumentException(s"Expected to write to directory $path but found file")
     }
   }
 }

@@ -23,28 +23,15 @@ import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.{SQLContext, SchemaRDD}
 import scala.reflect.runtime.universe.TypeTag
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 package object orc {
-//  implicit class OrcContext(sqlContext: HiveContext) {
-//
-//    def orcFile(filePath: String) =  new SchemaRDD(sqlContext,
-//      OrcRelation(filePath,
-//        Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext))
-//
-//    def createOrcFile[A <: Product : TypeTag](
-//        path: String,
-//        allowExisting: Boolean = true,
-//        conf: Configuration = new Configuration()): SchemaRDD = {
-//      new SchemaRDD(
-//        sqlContext,
-//        OrcRelation.createEmpty(path,
-//          ScalaReflection.attributesFor[A], allowExisting, conf, sqlContext))
-//    }
-//  }
-
-  implicit class OrcSchemaRDD(rdd: SchemaRDD) {
+  class OrcSchemaRDD(
+       @transient val sqlContext1: SQLContext,
+       @transient val baseLogicalPlan1: LogicalPlan)
+    extends SchemaRDD(sqlContext1, baseLogicalPlan1) {
     /**
      * Saves the contents of this `SchemaRDD` as a ORC file, preserving the schema.  Files that
      * are written out using this method can be read back in as a SchemaRDD using the `orcFile`
@@ -54,8 +41,7 @@ package object orc {
      * @group schema
      */
     def saveAsOrcFile(path: String): Unit = {
-      rdd.sqlContext.executePlan(WriteToOrcFile(path,
-        rdd.logicalPlan)).toRdd
+      sqlContext.executePlan(WriteToOrcFile(path, logicalPlan)).toRdd
     }
   }
 

@@ -40,14 +40,20 @@ import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.hive.orc.OrcRelation
+import org.apache.spark.sql.hive.orc.{OrcSchemaRDD, OrcRelation}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators}
 import org.apache.spark.sql.catalyst.analysis.{OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{Command => PhysicalCommand, ExtractPythonUdfs, QueryExecutionException}
+import org.apache.spark.sql.execution.{Command => PhysicalCommand, _}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.catalyst.plans.logical.SetCommand
+import scala.Some
+import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
+import org.apache.spark.sql.hive.MetastoreRelation
+import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.execution.LogicalRDD
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -110,6 +116,25 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
              s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
+  /**
+   * Creates a SchemaRDD from an RDD of case classes.
+   *
+   * @group userf
+   */
+//    implicit def createOrcSchemaRDD(rdd: SchemaRDD) = {
+//      new OrcSchemaRDD(rdd)
+//    }
+
+  /**
+   * Creates a SchemaRDD from an RDD of case classes.
+   *
+   * @group userf
+   */
+  implicit override def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
+    SparkPlan.currentContext.set(self)
+    new OrcSchemaRDD(this,
+      LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+  }
 
   /**
    * Creates a table using the schema of the given class.
@@ -128,41 +153,41 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * @group userf
    */
   def orcFile(path: String): SchemaRDD =
-    new SchemaRDD(this, orc.OrcRelation(path, Some(sparkContext.hadoopConfiguration), this))
+    new SchemaRDD(this, orc.OrcRelation(Seq.empty, path, Some(sparkContext.hadoopConfiguration), this))
 
-  /**
-   * :: Experimental ::
-   * Creates an empty orc file with the schema of class `A`, which can be registered as a table.
-   * This registered table can be used as the target of future `insertInto` operations.
-   *
-   * {{{
-   *   val sqlContext = new HiveContext(...)
-   *   import sqlContext._
-   *
-   *   case class Person(name: String, age: Int)
-   *   createOrcFile[Person]("path/to/file.orc").registerTempTable("people")
-   *   sql("INSERT INTO people SELECT 'michael', 29")
-   * }}}
-   *
-   * @tparam A A case class type that describes the desired schema of the orc file to be
-   *           created.
-   * @param path The path where the directory containing parquet metadata should be created.
-   *             Data inserted into this table will also be stored at this location.
-   * @param allowExisting When false, an exception will be thrown if this directory already exists.
-   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
-   *             output format.
-   *
-   * @group userf
-   */
-  @Experimental
-  def createOrcFile[A <: Product : TypeTag](
-      path: String,
-      allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): SchemaRDD = {
-    new SchemaRDD(
-      this,
-      OrcRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
-  }
+//  /**
+//   * :: Experimental ::
+//   * Creates an empty orc file with the schema of class `A`, which can be registered as a table.
+//   * This registered table can be used as the target of future `insertInto` operations.
+//   *
+//   * {{{
+//   *   val sqlContext = new HiveContext(...)
+//   *   import sqlContext._
+//   *
+//   *   case class Person(name: String, age: Int)
+//   *   createOrcFile[Person]("path/to/file.orc").registerTempTable("people")
+//   *   sql("INSERT INTO people SELECT 'michael', 29")
+//   * }}}
+//   *
+//   * @tparam A A case class type that describes the desired schema of the orc file to be
+//   *           created.
+//   * @param path The path where the directory containing parquet metadata should be created.
+//   *             Data inserted into this table will also be stored at this location.
+//   * @param allowExisting When false, an exception will be thrown if this directory already exists.
+//   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
+//   *             output format.
+//   *
+//   * @group userf
+//   */
+//  @Experimental
+//  def createOrcFile[A <: Product : TypeTag](
+//      path: String,
+//      allowExisting: Boolean = true,
+//      conf: Configuration = new Configuration()): SchemaRDD = {
+//    new SchemaRDD(
+//      this,
+//      OrcRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
+//  }
 
   /**
    * Analyzes the given table in the current database to generate statistics, which will be

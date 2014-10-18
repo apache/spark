@@ -149,8 +149,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+  def parquetFile(path: String): SchemaRDD = {
+    val a = new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration), this))
+    a
+  }
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
