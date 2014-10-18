@@ -18,24 +18,21 @@
 package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
-import java.io.IOException
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 import org.apache.hadoop.hive.ql.io.orc._
 
-import org.apache.spark.sql.parquet.FileSystemHelper
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedException, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hive.HiveMetastoreTypes
+import org.apache.spark.sql.parquet.FileSystemHelper
+import org.apache.spark.sql.SQLContext
 
 import scala.collection.JavaConversions._
-import org.apache.spark.Logging
 
 private[sql] case class OrcRelation(
     attributes: Seq[Attribute],
@@ -125,7 +122,6 @@ private[sql] object OrcFileOperator{
     val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
     // data types that is inspected by this inspector
     val schema = inspector.getTypeName
-
     // set prop here, initial OrcSerde need it
     val fields = inspector.getAllStructFieldRefs
     val (columns, columnTypes) = fields.map { f =>

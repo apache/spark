@@ -28,10 +28,11 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, FileOutputCommi
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.io.{Writable, NullWritable}
 import org.apache.hadoop.mapreduce.{TaskID, TaskAttemptContext, Job}
+import org.apache.hadoop.mapred.{SparkHadoopMapRedUtil, Reporter, JobConf}
 import org.apache.hadoop.hive.ql.io.orc.{OrcSerde, OrcInputFormat, OrcOutputFormat}
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
-import org.apache.hadoop.mapred.{SparkHadoopMapRedUtil, Reporter, JobConf}
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,12 +40,11 @@ import org.apache.spark.sql.parquet.FileSystemHelper
 import org.apache.spark.{TaskContext, SerializableWritable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode => LogicalUnaryNode}
+import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.execution.UnaryNode
 import org.apache.spark.sql.hive.{HiveMetastoreTypes, HadoopTableReader}
 
 import scala.collection.JavaConversions._
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfoUtils, TypeInfo}
 
 /**
  * logical plan of writing to ORC file
