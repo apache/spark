@@ -125,9 +125,8 @@ final class ShuffleBlockFetcherIterator(
           // Note that there is a chance that some blocks have been fetched successfully, but we
           // still add them to the failed queue. This is fine because when the caller see a
           // FetchFailedException, it is going to fail the entire task anyway.
-          for ((blockId, size) <- req.blocks) {
-            results.put(new FetchResult(blockId, -1, null))
-          }
+          val blocks = req.blocks
+          if (blocks.size > 0) results.put(new FetchResult(blocks(0)._1, -1, null))
         }
       }
     )
