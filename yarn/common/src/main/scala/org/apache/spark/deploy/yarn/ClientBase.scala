@@ -416,12 +416,14 @@ private[spark] trait ClientBase extends Logging {
 
   /**
    * Report the state of an application until it has exited, either successfully or
-   * due to some failure, then return the application state.
+   * due to some failure, then return a pair of the yarn application state (FINISHED, FAILED,
+   * KILLED, or RUNNING) and the final application state (UNDEFINED, SUCCEEDED, FAILED,
+   * or KILLED).
    *
    * @param appId ID of the application to monitor.
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
-   * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
+   * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
       appId: ApplicationId,
@@ -484,12 +486,14 @@ private[spark] trait ClientBase extends Logging {
   /**
    * Submit an application to the ResourceManager and monitor its state.
    * This continues until the application has exited for any reason.
+   * If the application finishes with a failed, killed, or undefined status,
+   * throw an appropriate SparkException.
    */
   def run(): Unit = {
     val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
     if (yarnApplicationState == YarnApplicationState.FAILED ||
       finalApplicationStatus == FinalApplicationStatus.FAILED) {
-      throw new SparkException("Application is failed")
+      throw new SparkException("Application finished with failed status.")
     }
     if (yarnApplicationState == YarnApplicationState.KILLED ||
       finalApplicationStatus == FinalApplicationStatus.KILLED) {
