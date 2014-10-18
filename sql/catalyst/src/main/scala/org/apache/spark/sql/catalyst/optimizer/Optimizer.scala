@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types._
 
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
-object SparkOptimizer extends Optimizer {
+object DefaultOptimizer extends Optimizer {
   val batches =
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::
