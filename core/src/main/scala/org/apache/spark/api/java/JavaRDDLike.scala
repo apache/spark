@@ -588,4 +588,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     rdd.foreachAsync(x => f.call(x))
   }
 
+  private[java] def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
+    new SerializableMapWrapper(underlying)
+
+  private[java] class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
+    extends MapWrapper(underlying) with java.io.Serializable
+
+
 }
