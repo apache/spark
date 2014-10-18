@@ -23,6 +23,7 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.ui.JettyUtils
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -68,6 +69,28 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+  }
+
+  /**
+   * Add filters to the SparkUI.
+   */
+  private def addWebUIFilter(
+      filterName: String,
+      filterParams: Map[String, String],
+      proxyBase: String): Unit = {
+    if (proxyBase != null && proxyBase.nonEmpty) {
+      System.setProperty("spark.ui.proxyBase", proxyBase)
+    }
+
+    val hasFilter =
+      filterName != null && filterName.nonEmpty &&
+      filterParams != null && filterParams.nonEmpty
+    if (hasFilter) {
+      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
+      conf.set("spark.ui.filters", filterName)
+      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
+      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
+    }
   }
 
   /**
