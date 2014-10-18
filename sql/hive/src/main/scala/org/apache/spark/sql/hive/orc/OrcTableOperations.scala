@@ -202,7 +202,7 @@ private[sql] case class InsertIntoOrcTable(
       iter.map { row =>
         var i = 0
         while (i < row.length) {
-          outputData(i) = HadoopTableReader.unwrapData(row(i), fieldOIs(i))
+          outputData(i) = HadoopTypeConverter.wrap((row(i), fieldOIs(i)))
           i += 1
         }
         orcSerde.serialize(outputData, standardOI)

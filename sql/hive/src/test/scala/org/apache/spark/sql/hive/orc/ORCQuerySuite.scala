@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
+import java.io.File
 import org.scalatest.BeforeAndAfterAll
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -27,7 +28,6 @@ import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.util.Utils
-import java.io.File
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 
 case class TestRDDEntry(key: Int, value: String)
@@ -101,10 +101,13 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("read/write binary data") {
     val tempDir = getTempFilePath("orcTest").getCanonicalPath
-    sparkContext.parallelize(BinaryData("test".getBytes("utf8")) :: Nil).saveAsOrcFile(tempDir)
+    val range = (0 to 3)
+    sparkContext.parallelize(range)
+    .map(x => BinaryData(s"test$x".getBytes("utf8"))).saveAsOrcFile(tempDir)
+
     TestHive.orcFile(tempDir)
       .map(r => new String(r(0).asInstanceOf[Array[Byte]], "utf8"))
-      .collect().toSeq == Seq("test")
+      .collect().toSet == Set("test0", "test1", "test2", "test3")
     Utils.deleteRecursively(new File(tempDir))
   }
 
@@ -163,7 +166,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   test("save and load case class RDD with Nones as orc") {
     val data = OptionalReflectData(None, None, None, None, None)
-    val rdd = sparkContext.parallelize(data :: Nil)
+    val rdd = sparkContext.parallelize(data :: data :: data :: Nil)
     val tempDir = getTempFilePath("orcTest").getCanonicalPath
     rdd.saveAsOrcFile(tempDir)
     val readFile = TestHive.orcFile(tempDir)
@@ -186,7 +189,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("Get ORC Schema with ORC Reader") {
-    val path = "sql/hive/src/test/resources/data/files/orcfiles"
+    val path = "src/test/resources/data/files/orcfiles"
     val attributes = OrcFileOperator.orcSchema(path, Some(TestHive.sparkContext.hadoopConfiguration), new Properties())
     assert(attributes(0).dataType == StringType)
     assert(attributes(1).dataType == IntegerType)
@@ -222,6 +225,4 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
     assert(actualCodec == CompressionKind.LZO)
     Utils.deleteRecursively(new File(tempDir))
   }
-
-
 }

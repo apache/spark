@@ -19,7 +19,12 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
+import org.apache.hadoop.hive.serde2.objectinspector._
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{JavaHiveDecimalObjectInspector, JavaHiveVarcharObjectInspector}
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.spark.sql.catalyst.expressions.Row
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 package object orc {
   class OrcSchemaRDD(
        @transient val sqlContext1: SQLContext,
@@ -35,6 +40,36 @@ package object orc {
      */
     def saveAsOrcFile(path: String): Unit = {
       sqlContext.executePlan(WriteToOrcFile(path, logicalPlan)).toRdd
+    }
+  }
+
+  object HadoopTypeConverter extends HiveInspectors {
+    def wrap(a: (Any, ObjectInspector)): Any = a match {
+      case (s: String, oi: JavaHiveVarcharObjectInspector) =>
+        new HiveVarchar(s, s.size)
+
+      case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
+        new HiveDecimal(bd.underlying())
+
+      case (row: Row, oi: StandardStructObjectInspector) =>
+        val struct = oi.create()
+        row.zip(oi.getAllStructFieldRefs: Seq[StructField]).foreach {
+          case (data, field) =>
+            oi.setStructFieldData(struct, field, wrap(data, field.getFieldObjectInspector))
+        }
+        struct
+      case (s: Seq[_], oi: ListObjectInspector) =>
+        val wrappedSeq = s.map(wrap(_, oi.getListElementObjectInspector))
+        seqAsJavaList(wrappedSeq)
+
+      case (m: Map[_, _], oi: MapObjectInspector) =>
+        val keyOi = oi.getMapKeyObjectInspector
+        val valueOi = oi.getMapValueObjectInspector
+        val wrappedMap = m.map { case (key, value) => wrap(key, keyOi) -> wrap(value, valueOi) }
+        mapAsJavaMap(wrappedMap)
+
+      case (obj, _) =>
+        obj
     }
   }
 
