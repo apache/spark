@@ -31,8 +31,10 @@ private[hive] object SparkSQLEnv extends Logging {
 
   def init() {
     if (hiveContext == null) {
-      sparkContext = new SparkContext(new SparkConf()
-        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}"))
+      val sparkConf = new SparkConf()
+        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}")
+        .set("spark.sql.hive.version", "0.12.0-protobuf-2.5")
+      sparkContext = new SparkContext(sparkConf)
 
       sparkContext.addSparkListener(new StatsReportListener())
       hiveContext = new HiveContext(sparkContext)
