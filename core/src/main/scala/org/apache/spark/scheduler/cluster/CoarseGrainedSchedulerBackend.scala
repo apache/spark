@@ -285,6 +285,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }
+
+  /**
+   * Request the given number of executors from the cluster manager.
+   * This is intended to be overridden by subclasses.
+   */
+  def requestExecutors(numExecutors: Int): Unit = { }
+
+  /**
+   * Request the cluster manager to kill the specified executor.
+   * This is intended to be overridden by subclasses.
+   */
+  def killExecutor(executorId: String): Unit = { }
+
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

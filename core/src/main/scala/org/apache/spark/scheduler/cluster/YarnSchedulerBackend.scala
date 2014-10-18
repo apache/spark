@@ -47,7 +47,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Request the given number of executors from the ApplicationMaster.
    */
-  def requestExecutors(numExecutors: Int): Unit = {
+  override def requestExecutors(numExecutors: Int): Unit = {
     Option(yarnSchedulerActor) match {
       case Some(actor) => actor ! RequestExecutors(numExecutors)
       case None => logWarning(
@@ -56,9 +56,9 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
-   * Request the ApplicationMaster to kill the given executor.
+   * Request the ApplicationMaster to kill the specified executor.
    */
-  def killExecutor(executorId: String): Unit = {
+  override def killExecutor(executorId: String): Unit = {
     Option(yarnSchedulerActor) match {
       case Some(actor) => actor ! KillExecutor(executorId)
       case None => logWarning(

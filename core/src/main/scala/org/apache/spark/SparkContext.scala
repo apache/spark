@@ -851,6 +851,38 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.addListener(listener)
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Request a number of executors from the cluster manager.
+   */
+  @DeveloperApi
+  def requestExecutors(numExecutors: Int): Unit = {
+    if (taskScheduler == null) {
+      logWarning("Attempted to request executors before initializing task scheduler.")
+      return
+    }
+    taskScheduler match {
+      case scheduler: TaskSchedulerImpl => scheduler.requestExecutors(numExecutors)
+      case _ => logWarning("This task scheduler does not support requesting executors.")
+    }
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Request the cluster manager to kill the specified executor.
+   */
+  @DeveloperApi
+  def killExecutor(executorId: String): Unit = {
+    if (taskScheduler == null) {
+      logWarning("Attempted to kill executors before initializing task scheduler.")
+      return
+    }
+    taskScheduler match {
+      case scheduler: TaskSchedulerImpl => scheduler.killExecutor(executorId)
+      case _ => logWarning("This task scheduler does not support killing executors.")
+    }
+  }
+
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
 

@@ -33,8 +33,8 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -487,6 +487,36 @@ private[spark] class TaskSchedulerImpl(
       synchronized {
         this.wait(100)
       }
+    }
+  }
+
+  /**
+   * Request a number of executors from the cluster manager.
+   * This does not apply to fine-grained backends by definition.
+   */
+  def requestExecutors(numExecutors: Int): Unit = {
+    if (backend == null) {
+      logWarning("Attempted to request executors before initializing the scheduler backend.")
+      return
+    }
+    backend match {
+      case b: CoarseGrainedSchedulerBackend => b.requestExecutors(numExecutors)
+      case _ => logWarning("This scheduler backend does not support requesting executors.")
+    }
+  }
+
+  /**
+   * Request the cluster manager to kill the specified executor.
+   * This does not apply to fine-grained backends by definition.
+   */
+  def killExecutor(executorId: String): Unit = {
+    if (backend == null) {
+      logWarning("Attempted to kill executors before initializing the scheduler backend.")
+      return
+    }
+    backend match {
+      case b: CoarseGrainedSchedulerBackend => b.killExecutor(executorId)
+      case _ => logWarning("This scheduler backend does not support killing executors.")
     }
   }
 
