@@ -493,7 +493,7 @@ private[spark] trait ClientBase extends Logging {
     val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
     if (yarnApplicationState == YarnApplicationState.FAILED ||
       finalApplicationStatus == FinalApplicationStatus.FAILED) {
-      throw new SparkException("Application finished with failed status.")
+      throw new SparkException("Application finished with failed status")
     }
     if (yarnApplicationState == YarnApplicationState.KILLED ||
       finalApplicationStatus == FinalApplicationStatus.KILLED) {

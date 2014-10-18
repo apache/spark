@@ -143,7 +143,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     val exception = intercept[SparkException] {
       Client.main(args)
     }
-    assert(Utils.exceptionString(exception).contains("Application is failed"))
+    assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
   }
 
   /**
