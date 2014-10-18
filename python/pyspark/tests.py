@@ -1383,7 +1383,7 @@ class WorkerTests(PySparkTestCase):
         t.start()
         t.join(5)
         self.assertTrue(not t.isAlive())
-        self.assertEqual(1000, rdd.count())
+        self.assertEqual(100000, rdd.count())
 
 
 class SparkSubmitTests(unittest.TestCase):
