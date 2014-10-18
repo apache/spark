@@ -15,21 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
-
-import org.apache.spark.annotation.DeveloperApi
+package org.apache.spark
 
 /**
- * Predicted value for a node
- * @param predict predicted value
- * @param prob probability of the label (classification only)
+ * This class exists to restrict the visibility of TaskContext setters.
  */
-@DeveloperApi
-class Predict(
-    val predict: Double,
-    val prob: Double = 0.0) extends Serializable {
+private [spark] object TaskContextHelper {
 
-  override def toString = {
-    "predict = %f, prob = %f".format(predict, prob)
-  }
+  def setTaskContext(tc: TaskContext): Unit = TaskContext.setTaskContext(tc)
+
+  def unset(): Unit = TaskContext.unset()
+  
 }
