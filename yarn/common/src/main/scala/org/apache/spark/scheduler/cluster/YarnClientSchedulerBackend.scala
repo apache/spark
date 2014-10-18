@@ -19,30 +19,21 @@ package org.apache.spark.scheduler.cluster
 
 import scala.collection.mutable.ArrayBuffer
 
-import akka.actor._
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 
 private[spark] class YarnClientSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends YarnSchedulerBackend(scheduler, sc)
   with Logging {
-
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  private var yarnActor: ActorRef = null
   private var stopping: Boolean = false
-  private var totalExpectedExecutors = 0
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -59,9 +50,6 @@ private[spark] class YarnClientSchedulerBackend(
     argsArrayBuf += ("--arg", hostport)
     argsArrayBuf ++= getExtraClientArguments
 
-    // Start the actor before the AM is launched because we expect a registration message from it
-    startYarnSchedulerActor()
-
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
     totalExpectedExecutors = args.numExecutors
@@ -69,15 +57,6 @@ private[spark] class YarnClientSchedulerBackend(
     appId = client.submitApplication()
     waitForApplication()
     asyncMonitorApplication()
-  }
-
-  /**
-   * Start an actor to communicate with the ApplicationMaster.
-   */
-  private def startYarnSchedulerActor(): Unit = {
-    yarnActor = actorSystem.actorOf(
-      Props(new YarnSchedulerActor),
-      name = YarnClientSchedulerBackend.ACTOR_NAME)
   }
 
   /**
@@ -168,10 +147,6 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
-  override def sufficientResourcesRegistered(): Boolean = {
-    totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
-  }
-
   override def applicationId(): String = {
     Option(appId).map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
@@ -179,70 +154,4 @@ private[spark] class YarnClientSchedulerBackend(
     }
   }
 
-  /**
-   * Request the given number of executors from the ApplicationMaster.
-   */
-  def requestExecutors(numExecutors: Int): Unit = {
-    Option(yarnActor) match {
-      case Some(actor) => actor ! RequestExecutors(numExecutors)
-      case None => logWarning(
-        "Attempted to request executors before the yarn scheduler actor has started!")
-    }
-  }
-
-  /**
-   * Request the ApplicationMaster to kill the given executor.
-   */
-  def killExecutor(executorId: String): Unit = {
-    Option(yarnActor) match {
-      case Some(actor) => actor ! KillExecutor(executorId)
-      case None => logWarning(
-        "Attempted to kill executors before the yarn scheduler actor has started!")
-    }
-  }
-
-  /**
-   * An actor that communicates with the ApplicationMaster.
-   */
-  private class YarnSchedulerActor extends Actor {
-    private var amActor: Option[ActorRef] = None
-
-    override def preStart(): Unit = {
-      // Listen for disassociation events
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-    }
-
-    override def receive = {
-      case RegisterClusterManager =>
-        logInfo("ApplicationMaster registered")
-        amActor = Some(sender)
-
-      case r: RequestExecutors =>
-        amActor match {
-          case Some(actor) => actor ! r
-          case None => logWarning(
-            "Attempted to request executors before the ApplicationMaster has registered!")
-        }
-
-      case k: KillExecutor =>
-        amActor match {
-          case Some(actor) => actor ! k
-          case None => logWarning(
-            "Attempted to kill executors before the ApplicationMaster has registered!")
-        }
-
-      case AddWebUIFilter(filterName, filterParams, proxyBase) =>
-        addWebUIFilter(filterName, filterParams, proxyBase)
-        sender ! true
-
-      case d: DisassociatedEvent =>
-        logWarning(s"ApplicationMaster has disassociated: $d")
-
-    }
-  }
-
-}
-
-private[spark] object YarnClientSchedulerBackend {
-  val ACTOR_NAME = "YarnScheduler"
 }

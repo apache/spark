@@ -36,7 +36,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend
+import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
@@ -385,7 +385,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       SparkEnv.driverActorSystemName,
       driverHost,
       driverPort.toString,
-      YarnClientSchedulerBackend.ACTOR_NAME)
+      YarnSchedulerBackend.ACTOR_NAME)
     actorSystem.actorOf(Props(new AMActor(driverUrl)), name = "YarnAM")
   }
 
