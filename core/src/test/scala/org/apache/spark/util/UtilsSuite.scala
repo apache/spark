@@ -27,6 +27,8 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
+
 class UtilsSuite extends FunSuite {
 
   test("bytesToString") {
@@ -332,4 +334,21 @@ class UtilsSuite extends FunSuite {
     assert(!tempFile2.exists())
   }
 
+  test("loading properties from file") {
+    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    try {
+      System.setProperty("spark.test.fileNameLoadB", "2")
+      Files.write("spark.test.fileNameLoadA true\n" +
+        "spark.test.fileNameLoadB 1\n", outFile, Charsets.UTF_8)
+      val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
+      properties
+        .filter { case (k, v) => k.startsWith("spark.")}
+        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
+      val sparkConf = new SparkConf
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
+    } finally {
+      outFile.delete()
+    }
+  }
 }

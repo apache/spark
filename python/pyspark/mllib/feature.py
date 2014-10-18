@@ -19,8 +19,7 @@
 Python package for feature in MLlib.
 """
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-
-from pyspark.mllib.linalg import _convert_to_vector
+from pyspark.mllib.linalg import _convert_to_vector, _to_java_object_rdd
 
 __all__ = ['Word2Vec', 'Word2VecModel']
 
@@ -44,6 +43,7 @@ class Word2VecModel(object):
         """
         :param word: a word
         :return: vector representation of word
+
         Transforms a word to its vector representation
 
         Note: local use only
@@ -57,6 +57,7 @@ class Word2VecModel(object):
         :param x: a word or a vector representation of word
         :param num: number of synonyms to find
         :return: array of (word, cosineSimilarity)
+
         Find synonyms of a word
 
         Note: local use only
@@ -174,7 +175,7 @@ class Word2Vec(object):
         seed = self.seed
 
         model = sc._jvm.PythonMLLibAPI().trainWord2Vec(
-            data._to_java_object_rdd(), vectorSize,
+            _to_java_object_rdd(data), vectorSize,
             learningRate, numPartitions, numIterations, seed)
         return Word2VecModel(sc, model)
 

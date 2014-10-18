@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{TaskContextHelper, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
@@ -45,8 +45,8 @@ import org.apache.spark.util.Utils
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
   final def run(attemptId: Long): T = {
-    context = new TaskContext(stageId, partitionId, attemptId, false)
-    TaskContext.setTaskContext(context)
+    context = new TaskContextImpl(stageId, partitionId, attemptId, false)
+    TaskContextHelper.setTaskContext(context)
     context.taskMetrics.hostname = Utils.localHostName()
     taskThread = Thread.currentThread()
     if (_killed) {
@@ -56,7 +56,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
       runTask(context)
     } finally {
       context.markTaskCompleted()
-      TaskContext.unset()
+      TaskContextHelper.unset()
     }
   }
 
@@ -70,7 +70,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   var metrics: Option[TaskMetrics] = None
 
   // Task context, to be initialized in run().
-  @transient protected var context: TaskContext = _
+  @transient protected var context: TaskContextImpl = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
