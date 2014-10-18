@@ -26,10 +26,17 @@ import scala.beans.BeanProperty
 
 trait PMMLModelExport extends ModelExport{
   
+  /**
+   * Holder of the exported model in PMML format
+   */
   @BeanProperty
   var pmml: PMML = new PMML();
   //TODO: set here header app copyright and timestamp
   
+  /**
+   * Write the exported model (in PMML XML) to the output stream specified 
+   */
+  @Override
   def save(outputStream: OutputStream): Unit = {
     JAXBUtil.marshalPMML(pmml, new StreamResult(outputStream));  
   }

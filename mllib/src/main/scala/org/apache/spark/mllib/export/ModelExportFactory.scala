@@ -19,14 +19,22 @@ package org.apache.spark.mllib.export
 
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
+import org.apache.spark.mllib.export.ModelExportType._
 
 object ModelExportFactory {
   
-  //TODO: introduce model export typed
-  
-  def createModelExport(model: Any): ModelExport = model match {
-    case kmeans: KMeansModel => new KMeansPMMLModelExport
-    case _ => throw new IllegalArgumentException("Export not supported for model " + model.getClass)
+  /**
+   * Factory object to help creating the necessary ModelExport implementation 
+   * taking as input the ModelExportType (for example PMML) and the machine learning model (for example KMeansModel).
+   */
+  def createModelExport(model: Any, exportType: ModelExportType): ModelExport = {
+	 return exportType match{
+	   case PMML => model match{
+	   		case kmeans: KMeansModel => new KMeansPMMLModelExport(kmeans)
+	   		case _ => throw new IllegalArgumentException("Export not supported for model: " + model.getClass)
+	   }
+	   case _ => throw new IllegalArgumentException("Export type not supported:" + exportType)
+	 }
   }
 
 }

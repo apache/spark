@@ -21,6 +21,9 @@ import java.io.OutputStream
 
 trait ModelExport {
 
+  /**
+  * Write the exported model to the output stream specified 
+  */
   def save(outputStream: OutputStream): Unit
 
 }

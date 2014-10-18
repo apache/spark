@@ -17,11 +17,19 @@
 
 package org.apache.spark.mllib.export.pmml
 
-class KMeansPMMLModelExport extends PMMLModelExport{
+import org.apache.spark.mllib.clustering.KMeansModel
 
-  populateKMeansPMML();
+/**
+ * PMML Model Export for KMeansModel class
+ */
+class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
+
+  /**
+   * Export the input KMeansModel model to PMML format
+   */
+  populateKMeansPMML(model);
   
-   def populateKMeansPMML(): Unit = {
+  private def populateKMeansPMML(model : KMeansModel): Unit = {
      //TODO: set here header description 
      pmml.setVersion("testing... kmeans..."); 
      //TODO: generate the model...
