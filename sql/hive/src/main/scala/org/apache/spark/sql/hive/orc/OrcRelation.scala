@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hive.HiveMetastoreTypes
 
 import scala.collection.JavaConversions._
+import org.apache.spark.Logging
 
 private[sql] case class OrcRelation(
     attributes: Seq[Attribute],
@@ -47,33 +48,10 @@ private[sql] case class OrcRelation(
 
   val prop: Properties = new Properties
 
-  override lazy val output = attributes ++ orcSchema
+  override lazy val output = attributes ++ OrcFileOperator.orcSchema(path, conf, prop)
 
   // TODO: use statistics in ORC file
   override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
-
-  private def orcSchema: Seq[Attribute] = {
-    // get the schema info through ORC Reader
-    val origPath = new Path(path)
-    val reader = OrcFileOperator.getMetaDataReader(origPath, conf)
-    if (reader == null) {
-      // return empty seq when saveAsOrcFile
-      return Seq.empty
-    }
-    val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-    // data types that is inspected by this inspector
-    val schema = inspector.getTypeName
-
-    // set prop here, initial OrcSerde need it
-    val fields = inspector.getAllStructFieldRefs
-    val (columns, columnTypes) = fields.map { f =>
-      f.getFieldName -> f.getFieldObjectInspector.getTypeName
-    }.unzip
-    prop.setProperty("columns", columns.mkString(","))
-    prop.setProperty("columns.types", columnTypes.mkString(":"))
-
-    HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType].toAttributes
-  }
 
   override def newInstance() =
     OrcRelation(attributes, path, conf, sqlContext).asInstanceOf[this.type]
@@ -121,7 +99,7 @@ private[sql] object OrcRelation {
   }
 }
 
-private[sql] object OrcFileOperator {
+private[sql] object OrcFileOperator{
   def getMetaDataReader(origPath: Path, configuration: Option[Configuration]): Reader = {
     val conf = configuration.getOrElse(new Configuration())
     val fs: FileSystem = origPath.getFileSystem(conf)
@@ -130,10 +108,32 @@ private[sql] object OrcFileOperator {
       // should return null when write to orc file
       return null
     }
-    if (fs.exists(origPath)) {
-      OrcFile.createReader(fs, orcFiles(0))
-    } else {
-      throw new IOException(s"File not found: $origPath")
+    OrcFile.createReader(fs, orcFiles(0))
+  }
+
+  def orcSchema(
+      path: String,
+      conf: Option[Configuration],
+      prop: Properties): Seq[Attribute] = {
+    // get the schema info through ORC Reader
+    val origPath = new Path(path)
+    val reader = getMetaDataReader(origPath, conf)
+    if (reader == null) {
+      // return empty seq when saveAsOrcFile
+      return Seq.empty
     }
+    val inspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+    // data types that is inspected by this inspector
+    val schema = inspector.getTypeName
+
+    // set prop here, initial OrcSerde need it
+    val fields = inspector.getAllStructFieldRefs
+    val (columns, columnTypes) = fields.map { f =>
+      f.getFieldName -> f.getFieldObjectInspector.getTypeName
+    }.unzip
+    prop.setProperty("columns", columns.mkString(","))
+    prop.setProperty("columns.types", columnTypes.mkString(":"))
+
+    HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType].toAttributes
   }
 }

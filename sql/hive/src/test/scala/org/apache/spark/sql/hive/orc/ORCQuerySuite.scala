@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import java.util.Properties
+import org.scalatest.BeforeAndAfterAll
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.Utils
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.hive.test.TestHive._
-
-
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.util.Utils
 import java.io.File
 
 case class TestRDDEntry(key: Int, value: String)
@@ -55,7 +54,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
       TestHive.orcFile(tempDir),
       data.toSchemaRDD.collect().toSeq)
 
-//    Utils.deleteRecursively(new File(tempDir))
+    Utils.deleteRecursively(new File(tempDir))
   }
 
   test("Compression options for writing to a Orcfile") {
@@ -65,15 +64,22 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     // test default compression codec, now only support zlib
     rdd.saveAsOrcFile(tempDir)
-    var actualCodec = OrcFileOperator.getMetaDataReader(new Path(tempDir), Some(new Configuration())).getCompression.name
+    val actualCodec = OrcFileOperator.getMetaDataReader(new Path(tempDir), Some(new Configuration())).getCompression.name
     assert(actualCodec == "ZLIB")
 
-//    Utils.deleteRecursively(new File(tempDir))
+    Utils.deleteRecursively(new File(tempDir))
   }
 
-  test("Orc metadata reader") {
-    val path = new Path("/private/var/folders/q7/whr53mh905l1xm_zqgk00j3m0000gn/T/orcTest5484580860941213910")
-    val reader = OrcFileOperator.getMetaDataReader(path, Some(TestHive.sparkContext.hadoopConfiguration))
-    reader
+  test("Get ORC Schema with ORC Reader") {
+    val path = "sql/hive/src/test/resources/data/files/orcfiles"
+    val attributes = OrcFileOperator.orcSchema(path, Some(TestHive.sparkContext.hadoopConfiguration), new Properties())
+    assert(attributes(0).dataType == StringType)
+    assert(attributes(1).dataType == IntegerType)
+    assert(attributes(2).dataType == LongType)
+    assert(attributes(3).dataType == FloatType)
+    assert(attributes(4).dataType == DoubleType)
+    assert(attributes(5).dataType == ShortType)
+    assert(attributes(6).dataType == ByteType)
+    assert(attributes(7).dataType == BooleanType)
   }
 }

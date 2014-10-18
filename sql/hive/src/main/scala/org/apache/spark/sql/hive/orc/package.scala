@@ -17,14 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import com.esotericsoftware.kryo.io.Output
-import com.esotericsoftware.kryo.Kryo
-import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
-import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 package object orc {
@@ -49,12 +42,5 @@ package object orc {
   val orcDefaultCompressVar = "hive.exec.orc.default.compress"
   // for prediction push down in hive-0.13.1, don't enable it
   val ORC_FILTER_PUSHDOWN_ENABLED = false
-  val SARG_PUSHDOWN = "sarg.pushdown";
-
-  def toKryo(input: SearchArgument) = {
-    val out = new Output(4 * 1024, 10 * 1024 * 1024);
-    new Kryo().writeObject(out, input);
-    out.close();
-    Base64.encodeBase64String(out.toBytes());
-  }
+  val SARG_PUSHDOWN = "sarg.pushdown"
 }
