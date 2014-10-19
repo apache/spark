@@ -216,26 +216,17 @@ class BroadcastSuite extends FunSuite with LocalSparkContext with GeneratorDrive
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
       statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      assert(statuses.size === (if (distributed) 1 else 0))
+      assert(statuses.size === 1)
     }
 
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(broadcastId: Long, bmm: BlockManagerMaster) {
       var blockId = BroadcastBlockId(broadcastId)
-      var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      if (distributed) {
-        assert(statuses.size === numSlaves + 1)
-      } else {
-        assert(statuses.size === 1)
-      }
+      val statuses = bmm.getBlockStatus(blockId, askSlaves = true)
+      assert(statuses.size === numSlaves + 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      if (distributed) {
-        assert(statuses.size === numSlaves + 1)
-      } else {
-        assert(statuses.size === 0)
-      }
+      assert(statuses.size === numSlaves + 1)
     }
 
     // Verify that blocks are unpersisted on all executors, and on all nodes if removeFromDriver
@@ -247,7 +238,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext with GeneratorDrive
       assert(statuses.size === expectedNumBlocks)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      expectedNumBlocks = if (removeFromDriver || !distributed) 0 else 1
+      expectedNumBlocks = if (removeFromDriver) 0 else 1
       statuses = bmm.getBlockStatus(blockId, askSlaves = true)
       assert(statuses.size === expectedNumBlocks)
     }
