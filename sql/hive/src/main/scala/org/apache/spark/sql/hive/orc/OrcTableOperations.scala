@@ -132,7 +132,7 @@ case class OrcTableScan(
    * @return Pruned TableScan.
    */
   def pruneColumns(prunedAttributes: Seq[Attribute]): OrcTableScan = {
-    // Todo: prune projection
+    // TODO: prune projection
     OrcTableScan(prunedAttributes, relation, columnPruningPred)
   }
 }

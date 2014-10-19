@@ -43,6 +43,7 @@ package object orc {
     }
   }
 
+  // TypeConverter for InsertIntoOrcTable
   object HadoopTypeConverter extends HiveInspectors {
     def wrap(a: (Any, ObjectInspector)): Any = a match {
       case (s: String, oi: JavaHiveVarcharObjectInspector) =>

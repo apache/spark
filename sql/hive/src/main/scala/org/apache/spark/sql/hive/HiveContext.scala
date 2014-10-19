@@ -23,7 +23,7 @@ import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.Some
 
 import org.apache.hadoop.fs.FileSystem
