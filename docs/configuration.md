@@ -620,6 +620,15 @@ Apart from these, the following properties are also available, and may be useful
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 <tr>
+    <td><code>spark.hadoop.cloneConf</code></td>
+    <td>false</td>
+    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
+    This is disabled by default in order to avoid unexpected performance regressions for jobs that
+    are not affected by these issues.</td>
+</tr>
+<tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
     <td>10000</td>
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
