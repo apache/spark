@@ -94,8 +94,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     val numTrees = 1
 
     val strategy = new Strategy(algo = Regression, impurity = Variance,
-      maxDepth = 2, maxBins = 10,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+      maxDepth = 2, maxBins = 10, numClassesForClassification = 2,
+      categoricalFeaturesInfo = categoricalFeaturesInfo)
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)

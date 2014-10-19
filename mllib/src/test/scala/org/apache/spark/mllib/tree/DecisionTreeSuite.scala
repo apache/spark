@@ -125,12 +125,45 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
         Array(5), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0)
+      val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 3)
       assert(fakeMetadata.numSplits(0) === 3)
       assert(fakeMetadata.numBins(0) === 4)
     }
+
+    // find splits when most samples close to the minimum
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 2)
+      assert(fakeMetadata.numSplits(0) === 2)
+      assert(fakeMetadata.numBins(0) === 3)
+      assert(splits(0) === 2.0)
+      assert(splits(1) === 3.0)
+    }
+
+
+    // find splits when most samples close to the maximum
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 1)
+      assert(fakeMetadata.numSplits(0) === 1)
+      assert(fakeMetadata.numBins(0) === 2)
+      assert(splits(0) === 1.0)
+    }
+
   }
 
   test("Multiclass classification with unordered categorical features:" +
