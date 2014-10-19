@@ -210,15 +210,3 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_MIMA
 
 ./dev/mima
-
-echo ""
-echo "========================================================================="
-echo "Sending archived unit tests logs"
-echo "========================================================================="
-
-LOG_ARCHIVE=unit-tests-logs.tar.gz
-find . -name "unit-tests.log" | xargs tar czf ${LOG_ARCHIVE}
-
-JENKINS_BUILD_DIR=${JENKINS_HOME}/jobs/builds/${JOB_NAME}/${BUILD_NUMBER}
-scp ${LOG_ARCHIVE} amp-jenkins-master:${JENKINS_BUILD_DIR}/${LOG_ARCHIVE}
-rm -f ${LOG_ARCHIVE}
