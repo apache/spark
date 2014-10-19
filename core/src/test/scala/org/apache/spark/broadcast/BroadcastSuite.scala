@@ -17,13 +17,17 @@
 
 package org.apache.spark.broadcast
 
+import scala.util.Random
+
+import org.scalacheck.Gen
 import org.scalatest.FunSuite
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
+import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.storage._
 
-
-class BroadcastSuite extends FunSuite with LocalSparkContext {
+class BroadcastSuite extends FunSuite with LocalSparkContext with GeneratorDrivenPropertyChecks {
 
   private val httpConf = broadcastConf("HttpBroadcastFactory")
   private val torrentConf = broadcastConf("TorrentBroadcastFactory")
@@ -82,6 +86,20 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     val broadcast = sc.broadcast(list)
     val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
     assert(results.collect().toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
+  }
+
+  test("TorrentBroadcast's blockifyObject and unblockifyObject are inverses") {
+    import org.apache.spark.broadcast.TorrentBroadcast._
+    val blockSize = 1024
+    val snappy = Some(new SnappyCompressionCodec(new SparkConf()))
+    val objects = for (size <- Gen.choose(1, 1024 * 10)) yield {
+      val data: Array[Byte] = new Array[Byte](size)
+      Random.nextBytes(data)
+      data
+    }
+    forAll (objects) { (obj: Array[Byte]) =>
+      assert(unBlockifyObject[Array[Byte]](blockifyObject(obj, blockSize, snappy), snappy) === obj)
+    }
   }
 
   test("Unpersisting HttpBroadcast on executors only in local mode") {
