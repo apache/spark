@@ -124,17 +124,6 @@ case class OrcTableScan(
       ColumnProjectionUtils.appendReadColumnNames(conf, names)
     }
   }
-
-  /**
-   * Applies a (candidate) projection.
-   *
-   * @param prunedAttributes The list of attributes to be used in the projection.
-   * @return Pruned TableScan.
-   */
-  def pruneColumns(prunedAttributes: Seq[Attribute]): OrcTableScan = {
-    // TODO: prune projection
-    OrcTableScan(prunedAttributes, relation, columnPruningPred)
-  }
 }
 
 /**
