@@ -87,6 +87,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * @return number of blocks this broadcast variable is divided into
    */
   private def writeBlocks(): Int = {
+    // Store a copy of the broadcast variable in the driver so that tasks run on the driver
+    // do not create a duplicate copy of the broadcast variable's value.
+    SparkEnv.get.blockManager.putSingle(broadcastId, _value, StorageLevel.MEMORY_AND_DISK,
+      tellMaster = false)
     val blocks =
       TorrentBroadcast.blockifyObject(_value, blockSize, SparkEnv.get.serializer, compressionCodec)
     blocks.zipWithIndex.foreach { case (block, i) =>
