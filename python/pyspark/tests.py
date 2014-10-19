@@ -34,7 +34,11 @@ import random
 from platform import python_implementation
 
 if sys.version_info[:2] <= (2, 6):
-    import unittest2 as unittest
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
 else:
     import unittest
 
@@ -678,6 +682,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
+
+    def test_udf2(self):
+        self.sqlCtx.registerFunction("strlen", lambda string: len(string))
+        self.sqlCtx.inferSchema(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
+        [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
+        self.assertEqual(u"4", res[0])
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}

@@ -50,9 +50,11 @@ object MimaExcludes {
               "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2"),
             // MapStatus should be private[spark]
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
-              "org.apache.spark.scheduler.MapStatus")
-          ) ++
-          Seq(
+              "org.apache.spark.scheduler.MapStatus"),
+            // TaskContext was promoted to Abstract class
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.TaskContext")
+          ) ++ Seq(
             // Adding new methods to the JavaRDDLike trait:
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.takeAsync"),
@@ -65,7 +67,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.collectAsync")
           )
-
+          
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
