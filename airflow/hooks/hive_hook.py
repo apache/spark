@@ -35,11 +35,11 @@ class HiveHook(BaseHook):
         self.transport.open()
         return self.hive
 
-    def check_for_partition(self, schema, table, filter):
+    def check_for_partition(self, schema, table, partition):
         try:
             self.transport.open()
-            partitions = self.hive.get_partitions_by_filter(
-                schema, table, filter, 1)
+            partitions = self.hive.get_partitions_by_partition(
+                schema, table, partition, 1)
             self.transport.close()
             if partitions:
                 return True

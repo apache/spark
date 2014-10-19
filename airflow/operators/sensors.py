@@ -85,3 +85,30 @@ class ExternalTaskSensor(BaseSensorOperator):
         session.commit()
         session.close()
         return count
+
+
+class HivePartitionSensor(BaseSensorOperator):
+    """
+    Waits for the apparation of a partition in Hive
+    """
+    template_fields = ('table', 'partition',)
+    __mapper_args__ = {
+        'polymorphic_identity': 'HivePartitionSensor'
+    }
+
+    def __init__(
+            self, hive_dbid, table, partition, schema='default',
+            *args, **kwargs):
+        super(HivePartitionSensor, self).__init__(*args, **kwargs)
+        self.hive_dbid = hive_dbid
+        self.hook = HiveHook(hive_dbid=hive_dbid)
+        self.table = table
+        self.partition = partition
+        self.schema = schema
+
+    def poke(self):
+        logging.info(
+            'Poking for table {self.table}, '
+            'partition {self.partition} ' )
+        return self.hook.check_for_partition(
+            self.schema, self.table, self.partition)

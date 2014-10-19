@@ -1,11 +1,17 @@
 import logging
 from airflow.models import BaseOperator
+from airflow import settings
 from airflow.hooks import HiveHook
 
 
 class HiveOperator(BaseOperator):
     """
-    Executes sql code in a specific mysql database.
+    Executes hql code in a specific Hive database.
+
+    :param hql: the hql to be executed
+    :type hql: string
+    :param hive_dbid: reference to the Hive database
+    :type hive_dbid: string
     """
 
     __mapper_args__ = {
@@ -13,12 +19,9 @@ class HiveOperator(BaseOperator):
     }
     template_fields = ('hql',)
 
-    def __init__(self, hql, hive_dbid, *args, **kwargs):
-        """
-        Parameters:
-        mysql_dbid: reference to a specific mysql database
-        sql: the sql code you to be executed
-        """
+    def __init__(
+            self, hql, hive_dbid=settings.HIVE_DEFAULT_DBID,
+            *args, **kwargs):
         super(HiveOperator, self).__init__(*args, **kwargs)
 
         self.hive_dbid = hive_dbid
