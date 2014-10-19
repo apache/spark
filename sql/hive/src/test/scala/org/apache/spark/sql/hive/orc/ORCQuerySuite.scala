@@ -111,6 +111,22 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll {
     Utils.deleteRecursively(new File(tempDir))
   }
 
+  test("read/right empty RDD") {
+    val tempDir = getTempFilePath("orcTest").getCanonicalPath
+    val range = (0 to 255)
+    val data = sparkContext
+      .parallelize(range)
+      .map(x => AllDataTypes(
+      s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+      .filter(_.intField > 500)
+    data.saveAsOrcFile(tempDir)
+    checkAnswer(
+      TestHive.orcFile(tempDir),
+      data.toSchemaRDD.collect().toSeq)
+
+    Utils.deleteRecursively(new File(tempDir))
+  }
+
   test("Read/Write All Types with non-primitive type") {
     val tempDir = getTempFilePath("orcTest").getCanonicalPath
     val range = (0 to 255)
