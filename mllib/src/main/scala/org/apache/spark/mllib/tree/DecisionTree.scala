@@ -1023,8 +1023,6 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Find splits for a continuous feature
    * NOTE: Returned number of splits is set based on `featureSamples` and
-   *       may be different with `numSplits`.
-   * NOTE: Returned number of splits is set based on `featureSamples` and
    *       could be different from the specified `numSplits`.
    *       The `numSplits` attribute in the `DecisionTreeMetadata` class will be set accordingly.
    * @param featureSamples feature values of each sample

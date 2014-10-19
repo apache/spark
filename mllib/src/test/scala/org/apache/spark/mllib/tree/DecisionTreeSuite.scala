@@ -148,7 +148,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(splits(1) === 3.0)
     }
 
-
     // find splits when most samples close to the maximum
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
@@ -163,7 +162,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(fakeMetadata.numBins(0) === 2)
       assert(splits(0) === 1.0)
     }
-
   }
 
   test("Multiclass classification with unordered categorical features:" +
