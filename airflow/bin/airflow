@@ -195,11 +195,29 @@ def initdb(args):
         # Creating the local_mysql DB connection
         session = settings.Session()
         session.query(models.DatabaseConnection).delete()
-        mysqldb = models.DatabaseConnection(
-            db_id='local_mysql', db_type='mysql',
-            host='localhost', login='airflow', password='airflow',
-            schema='airflow')
-        session.add(mysqldb)
+        session.add(
+            models.DatabaseConnection(
+                db_id='local_mysql', db_type='mysql',
+                host='localhost', login='airflow', password='airflow',
+                schema='airflow'))
+        session.commit()
+        session.add(
+            models.DatabaseConnection(
+                db_id='mysql_default', db_type='mysql',
+                host='localhost', login='airflow', password='airflow',
+                schema='airflow'))
+        session.commit()
+        session.add(
+            models.DatabaseConnection(
+                db_id='presto_default', db_type='presto',
+                host='localhost', 
+                schema='hive', port=10001))
+        session.commit()
+        session.add(
+            models.DatabaseConnection(
+                db_id='hive_default', db_type='hive',
+                host='localhost', 
+                schema='default', port=10000))
         session.commit()
 
 

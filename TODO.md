@@ -27,6 +27,7 @@ TODO
 #### Backend
 * CeleryExecutor
 * Clear should kill running jobs
+* Mysql port should carry through
 
 #### Misc
 * Write an hypervisor, looks for dead jobs without a heartbeat and kills

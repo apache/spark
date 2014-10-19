@@ -108,24 +108,25 @@ class DatabaseConnection(Base):
     """
     __tablename__ = "db_connection"
 
-    id = Column(Integer, primary_key=True)
-    db_id = Column(String(ID_LEN), unique=True)
+    db_id = Column(String(ID_LEN), primary_key=True)
     db_type = Column(String(500))
     host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
     password = Column(String(500))
+    port = Column(Integer())
 
     def __init__(
             self, db_id=None, db_type=None,
             host=None, login=None, password=None,
-            schema=None):
+            schema=None, port=None):
         self.db_id = db_id
         self.db_type = db_type
         self.host = host
         self.login = login
         self.password = password
         self.schema = schema
+        self.port = port
 
 
 class DagPickle(Base):
@@ -1015,7 +1016,7 @@ class DAG(Base):
         session.commit()
 
     def run(
-            self, start_date=None, end_date=None, mark_success=False, 
+            self, start_date=None, end_date=None, mark_success=False,
             executor=DEFAULT_EXECUTOR):
         session = settings.Session()
         job = BackfillJob(executor=executor)

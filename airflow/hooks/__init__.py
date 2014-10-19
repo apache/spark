@@ -1,3 +1,3 @@
 from mysql_hook import MySqlHook
 from hive_hook import HiveHook
-from presto_hook import PrestoHook
+from airflow.hooks.presto.presto_hook import PrestoHook

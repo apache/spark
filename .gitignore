@@ -1,8 +1,9 @@
-airflow.db
-env
-logs
-build
-dist
-MANIFEST
 *.pyc
 docs/_*
+airflow.db
+build
+dist
+env
+initdb.py
+logs
+MANIFEST

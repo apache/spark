@@ -452,9 +452,11 @@ admin.add_view(mv)
 
 
 class DatabaseConnectionModelView(ModelView):
-    column_exclude_list = ('login', 'password',)
+    column_list = ('db_id', 'db_type', 'host', 'port')
     form_choices = {
         'db_type': [
+            ('hive', 'Hive',),
+            ('presto', 'Presto',),
             ('mysql', 'MySQL',),
             ('oracle', 'Oracle',),
         ]
