@@ -625,6 +625,29 @@ class BaseOperator(Base):
     classes needs to implement the polymorphic specificities documented in
     SQLAlchemy. This should become clear while reading the code for other
     operators.
+
+    :param task_id: a unique, meaningful id for the task
+    :type task_id: string
+    :param owner: the owner of the task, using the unix username is recommended
+    :type owner: string
+    :param retries: the number of retries that should be performed before
+        failing the task
+    :type retries: int
+    :param retry_delay: delay between retries
+    :type retry_delay: timedelta
+    :param start_date: start date for the task, the scheduler will start from
+        this point in time
+    :type start_date: datetime
+    :param end_date: if specified, the scheduler won't go beyond this date
+    :type end_date: datetime
+    :param schedule_interval: interval at which to schedule the task
+    :type schedule_interval: timedelta
+    :param depends_on_past: when set to true, task instances will run
+        sequentially while relying on the previous task's schedule to
+        succeed. The task instance for the start_date is allowed to run.
+    :type depends_on_past: boolean
+    :param dag: a reference to the dag the task is attached to (if any)
+    :type dag: DAG
     """
 
     template_fields = []
@@ -648,7 +671,6 @@ class BaseOperator(Base):
             self,
             task_id,
             owner,
-            dag_id=None,
             retries=0,
             retry_delay=timedelta(seconds=10),
             start_date=None,
@@ -659,9 +681,13 @@ class BaseOperator(Base):
             params=None,
             *args,
             **kwargs):
+        """
+        """
 
         utils.validate_key(task_id)
-        self.dag_id = dag_id or 'adhoc_' + owner
+        if dag:
+            self.dag_id = dag.dag_id or 'adhoc_' + owner
+        self.dag = dag
         self.task_id = task_id
         self.owner = owner
         self.start_date = start_date
@@ -1008,6 +1034,7 @@ class DAG(Base):
         else:
             self.tasks.append(task)
             task.dag_id = self.dag_id
+            task.dag = self
         self.task_count = len(self.tasks)
 
     def db_merge(self):
