@@ -25,6 +25,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
 import org.apache.spark.io.SnappyCompressionCodec
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
 
 class BroadcastSuite extends FunSuite with LocalSparkContext with GeneratorDrivenPropertyChecks {
@@ -91,14 +92,18 @@ class BroadcastSuite extends FunSuite with LocalSparkContext with GeneratorDrive
   test("TorrentBroadcast's blockifyObject and unblockifyObject are inverses") {
     import org.apache.spark.broadcast.TorrentBroadcast._
     val blockSize = 1024
-    val snappy = Some(new SnappyCompressionCodec(new SparkConf()))
+    val conf = new SparkConf()
+    val compressionCodec = Some(new SnappyCompressionCodec(conf))
+    val serializer = new JavaSerializer(conf)
     val objects = for (size <- Gen.choose(1, 1024 * 10)) yield {
       val data: Array[Byte] = new Array[Byte](size)
       Random.nextBytes(data)
       data
     }
     forAll (objects) { (obj: Array[Byte]) =>
-      assert(unBlockifyObject[Array[Byte]](blockifyObject(obj, blockSize, snappy), snappy) === obj)
+      val blocks = blockifyObject(obj, blockSize, serializer, compressionCodec)
+      val unblockified = unBlockifyObject[Array[Byte]](blocks, serializer, compressionCodec)
+      assert(unblockified === obj)
     }
   }
 
