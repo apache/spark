@@ -4,7 +4,7 @@ from time import sleep
 
 from airflow import settings
 from airflow.models import BaseOperator, TaskInstance, State
-from airflow.hooks import MySqlHook
+from airflow.hooks import MySqlHook, HiveHook
 
 
 class BaseSensorOperator(BaseOperator):
@@ -97,7 +97,10 @@ class HivePartitionSensor(BaseSensorOperator):
     }
 
     def __init__(
-            self, hive_dbid, table, partition, schema='default',
+            self,
+            table, partition,
+            hive_dbid=settings.HIVE_DEFAULT_DBID,
+            schema='default',
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)
         self.hive_dbid = hive_dbid
@@ -109,6 +112,6 @@ class HivePartitionSensor(BaseSensorOperator):
     def poke(self):
         logging.info(
             'Poking for table {self.table}, '
-            'partition {self.partition} ' )
+            'partition {self.partition}'.format(**locals()))
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)

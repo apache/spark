@@ -2,6 +2,7 @@ import logging
 import subprocess
 import sys
 import os
+from airflow.models import DatabaseConnection
 from airflow import settings
 
 # Adding the Hive python libs to python path
@@ -16,17 +17,25 @@ from hive_service import ThriftHive
 
 from airflow.hooks.base_hook import BaseHook
 
-METASTORE_THRIFT_HOST = "localhost"
-METASTORE_THRIFT_PORT = 8083
-
 
 class HiveHook(BaseHook):
-
-    def __init__(self, hive_dbid=None):
+    def __init__(self, hive_dbid=settings.HIVE_DEFAULT_DBID):
+        session = settings.Session()
+        db = session.query(
+            DatabaseConnection).filter(
+                DatabaseConnection.db_id == hive_dbid)
+        if db.count() == 0:
+            raise Exception("The presto_dbid you provided isn't defined")
+        else:
+            db = db.all()[0]
+        self.host = db.host
+        self.db = db.schema
+        self.port = db.port
+        session.commit()
+        session.close()
 
         # Connection to Hive
-        transport = TSocket.TSocket(
-            METASTORE_THRIFT_HOST, METASTORE_THRIFT_PORT)
+        transport = TSocket.TSocket(self.host, self.port)
         self.transport = TTransport.TBufferedTransport(transport)
         protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
         self.hive = ThriftHive.Client(protocol)
@@ -38,7 +47,7 @@ class HiveHook(BaseHook):
     def check_for_partition(self, schema, table, partition):
         try:
             self.transport.open()
-            partitions = self.hive.get_partitions_by_partition(
+            partitions = self.hive.get_partitions_by_filter(
                 schema, table, partition, 1)
             self.transport.close()
             if partitions:
@@ -73,10 +82,20 @@ class HiveHook(BaseHook):
         sp = subprocess.Popen(['hive', '-e', hql])
         sp.wait()
 
-if __name__ == "__main__":
-    hh = HiveHook()
-    hql = "SELECT * FROM fct_nights_booked WHERE ds='2014-10-01' LIMIT 2"
-    print hh.get_records(schema="core_data", hql=hql)
-
-    print "Checking for partition:" + str(hh.check_for_partition(
-        schema="core_data", table="fct_nights_booked", filter="ds=2014-10-01"))
+    def max_partition(self, schema, table):
+        '''
+        Returns the maximum value for all partitions in a table. Works only
+        for tables that have a single partition key. For subpartitionned
+        table, we recommend using signal tables.
+        '''
+        table = client.get_table(dbname=schema, tbl_name=table)
+        if len(table.partitionKeys) == 0:
+            raise Exception("The table isn't partitionned")
+        elif len(table.partitionKeys) >1:
+            raise Exception(
+                "The table is partitionned by multiple columns, "
+                "use a signal table!")
+        else:
+            parts = client.get_partitions(
+                db_name='core_data', tbl_name='dim_users', max_parts=32767)
+            return max([p.values[0] for p in parts])

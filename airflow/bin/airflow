@@ -121,7 +121,7 @@ def master(args):
     TI = TaskInstance
     # This should get new code
     dagbag = DagBag(args.subdir)
-    executor = dagbag.executor()
+    executor = dagbag.executor
     executor.start()
     if args.dag_id:
         dags = [dagbag.dags[args.dag_id]]
@@ -172,6 +172,7 @@ def master(args):
                         ti.refresh_from_db()
                         if ti.is_runnable():
                             executor.queue_command(ti.key, ti.command())
+                executor.heartbeat()
             session.close()
         sleep(5)
     executor.end()

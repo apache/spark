@@ -408,6 +408,7 @@ class TaskInstance(Base):
                     jinja_context = {
                         'ti': self,
                         'execution_date': self.execution_date,
+                        'ds': self.execution_date.isoformat()[:10],
                         'task': self.task,
                         'dag': self.task.dag,
                         'macros': macros,
@@ -681,12 +682,9 @@ class BaseOperator(Base):
             params=None,
             *args,
             **kwargs):
-        """
-        """
 
         utils.validate_key(task_id)
-        if dag:
-            self.dag_id = dag.dag_id or 'adhoc_' + owner
+        self.dag_id = dag.dag_id if dag else 'adhoc_' + owner
         self.dag = dag
         self.task_id = task_id
         self.owner = owner
