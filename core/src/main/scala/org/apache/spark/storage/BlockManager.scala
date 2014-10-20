@@ -1224,6 +1224,8 @@ private[spark] class BlockManager(
     broadcastCleaner.cancel()
     logInfo("BlockManager stopped")
   }
+
+  def blockInfoMap: Map[BlockId, BlockInfo] = blockInfo.toMap
 }
 
 

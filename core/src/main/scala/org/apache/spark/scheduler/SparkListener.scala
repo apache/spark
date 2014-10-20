@@ -109,7 +109,8 @@ case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: 
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
+    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)],
+    broadcastInfo: Map[BlockId, Option[BlockStatus]])
   extends SparkListenerEvent
 
 @DeveloperApi
