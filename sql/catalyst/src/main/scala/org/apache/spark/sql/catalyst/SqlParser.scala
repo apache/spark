@@ -181,9 +181,11 @@ class SqlParser extends AbstractSparkSQLParser {
     )
 
   protected lazy val joinedRelation: Parser[LogicalPlan] =
-    relationFactor ~ joinType.? ~ (JOIN ~> relationFactor) ~ joinConditions.? ^^ {
-      case r1 ~ jt ~ r2 ~ cond =>
-        Join(r1, r2, joinType = jt.getOrElse(Inner), cond)
+    relationFactor ~ rep1(joinType.? ~ (JOIN ~> relationFactor) ~ joinConditions.?) ^^ {
+      case r1 ~ joins =>
+        joins.foldLeft(r1) { case (lhs, jt ~ rhs ~ cond) =>
+          Join(lhs, rhs, joinType = jt.getOrElse(Inner), cond)
+        }
     }
 
   protected lazy val joinConditions: Parser[Expression] =
