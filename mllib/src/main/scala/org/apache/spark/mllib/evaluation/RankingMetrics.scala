@@ -41,7 +41,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * computed as #(relevant items retrived) / k. This formula also applies when the size of the
    * ground truth set is less than k.
    *
-   * If a query has an empty ground truth set, one will be returned together with a log warning.
+   * If a query has an empty ground truth set, zero will be returned together with a log warning.
    *
    * See the following paper for detail:
    *
@@ -67,7 +67,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
       }
       if (labSet.size == 0) {
         logWarning("Empty ground truth set, check input data")
-        1.0
+        0.0
       } else {
         cnt.toDouble / k
       }
@@ -76,7 +76,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
 
   /**
    * Returns the mean average precision (MAP) of all the queries.
-   * If a query has an empty ground truth set, the average precision will be 1.0 and a log
+   * If a query has an empty ground truth set, the average precision will be zero and a log
    * warining is generated.
    */
   lazy val meanAveragePrecision: Double = {
@@ -97,7 +97,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
       }
       if (labSetSize == 0) {
         logWarning("Empty ground truth set, check input data")
-        1.0
+        0.0
       } else {
         precSum / labSet.size
       }

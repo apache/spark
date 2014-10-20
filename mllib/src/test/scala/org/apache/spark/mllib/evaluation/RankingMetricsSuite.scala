@@ -35,15 +35,15 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     val metrics = new RankingMetrics(predictionAndLabels)
     val map = metrics.meanAveragePrecision
 
-    assert(metrics.precisionAt(1) ~== 2.0/3 absTol eps)
-    assert(metrics.precisionAt(2) ~== 2.0/3 absTol eps)
-    assert(metrics.precisionAt(3) ~== 2.0/3 absTol eps)
-    assert(metrics.precisionAt(4) ~== 1.75/3 absTol eps)
-    assert(metrics.precisionAt(5) ~== 0.6 absTol eps)
-    assert(metrics.precisionAt(10) ~== 0.6 absTol eps)
-    assert(metrics.precisionAt(15) ~== 23.0/45 absTol eps)
+    assert(metrics.precisionAt(1) ~== 1.0/3 absTol eps)
+    assert(metrics.precisionAt(2) ~== 1.0/3 absTol eps)
+    assert(metrics.precisionAt(3) ~== 1.0/3 absTol eps)
+    assert(metrics.precisionAt(4) ~== 0.75/3 absTol eps)
+    assert(metrics.precisionAt(5) ~== 0.8/3 absTol eps)
+    assert(metrics.precisionAt(10) ~== 0.8/3 absTol eps)
+    assert(metrics.precisionAt(15) ~== 8.0/45 absTol eps)
 
-    assert(map ~== 0.6883598 absTol eps)
+    assert(map ~== 0.355026 absTol eps)
 
     assert(metrics.ndcgAt(3) ~== 1.0/3 absTol eps)
     assert(metrics.ndcgAt(5) ~== 0.328788 absTol eps)
