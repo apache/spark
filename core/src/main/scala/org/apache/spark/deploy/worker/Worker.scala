@@ -66,6 +66,11 @@ private[spark] class Worker(
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
+  // Model retries to connect to the master, after Hadoop's model.
+  // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
+  // Afterwards, the next 10 attempts are between 30 and 90 seconds.
+  // A bit of randomness is introduced so that not all of the workers attempt to reconnect at
+  // the same time.
   val INITIAL_REGISTRATION_RETRIES = 6
   val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
   val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
@@ -179,9 +184,9 @@ private[spark] class Worker(
   }
 
   private def retryConnectToMaster() {
-    logInfo("ping")
     Utils.tryOrExit {
       connectionAttemptCount += 1
+      logInfo(s"Attempting to connect to master (attempt # $connectionAttemptCount")
       if (registered) {
         registrationRetryTimer.foreach(_.cancel())
         registrationRetryTimer = None
@@ -211,7 +216,7 @@ private[spark] class Worker(
         connectionAttemptCount = 0
         registrationRetryTimer = Some {
           context.system.scheduler.schedule(INITIAL_REGISTRATION_RETRY_INTERVAL,
-          INITIAL_REGISTRATION_RETRY_INTERVAL)(retryConnectToMaster)
+            INITIAL_REGISTRATION_RETRY_INTERVAL)(retryConnectToMaster)
         }
       case Some(_) =>
         logInfo("Not spawning another attempt to register with the master, since there is an" +
