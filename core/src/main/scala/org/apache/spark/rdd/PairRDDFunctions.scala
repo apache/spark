@@ -243,10 +243,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Note that this method should only be used if the resulting map is expected to be small, as
    * the whole thing is loaded into the driver's memory.
-   * To handle very large results, consider using rdd.mapValues(_ => 1).reduceByKey(_ + _), which
+   * To handle very large results, consider using rdd.mapValues(_ => 1L).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
    */
-  def countByKey(): Map[K, Long] = self.mapValues(_ => 1L).reduceByKey(_ + _).collect.toMap
+  def countByKey(): Map[K, Long] = self.mapValues(_ => 1L).reduceByKey(_ + _).collect().toMap
 
   /**
    * :: Experimental ::

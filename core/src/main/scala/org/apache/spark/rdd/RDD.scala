@@ -915,11 +915,11 @@ abstract class RDD[T: ClassTag](
    *
    * Note that this method should only be used if the resulting map is expected to be small, as
    * the whole thing is loaded into the driver's memory.
-   * To handle very large results, consider using rdd.map(x => (x, 1)).reduceByKey(_ + _), which
+   * To handle very large results, consider using rdd.map(x => (x, 1L)).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
-    map(value => (value, 1)).countByKey()
+    map(value => (value, null)).countByKey()
   }
 
   /**
