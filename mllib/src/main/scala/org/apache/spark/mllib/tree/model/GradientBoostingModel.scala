@@ -17,12 +17,39 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.rdd.RDD
 
+@Experimental
+class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingStrategy)
+  extends Serializable {
 
-class GradientBoostingModel(trees: Array[DecisionTreeModel], algo: Algo) extends Serializable {
+  require(trees.size > 0, s"GradientBoostingModel cannot be created with empty trees collection.")
+
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param features array representing a single data point
+   * @return predicted category from the trained model
+   */
+  private def predictRaw(features: Vector): Double = {
+    val treePredictions = trees.map(tree => tree.predict(features))
+    if (trees.size == 1){
+      treePredictions(0)
+    } else {
+      var prediction = treePredictions(0)
+      var index = 1
+      while (index < trees.size) {
+        prediction += strategy.learningRate * treePredictions(index)
+        index += 1
+      }
+      prediction
+    }
+  }
+
   /**
    * Predict values for a single data point using the model trained.
    *
@@ -30,9 +57,14 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], algo: Algo) extends
    * @return predicted category from the trained model
    */
   def predict(features: Vector): Double = {
-    trees.map(tree => tree.predict(features)).sum
+    val algo = strategy.algo
+    algo match {
+      case Regression => predictRaw(features)
+      case Classification => if (predictRaw(features) > 0 ) 1.0 else 0.0
+      case _ => throw new IllegalArgumentException(
+        s"GradientBoostingModel given unknown algo parameter: $algo.")
+    }
   }
-
 
   /**
    * Predict values for the given data set.
@@ -40,14 +72,7 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], algo: Algo) extends
    * @param features RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
-  def predict(features: RDD[Vector]): RDD[Double] = {
-    algo match {
-      case Regression => features.map(x => predict(x))
-      case Classification => features.map(predict).map(x => if (x > 0) 1.0 else 0.0)
-      case _ => throw new IllegalArgumentException(
-        s"GradientBoostingModel given unknown algo parameter: $algo.")
-    }
-  }
+  def predict(features: RDD[Vector]): RDD[Double] = features.map(x => predict(x))
 
   /**
    * Get number of trees in forest.
@@ -58,6 +83,7 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], algo: Algo) extends
    * Print full model.
    */
   override def toString: String = {
+    val algo = strategy.algo
     val header = algo match {
       case Classification =>
         s"GradientBoostingModel classifier with $numTrees trees\n"

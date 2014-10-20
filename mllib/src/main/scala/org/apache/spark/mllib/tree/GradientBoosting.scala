@@ -456,7 +456,7 @@ object GradientBoosting extends Logging {
 
 
     // 3. Output classifier
-    new GradientBoostingModel(trees, strategy.algo)
+    new GradientBoostingModel(trees, boostingStrategy)
 
   }
 
