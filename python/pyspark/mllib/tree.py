@@ -153,9 +153,9 @@ class DecisionTree(object):
         DecisionTreeModel classifier of depth 1 with 3 nodes
         >>> print model.toDebugString(),  # it already has newline
         DecisionTreeModel classifier of depth 1 with 3 nodes
-          If (feature 0 <= 0.5)
+          If (feature 0 <= 0.0)
            Predict: 0.0
-          Else (feature 0 > 0.5)
+          Else (feature 0 > 0.0)
            Predict: 1.0
         >>> model.predict(array([1.0])) > 0
         True
