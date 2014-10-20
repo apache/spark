@@ -67,11 +67,13 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   }
 
   /**
-   * Returns the mean average precision (MAP) of all the queries
+   * Returns the mean average precision (MAP) of all the queries.
+   * If a query has an empty ground truth set, the average precision will be 1.0
    */
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet
+      val labSetSize = labSet.size
       var i = 0
       var cnt = 0
       var precSum = 0.0
@@ -84,7 +86,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         }
         i += 1
       }
-      precSum / labSet.size
+      if (labSetSize == 0) 1.0 else precSum / labSet.size
     }.mean
   }
 

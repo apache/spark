@@ -27,26 +27,27 @@ class RankingMetricsSuite extends FunSuite with LocalSparkContext {
     val predictionAndLabels = sc.parallelize(
       Seq(
         (Array[Int](1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array[Int](1, 2, 3, 4, 5)),
-        (Array[Int](4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array[Int](1, 2, 3))
+        (Array[Int](4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array[Int](1, 2, 3)),
+        (Array[Int](1, 2, 3, 4, 5), Array[Int]())
       ), 2)
     val eps: Double = 1E-5
 
     val metrics = new RankingMetrics(predictionAndLabels)
     val map = metrics.meanAveragePrecision
 
-    assert(metrics.precisionAt(1) ~== 0.5 absTol eps)
-    assert(metrics.precisionAt(2) ~== 0.5 absTol eps)
-    assert(metrics.precisionAt(3) ~== 0.5 absTol eps)
-    assert(metrics.precisionAt(4) ~== 0.375 absTol eps)
-    assert(metrics.precisionAt(5) ~== 0.4 absTol eps)
-    assert(metrics.precisionAt(10) ~== 0.4 absTol eps)
-    assert(metrics.precisionAt(15) ~== 0.266666 absTol eps)
+    assert(metrics.precisionAt(1) ~== 2.0/3 absTol eps)
+    assert(metrics.precisionAt(2) ~== 2.0/3 absTol eps)
+    assert(metrics.precisionAt(3) ~== 2.0/3 absTol eps)
+    assert(metrics.precisionAt(4) ~== 1.75/3 absTol eps)
+    assert(metrics.precisionAt(5) ~== 0.6 absTol eps)
+    assert(metrics.precisionAt(10) ~== 0.6 absTol eps)
+    assert(metrics.precisionAt(15) ~== 23.0/45 absTol eps)
 
-    assert(map ~== 0.532539 absTol eps)
+    assert(map ~== 0.6883598 absTol eps)
 
-    assert(metrics.ndcgAt(3) ~== 0.5 absTol eps)
-    assert(metrics.ndcgAt(5) ~== 0.493182 absTol eps)
-    assert(metrics.ndcgAt(10) ~== 0.731869 absTol eps)
+    assert(metrics.ndcgAt(3) ~== 1.0/3 absTol eps)
+    assert(metrics.ndcgAt(5) ~== 0.328788 absTol eps)
+    assert(metrics.ndcgAt(10) ~== 0.487913 absTol eps)
     assert(metrics.ndcgAt(15) ~== metrics.ndcgAt(10) absTol eps)
 
   }
