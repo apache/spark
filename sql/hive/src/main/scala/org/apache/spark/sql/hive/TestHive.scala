@@ -31,8 +31,9 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
@@ -40,8 +41,10 @@ import org.apache.spark.sql.SQLConf
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
+// SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
-  extends TestHiveContext(new SparkContext("local[2]", "TestSQLContext", new SparkConf()))
+  extends TestHiveContext(
+    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -65,15 +68,18 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
   /** Sets up the system initially or after a RESET command */
-  protected def configure() {
+  protected def configure(): Unit = {
     setConf("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
     setConf("hive.metastore.warehouse.dir", warehousePath)
+    Utils.registerShutdownDeleteDir(new File(warehousePath))
+    Utils.registerShutdownDeleteDir(new File(metastorePath))
   }
 
   val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
   testTempDir.delete()
   testTempDir.mkdir()
+  Utils.registerShutdownDeleteDir(testTempDir)
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
@@ -119,8 +125,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
-  hiveFilesTemp.deleteOnExit()
-
+  Utils.registerShutdownDeleteDir(hiveFilesTemp)
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -152,7 +157,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
-        case CacheCommand(tbl, _) => tbl :: Nil
+        case CacheTableCommand(tbl, _, _) => tbl :: Nil
         case _ => Nil
       }
 
@@ -351,7 +356,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   var cacheTables: Boolean = false
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
-      // Marks the table as loaded first to prevent infite mutually recursive table loading.
+      // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       loadedTables += name
       logInfo(s"Loading test table $name")
       val createCmds =
@@ -381,6 +386,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
+      clearCache()
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
@@ -426,7 +432,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       loadTestTable("srcpart")
     } catch {
       case e: Exception =>
-        logError(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        logError("FATAL ERROR: Failed to reset TestDB state.", e)
         // At this point there is really no reason to continue, but the test framework traps exits.
         // So instead we just pause forever so that at least the developer can see where things
         // started to go wrong.

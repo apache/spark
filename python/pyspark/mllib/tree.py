@@ -19,7 +19,7 @@ from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
-from pyspark.mllib.linalg import Vector, _convert_to_vector
+from pyspark.mllib.linalg import Vector, _convert_to_vector, _to_java_object_rdd
 from pyspark.mllib.regression import LabeledPoint
 
 __all__ = ['DecisionTreeModel', 'DecisionTree']
@@ -48,6 +48,7 @@ class DecisionTreeModel(object):
     def predict(self, x):
         """
         Predict the label of one or more examples.
+
         :param x:  Data point (feature vector),
                    or an RDD of data points (feature vectors).
         """
@@ -60,8 +61,8 @@ class DecisionTreeModel(object):
                 return self._sc.parallelize([])
             if not isinstance(first[0], Vector):
                 x = x.map(_convert_to_vector)
-            jPred = self._java_model.predict(x._to_java_object_rdd()).toJavaRDD()
-            jpyrdd = self._sc._jvm.PythonRDD.javaToPython(jPred)
+            jPred = self._java_model.predict(_to_java_object_rdd(x)).toJavaRDD()
+            jpyrdd = self._sc._jvm.SerDe.javaToPython(jPred)
             return RDD(jpyrdd, self._sc, BatchedSerializer(ser, 1024))
 
         else:
@@ -77,7 +78,12 @@ class DecisionTreeModel(object):
         return self._java_model.depth()
 
     def __repr__(self):
+        """ Print summary of model. """
         return self._java_model.toString()
+
+    def toDebugString(self):
+        """ Print full model. """
+        return self._java_model.toDebugString()
 
 
 class DecisionTree(object):
@@ -98,7 +104,7 @@ class DecisionTree(object):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
         sc = data.context
-        jrdd = data._to_java_object_rdd()
+        jrdd = _to_java_object_rdd(data)
         cfiMap = MapConverter().convert(categoricalFeaturesInfo,
                                         sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
@@ -135,7 +141,6 @@ class DecisionTree(object):
         >>> from numpy import array
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import DecisionTree
-        >>> from pyspark.mllib.linalg import SparseVector
         >>>
         >>> data = [
         ...     LabeledPoint(0.0, [0.0]),
@@ -145,7 +150,9 @@ class DecisionTree(object):
         ... ]
         >>> model = DecisionTree.trainClassifier(sc.parallelize(data), 2, {})
         >>> print model,  # it already has newline
-        DecisionTreeModel classifier
+        DecisionTreeModel classifier of depth 1 with 3 nodes
+        >>> print model.toDebugString(),  # it already has newline
+        DecisionTreeModel classifier of depth 1 with 3 nodes
           If (feature 0 <= 0.5)
            Predict: 0.0
           Else (feature 0 > 0.5)

@@ -78,6 +78,13 @@ follows:
     file system.</td>
   </tr>
   <tr>
+    <td>spark.history.fs.logDirectory</td>
+    <td>(none)</td>
+    <td>
+     Directory that contains application event logs to be loaded by the history server
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.updateInterval</td>
     <td>10</td>
     <td>

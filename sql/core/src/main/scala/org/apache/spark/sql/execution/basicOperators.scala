@@ -212,45 +212,6 @@ case class Sort(
 
 /**
  * :: DeveloperApi ::
- */
-@DeveloperApi
-object ExistingRdd {
-  def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
-    data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
-
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) = ScalaReflection.convertToCatalyst(r.productElement(i))
-            i += 1
-          }
-
-          mutableRow
-        }
-      }
-    }
-  }
-
-  def fromProductRdd[A <: Product : TypeTag](productRdd: RDD[A]) = {
-    ExistingRdd(ScalaReflection.attributesFor[A], productToRowRdd(productRdd))
-  }
-}
-
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  override def execute() = rdd
-}
-
-/**
- * :: DeveloperApi ::
  * Computes the set of distinct input rows using a HashSet.
  * @param partial when true the distinct operation is performed partially, per partition, without
  *                shuffling the data.

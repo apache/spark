@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
 
+import org.apache.spark.storage.StorageLevel
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -32,7 +34,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.api.java.JavaRDD
 
 /**
@@ -358,7 +360,7 @@ class SchemaRDD(
       join: Boolean = false,
       outer: Boolean = false,
       alias: Option[String] = None) =
-    new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
+    new SchemaRDD(sqlContext, Generate(generator, join, outer, alias, logicalPlan))
 
   /**
    * Returns this RDD as a SchemaRDD.  Intended primarily to force the invocation of the implicit
@@ -442,8 +444,7 @@ class SchemaRDD(
    */
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
     new SchemaRDD(sqlContext,
-      SparkLogicalPlan(
-        ExistingRdd(queryExecution.analyzed.output.map(_.newInstance), rdd))(sqlContext))
+      LogicalRDD(queryExecution.analyzed.output.map(_.newInstance()), rdd)(sqlContext))
   }
 
   // =======================================================================
@@ -497,4 +498,20 @@ class SchemaRDD(
   override def subtract(other: RDD[Row], p: Partitioner)
                        (implicit ord: Ordering[Row] = null): SchemaRDD =
     applySchema(super.subtract(other, p)(ord))
+
+  /** Overridden cache function will always use the in-memory columnar caching. */
+  override def cache(): this.type = {
+    sqlContext.cacheQuery(this)
+    this
+  }
+
+  override def persist(newLevel: StorageLevel): this.type = {
+    sqlContext.cacheQuery(this, newLevel)
+    this
+  }
+
+  override def unpersist(blocking: Boolean): this.type = {
+    sqlContext.uncacheQuery(this, blocking)
+    this
+  }
 }
