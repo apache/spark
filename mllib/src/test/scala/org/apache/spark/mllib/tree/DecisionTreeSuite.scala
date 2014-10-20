@@ -115,6 +115,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(splits.length === 5)
       assert(fakeMetadata.numSplits(0) === 5)
       assert(fakeMetadata.numBins(0) === 6)
+      // check returned splits are distinct
+      assert(splits.distinct.length === splits.length)
     }
 
     // find splits should not return identical splits
@@ -130,6 +132,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       assert(splits.length === 3)
       assert(fakeMetadata.numSplits(0) === 3)
       assert(fakeMetadata.numBins(0) === 4)
+      // check returned splits are distinct
+      assert(splits.distinct.length === splits.length)
     }
 
     // find splits when most samples close to the minimum
