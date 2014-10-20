@@ -20,23 +20,35 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.rdd.RDD
 
 /**
- * Trait for adding "pluggable" loss functions for the gradient boosting algorithm
+ * Trait for adding "pluggable" loss functions for the gradient boosting algorithm.
  */
 trait Loss extends Serializable {
 
   /**
-   * Method to calculate the loss gradients for the gradient boosting calculation
-   * @param model Model of the weak learner
-   * @param point Instance of the training dataset
-   * @param learningRate Learning rate parameter for regularization
-   * @return Loss gradient
+   * Method to calculate the loss gradients for the gradient boosting calculation.
+   * @param model Model of the weak learner.
+   * @param point Instance of the training dataset.
+   * @param learningRate Learning rate parameter for regularization.
+   * @return Loss gradient.
    */
   @DeveloperApi
   def lossGradient(
       model: DecisionTreeModel,
       point: LabeledPoint,
       learningRate: Double): Double
+
+  /**
+   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
+   * purposes.
+   * @param model Model of the weak learner.
+   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @return
+   */
+  @DeveloperApi
+  def computeError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double
 
 }

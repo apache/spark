@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.SparkContext._
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, BoostingStrategy}
+import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.mllib.tree.impurity.Impurities
@@ -418,7 +417,7 @@ object GradientBoosting extends Logging {
     val firstModel = new DecisionTree(strategy).train(data)
     timer.stop("building tree 0")
     trees(0) = firstModel
-    logDebug("error of tree = " + meanSquaredError(firstModel, data))
+    logDebug("error of tree = " + loss.computeError(firstModel, data))
 
     // psuedo-residual for second iteration
     data = data.map(point => LabeledPoint(loss.lossGradient(firstModel, point,
@@ -434,7 +433,7 @@ object GradientBoosting extends Logging {
       val model = new DecisionTree(strategy).train(data)
       timer.stop(s"building tree $m")
       trees(m) = model
-      logDebug("error of tree = " + meanSquaredError(model, data))
+      logDebug("error of tree = " + loss.computeError(model, data))
       // Update data with pseudo-residuals
       data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
         point.features))
@@ -459,16 +458,5 @@ object GradientBoosting extends Logging {
     new GradientBoostingModel(trees, boostingStrategy)
 
   }
-
-  /**
-   * Calculates the mean squared error for regression.
-   */
-  private def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
-    data.map { y =>
-      val err = tree.predict(y.features) - y.label
-      err * err
-    }.mean()
-  }
-
 
 }

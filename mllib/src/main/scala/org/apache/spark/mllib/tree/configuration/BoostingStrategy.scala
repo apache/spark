@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.impurity.Impurity
-import org.apache.spark.mllib.tree.loss.{LeastSquaresError, Loss}
+import org.apache.spark.mllib.tree.loss.{SquaredError, Loss}
 
 /**
  * :: Experimental ::

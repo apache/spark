@@ -17,18 +17,24 @@
 
 package org.apache.spark.mllib.tree.loss
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.rdd.RDD
 
 /**
- * Class for least squares error loss calculation.
+ * Class for least absolute error loss calculation.
+ * The features x and the corresponding label y is predicted using the function F.
+ * For each instance:
+ * Loss: |y - F|
+ * Negative gradient: sign(y - F)
  */
-object LeastSquaresError extends Loss {
+object AbsoluteError extends Loss {
 
   /**
    * Method to calculate the loss gradients for the gradient boosting calculation for least
-   * squares error calculation.
+   * absolute error calculation.
    * @param model Model of the weak learner
    * @param point Instance of the training dataset
    * @param learningRate Learning rate parameter for regularization
@@ -36,10 +42,27 @@ object LeastSquaresError extends Loss {
    */
   @DeveloperApi
   override def lossGradient(
-    model: DecisionTreeModel,
-    point: LabeledPoint,
-    learningRate: Double): Double = {
-    point.label - model.predict(point.features) * learningRate
+      model: DecisionTreeModel,
+      point: LabeledPoint,
+      learningRate: Double): Double = {
+    if ((point.label - model.predict(point.features) * learningRate) > 0) 1.0 else -1.0
+  }
+
+  /**
+   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
+   * purposes.
+   * @param model Model of the weak learner.
+   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @return
+   */
+  @DeveloperApi
+  override def computeError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+    val sumOfAbsolutes = data.map { y =>
+      val err = model.predict(y.features) - y.label
+      math.abs(err)
+    }.sum()
+    sumOfAbsolutes / data.count()
   }
 
 }

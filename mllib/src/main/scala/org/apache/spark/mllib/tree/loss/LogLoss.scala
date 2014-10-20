@@ -20,9 +20,15 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.rdd.RDD
 
 /**
  * Class for least squares error loss calculation.
+ *
+ * The features x and the corresponding label y is predicted using the function F.
+ * For each instance:
+ * Loss: log(1 + exp(-2yF)), y in {-1, 1}
+ * Negative gradient: 2y / ( 1 + exp(2yF))
  */
 object LogLoss extends Loss {
 
@@ -44,4 +50,17 @@ object LogLoss extends Loss {
     point.label - logLoss * learningRate
   }
 
+  /**
+   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
+   * purposes.
+   * @param model Model of the weak learner.
+   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @return
+   */
+  @DeveloperApi
+  override def computeError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+    val wrongPredictions = data.filter(lp => model.predict(lp.features) != lp.label).count()
+    wrongPredictions / data.count
+  }
 }
