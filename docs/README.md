@@ -25,8 +25,7 @@ installing via the Ruby Gem dependency manager. Since the exact HTML output
 varies between versions of Jekyll and its dependencies, we list specific versions here
 in some cases:
 
-    $ sudo gem install jekyll -v 1.4.3
-    $ sudo gem uninstall kramdown -v 1.4.1
+    $ sudo gem install jekyll
     $ sudo gem install jekyll-redirect-from
 
 Execute `jekyll` from the `docs/` directory. Compiling the site with Jekyll will create a directory

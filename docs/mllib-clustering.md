@@ -69,7 +69,7 @@ println("Within Set Sum of Squared Errors = " + WSSSE)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A standalone application example
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given below:
 
 {% highlight java %}
@@ -113,12 +113,6 @@ public class KMeansExample {
   }
 }
 {% endhighlight %}
-
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -153,3 +147,9 @@ print("Within Set Sum of Squared Error = " + str(WSSSE))
 </div>
 
 </div>
+
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
+Quick Start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.

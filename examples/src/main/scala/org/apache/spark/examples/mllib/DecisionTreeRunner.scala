@@ -189,9 +189,10 @@ object DecisionTreeRunner {
     // Create training, test sets.
     val splits = if (params.testInput != "") {
       // Load testInput.
+      val numFeatures = examples.take(1)(0).features.size
       val origTestExamples = params.dataFormat match {
         case "dense" => MLUtils.loadLabeledPoints(sc, params.testInput)
-        case "libsvm" => MLUtils.loadLibSVMFile(sc, params.testInput)
+        case "libsvm" => MLUtils.loadLibSVMFile(sc, params.testInput, numFeatures)
       }
       params.algo match {
         case Classification => {

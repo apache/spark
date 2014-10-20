@@ -15,21 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.sql.execution.debug
 
-import org.apache.spark.annotation.DeveloperApi
+import org.scalatest.FunSuite
 
-/**
- * Predicted value for a node
- * @param predict predicted value
- * @param prob probability of the label (classification only)
- */
-@DeveloperApi
-class Predict(
-    val predict: Double,
-    val prob: Double = 0.0) extends Serializable {
+import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext._
 
-  override def toString = {
-    "predict = %f, prob = %f".format(predict, prob)
+class DebuggingSuite extends FunSuite {
+  test("SchemaRDD.debug()") {
+    testData.debug()
+  }
+
+  test("SchemaRDD.typeCheck()") {
+    testData.typeCheck()
   }
 }
