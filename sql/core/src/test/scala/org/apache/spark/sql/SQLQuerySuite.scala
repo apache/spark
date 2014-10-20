@@ -43,6 +43,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     TimeZone.setDefault(origZone)
   }
 
+  test("grouping on nested fields") {
+    jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
+     .registerTempTable("rows")
+
+    checkAnswer(
+      sql(
+        """
+          |select attribute, sum(cnt)
+          |from (
+          |  select nested.attribute, count(*) as cnt
+          |  from rows
+          |  group by nested.attribute) a
+          |group by attribute
+        """.stripMargin),
+      Row(1, 1) :: Nil)
+  }
+
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
       sql("SELECT ABS(-1.3)"),
