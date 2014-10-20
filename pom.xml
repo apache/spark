@@ -123,8 +123,10 @@
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <hbase.artifact>hbase</hbase.artifact>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
+    <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>0.13.1a</hive.version>
     <!-- Version used for internal directory structure -->
@@ -143,12 +145,29 @@
     <commons.httpclient.version>4.2.6</commons.httpclient.version>
     <commons.math3.version>3.1.1</commons.math3.version>
     <test_classpath_file>${project.build.directory}/spark-test-classpath.txt</test_classpath_file>
-    <PermGen>64m</PermGen>
-    <MaxPermGen>512m</MaxPermGen>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
+    <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
+
+    <!--
+      Dependency scopes that can be overridden by enabling certain profiles. These profiles are
+      declared in the projects that build assemblies.
+
+      For other projects the scope should remain as "compile", otherwise they are not available
+      during compilation if the dependency is transivite (e.g. "bagel/" depending on "core/" and
+      needing Hadoop classes in the classpath to compile).
+    -->
+    <parquet.deps.scope>compile</parquet.deps.scope>
+    <flume.deps.scope>compile</flume.deps.scope>
+    <hadoop.deps.scope>compile</hadoop.deps.scope>
+    <hbase.deps.scope>compile</hbase.deps.scope>
+    <hive.deps.scope>compile</hive.deps.scope>
+
+    <PermGen>64m</PermGen>
+    <MaxPermGen>512m</MaxPermGen>
+    <CodeCacheSize>512m</CodeCacheSize>
   </properties>
 
   <repositories>
@@ -267,21 +286,20 @@
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
-
   <dependencies>
-  <!-- 
-       This is a dummy dependency that is used along with the shading plug-in
-       to create effective poms on publishing (see SPARK-3812).
-  -->
+    <!--
+      This is a dummy dependency that is used along with the shading plug-in
+      to create effective poms on publishing (see SPARK-3812).
+    -->
     <dependency>
       <groupId>org.spark-project.spark</groupId>
       <artifactId>unused</artifactId>
       <version>1.0.0</version>
     </dependency>
-    <!-- 
-         This depndency has been added to provided scope as it is needed for excuting build
-         specific groovy scripts using gmaven+ and not required for downstream project building
-         with spark.
+    <!--
+      This depndency has been added to provided scope as it is needed for excuting build
+      specific groovy scripts using gmaven+ and not required for downstream project building
+      with spark.
     -->
     <dependency>
       <groupId>org.codehaus.groovy</groupId>
@@ -383,11 +401,13 @@
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
         <version>${slf4j.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-log4j12</artifactId>
         <version>${slf4j.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
@@ -404,6 +424,7 @@
         <groupId>log4j</groupId>
         <artifactId>log4j</artifactId>
         <version>${log4j.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>com.ning</groupId>
@@ -441,6 +462,7 @@
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
         <version>${protobuf.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
@@ -461,6 +483,17 @@
         <groupId>${akka.group}</groupId>
         <artifactId>akka-testkit_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
+        <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>${akka.group}</groupId>
+            <artifactId>akka-actor_${scala.binary.version}</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.mesos</groupId>
@@ -591,6 +624,7 @@
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-recipes</artifactId>
         <version>2.4.0</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -602,6 +636,7 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
         <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -637,11 +672,13 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-ipc</artifactId>
         <version>${avro.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -670,6 +707,7 @@
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
         <classifier>${avro.mapred.classifier}</classifier>
+        <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -698,6 +736,7 @@
         <groupId>net.java.dev.jets3t</groupId>
         <artifactId>jets3t</artifactId>
         <version>${jets3t.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -709,6 +748,7 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-api</artifactId>
         <version>${yarn.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>javax.servlet</groupId>
@@ -736,6 +776,7 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-common</artifactId>
         <version>${yarn.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -792,6 +833,7 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-server-web-proxy</artifactId>
         <version>${yarn.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -819,6 +861,7 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-client</artifactId>
         <version>${yarn.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -843,10 +886,103 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper</artifactId>
+        <version>${zookeeper.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
         <!-- Matches the version of jackson-core-asl pulled in by avro -->
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-mapper-asl</artifactId>
-        <version>1.8.8</version>
+        <version>${codehaus.jackson.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-exec</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.esotericsoftware.kryo</groupId>
+            <artifactId>kryo</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-metastore</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-serde</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.twitter</groupId>
+        <artifactId>parquet-column</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.twitter</groupId>
+        <artifactId>parquet-hadoop</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.flume</groupId>
+        <artifactId>flume-ng-core</artifactId>
+        <version>${flume.version}</version>
+        <scope>${flume.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.thrift</groupId>
+            <artifactId>libthrift</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.flume</groupId>
+        <artifactId>flume-ng-sdk</artifactId>
+        <version>${flume.version}</version>
+        <scope>${flume.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.thrift</groupId>
+            <artifactId>libthrift</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -923,6 +1059,7 @@
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
               <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
+              <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
             </jvmArgs>
             <javacArgs>
               <javacArg>-source</javacArg>
@@ -970,7 +1107,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <stderr/>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -999,11 +1136,6 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-antrun-plugin</artifactId>
           <version>1.7</version>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-shade-plugin</artifactId>
-          <version>2.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -1085,6 +1217,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
+        <version>2.2</version>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
@@ -1333,55 +1466,9 @@
       </dependencies>
     </profile>
 
-    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
-      <id>hadoop-provided</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-api</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-common</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-server-web-proxy</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-client</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro-ipc</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.zookeeper</groupId>
-          <artifactId>zookeeper</artifactId>
-          <version>${zookeeper.version}</version>
-          <scope>provided</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hive-thriftserver</id>
+      <id>hive-0.12.0</id>
+      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
@@ -1432,5 +1519,28 @@
       </properties>
     </profile>
 
+    <!--
+      These empty profiles are available in some sub-modules. Declare them here so that
+      maven does not complain when they're provided on the command line for a sub-module
+      that does not have them.
+    -->
+    <profile>
+      <id>flume-provided</id>
+    </profile>
+    <profile>
+      <id>hadoop-provided</id>
+    </profile>
+    <profile>
+      <id>hbase-provided</id>
+    </profile>
+    <profile>
+      <id>hive</id>
+    </profile>
+    <profile>
+      <id>hive-provided</id>
+    </profile>
+    <profile>
+      <id>parquet-provided</id>
+    </profile>
   </profiles>
 </project>
