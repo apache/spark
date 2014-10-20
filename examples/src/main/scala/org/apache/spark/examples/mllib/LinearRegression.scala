@@ -47,7 +47,7 @@ object LinearRegression extends App {
       numIterations: Int = 100,
       stepSize: Double = 1.0,
       regType: RegType = L2,
-      regParam: Double = 0.1)
+      regParam: Double = 0.1) extends AbstractParams[Params]
 
   val defaultParams = Params()
 

@@ -1,5 +1,15 @@
-pygments: true
+highlighter: pygments
 markdown: kramdown
+gems:
+  - jekyll-redirect-from
+
+# For some reason kramdown seems to behave differently on different
+# OS/packages wrt encoding. So we hard code this config.
+kramdown:
+  entity_output: numeric
+
+include:
+  - _static
 
 # These allow the documentation to be updated with nerw releases
 # of Spark, Scala, and Mesos.

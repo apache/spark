@@ -211,17 +211,17 @@ For a complete list of options, run `pyspark --help`. Behind the scenes,
 
 It is also possible to launch the PySpark shell in [IPython](http://ipython.org), the
 enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
-use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
+use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running `bin/pyspark`:
 
 {% highlight bash %}
-$ IPYTHON=1 ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-You can customize the `ipython` command by setting `IPYTHON_OPTS`. For example, to launch
+You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`. For example, to launch
 the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
 
 {% highlight bash %}
-$ IPYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
 {% endhighlight %}
 
 </div>
@@ -286,7 +286,7 @@ We describe operations on distributed datasets later on.
 
 </div>
 
-One important parameter for parallel collections is the number of *slices* to cut the dataset into. Spark will run one task for each slice of the cluster. Typically you want 2-4 slices for each CPU in your cluster. Normally, Spark tries to set the number of slices automatically based on your cluster. However, you can also set it manually by passing it as a second parameter to `parallelize` (e.g. `sc.parallelize(data, 10)`).
+One important parameter for parallel collections is the number of *partitions* to cut the dataset into. Spark will run one task for each partition of the cluster. Typically you want 2-4 partitions for each CPU in your cluster. Normally, Spark tries to set the number of partitions automatically based on your cluster. However, you can also set it manually by passing it as a second parameter to `parallelize` (e.g. `sc.parallelize(data, 10)`). Note: some places in the code use the term slices (a synonym for partitions) to maintain backward compatibility.
 
 ## External Datasets
 
@@ -311,7 +311,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of slices of the file. By default, Spark creates one slice for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of slices by passing a larger value. Note that you cannot have fewer slices than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Scala API also supports several other data formats:
 
@@ -343,7 +343,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of slices of the file. By default, Spark creates one slice for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of slices by passing a larger value. Note that you cannot have fewer slices than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Java API also supports several other data formats:
 
@@ -375,7 +375,7 @@ Some notes on reading files with Spark:
 
 * All of Spark's file-based input methods, including `textFile`, support running on directories, compressed files, and wildcards as well. For example, you can use `textFile("/my/directory")`, `textFile("/my/directory/*.txt")`, and `textFile("/my/directory/*.gz")`.
 
-* The `textFile` method also takes an optional second argument for controlling the number of slices of the file. By default, Spark creates one slice for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of slices by passing a larger value. Note that you cannot have fewer slices than blocks.
+* The `textFile` method also takes an optional second argument for controlling the number of partitions of the file. By default, Spark creates one partition for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of partitions by passing a larger value. Note that you cannot have fewer partitions than blocks.
 
 Apart from text files, Spark's Python API also supports several other data formats:
 
@@ -883,7 +883,7 @@ for details.
 <tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
-    <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or 
+    <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
       average) over each key, using <code>reduceByKey</code> or <code>combineByKey</code> will yield much better 
       performance.
     <br />
@@ -906,7 +906,7 @@ for details.
 <tr>
   <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W)) pairs with all pairs of elements for each key.
-    Outer joins are also supported through <code>leftOuterJoin</code> and <code>rightOuterJoin</code>.
+    Outer joins are supported through <code>leftOuterJoin</code>, <code>rightOuterJoin</code>, and <code>fullOuterJoin</code>.
   </td>
 </tr>
 <tr>
