@@ -49,22 +49,14 @@ private[spark] abstract class YarnSchedulerBackend(
    * Request the given number of executors from the ApplicationMaster.
    */
   override def requestExecutors(numExecutors: Int): Unit = {
-    Option(yarnSchedulerActor) match {
-      case Some(actor) => actor ! RequestExecutors(numExecutors)
-      case None => logWarning(
-        "Attempted to request executors before the yarn scheduler actor has started!")
-    }
+    yarnSchedulerActor ! RequestExecutors(numExecutors)
   }
 
   /**
    * Request the ApplicationMaster to kill the specified executor.
    */
   override def killExecutor(executorId: String): Unit = {
-    Option(yarnSchedulerActor) match {
-      case Some(actor) => actor ! KillExecutor(executorId)
-      case None => logWarning(
-        "Attempted to kill executors before the yarn scheduler actor has started!")
-    }
+    yarnSchedulerActor ! KillExecutor(executorId)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -106,7 +98,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
     override def receive = {
       case RegisterClusterManager =>
-        logInfo("ApplicationMaster registered")
+        logInfo(s"ApplicationMaster registered as $sender")
         amActor = Some(sender)
 
       case r: RequestExecutors =>
