@@ -43,6 +43,7 @@ SparkImports.scala
 SparkJLineCompletion.scala
 SparkJLineReader.scala
 SparkMemberHandlers.scala
+SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
