@@ -22,6 +22,7 @@ import java.util.Properties
 import java.util.concurrent.{TimeUnit, Executors}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -164,8 +165,9 @@ class DAGScheduler(
   def executorHeartbeatReceived(
       execId: String,
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
-      blockManagerId: BlockManagerId): Boolean = {
-    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
+      blockManagerId: BlockManagerId,
+      broadcastInfo: immutable.Map[BlockId, Option[BlockStatus]]): Boolean = {
+    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics, broadcastInfo))
     implicit val timeout = Timeout(600 seconds)
 
     Await.result(

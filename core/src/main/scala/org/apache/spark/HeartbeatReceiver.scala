@@ -23,7 +23,7 @@ import scala.collection.mutable
 import akka.actor.{Actor, Cancellable}
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockStatus, BlockId, BlockManagerId}
 import org.apache.spark.scheduler.{SlaveLost, TaskScheduler}
 import org.apache.spark.util.ActorLogReceive
 
@@ -35,7 +35,8 @@ import org.apache.spark.util.ActorLogReceive
 private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
-    blockManagerId: BlockManagerId)
+    blockManagerId: BlockManagerId,
+    broadcastBlocks: Map[BlockId, Option[BlockStatus]])
 
 private[spark] case object ExpireDeadHosts 
     
@@ -66,11 +67,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   }
   
   override def receiveWithLogging = {
-    case Heartbeat(executorId, taskMetrics, blockManagerId) =>
-      val unknownExecutor = !scheduler.executorHeartbeatReceived(
-        executorId, taskMetrics, blockManagerId)
-      val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
-      executorLastSeen(executorId) = System.currentTimeMillis()
+    case Heartbeat(executorId, taskMetrics, blockManagerId,
+      broadcastInfo) =>
+      val response = HeartbeatResponse(
+        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId,
+          broadcastInfo))
       sender ! response
     case ExpireDeadHosts =>
       expireDeadHosts()

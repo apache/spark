@@ -34,7 +34,12 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
+<<<<<<< HEAD
 import org.apache.spark.storage.BlockManagerId
+=======
+import org.apache.spark.storage.{BlockStatus, BlockId, BlockManagerId}
+import akka.actor.Props
+>>>>>>> send broadcastInfo in blockManager heartbeat
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -356,7 +361,8 @@ private[spark] class TaskSchedulerImpl(
   override def executorHeartbeatReceived(
       execId: String,
       taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
-      blockManagerId: BlockManagerId): Boolean = {
+      blockManagerId: BlockManagerId,
+      broadcastInfo: Map[BlockId, Option[BlockStatus]]): Boolean = {
 
     val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
       taskMetrics.flatMap { case (id, metrics) =>
@@ -365,7 +371,8 @@ private[spark] class TaskSchedulerImpl(
           .map(taskSetMgr => (id, taskSetMgr.stageId, taskSetMgr.taskSet.attempt, metrics))
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId,
+      broadcastInfo)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {

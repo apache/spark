@@ -421,7 +421,12 @@ private[spark] class Executor(
             }
           }
 
-          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId,
+            {
+              env.blockManager.blockInfoMap.filter(_._1.isBroadcast).map {
+                case (blockId, blockInfo) => (blockId, env.blockManager.getStatus(blockId))
+              }.filter(_._2.isDefined)
+            })
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
               retryAttempts, retryIntervalMs, timeout)
