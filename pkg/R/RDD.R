@@ -986,8 +986,6 @@ setGeneric("reduceByKey",
 setMethod("reduceByKey",
           signature(rdd = "RDD", combineFunc = "ANY", numPartitions = "integer"),
           function(rdd, combineFunc, numPartitions) {
-            # TODO: Implement map-side combine
-            shuffled <- partitionBy(rdd, numPartitions)
             reduceVals <- function(part) {
               vals <- new.env()
               keys <- new.env()
@@ -1008,6 +1006,8 @@ setMethod("reduceByKey",
                                   })
               combined
             }
+            locallyReduced <- lapplyPartition(rdd, reduceVals)
+            shuffled <- partitionBy(locallyReduced, numPartitions)
             lapplyPartition(shuffled, reduceVals)
           })
 
