@@ -19,6 +19,7 @@ package org.apache.spark.mllib.evaluation
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -30,16 +31,18 @@ import org.apache.spark.rdd.RDD
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Experimental
-class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]) {
+class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
+  extends Logging with Serializable {
 
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
    *
-   * If for a query, the ranking algorithm returns n (n < k) results,
-   * the precision value will be computed as #(relevant items retrived) / k.
-   * This formula also applies when the size of the ground truth set is less than k.
+   * If for a query, the ranking algorithm returns n (n < k) results, the precision value will be
+   * computed as #(relevant items retrived) / k. This formula also applies when the size of the
+   * ground truth set is less than k.
    *
-   * If a query has an empty ground truth set, one will be returned.
+   * If a query has an empty ground truth set, one will be returned together with a log warning.
+   *
    * See the following paper for detail:
    *
    * IR evaluation methods for retrieving highly relevant documents.
@@ -62,13 +65,19 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         }
         i += 1
       }
-      if (labSet.size == 0) 1.0 else cnt.toDouble / k
+      if (labSet.size == 0) {
+        logWarning("Empty ground truth set, check input data")
+        1.0
+      } else {
+        cnt.toDouble / k
+      }
     }.mean
   }
 
   /**
    * Returns the mean average precision (MAP) of all the queries.
-   * If a query has an empty ground truth set, the average precision will be 1.0
+   * If a query has an empty ground truth set, the average precision will be 1.0 and a log
+   * warining is generated.
    */
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
@@ -86,7 +95,12 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         }
         i += 1
       }
-      if (labSetSize == 0) 1.0 else precSum / labSet.size
+      if (labSetSize == 0) {
+        logWarning("Empty ground truth set, check input data")
+        1.0
+      } else {
+        precSum / labSet.size
+      }
     }.mean
   }
 
@@ -94,14 +108,14 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * Compute the average NDCG value of all the queries, truncated at ranking position k.
    * The discounted cumulative gain at position k is computed as:
    *    \sum_{i=1}^k (2^{relevance of ith item} - 1) / log(i + 1),
-   * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the
-   * current implementation, the relevance value is binary.
+   * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
+   * implementation, the relevance value is binary.
    *
-   * If for a query, the ranking algorithm returns n (n < k) results, the NDCG value at
-   * at position n will be used. If the ground truth set contains n (n < k) results,
-   * the first n items will be used to compute the DCG value on the ground truth set.
+   * If for a query, the ranking algorithm returns n (n < k) results, the NDCG value at position n
+   * will be used. If the ground truth set contains n (n < k) results, the first n items will be
+   * used to compute the DCG value on the ground truth set.
    *
-   * If a query has an empty ground truth set, zero will be returned.
+   * If a query has an empty ground truth set, zero will be returned together with a log warning.
    *
    * See the following paper for detail:
    *
@@ -131,7 +145,12 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         }
         i += 1
       }
-      if (labSetSize == 0) 0.0 else dcg / maxDcg
+      if (labSetSize == 0) {
+        logWarning("Empty ground truth set, check input data")
+        0.0
+      } else {
+        dcg / maxDcg
+      }
     }.mean
   }
 
