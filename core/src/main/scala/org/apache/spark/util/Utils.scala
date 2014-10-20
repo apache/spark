@@ -269,11 +269,14 @@ private[spark] object Utils extends Logging {
     dir
   }
 
-  /** Copy all data from an InputStream to an OutputStream */
+  /** Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
+    * copying is disabled by default unless explicitly set transferToEnabled as true,
+    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
+    */
   def copyStream(in: InputStream,
                  out: OutputStream,
                  closeStreams: Boolean = false,
-                 transferToEnabled: Boolean = true): Long =
+                 transferToEnabled: Boolean = false): Long =
   {
     var count = 0L
     try {
@@ -299,7 +302,7 @@ private[spark] object Utils extends Logging {
         val finalPos = outChannel.position()
         assert(finalPos == initialPos + size,
           s"""
-             |Current position $finalPos do not equal to expected position ${initialPos + count}
+             |Current position $finalPos do not equal to expected position ${initialPos + size}
              |after transferTo, please check your kernel version to see if it is 2.6.32,
              |this is a kernel bug which will lead to unexpected behavior when using transferTo.
              |You can set spark.file.transferTo = false to disable this NIO feature.
