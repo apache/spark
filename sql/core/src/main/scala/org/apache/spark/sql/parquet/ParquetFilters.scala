@@ -221,25 +221,25 @@ private[sql] object ParquetFilters {
           case _ => None
         }
       }
-      case p @ EqualTo(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ EqualTo(left: Literal, right: NamedExpression) =>
         Some(createEqualityFilter(right.name, left, p))
-      case p @ EqualTo(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ EqualTo(left: NamedExpression, right: Literal) =>
         Some(createEqualityFilter(left.name, right, p))
-      case p @ LessThan(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ LessThan(left: Literal, right: NamedExpression) =>
         Some(createLessThanFilter(right.name, left, p))
-      case p @ LessThan(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ LessThan(left: NamedExpression, right: Literal) =>
         Some(createLessThanFilter(left.name, right, p))
-      case p @ LessThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ LessThanOrEqual(left: Literal, right: NamedExpression) =>
         Some(createLessThanOrEqualFilter(right.name, left, p))
-      case p @ LessThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ LessThanOrEqual(left: NamedExpression, right: Literal) =>
         Some(createLessThanOrEqualFilter(left.name, right, p))
-      case p @ GreaterThan(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ GreaterThan(left: Literal, right: NamedExpression) =>
         Some(createGreaterThanFilter(right.name, left, p))
-      case p @ GreaterThan(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ GreaterThan(left: NamedExpression, right: Literal) =>
         Some(createGreaterThanFilter(left.name, right, p))
-      case p @ GreaterThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ GreaterThanOrEqual(left: Literal, right: NamedExpression) =>
         Some(createGreaterThanOrEqualFilter(right.name, left, p))
-      case p @ GreaterThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ GreaterThanOrEqual(left: NamedExpression, right: Literal) =>
         Some(createGreaterThanOrEqualFilter(left.name, right, p))
       case _ => None
     }
