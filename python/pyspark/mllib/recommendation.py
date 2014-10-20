@@ -84,8 +84,16 @@ class MatrixFactorizationModel(object):
 
     def userFeatures(self):
         sc = self._context
-        juf = self._java_model.userFeaturesString().toJavaRDD()
+        juf = self._java_model.userFeatures()
+        juf = sc._jvm.SerDe.fromTuple2RDD(juf).toJavaRDD()
         return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc,
+                   AutoBatchedSerializer(PickleSerializer()))
+
+    def productFeatures(self):
+        sc = self._context
+        jpf = self._java_model.productFeatures()
+        jpf = sc._jvm.SerDe.fromTuple2RDD(jpf).toJavaRDD()
+        return RDD(sc._jvm.PythonRDD.javaToPython(jpf), sc,
                    AutoBatchedSerializer(PickleSerializer()))
 
 

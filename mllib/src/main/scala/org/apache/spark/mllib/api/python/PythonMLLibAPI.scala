@@ -604,4 +604,10 @@ private[spark] object SerDe extends Serializable {
   def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
     rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
   }
+
+  /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
+  def fromTuple2RDD(rdd: RDD[Tuple2[Any, Any]]): RDD[Array[Any]]  = {
+    rdd.map(x => Array(x._1, x._2))
+  }
+
 }
