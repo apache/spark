@@ -171,7 +171,7 @@ function send_archived_logs () {
 # post start message
 {
   start_message="\
-  [QA tests have started](${BUILD_URL}consoleFull) for \
+  [Test build ${BUILD_DISPLAY_NAME} has started](${BUILD_URL}consoleFull) for \
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   start_message="${start_message}\n${merge_note}"
@@ -186,7 +186,7 @@ function send_archived_logs () {
   test_result="$?"
 
   if [ "$test_result" -eq "124" ]; then
-    fail_message="**[Tests timed out](${BUILD_URL}consoleFull)** \
+    fail_message="**[Test build ${BUILD_DISPLAY_NAME} timed out](${BUILD_URL}consoleFull)** \
     for PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL}) \
     after a configured wait of \`${TESTS_TIMEOUT}\`."
 
@@ -224,7 +224,7 @@ function send_archived_logs () {
 # post end message
 {
   result_message="\
-  [QA tests have finished](${BUILD_URL}consoleFull) for \
+  [Test build ${BUILD_DISPLAY_NAME} has finished](${BUILD_URL}consoleFull) for \
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   result_message="${result_message}\n${test_result_note}"
