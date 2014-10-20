@@ -48,7 +48,6 @@ class GradientBoosting (
    * @return GradientBoostingModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): GradientBoostingModel = {
-    val strategy = boostingStrategy.strategy
     val algo = boostingStrategy.algo
     algo match {
       case Regression => GradientBoosting.boost(input, boostingStrategy)
@@ -177,6 +176,7 @@ object GradientBoosting extends Logging {
       numClassesForClassification, categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
+
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting#trainRegressor]]
    *
@@ -222,7 +222,6 @@ object GradientBoosting extends Logging {
         Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
   }
-
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
@@ -274,7 +273,6 @@ object GradientBoosting extends Logging {
     new GradientBoosting(boostingStrategy).train(input)
   }
 
-
   /**
    * Method to train a gradient boosting regression model.
    *
@@ -309,7 +307,6 @@ object GradientBoosting extends Logging {
       impurityType, maxDepth, learningRate, subsample)
     new GradientBoosting(boostingStrategy).train(input)
   }
-
 
   /**
    * Method to train a gradient boosting binary classification model.
@@ -346,7 +343,6 @@ object GradientBoosting extends Logging {
     new GradientBoosting(boostingStrategy).train(input)
   }
 
-
   /**
    * Method to train a gradient boosting regression model.
    *
@@ -373,15 +369,13 @@ object GradientBoosting extends Logging {
    * @param boostingStrategy Configuration options for the boosting algorithm.
    * @return GradientBoostingModel that can be used for prediction
    */
-  def trainClassification(
+  def trainClassifier(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): GradientBoostingModel = {
     val algo = boostingStrategy.algo
     require(algo == Classification, s"Only Classification algo supported. Provided algo is $algo.")
     new GradientBoosting(boostingStrategy).train(input)
   }
-
-
 
   /**
    * Internal method for performing regression using trees as base learners.
