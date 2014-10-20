@@ -17,14 +17,11 @@
 
 package org.apache.spark.rdd
 
-/** Allows better control of the partitioning
-  *
-  */
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
-import org.apache.spark.{InterruptibleIterator, TaskContext, Partition, SparkContext}
 import org.apache.spark.input.StreamFileInputFormat
+import org.apache.spark.{Partition, SparkContext}
 
 private[spark] class BinaryFileRDD[T](
                                        sc : SparkContext,

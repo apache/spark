@@ -29,7 +29,6 @@ import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAt
  */
 
 private[spark] object FixedLengthBinaryInputFormat {
-
   /**
    * This function retrieves the recordLength by checking the configuration parameter
    *
@@ -39,13 +38,10 @@ private[spark] object FixedLengthBinaryInputFormat {
     // retrieve record length from configuration
     context.getConfiguration.get("recordLength").toInt
   }
-
 }
 
 private[spark] class FixedLengthBinaryInputFormat
   extends FileInputFormat[LongWritable, BytesWritable] {
-
-
   /**
    * Override of isSplitable to ensure initial computation of the record length
    */
@@ -60,7 +56,6 @@ private[spark] class FixedLengthBinaryInputFormat
     } else {
       true
     }
-
   }
 
   /**
@@ -69,14 +64,11 @@ private[spark] class FixedLengthBinaryInputFormat
    * will start at the first byte of a record, and the last byte will the last byte of a record.
    */
   override def computeSplitSize(blockSize: Long, minSize: Long, maxSize: Long): Long = {
-
     val defaultSize = super.computeSplitSize(blockSize, minSize, maxSize)
-
     // If the default size is less than the length of a record, make it equal to it
     // Otherwise, make sure the split size is as close to possible as the default size,
     // but still contains a complete set of records, with the first record
     // starting at the first byte in the split and the last record ending with the last byte
-
     if (defaultSize < recordLength) {
       recordLength.toLong
     } else {
@@ -91,7 +83,5 @@ private[spark] class FixedLengthBinaryInputFormat
       RecordReader[LongWritable, BytesWritable] = {
     new FixedLengthBinaryRecordReader
   }
-
   var recordLength = -1
-
 }

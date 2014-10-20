@@ -256,8 +256,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  def binaryFiles(path: String, minPartitions: Int):
   JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
+
+  def binaryFiles(path: String):
+  JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.binaryFiles(path,defaultMinPartitions))
 
   /**
    * Read a directory of files as DataInputStream from HDFS,

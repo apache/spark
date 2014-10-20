@@ -844,7 +844,6 @@ public class JavaAPISuite implements Serializable {
         // Reusing the wholeText files example
         byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
 
-
         String tempDirName = tempDir.getAbsolutePath();
         File file1 = new File(tempDirName + "/part-00000");
 
@@ -866,7 +865,6 @@ public class JavaAPISuite implements Serializable {
         // Reusing the wholeText files example
         byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
 
-
         String tempDirName = tempDir.getAbsolutePath();
         File file1 = new File(tempDirName + "/part-00000");
 
@@ -877,7 +875,7 @@ public class JavaAPISuite implements Serializable {
         channel1.write(bbuf);
         channel1.close();
 
-        JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName,3).cache();
+        JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName).cache();
         readRDD.foreach(new VoidFunction<Tuple2<String,PortableDataStream>>() {
             @Override
             public void call(Tuple2<String, PortableDataStream> stringPortableDataStreamTuple2) throws Exception {

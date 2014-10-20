@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.{File, FileWriter}
 
 import org.apache.spark.input.PortableDataStream
+import org.apache.spark.storage.StorageLevel
 
 import scala.io.Source
 
@@ -280,6 +281,37 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(indata.toArray === testOutput)
   }
 
+  test("portabledatastream persist disk storage") {
+    sc = new SparkContext("local", "test")
+    val outFile = new File(tempDir, "record-bytestream-00000.bin")
+    val outFileName = outFile.getAbsolutePath()
+
+    // create file
+    val testOutput = Array[Byte](1,2,3,4,5,6)
+    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
+    // write data to file
+    val file = new java.io.FileOutputStream(outFile)
+    val channel = file.getChannel
+    channel.write(bbuf)
+    channel.close()
+    file.close()
+
+    val inRdd = sc.binaryFiles(outFileName).persist(StorageLevel.DISK_ONLY)
+    inRdd.foreach{
+      curData: (String, PortableDataStream) =>
+        curData._2.toArray() // force the file to read
+    }
+    val mappedRdd = inRdd.map{
+      curData: (String, PortableDataStream) =>
+        (curData._2.getPath(),curData._2)
+    }
+    val (infile: String, indata: PortableDataStream) = mappedRdd.first
+
+    // Try reading the output back as an object file
+
+    assert(indata.toArray === testOutput)
+  }
+
   test("portabledatastream flatmap tests") {
     sc = new SparkContext("local", "test")
     val outFile = new File(tempDir, "record-bytestream-00000.bin")
@@ -346,6 +378,34 @@ class FileSuite extends FunSuite with LocalSparkContext {
     // now just compare the first one
     val indata: Array[Byte] = inRdd.first
     assert(indata === testOutput)
+  }
+
+  test ("negative binary record length should raise an exception") {
+    // a fixed length of 6 bytes
+    sc = new SparkContext("local", "test")
+
+    val outFile = new File(tempDir, "record-bytestream-00000.bin")
+    val outFileName = outFile.getAbsolutePath()
+
+    // create file
+    val testOutput = Array[Byte](1,2,3,4,5,6)
+    val testOutputCopies = 10
+
+    // write data to file
+    val file = new java.io.FileOutputStream(outFile)
+    val channel = file.getChannel
+    for(i <- 1 to testOutputCopies) {
+      val bbuf = java.nio.ByteBuffer.wrap(testOutput)
+      channel.write(bbuf)
+    }
+    channel.close()
+    file.close()
+
+    val inRdd = sc.binaryRecords(outFileName, -1)
+
+    intercept[SparkException] {
+      inRdd.count
+    }
   }
 
   test("file caching") {
