@@ -29,7 +29,6 @@ from errno import EINTR, ECHILD, EAGAIN
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN
 
-from pyspark.conf import _parse_memory
 from pyspark.worker import main as worker_main
 from pyspark.serializers import read_int, write_int
 
@@ -84,7 +83,7 @@ def manager():
     limit = os.environ.get("_PYSPARK_WORKER_MEMORY_LIMIT")
     if limit:
         # limit the memory used by each worker (in bytes)
-        vslimit = _parse_memory(limit) * 1024 * 1024
+        vslimit = int(limit) * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (vslimit, vslimit))
 
     # Create a listening socket on the AF_INET loopback interface
