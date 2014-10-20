@@ -335,8 +335,7 @@ private[spark] object Utils extends Logging {
   def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
     hadoopConf: Configuration) {
     val filename = url.split("/").last
-    val tempDir = getLocalDir(conf)
-    val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
+    val tempFile =  File.createTempFile("fetchFileTemp", null, new File(targetDir.getAbsolutePath))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
