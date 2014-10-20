@@ -21,10 +21,14 @@ import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.util.jar.{JarEntry, JarOutputStream}
 
+import org.apache.commons.io.FilenameUtils
+
 import scala.collection.JavaConversions._
 
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, ByteSource, InputSupplier, Files}
+
+import scala.collection.mutable
 
 import org.apache.spark.util.Utils
 
@@ -52,25 +56,38 @@ private[spark] object TestUtils {
 
 
   /**
-   * Create a jar file that contains this set of files. All files will be located at the root
-   * of the jar.
+   * Create a jar file that contains this set of files.
+   *
    */
-  def createJar(files: Seq[File], jarFile: File): URL = {
+  def createJar(files: Seq[File],
+                jarFile: File,
+                flat:Boolean = true,
+                stripPath: String = ""): URL = {
     val jarFileStream = new FileOutputStream(jarFile)
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
+    val fprefix = if (!stripPath.isEmpty && !stripPath.endsWith("/")) stripPath + "/" else ""
 
     for (file <- files) {
-      val jarEntry = new JarEntry(file.getName)
-      jarStream.putNextEntry(jarEntry)
+      if (file.isDirectory && !flat) { // Skip directories in flat mode
+        val name = file.getPath.stripPrefix(fprefix)
+        val jarEntry = new JarEntry(name)
+        jarEntry.setTime(file.lastModified())
+        jarStream.putNextEntry(jarEntry)
+        jarStream.closeEntry()
+      } else if (file.isFile) { // Put file into jar file
+        val name = if (flat) file.getName else file.getPath.stripPrefix(fprefix)
+        val jarEntry = new JarEntry(name)
+        jarStream.putNextEntry(jarEntry)
 
-      val in = new FileInputStream(file)
-      val buffer = new Array[Byte](10240)
-      var nRead = 0
-      while (nRead <= 0) {
-        nRead = in.read(buffer, 0, buffer.length)
-        jarStream.write(buffer, 0, nRead)
+        val in = new FileInputStream(file)
+        val buffer = new Array[Byte](10240)
+        var nRead = 0
+        while (nRead <= 0) {
+          nRead = in.read(buffer, 0, buffer.length)
+          jarStream.write(buffer, 0, nRead)
+        }
+        in.close()
       }
-      in.close()
     }
     jarStream.close()
     jarFileStream.close()
@@ -111,5 +128,40 @@ private[spark] object TestUtils {
 
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
     out
+  }
+
+  /** Create a jar containing given classes.
+    *
+    * @param klazzes list of classes which will be in resulting jar
+    * @param cl  classloader to access given classes
+    */
+  def createJarWithExistingClasses(klazzes: Seq[String], cl: ClassLoader): URL = {
+    val tempDir = Files.createTempDir()
+    tempDir.deleteOnExit()
+    val files = for (klazz <- klazzes) yield createExistingClass(klazz, cl, tempDir)
+    val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
+    createJar(files, jarFile, false, tempDir.getAbsolutePath)
+  }
+
+  /** Save an existing class loadable by given classloader into a file in destination directory
+    *
+    * @param klazz  name of class to save
+    * @param cl  classloader for loading given class
+    * @param destDir  directory where a class file will be saved
+    * @return  return a reference to saved class file
+    */
+  def createExistingClass(klazz: String, cl: ClassLoader, destDir: File): File = {
+    val klazzName = klazz.replace('.', '/') + ".class"
+
+    val is = cl.getResourceAsStream(klazzName)
+    val kDir  = new File(destDir, FilenameUtils.getPath(klazzName))
+    val kFile = new File(kDir, FilenameUtils.getName(klazzName))
+    kDir.mkdirs()
+    // Copy content
+    val os = Files.asByteSink(kFile).openStream()
+    ByteStreams.copy(is, os)
+    os.close()
+    assert(kFile.exists(), "Destination file not created: " + kFile.getAbsolutePath())
+    kFile
   }
 }

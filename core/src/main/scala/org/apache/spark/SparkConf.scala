@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -304,6 +305,21 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         }
       }
     }
+  }
+
+  /* Register a new platform extension */
+  def addExtension[T <: PlatformExtension : ClassTag]: SparkConf = {
+    val name = implicitly[ClassTag[T]].runtimeClass.getCanonicalName
+    addExtension(name)
+  }
+  /* Register a new platform extension */
+  def addExtension(fullName : String): SparkConf = {
+    val exts = settings.get("spark.extensions") match {
+      case Some(v) => s"${v},${fullName}"
+      case None    => fullName
+    }
+    settings.update("spark.extensions", exts)
+    this
   }
 
   /**

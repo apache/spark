@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent._
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
@@ -105,6 +106,12 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
+  // List of Executor extensions launched in its lifecycle
+  private val extensions = createExtensions(conf, urlClassLoader)
+
+  // Start this executor services
+  start()
+
   startDriverHeartbeater()
 
   def launchTask(
@@ -121,6 +128,18 @@ private[spark] class Executor(
     }
   }
 
+  def start(): Unit = {
+    // Make sure that we are using the same classloader which was used
+    // for extension creation.
+    val ccl = Thread.currentThread().getContextClassLoader
+    Thread.currentThread().setContextClassLoader(urlClassLoader)
+    try {
+      extensions.foreach(_.start(conf))
+    } finally {
+      Thread.currentThread().setContextClassLoader(ccl);
+    }
+  }
+
   def stop() {
     env.metricsSystem.report()
     isStopped = true
@@ -128,6 +147,34 @@ private[spark] class Executor(
     if (!isLocal) {
       env.stop()
     }
+    extensions.foreach(_.stop(conf))
+  }
+
+  private def createExtensions(conf: SparkConf, cl: ClassLoader):Seq[PlatformExtension] = {
+    // To create extension we need to prefetch spark.jars and then classload extension
+    // class file.
+    // 1a) Prefetch spark jars
+    val jars = conf.getOption("spark.jars")
+    val jmap = new mutable.HashMap[String, Long]()
+    if (jars.isDefined && !jars.get.isEmpty) {
+      jars.get.split(',').foreach( j => jmap.put(j, 1L))
+    }
+    // 1b) Fetch jars from master
+    updateDependencies(new mutable.HashMap[String,Long](), jmap)
+
+    // 2) Now instantiate extension, but only those which are intercepting Executor lifecycle
+    val opt = conf.getOption("spark.extensions")
+    opt .filter(!_.isEmpty)
+        .map(
+          _ .split(",")
+            .map(instantiateExtension(_, cl))
+            .filter(ext => ext.intercept == InterceptionPoints.EXECUTOR_LC).toSeq)
+        .getOrElse(Seq[PlatformExtension]())
+  }
+
+  private def instantiateExtension(extName: String, cl: ClassLoader):PlatformExtension = {
+    val klazz = Class.forName(extName, true, cl)
+    klazz.newInstance().asInstanceOf[PlatformExtension]
   }
 
   class TaskRunner(
