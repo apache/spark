@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
 class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingStrategy)
   extends Serializable {
 
-  require(trees.size > 0, s"GradientBoostingModel cannot be created with empty trees collection.")
+  require(numTrees > 0, s"GradientBoostingModel cannot be created with empty trees collection.")
 
   /**
    * Predict values for a single data point using the model trained.
@@ -37,12 +37,12 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingS
    */
   private def predictRaw(features: Vector): Double = {
     val treePredictions = trees.map(tree => tree.predict(features))
-    if (trees.size == 1){
+    if (numTrees == 1){
       treePredictions(0)
     } else {
       var prediction = treePredictions(0)
       var index = 1
-      while (index < trees.size) {
+      while (index < numTrees) {
         prediction += strategy.learningRate * treePredictions(index)
         index += 1
       }
