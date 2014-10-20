@@ -81,7 +81,7 @@ def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
-    limit = os.environ.get("PYSPARK_WORKER_MEMORY_LIMIT")
+    limit = os.environ.get("_PYSPARK_WORKER_MEMORY_LIMIT")
     if limit:
         # limit the memory used by each worker (in bytes)
         vslimit = _parse_memory(limit) * 1024 * 1024
@@ -106,7 +106,7 @@ def manager():
     signal.signal(SIGTERM, handle_sigterm)  # Gracefully exit on SIGTERM
     signal.signal(SIGHUP, SIG_IGN)  # Don't die on SIGHUP
 
-    reuse = os.environ.get("SPARK_REUSE_WORKER")
+    reuse = os.environ.get("_PYSPARK_REUSE_WORKER")
 
     # Initialization complete
     try:

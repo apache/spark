@@ -65,10 +65,10 @@ private[spark] class PythonRDD(
       f => f.getPath()).mkString(",")
     envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
     if (reuseWorker) {
-      envVars += ("SPARK_REUSE_WORKER" -> "1")
+      envVars += ("_PYSPARK_REUSE_WORKER" -> "1")
     }
     if (!memoryLimit.isEmpty) {
-      envVars += ("PYSPARK_WORKER_MEMORY_LIMIT" -> memoryLimit)
+      envVars += ("_PYSPARK_WORKER_MEMORY_LIMIT" -> memoryLimit)
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
