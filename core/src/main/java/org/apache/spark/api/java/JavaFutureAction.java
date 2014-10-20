@@ -15,21 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.api.java;
 
-import org.apache.spark.annotation.DeveloperApi
 
-/**
- * Predicted value for a node
- * @param predict predicted value
- * @param prob probability of the label (classification only)
- */
-@DeveloperApi
-class Predict(
-    val predict: Double,
-    val prob: Double = 0.0) extends Serializable {
+import java.util.List;
+import java.util.concurrent.Future;
 
-  override def toString = {
-    "predict = %f, prob = %f".format(predict, prob)
-  }
+public interface JavaFutureAction<T> extends Future<T> {
+
+  /**
+   * Returns the job IDs run by the underlying async operation.
+   *
+   * This returns the current snapshot of the job list. Certain operations may run multiple
+   * jobs, so multiple calls to this method may return different lists.
+   */
+  List<Integer> jobIds();
 }

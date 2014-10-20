@@ -22,6 +22,7 @@ Python package for statistical functions in MLlib.
 from functools import wraps
 
 from pyspark import PickleSerializer
+from pyspark.mllib.linalg import _to_java_object_rdd
 
 
 __all__ = ['MultivariateStatisticalSummary', 'Statistics']
@@ -106,7 +107,7 @@ class Statistics(object):
         array([ 2.,  0.,  0., -2.])
         """
         sc = rdd.ctx
-        jrdd = rdd._to_java_object_rdd()
+        jrdd = _to_java_object_rdd(rdd)
         cStats = sc._jvm.PythonMLLibAPI().colStats(jrdd)
         return MultivariateStatisticalSummary(sc, cStats)
 
@@ -162,14 +163,14 @@ class Statistics(object):
         if type(y) == str:
             raise TypeError("Use 'method=' to specify method name.")
 
-        jx = x._to_java_object_rdd()
+        jx = _to_java_object_rdd(x)
         if not y:
             resultMat = sc._jvm.PythonMLLibAPI().corr(jx, method)
             bytes = sc._jvm.SerDe.dumps(resultMat)
             ser = PickleSerializer()
             return ser.loads(str(bytes)).toArray()
         else:
-            jy = y._to_java_object_rdd()
+            jy = _to_java_object_rdd(y)
             return sc._jvm.PythonMLLibAPI().corr(jx, jy, method)
 
 

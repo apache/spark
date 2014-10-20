@@ -78,12 +78,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val process = (Process(command) #< queryStream).run(
       ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
 
-    Future {
-      val exitValue = process.exitValue()
-      foundAllExpectedAnswers.tryFailure(
-        new SparkException(s"Spark SQL CLI process exit value: $exitValue"))
-    }
-
     try {
       Await.result(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
