@@ -116,7 +116,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath())
+      client.prepareLocalResources(args,tempDir.getAbsolutePath())
       sparkConf.getOption(ClientBase.CONF_SPARK_USER_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -248,9 +248,11 @@ class ClientBaseSuite extends FunSuite with Matchers {
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
     override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = ???
-    override def submitApplication(): ApplicationId = ???
+    override def submitApplication(): (ApplicationId, ClientArguments) = ???
     override def getApplicationReport(appId: ApplicationId): ApplicationReport = ???
     override def getClientToken(report: ApplicationReport): String = ???
+    override def killApplication(appId: ApplicationId): Unit = ???
+    override protected def getAppProgress(report: ApplicationReport): YarnAppProgress = ???
   }
 
 }

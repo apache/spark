@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{YarnResourceCapacity, Client, ClientArguments}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -55,10 +55,13 @@ private[spark] class YarnClientSchedulerBackend(
     argsArrayBuf ++= getExtraClientArguments
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
-    val args = new ClientArguments(argsArrayBuf.toArray, conf)
+
+    def toArgs (capacity: YarnResourceCapacity) = new ClientArguments(argsArrayBuf.toArray, conf)
+    //val args = new ClientArguments(argsArrayBuf.toArray, conf)
+    client = new Client(toArgs, conf)
+    val (applicationId, args) = client.submitApplication()
+    appId = applicationId
     totalExpectedExecutors = args.numExecutors
-    client = new Client(args, conf)
-    appId = client.submitApplication()
     waitForApplication()
     asyncMonitorApplication()
   }
