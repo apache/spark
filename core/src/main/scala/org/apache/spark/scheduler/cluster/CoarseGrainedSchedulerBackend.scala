@@ -276,10 +276,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   def requestExecutors(numExecutors: Int): Unit = { }
 
   /**
-   * Request the cluster manager to kill the specified executor.
+   * Request the cluster manager to kill the specified executors.
    * This is intended to be overridden by subclasses.
    */
-  def killExecutor(executorId: String): Unit = { }
+  def killExecutors(executorIds: Seq[String]): Unit = { }
 
 }
 

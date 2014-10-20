@@ -53,10 +53,10 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
-   * Request the ApplicationMaster to kill the specified executor.
+   * Request the ApplicationMaster to kill the specified executors.
    */
-  override def killExecutor(executorId: String): Unit = {
-    yarnSchedulerActor ! KillExecutor(executorId)
+  override def killExecutors(executorIds: Seq[String]): Unit = {
+    yarnSchedulerActor ! KillExecutors(executorIds)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -108,7 +108,7 @@ private[spark] abstract class YarnSchedulerBackend(
             "Attempted to request executors before the ApplicationMaster has registered!")
         }
 
-      case k: KillExecutor =>
+      case k: KillExecutors =>
         amActor match {
           case Some(actor) => actor ! k
           case None => logWarning(

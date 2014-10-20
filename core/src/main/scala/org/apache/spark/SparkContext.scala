@@ -872,12 +872,12 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * :: DeveloperApi ::
-   * Request the cluster manager to kill the specified executor.
+   * Request the cluster manager to kill the specified executors.
    */
   @DeveloperApi
-  def killExecutor(executorId: String): Unit = {
+  def killExecutors(executorIds: Seq[String]): Unit = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend => b.killExecutor(executorId)
+      case b: CoarseGrainedSchedulerBackend => b.killExecutors(executorIds)
       case null => logWarning("Attempted to kill executors before initializing the backend")
       case _ => logWarning("Killing executors is only supported in coarse-grained mode")
     }

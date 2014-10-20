@@ -490,11 +490,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Request to kill the container running the given executor.
+   * Request to kill the container running the specified executors.
    */
-  private def killExecutor(executorId: String): Unit = {
+  private def killExecutors(executorIds: Seq[String]): Unit = {
     Option(allocator) match {
-      case Some(a) => a.killExecutor(executorId)
+      case Some(a) => executorIds.foreach(a.killExecutor)
       case None => logWarning("Container allocator is not ready to kill executors yet.")
     }
   }
@@ -528,9 +528,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         logInfo(s"Driver requested $numExecutors executors.")
         requestExecutors(numExecutors)
 
-      case KillExecutor(executorId) =>
-        logInfo(s"Driver requested to kill executor $executorId.")
-        killExecutor(executorId)
+      case KillExecutors(executorIds) =>
+        logInfo(s"Driver requested to kill executors ${executorIds.mkString(", ")}.")
+        killExecutors(executorIds)
     }
   }
 
