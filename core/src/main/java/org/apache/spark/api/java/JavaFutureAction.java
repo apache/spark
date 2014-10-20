@@ -15,24 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java
+package org.apache.spark.api.java;
 
-import com.google.common.base.Optional
 
-import scala.collection.convert.Wrappers.MapWrapper
+import java.util.List;
+import java.util.concurrent.Future;
 
-private[spark] object JavaUtils {
-  def optionToOptional[T](option: Option[T]): Optional[T] =
-    option match {
-      case Some(value) => Optional.of(value)
-      case None => Optional.absent()
-    }
+public interface JavaFutureAction<T> extends Future<T> {
 
-  // Workaround for SPARK-3926 / SI-8911
-  def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
-    new SerializableMapWrapper(underlying)
-
-  class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
-    extends MapWrapper(underlying) with java.io.Serializable
-
+  /**
+   * Returns the job IDs run by the underlying async operation.
+   *
+   * This returns the current snapshot of the job list. Certain operations may run multiple
+   * jobs, so multiple calls to this method may return different lists.
+   */
+  List<Integer> jobIds();
 }
