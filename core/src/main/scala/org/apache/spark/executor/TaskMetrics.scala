@@ -83,6 +83,12 @@ class TaskMetrics extends Serializable {
   var inputMetrics: Option[InputMetrics] = None
 
   /**
+   * If this task writes data externally (e.g. to a distributed filesystem), metrics on how much
+   * data was written are stored here.
+   */
+  var outputMetrics: Option[OutputMetrics] = None
+
+  /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here.
    * This includes read metrics aggregated over all the task's shuffle dependencies.
    */
@@ -167,6 +173,18 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
    * Total bytes read.
    */
   var bytesRead: Long = 0L
+}
+
+/**
+ * :: DeveloperApi ::
+ * Metrics about writing output data.
+ */
+@DeveloperApi
+case class OutputMetrics() {
+  /**
+   * Total bytes written
+   */
+  var bytesWritten: Long = 0L
 }
 
 /**
