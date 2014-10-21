@@ -260,7 +260,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
 
   def binaryFiles(path: String):
-  JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.binaryFiles(path,defaultMinPartitions))
+  JavaPairRDD[String,PortableDataStream] =
+    new JavaPairRDD(sc.binaryFiles(path,defaultMinPartitions))
 
   /**
    * Read a directory of files as DataInputStream from HDFS,
