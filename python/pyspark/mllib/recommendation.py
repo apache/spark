@@ -53,6 +53,23 @@ class MatrixFactorizationModel(object):
     >>> model = ALS.train(ratings, 1)
     >>> model.predictAll(testset).count() == 2
     True
+
+    >>> model = ALS.train(ratings, 4)
+    >>> model.userFeatures().count() == 2
+    True
+
+    >>> first_user = model.userFeatures().take(1)[0]
+    >>> latents = first_user[1]
+    >>> len(latents) == 4
+    True
+
+    >>> model.productFeatures().count() == 2
+    True
+
+    >>> first_product = model.productFeatures().take(1)[0]
+    >>> latents = first_product[1]
+    >>> len(latents) == 4
+    True
     """
 
     def __init__(self, sc, java_model):
@@ -81,6 +98,20 @@ class MatrixFactorizationModel(object):
         tuplerdd = sc._jvm.SerDe.asTupleRDD(_to_java_object_rdd(user_product).rdd())
         jresult = self._java_model.predict(tuplerdd).toJavaRDD()
         return RDD(sc._jvm.SerDe.javaToPython(jresult), sc,
+                   AutoBatchedSerializer(PickleSerializer()))
+
+    def userFeatures(self):
+        sc = self._context
+        juf = self._java_model.userFeatures()
+        juf = sc._jvm.SerDe.fromTuple2RDD(juf).toJavaRDD()
+        return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc,
+                   AutoBatchedSerializer(PickleSerializer()))
+
+    def productFeatures(self):
+        sc = self._context
+        jpf = self._java_model.productFeatures()
+        jpf = sc._jvm.SerDe.fromTuple2RDD(jpf).toJavaRDD()
+        return RDD(sc._jvm.PythonRDD.javaToPython(jpf), sc,
                    AutoBatchedSerializer(PickleSerializer()))
 
 

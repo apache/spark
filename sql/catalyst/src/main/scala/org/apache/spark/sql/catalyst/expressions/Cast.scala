@@ -32,6 +32,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case (StringType, _: NumericType) => true
     case (StringType, TimestampType)  => true
     case (StringType, DateType)       => true
+    case (_: NumericType, DateType)   => true
+    case (BooleanType, DateType)      => true
+    case (DateType, _: NumericType)   => true
+    case (DateType, BooleanType)      => true
     case _                            => child.nullable
   }
 
