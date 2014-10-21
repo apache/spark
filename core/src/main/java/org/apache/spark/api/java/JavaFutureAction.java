@@ -15,22 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.api.java;
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
 
-/**
- * Overrides our expression evaluation tests and reruns them after optimization has occured.  This
- * is to ensure that constant folding and other optimizations do not break anything.
- */
-class ExpressionOptimizationSuite extends ExpressionEvaluationSuite {
-  override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
-    val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, NoRelation)
-    val optimizedPlan = DefaultOptimizer(plan)
-    super.checkEvaluation(optimizedPlan.expressions.head, expected, inputRow)
-  }
+import java.util.List;
+import java.util.concurrent.Future;
+
+public interface JavaFutureAction<T> extends Future<T> {
+
+  /**
+   * Returns the job IDs run by the underlying async operation.
+   *
+   * This returns the current snapshot of the job list. Certain operations may run multiple
+   * jobs, so multiple calls to this method may return different lists.
+   */
+  List<Integer> jobIds();
 }
