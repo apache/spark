@@ -107,10 +107,10 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Compute the average NDCG value of all the queries, truncated at ranking position k.
    * The discounted cumulative gain at position k is computed as:
-   *    \sum_{i=1}^k (2^{relevance of ith item} - 1) / log(i + 1),
+   *    sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
    * implementation, the relevance value is binary.
-   *
+
    * If a query has an empty ground truth set, zero will be used as ndcg together with a log warning.
    *
    * See the following paper for detail:

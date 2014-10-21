@@ -1,0 +1,148 @@
+<ul id="markdown-toc">
+  <li><a href="#clustering">Clustering</a></li>
+  <li><a href="#examples">Examples</a></li>
+</ul>
+
+<h2 id="clustering">Clustering</h2>
+
+<p>Clustering is an unsupervised learning problem whereby we aim to group subsets
+of entities with one another based on some notion of similarity.  Clustering is
+often used for exploratory analysis and/or as a component of a hierarchical
+supervised learning pipeline (in which distinct classifiers or regression
+models are trained for each cluster). </p>
+
+<p>MLlib supports
+<a href="http://en.wikipedia.org/wiki/K-means_clustering">k-means</a> clustering, one of
+the most commonly used clustering algorithms that clusters the data points into
+predefined number of clusters. The MLlib implementation includes a parallelized
+variant of the <a href="http://en.wikipedia.org/wiki/K-means%2B%2B">k-means++</a> method
+called <a href="http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf">kmeans||</a>.
+The implementation in MLlib has the following parameters:  </p>
+
+<ul>
+  <li><em>k</em> is the number of desired clusters.</li>
+  <li><em>maxIterations</em> is the maximum number of iterations to run.</li>
+  <li><em>initializationMode</em> specifies either random initialization or
+initialization via k-means||.</li>
+  <li><em>runs</em> is the number of times to run the k-means algorithm (k-means is not
+guaranteed to find a globally optimal solution, and when run multiple times on
+a given dataset, the algorithm returns the best clustering result).</li>
+  <li><em>initializationSteps</em> determines the number of steps in the k-means|| algorithm.</li>
+  <li><em>epsilon</em> determines the distance threshold within which we consider k-means to have converged. </li>
+</ul>
+
+<h2 id="examples">Examples</h2>
+
+<div class="codetabs">
+<div data-lang="scala">
+    <p>The following code snippets can be executed in <code>spark-shell</code>.</p>
+
+    <p>In the following example after loading and parsing data, we use the
+<a href="api/scala/index.html#org.apache.spark.mllib.clustering.KMeans"><code>KMeans</code></a> object to cluster the data
+into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
+Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing <em>k</em>. In fact the
+optimal <em>k</em> is usually one where there is an “elbow” in the WSSSE graph.</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.clustering.KMeans</span>
+<span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span>
+
+<span class="c1">// Load and parse the data</span>
+<span class="k">val</span> <span class="n">data</span> <span class="k">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="o">(</span><span class="s">&quot;data/mllib/kmeans_data.txt&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">parsedData</span> <span class="k">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">s</span> <span class="k">=&gt;</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">s</span><span class="o">.</span><span class="n">split</span><span class="o">(</span><span class="sc">&#39; &#39;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">toDouble</span><span class="o">))).</span><span class="n">cache</span><span class="o">()</span>
+
+<span class="c1">// Cluster the data into two classes using KMeans</span>
+<span class="k">val</span> <span class="n">numClusters</span> <span class="k">=</span> <span class="mi">2</span>
+<span class="k">val</span> <span class="n">numIterations</span> <span class="k">=</span> <span class="mi">20</span>
+<span class="k">val</span> <span class="n">clusters</span> <span class="k">=</span> <span class="nc">KMeans</span><span class="o">.</span><span class="n">train</span><span class="o">(</span><span class="n">parsedData</span><span class="o">,</span> <span class="n">numClusters</span><span class="o">,</span> <span class="n">numIterations</span><span class="o">)</span>
+
+<span class="c1">// Evaluate clustering by computing Within Set Sum of Squared Errors</span>
+<span class="k">val</span> <span class="nc">WSSSE</span> <span class="k">=</span> <span class="n">clusters</span><span class="o">.</span><span class="n">computeCost</span><span class="o">(</span><span class="n">parsedData</span><span class="o">)</span>
+<span class="n">println</span><span class="o">(</span><span class="s">&quot;Within Set Sum of Squared Errors = &quot;</span> <span class="o">+</span> <span class="nc">WSSSE</span><span class="o">)</span></code></pre></div>
+
+  </div>
+
+<div data-lang="java">
+    <p>All of MLlib’s methods use Java-friendly types, so you can import and call them there the same
+way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
+Spark Java API uses a separate <code>JavaRDD</code> class. You can convert a Java RDD to a Scala one by
+calling <code>.rdd()</code> on your <code>JavaRDD</code> object. A standalone application example
+that is equivalent to the provided example in Scala is given below:</p>
+
+    <div class="highlight"><pre><code class="language-java" data-lang="java"><span class="kn">import</span> <span class="nn">org.apache.spark.api.java.*</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.api.java.function.Function</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.clustering.KMeans</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.clustering.KMeansModel</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vector</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.SparkConf</span><span class="o">;</span>
+
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">KMeansExample</span> <span class="o">{</span>
+  <span class="kd">public</span> <span class="kd">static</span> <span class="kt">void</span> <span class="nf">main</span><span class="o">(</span><span class="n">String</span><span class="o">[]</span> <span class="n">args</span><span class="o">)</span> <span class="o">{</span>
+    <span class="n">SparkConf</span> <span class="n">conf</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">SparkConf</span><span class="o">().</span><span class="na">setAppName</span><span class="o">(</span><span class="s">&quot;K-means Example&quot;</span><span class="o">);</span>
+    <span class="n">JavaSparkContext</span> <span class="n">sc</span> <span class="o">=</span> <span class="k">new</span> <span class="nf">JavaSparkContext</span><span class="o">(</span><span class="n">conf</span><span class="o">);</span>
+
+    <span class="c1">// Load and parse data</span>
+    <span class="n">String</span> <span class="n">path</span> <span class="o">=</span> <span class="s">&quot;data/mllib/kmeans_data.txt&quot;</span><span class="o">;</span>
+    <span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="na">textFile</span><span class="o">(</span><span class="n">path</span><span class="o">);</span>
+    <span class="n">JavaRDD</span><span class="o">&lt;</span><span class="n">Vector</span><span class="o">&gt;</span> <span class="n">parsedData</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="na">map</span><span class="o">(</span>
+      <span class="k">new</span> <span class="n">Function</span><span class="o">&lt;</span><span class="n">String</span><span class="o">,</span> <span class="n">Vector</span><span class="o">&gt;()</span> <span class="o">{</span>
+        <span class="kd">public</span> <span class="n">Vector</span> <span class="nf">call</span><span class="o">(</span><span class="n">String</span> <span class="n">s</span><span class="o">)</span> <span class="o">{</span>
+          <span class="n">String</span><span class="o">[]</span> <span class="n">sarray</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="na">split</span><span class="o">(</span><span class="s">&quot; &quot;</span><span class="o">);</span>
+          <span class="kt">double</span><span class="o">[]</span> <span class="n">values</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">double</span><span class="o">[</span><span class="n">sarray</span><span class="o">.</span><span class="na">length</span><span class="o">];</span>
+          <span class="k">for</span> <span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">sarray</span><span class="o">.</span><span class="na">length</span><span class="o">;</span> <span class="n">i</span><span class="o">++)</span>
+            <span class="n">values</span><span class="o">[</span><span class="n">i</span><span class="o">]</span> <span class="o">=</span> <span class="n">Double</span><span class="o">.</span><span class="na">parseDouble</span><span class="o">(</span><span class="n">sarray</span><span class="o">[</span><span class="n">i</span><span class="o">]);</span>
+          <span class="k">return</span> <span class="n">Vectors</span><span class="o">.</span><span class="na">dense</span><span class="o">(</span><span class="n">values</span><span class="o">);</span>
+        <span class="o">}</span>
+      <span class="o">}</span>
+    <span class="o">);</span>
+    <span class="n">parsedData</span><span class="o">.</span><span class="na">cache</span><span class="o">();</span>
+
+    <span class="c1">// Cluster the data into two classes using KMeans</span>
+    <span class="kt">int</span> <span class="n">numClusters</span> <span class="o">=</span> <span class="mi">2</span><span class="o">;</span>
+    <span class="kt">int</span> <span class="n">numIterations</span> <span class="o">=</span> <span class="mi">20</span><span class="o">;</span>
+    <span class="n">KMeansModel</span> <span class="n">clusters</span> <span class="o">=</span> <span class="n">KMeans</span><span class="o">.</span><span class="na">train</span><span class="o">(</span><span class="n">parsedData</span><span class="o">.</span><span class="na">rdd</span><span class="o">(),</span> <span class="n">numClusters</span><span class="o">,</span> <span class="n">numIterations</span><span class="o">);</span>
+
+    <span class="c1">// Evaluate clustering by computing Within Set Sum of Squared Errors</span>
+    <span class="kt">double</span> <span class="n">WSSSE</span> <span class="o">=</span> <span class="n">clusters</span><span class="o">.</span><span class="na">computeCost</span><span class="o">(</span><span class="n">parsedData</span><span class="o">.</span><span class="na">rdd</span><span class="o">());</span>
+    <span class="n">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">&quot;Within Set Sum of Squared Errors = &quot;</span> <span class="o">+</span> <span class="n">WSSSE</span><span class="o">);</span>
+  <span class="o">}</span>
+<span class="o">}</span></code></pre></div>
+
+    <p>In order to run the above standalone application, follow the instructions
+provided in the <a href="quick-start.html#standalone-applications">Standalone
+Applications</a> section of the Spark
+quick-start guide. Be sure to also include <em>spark-mllib</em> to your build file as
+a dependency.</p>
+  </div>
+
+<div data-lang="python">
+    <p>The following examples can be tested in the PySpark shell.</p>
+
+    <p>In the following example after loading and parsing data, we use the KMeans object to cluster the
+data into two clusters. The number of desired clusters is passed to the algorithm. We then compute
+Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing <em>k</em>. In
+fact the optimal <em>k</em> is usually one where there is an “elbow” in the WSSSE graph.</p>
+
+    <div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark.mllib.clustering</span> <span class="kn">import</span> <span class="n">KMeans</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="n">array</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">sqrt</span>
+
+<span class="c"># Load and parse the data</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">textFile</span><span class="p">(</span><span class="s">&quot;data/mllib/kmeans_data.txt&quot;</span><span class="p">)</span>
+<span class="n">parsedData</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">line</span><span class="p">:</span> <span class="n">array</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39; &#39;</span><span class="p">)]))</span>
+
+<span class="c"># Build the model (cluster the data)</span>
+<span class="n">clusters</span> <span class="o">=</span> <span class="n">KMeans</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">parsedData</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">maxIterations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">runs</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">initializationMode</span><span class="o">=</span><span class="s">&quot;random&quot;</span><span class="p">)</span>
+
+<span class="c"># Evaluate clustering by computing Within Set Sum of Squared Errors</span>
+<span class="k">def</span> <span class="nf">error</span><span class="p">(</span><span class="n">point</span><span class="p">):</span>
+    <span class="n">center</span> <span class="o">=</span> <span class="n">clusters</span><span class="o">.</span><span class="n">centers</span><span class="p">[</span><span class="n">clusters</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">point</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">([</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="n">point</span> <span class="o">-</span> <span class="n">center</span><span class="p">)]))</span>
+
+<span class="n">WSSSE</span> <span class="o">=</span> <span class="n">parsedData</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">point</span><span class="p">:</span> <span class="n">error</span><span class="p">(</span><span class="n">point</span><span class="p">))</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span><span class="p">)</span>
+<span class="k">print</span><span class="p">(</span><span class="s">&quot;Within Set Sum of Squared Error = &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">WSSSE</span><span class="p">))</span></code></pre></div>
+
+  </div>
+
+</div>

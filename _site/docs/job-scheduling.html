@@ -1,0 +1,166 @@
+<ul id="markdown-toc">
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#scheduling-across-applications">Scheduling Across Applications</a></li>
+  <li><a href="#scheduling-within-an-application">Scheduling Within an Application</a>    <ul>
+      <li><a href="#fair-scheduler-pools">Fair Scheduler Pools</a></li>
+      <li><a href="#default-behavior-of-pools">Default Behavior of Pools</a></li>
+      <li><a href="#configuring-pool-properties">Configuring Pool Properties</a></li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="overview">Overview</h1>
+
+<p>Spark has several facilities for scheduling resources between computations. First, recall that, as described
+in the <a href="cluster-overview.html">cluster mode overview</a>, each Spark application (instance of SparkContext)
+runs an independent set of executor processes. The cluster managers that Spark runs on provide
+facilities for <a href="#scheduling-across-applications">scheduling across applications</a>. Second,
+<em>within</em> each Spark application, multiple “jobs” (Spark actions) may be running concurrently
+if they were submitted by different threads. This is common if your application is serving requests
+over the network; for example, the <a href="http://shark.cs.berkeley.edu">Shark</a> server works this way. Spark
+includes a <a href="#scheduling-within-an-application">fair scheduler</a> to schedule resources within each SparkContext.</p>
+
+<h1 id="scheduling-across-applications">Scheduling Across Applications</h1>
+
+<p>When running on a cluster, each Spark application gets an independent set of executor JVMs that only
+run tasks and store data for that application. If multiple users need to share your cluster, there are
+different options to manage allocation, depending on the cluster manager.</p>
+
+<p>The simplest option, available on all cluster managers, is <em>static partitioning</em> of resources. With
+this approach, each application is given a maximum amount of resources it can use, and holds onto them
+for its whole duration. This is the approach used in Spark’s <a href="spark-standalone.html">standalone</a>
+and <a href="running-on-yarn.html">YARN</a> modes, as well as the
+<a href="running-on-mesos.html#mesos-run-modes">coarse-grained Mesos mode</a>.
+Resource allocation can be configured as follows, based on the cluster type:</p>
+
+<ul>
+  <li><strong>Standalone mode:</strong> By default, applications submitted to the standalone mode cluster will run in
+FIFO (first-in-first-out) order, and each application will try to use all available nodes. You can limit
+the number of nodes an application uses by setting the <code>spark.cores.max</code> configuration property in it,
+or change the default for applications that don’t set this setting through <code>spark.deploy.defaultCores</code>. 
+Finally, in addition to controlling cores, each application’s <code>spark.executor.memory</code> setting controls
+its memory use.</li>
+  <li><strong>Mesos:</strong> To use static partitioning on Mesos, set the <code>spark.mesos.coarse</code> configuration property to <code>true</code>,
+and optionally set <code>spark.cores.max</code> to limit each application’s resource share as in the standalone mode.
+You should also set <code>spark.executor.memory</code> to control the executor memory.</li>
+  <li><strong>YARN:</strong> The <code>--num-executors</code> option to the Spark YARN client controls how many executors it will allocate
+on the cluster, while <code>--executor-memory</code> and <code>--executor-cores</code> control the resources per executor.</li>
+</ul>
+
+<p>A second option available on Mesos is <em>dynamic sharing</em> of CPU cores. In this mode, each Spark application
+still has a fixed and independent memory allocation (set by <code>spark.executor.memory</code>), but when the
+application is not running tasks on a machine, other applications may run tasks on those cores. This mode
+is useful when you expect large numbers of not overly active applications, such as shell sessions from
+separate users. However, it comes with a risk of less predictable latency, because it may take a while for
+an application to gain back cores on one node when it has work to do. To use this mode, simply use a
+<code>mesos://</code> URL without setting <code>spark.mesos.coarse</code> to true.</p>
+
+<p>Note that none of the modes currently provide memory sharing across applications. If you would like to share
+data this way, we recommend running a single server application that can serve multiple requests by querying
+the same RDDs. For example, the <a href="http://shark.cs.berkeley.edu">Shark</a> JDBC server works this way for SQL
+queries. In future releases, in-memory storage systems such as <a href="http://tachyon-project.org">Tachyon</a> will
+provide another approach to share RDDs.</p>
+
+<h1 id="scheduling-within-an-application">Scheduling Within an Application</h1>
+
+<p>Inside a given Spark application (SparkContext instance), multiple parallel jobs can run simultaneously if
+they were submitted from separate threads. By “job”, in this section, we mean a Spark action (e.g. <code>save</code>,
+<code>collect</code>) and any tasks that need to run to evaluate that action. Spark’s scheduler is fully thread-safe
+and supports this use case to enable applications that serve multiple requests (e.g. queries for
+multiple users).</p>
+
+<p>By default, Spark’s scheduler runs jobs in FIFO fashion. Each job is divided into “stages” (e.g. map and
+reduce phases), and the first job gets priority on all available resources while its stages have tasks to
+launch, then the second job gets priority, etc. If the jobs at the head of the queue don’t need to use
+the whole cluster, later jobs can start to run right away, but if the jobs at the head of the queue are
+large, then later jobs may be delayed significantly.</p>
+
+<p>Starting in Spark 0.8, it is also possible to configure fair sharing between jobs. Under fair sharing,
+Spark assigns tasks between jobs in a “round robin” fashion, so that all jobs get a roughly equal share
+of cluster resources. This means that short jobs submitted while a long job is running can start receiving
+resources right away and still get good response times, without waiting for the long job to finish. This
+mode is best for multi-user settings.</p>
+
+<p>To enable the fair scheduler, simply set the <code>spark.scheduler.mode</code> property to <code>FAIR</code> when configuring
+a SparkContext:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">val</span> <span class="n">conf</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">SparkConf</span><span class="o">().</span><span class="n">setMaster</span><span class="o">(...).</span><span class="n">setAppName</span><span class="o">(...)</span>
+<span class="n">conf</span><span class="o">.</span><span class="n">set</span><span class="o">(</span><span class="s">&quot;spark.scheduler.mode&quot;</span><span class="o">,</span> <span class="s">&quot;FAIR&quot;</span><span class="o">)</span>
+<span class="k">val</span> <span class="n">sc</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">SparkContext</span><span class="o">(</span><span class="n">conf</span><span class="o">)</span></code></pre></div>
+
+<h2 id="fair-scheduler-pools">Fair Scheduler Pools</h2>
+
+<p>The fair scheduler also supports grouping jobs into <em>pools</em>, and setting different scheduling options
+(e.g. weight) for each pool. This can be useful to create a “high-priority” pool for more important jobs,
+for example, or to group the jobs of each user together and give <em>users</em> equal shares regardless of how
+many concurrent jobs they have instead of giving <em>jobs</em> equal shares. This approach is modeled after the
+<a href="http://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/FairScheduler.html">Hadoop Fair Scheduler</a>.</p>
+
+<p>Without any intervention, newly submitted jobs go into a <em>default pool</em>, but jobs’ pools can be set by
+adding the <code>spark.scheduler.pool</code> “local property” to the SparkContext in the thread that’s submitting them.
+This is done as follows:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="c1">// Assuming sc is your SparkContext variable</span>
+<span class="n">sc</span><span class="o">.</span><span class="n">setLocalProperty</span><span class="o">(</span><span class="s">&quot;spark.scheduler.pool&quot;</span><span class="o">,</span> <span class="s">&quot;pool1&quot;</span><span class="o">)</span></code></pre></div>
+
+<p>After setting this local property, <em>all</em> jobs submitted within this thread (by calls in this thread
+to <code>RDD.save</code>, <code>count</code>, <code>collect</code>, etc) will use this pool name. The setting is per-thread to make
+it easy to have a thread run multiple jobs on behalf of the same user. If you’d like to clear the
+pool that a thread is associated with, simply call:</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="n">sc</span><span class="o">.</span><span class="n">setLocalProperty</span><span class="o">(</span><span class="s">&quot;spark.scheduler.pool&quot;</span><span class="o">,</span> <span class="kc">null</span><span class="o">)</span></code></pre></div>
+
+<h2 id="default-behavior-of-pools">Default Behavior of Pools</h2>
+
+<p>By default, each pool gets an equal share of the cluster (also equal in share to each job in the default
+pool), but inside each pool, jobs run in FIFO order. For example, if you create one pool per user, this
+means that each user will get an equal share of the cluster, and that each user’s queries will run in
+order instead of later queries taking resources from that user’s earlier ones.</p>
+
+<h2 id="configuring-pool-properties">Configuring Pool Properties</h2>
+
+<p>Specific pools’ properties can also be modified through a configuration file. Each pool supports three
+properties:</p>
+
+<ul>
+  <li><code>schedulingMode</code>: This can be FIFO or FAIR, to control whether jobs within the pool queue up behind
+each other (the default) or share the pool’s resources fairly.</li>
+  <li><code>weight</code>: This controls the pool’s share of the cluster relative to other pools. By default, all pools
+have a weight of 1. If you give a specific pool a weight of 2, for example, it will get 2x more
+resources as other active pools. Setting a high weight such as 1000 also makes it possible to implement
+<em>priority</em> between pools—in essence, the weight-1000 pool will always get to launch tasks first
+whenever it has jobs active.</li>
+  <li><code>minShare</code>: Apart from an overall weight, each pool can be given a <em>minimum shares</em> (as a number of
+CPU cores) that the administrator would like it to have. The fair scheduler always attempts to meet
+all active pools’ minimum shares before redistributing extra resources according to the weights.
+The <code>minShare</code> property can therefore be another way to ensure that a pool can always get up to a
+certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
+of the cluster. By default, each pool’s <code>minShare</code> is 0.</li>
+</ul>
+
+<p>The pool properties can be set by creating an XML file, similar to <code>conf/fairscheduler.xml.template</code>,
+and setting a <code>spark.scheduler.allocation.file</code> property in your
+<a href="configuration.html#spark-properties">SparkConf</a>.</p>
+
+<div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="n">conf</span><span class="o">.</span><span class="n">set</span><span class="o">(</span><span class="s">&quot;spark.scheduler.allocation.file&quot;</span><span class="o">,</span> <span class="s">&quot;/path/to/file&quot;</span><span class="o">)</span></code></pre></div>
+
+<p>The format of the XML file is simply a <code>&lt;pool&gt;</code> element for each pool, with different elements
+within it for the various settings. For example:</p>
+
+<div class="highlight"><pre><code class="language-xml" data-lang="xml"><span class="cp">&lt;?xml version=&quot;1.0&quot;?&gt;</span>
+<span class="nt">&lt;allocations&gt;</span>
+  <span class="nt">&lt;pool</span> <span class="na">name=</span><span class="s">&quot;production&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;schedulingMode&gt;</span>FAIR<span class="nt">&lt;/schedulingMode&gt;</span>
+    <span class="nt">&lt;weight&gt;</span>1<span class="nt">&lt;/weight&gt;</span>
+    <span class="nt">&lt;minShare&gt;</span>2<span class="nt">&lt;/minShare&gt;</span>
+  <span class="nt">&lt;/pool&gt;</span>
+  <span class="nt">&lt;pool</span> <span class="na">name=</span><span class="s">&quot;test&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;schedulingMode&gt;</span>FIFO<span class="nt">&lt;/schedulingMode&gt;</span>
+    <span class="nt">&lt;weight&gt;</span>2<span class="nt">&lt;/weight&gt;</span>
+    <span class="nt">&lt;minShare&gt;</span>3<span class="nt">&lt;/minShare&gt;</span>
+  <span class="nt">&lt;/pool&gt;</span>
+<span class="nt">&lt;/allocations&gt;</span></code></pre></div>
+
+<p>A full example is also available in <code>conf/fairscheduler.xml.template</code>. Note that any pools not
+configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
+weight 1, and minShare 0).</p>

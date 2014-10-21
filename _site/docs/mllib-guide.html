@@ -1,0 +1,173 @@
+<p>MLlib is Spark’s scalable machine learning library consisting of common learning algorithms and utilities,
+including classification, regression, clustering, collaborative
+filtering, dimensionality reduction, as well as underlying optimization primitives, as outlined below:</p>
+
+<ul>
+  <li><a href="mllib-data-types.html">Data types</a></li>
+  <li><a href="mllib-statistics.html">Basic statistics</a>
+    <ul>
+      <li>summary statistics</li>
+      <li>correlations</li>
+      <li>stratified sampling</li>
+      <li>hypothesis testing</li>
+      <li>random data generation  </li>
+    </ul>
+  </li>
+  <li><a href="mllib-classification-regression.html">Classification and regression</a>
+    <ul>
+      <li><a href="mllib-linear-methods.html">linear models (SVMs, logistic regression, linear regression)</a></li>
+      <li><a href="mllib-decision-tree.html">decision trees</a></li>
+      <li><a href="mllib-naive-bayes.html">naive Bayes</a></li>
+    </ul>
+  </li>
+  <li><a href="mllib-collaborative-filtering.html">Collaborative filtering</a>
+    <ul>
+      <li>alternating least squares (ALS)</li>
+    </ul>
+  </li>
+  <li><a href="mllib-clustering.html">Clustering</a>
+    <ul>
+      <li>k-means</li>
+    </ul>
+  </li>
+  <li><a href="mllib-dimensionality-reduction.html">Dimensionality reduction</a>
+    <ul>
+      <li>singular value decomposition (SVD)</li>
+      <li>principal component analysis (PCA)</li>
+    </ul>
+  </li>
+  <li><a href="mllib-feature-extraction.html">Feature extraction and transformation</a></li>
+  <li><a href="mllib-optimization.html">Optimization (developer)</a>
+    <ul>
+      <li>stochastic gradient descent</li>
+      <li>limited-memory BFGS (L-BFGS)</li>
+    </ul>
+  </li>
+</ul>
+
+<p>MLlib is under active development.
+The APIs marked <code>Experimental</code>/<code>DeveloperApi</code> may change in future releases, 
+and the migration guide below will explain all changes between releases.</p>
+
+<h1 id="dependencies">Dependencies</h1>
+
+<p>MLlib uses the linear algebra package <a href="http://www.scalanlp.org/">Breeze</a>,
+which depends on <a href="https://github.com/fommil/netlib-java">netlib-java</a>,
+and <a href="https://github.com/mikiobraun/jblas">jblas</a>. 
+<code>netlib-java</code> and <code>jblas</code> depend on native Fortran routines.
+You need to install the
+<a href="https://github.com/mikiobraun/jblas/wiki/Missing-Libraries">gfortran runtime library</a>
+if it is not already present on your nodes.
+MLlib will throw a linking error if it cannot detect these libraries automatically.
+Due to license issues, we do not include <code>netlib-java</code>’s native libraries in MLlib’s
+dependency set under default settings.
+If no native library is available at runtime, you will see a warning message.
+To use native libraries from <code>netlib-java</code>, please build Spark with <code>-Pnetlib-lgpl</code> or
+include <code>com.github.fommil.netlib:all:1.1.2</code> as a dependency of your project.
+If you want to use optimized BLAS/LAPACK libraries such as
+<a href="http://www.openblas.net/">OpenBLAS</a>, please link its shared libraries to
+<code>/usr/lib/libblas.so.3</code> and <code>/usr/lib/liblapack.so.3</code>, respectively.
+BLAS/LAPACK libraries on worker nodes should be built without multithreading.</p>
+
+<p>To use MLlib in Python, you will need <a href="http://www.numpy.org">NumPy</a> version 1.4 or newer.</p>
+
+<hr />
+
+<h1 id="migration-guide">Migration Guide</h1>
+
+<h2 id="from-10-to-11">From 1.0 to 1.1</h2>
+
+<p>The only API changes in MLlib v1.1 are in
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>,
+which continues to be an experimental API in MLlib 1.1:</p>
+
+<ol>
+  <li>
+    <p><em>(Breaking change)</em> The meaning of tree depth has been changed by 1 in order to match
+the implementations of trees in
+<a href="http://scikit-learn.org/stable/modules/classes.html#module-sklearn.tree">scikit-learn</a>
+and in <a href="http://cran.r-project.org/web/packages/rpart/index.html">rpart</a>.
+In MLlib v1.0, a depth-1 tree had 1 leaf node, and a depth-2 tree had 1 root node and 2 leaf nodes.
+In MLlib v1.1, a depth-0 tree has 1 leaf node, and a depth-1 tree has 1 root node and 2 leaf nodes.
+This depth is specified by the <code>maxDepth</code> parameter in
+<a href="api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy"><code>Strategy</code></a>
+or via <a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>
+static <code>trainClassifier</code> and <code>trainRegressor</code> methods.</p>
+  </li>
+  <li>
+    <p><em>(Non-breaking change)</em> We recommend using the newly added <code>trainClassifier</code> and <code>trainRegressor</code>
+methods to build a <a href="api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree"><code>DecisionTree</code></a>,
+rather than using the old parameter class <code>Strategy</code>.  These new training methods explicitly
+separate classification and regression, and they replace specialized parameter types with
+simple <code>String</code> types.</p>
+  </li>
+</ol>
+
+<p>Examples of the new, recommended <code>trainClassifier</code> and <code>trainRegressor</code> are given in the
+<a href="mllib-decision-tree.html#examples">Decision Trees Guide</a>.</p>
+
+<h2 id="from-09-to-10">From 0.9 to 1.0</h2>
+
+<p>In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
+breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
+take advantage of sparsity in both storage and computation. Details are described below.</p>
+
+<div class="codetabs">
+<div data-lang="scala">
+
+    <p>We used to represent a feature vector by <code>Array[Double]</code>, which is replaced by
+<a href="api/scala/index.html#org.apache.spark.mllib.linalg.Vector"><code>Vector</code></a> in v1.0. Algorithms that used
+to accept <code>RDD[Array[Double]]</code> now take
+<code>RDD[Vector]</code>. <a href="api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint"><code>LabeledPoint</code></a>
+is now a wrapper of <code>(Double, Vector)</code> instead of <code>(Double, Array[Double])</code>. Converting
+<code>Array[Double]</code> to <code>Vector</code> is straightforward:</p>
+
+    <div class="highlight"><pre><code class="language-scala" data-lang="scala"><span class="k">import</span> <span class="nn">org.apache.spark.mllib.linalg.</span><span class="o">{</span><span class="nc">Vector</span><span class="o">,</span> <span class="nc">Vectors</span><span class="o">}</span>
+
+<span class="k">val</span> <span class="n">array</span><span class="k">:</span> <span class="kt">Array</span><span class="o">[</span><span class="kt">Double</span><span class="o">]</span> <span class="k">=</span> <span class="o">...</span> <span class="c1">// a double array</span>
+<span class="k">val</span> <span class="n">vector</span><span class="k">:</span> <span class="kt">Vector</span> <span class="o">=</span> <span class="nc">Vectors</span><span class="o">.</span><span class="n">dense</span><span class="o">(</span><span class="n">array</span><span class="o">)</span> <span class="c1">// a dense vector</span></code></pre></div>
+
+    <p><a href="api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$"><code>Vectors</code></a> provides factory methods to create sparse vectors.</p>
+
+    <p><em>Note</em>: Scala imports <code>scala.collection.immutable.Vector</code> by default, so you have to import <code>org.apache.spark.mllib.linalg.Vector</code> explicitly to use MLlib’s <code>Vector</code>.</p>
+
+  </div>
+
+<div data-lang="java">
+
+    <p>We used to represent a feature vector by <code>double[]</code>, which is replaced by
+<a href="api/java/index.html?org/apache/spark/mllib/linalg/Vector.html"><code>Vector</code></a> in v1.0. Algorithms that used
+to accept <code>RDD&lt;double[]&gt;</code> now take
+<code>RDD&lt;Vector&gt;</code>. <a href="api/java/index.html?org/apache/spark/mllib/regression/LabeledPoint.html"><code>LabeledPoint</code></a>
+is now a wrapper of <code>(double, Vector)</code> instead of <code>(double, double[])</code>. Converting <code>double[]</code> to
+<code>Vector</code> is straightforward:</p>
+
+    <div class="highlight"><pre><code class="language-java" data-lang="java"><span class="kn">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vector</span><span class="o">;</span>
+<span class="kn">import</span> <span class="nn">org.apache.spark.mllib.linalg.Vectors</span><span class="o">;</span>
+
+<span class="kt">double</span><span class="o">[]</span> <span class="n">array</span> <span class="o">=</span> <span class="o">...</span> <span class="c1">// a double array</span>
+<span class="n">Vector</span> <span class="n">vector</span> <span class="o">=</span> <span class="n">Vectors</span><span class="o">.</span><span class="na">dense</span><span class="o">(</span><span class="n">array</span><span class="o">);</span> <span class="c1">// a dense vector</span></code></pre></div>
+
+    <p><a href="api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$"><code>Vectors</code></a> provides factory methods to
+create sparse vectors.</p>
+
+  </div>
+
+<div data-lang="python">
+
+    <p>We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to
+the label and the rest are features.  This representation is replaced by class
+<a href="api/python/pyspark.mllib.regression.LabeledPoint-class.html"><code>LabeledPoint</code></a>, which takes both
+dense and sparse feature vectors.</p>
+
+    <div class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">pyspark.mllib.linalg</span> <span class="kn">import</span> <span class="n">SparseVector</span>
+<span class="kn">from</span> <span class="nn">pyspark.mllib.regression</span> <span class="kn">import</span> <span class="n">LabeledPoint</span>
+
+<span class="c"># Create a labeled point with a positive label and a dense feature vector.</span>
+<span class="n">pos</span> <span class="o">=</span> <span class="n">LabeledPoint</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
+
+<span class="c"># Create a labeled point with a negative label and a sparse feature vector.</span>
+<span class="n">neg</span> <span class="o">=</span> <span class="n">LabeledPoint</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">SparseVector</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]))</span></code></pre></div>
+
+  </div>
+</div>

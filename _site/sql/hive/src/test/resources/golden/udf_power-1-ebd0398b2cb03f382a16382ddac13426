@@ -1,0 +1,5 @@
+power(x1, x2) - raise x1 to the power of x2
+Synonyms: pow
+Example:
+  > SELECT power(2, 3) FROM src LIMIT 1;
+  8

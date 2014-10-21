@@ -1,0 +1,5 @@
+date_sub(start_date, num_days) - Returns the date that is num_days before start_date.
+start_date is a string in the format 'yyyy-MM-dd HH:mm:ss' or 'yyyy-MM-dd'. num_days is a number. The time part of start_date is ignored.
+Example:
+   > SELECT date_sub('2009-30-07', 1) FROM src LIMIT 1;
+  '2009-29-07'

@@ -1,0 +1,52 @@
+<p><a href="http://kafka.apache.org/">Apache Kafka</a> is publish-subscribe messaging rethought as a distributed, partitioned, replicated commit log service.  Here we explain how to configure Spark Streaming to receive data from Kafka.</p>
+
+<ol>
+  <li>
+    <p><strong>Linking:</strong> In your SBT/Maven projrect definition, link your streaming application against the following artifact (see <a href="streaming-programming-guide.html#linking">Linking section</a> in the main programming guide for further information).</p>
+
+    <pre><code> groupId = org.apache.spark
+ artifactId = spark-streaming-kafka_
+ version = 
+</code></pre>
+  </li>
+  <li>
+    <p><strong>Programming:</strong> In the streaming application code, import <code>KafkaUtils</code> and create input DStream as follows.</p>
+
+    <div class="codetabs">
+ <div data-lang="scala">
+        <pre><code> import org.apache.spark.streaming.kafka._
+
+ val kafkaStream = KafkaUtils.createStream(
+ 	streamingContext, [zookeeperQuorum], [group id of the consumer], [per-topic number of Kafka partitions to consume])
+</code></pre>
+
+        <p>See the <a href="api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$">API docs</a>
+ and the <a href="/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala">example</a>.</p>
+      </div>
+ <div data-lang="java">
+        <pre><code> import org.apache.spark.streaming.kafka.*;
+
+ JavaPairReceiverInputDStream&lt;String, String&gt; kafkaStream = KafkaUtils.createStream(
+ 	streamingContext, [zookeeperQuorum], [group id of the consumer], [per-topic number of Kafka partitions to consume]);
+</code></pre>
+
+        <p>See the <a href="api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html">API docs</a>
+ and the <a href="/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java">example</a>.</p>
+      </div>
+ </div>
+
+    <p><em>Points to remember:</em></p>
+
+    <ul>
+      <li>
+        <p>Topic partitions in Kafka does not correlate to partitions of RDDs generated in Spark Streaming. So increasing the number of topic-specific partitions in the <code>KafkaUtils.createStream()</code> only increases the number of threads using which topics that are consumed within a single receiver. It does not increase the parallelism of Spark in processing the data. Refer to the main document for more information on that.</p>
+      </li>
+      <li>
+        <p>Multiple Kafka input DStreams can be created with different groups and topics for parallel receiving of data using multiple receivers.</p>
+      </li>
+    </ul>
+  </li>
+  <li>
+    <p><strong>Deploying:</strong> Package <code>spark-streaming-kafka_</code> and its dependencies (except <code>spark-core_</code> and <code>spark-streaming_</code> which are provided by <code>spark-submit</code>) into the application JAR. Then use <code>spark-submit</code> to launch your application (see <a href="streaming-programming-guide.html#deploying-applications">Deploying section</a> in the main programming guide).</p>
+  </li>
+</ol>
