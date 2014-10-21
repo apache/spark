@@ -18,20 +18,18 @@
 package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
-
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.duration._
-
 import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
-
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
+
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -187,12 +185,13 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
     val info = blockManagerInfo(blockManagerId)
-
+    
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
-
+    
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
+    
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -203,6 +202,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
+    logInfo("removed " + blockManagerId)
   }
 
   private def expireDeadHosts() {
@@ -325,22 +325,23 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     val time = System.currentTimeMillis()
+    
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(manager) =>
-          // A block manager of the same executor already exists.
-          // This should never happen. Let's just quit.
-          logError("Got two different block manager registrations on " + id.executorId)
-          System.exit(1)
+          // A block manager of the same executor already exists so remove it (assumed dead).
+          logError("Got two different block manager registrations on same executor - " 
+              + " will remove, new Id " + id + ", orig id - " + manager)
+          removeExecutor(id.executorId)  
         case None =>
-          blockManagerIdByExecutor(id.executorId) = id
       }
-
-      logInfo("Registering block manager %s with %s RAM".format(
-        id.hostPort, Utils.bytesToString(maxMemSize)))
-
-      blockManagerInfo(id) =
-        new BlockManagerInfo(id, time, maxMemSize, slaveActor)
+      logInfo("Registering block manager %s with %s RAM, %s".format(
+        id.hostPort, Utils.bytesToString(maxMemSize), id))
+      
+      blockManagerIdByExecutor(id.executorId) = id
+      
+      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), 
+                                                  maxMemSize, slaveActor)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
