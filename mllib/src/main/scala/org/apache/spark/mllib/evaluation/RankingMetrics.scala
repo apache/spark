@@ -38,10 +38,11 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * Compute the average precision of all the queries, truncated at ranking position k.
    *
    * If for a query, the ranking algorithm returns n (n < k) results, the precision value will be
-   * computed as #(relevant items retrived) / k. This formula also applies when the size of the
+   * computed as #(relevant items retrieved) / k. This formula also applies when the size of the
    * ground truth set is less than k.
    *
-   * If a query has an empty ground truth set, zero will be returned together with a log warning.
+   * If a query has an empty ground truth set, zero will be used as precision together with
+   * a log warning.
    *
    * See the following paper for detail:
    *
@@ -52,24 +53,24 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @return the average precision at the first k ranking positions
    */
   def precisionAt(k: Int): Double = {
-    require (k > 0,"ranking position k should be positive")
+    require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet
-      val n = math.min(pred.length, k)
-      var i = 0
-      var cnt = 0
 
-      while (i < n) {
-        if (labSet.contains(pred(i))) {
-          cnt += 1
+      if (labSet.nonEmpty) {
+        val n = math.min(pred.length, k)
+        var i = 0
+        var cnt = 0
+        while (i < n) {
+          if (labSet.contains(pred(i))) {
+            cnt += 1
+          }
+          i += 1
         }
-        i += 1
-      }
-      if (labSet.size == 0) {
+        cnt.toDouble / k
+      } else {
         logWarning("Empty ground truth set, check input data")
         0.0
-      } else {
-        cnt.toDouble / k
       }
     }.mean
   }
@@ -82,24 +83,23 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet
-      val labSetSize = labSet.size
-      var i = 0
-      var cnt = 0
-      var precSum = 0.0
-      val n = pred.length
 
-      while (i < n) {
-        if (labSet.contains(pred(i))) {
-          cnt += 1
-          precSum += cnt.toDouble / (i + 1)
+      if (labSet.nonEmpty) {
+        var i = 0
+        var cnt = 0
+        var precSum = 0.0
+        val n = pred.length
+        while (i < n) {
+          if (labSet.contains(pred(i))) {
+            cnt += 1
+            precSum += cnt.toDouble / (i + 1)
+          }
+          i += 1
         }
-        i += 1
-      }
-      if (labSetSize == 0) {
+        precSum / labSet.size
+      } else {
         logWarning("Empty ground truth set, check input data")
         0.0
-      } else {
-        precSum / labSet.size
       }
     }.mean
   }
@@ -111,11 +111,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
    * implementation, the relevance value is binary.
    *
-   * If for a query, the ranking algorithm returns n (n < k) results, the NDCG value at position n
-   * will be used. If the ground truth set contains n (n < k) results, the first n items will be
-   * used to compute the DCG value on the ground truth set.
-   *
-   * If a query has an empty ground truth set, zero will be returned together with a log warning.
+   * If a query has an empty ground truth set, zero will be used as ndcg together with a log warning.
    *
    * See the following paper for detail:
    *
@@ -126,30 +122,30 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @return the average ndcg at the first k ranking positions
    */
   def ndcgAt(k: Int): Double = {
-    require (k > 0,"ranking position k should be positive")
+    require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet
-      val labSetSize = labSet.size
-      val n = math.min(math.max(pred.length, labSetSize), k)
-      var maxDcg = 0.0
-      var dcg = 0.0
-      var i = 0
 
-      while (i < n) {
-        val gain = 1.0 / math.log(i + 2)
-        if (labSet.contains(pred(i))) {
-          dcg += gain
+      if (labSet.nonEmpty) {
+        val labSetSize = labSet.size
+        val n = math.min(math.max(pred.length, labSetSize), k)
+        var maxDcg = 0.0
+        var dcg = 0.0
+        var i = 0
+        while (i < n) {
+          val gain = 1.0 / math.log(i + 2)
+          if (labSet.contains(pred(i))) {
+            dcg += gain
+          }
+          if (i < labSetSize) {
+            maxDcg += gain
+          }
+          i += 1
         }
-        if (i < labSetSize) {
-          maxDcg += gain
-        }
-        i += 1
-      }
-      if (labSetSize == 0) {
+        dcg / maxDcg
+      } else {
         logWarning("Empty ground truth set, check input data")
         0.0
-      } else {
-        dcg / maxDcg
       }
     }.mean
   }
