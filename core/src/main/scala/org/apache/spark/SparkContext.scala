@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
-import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
@@ -61,7 +60,7 @@ import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, Metadat
  *   this config overrides the default configs as well as system properties.
  */
 
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -234,7 +233,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val jobProgressListener = new JobProgressListener(conf)
   listenerBus.addListener(jobProgressListener)
 
-  // Initialize the Spark UI:
+  // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
       Some(SparkUI.create(Some(this), conf, listenerBus, env.securityManager, appName,
@@ -858,112 +857,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
-
-  /**
-   * Return a list of all known jobs in a particular job group.  The returned list may contain
-   * running, failed, and completed jobs, and may vary across invocations of this method.
-   */
-  def getJobIdsForGroup(jobGroup: String): Array[Int] = {
-    jobProgressListener.synchronized {
-      val jobData = jobProgressListener.jobIdToData.valuesIterator
-      jobData.filter(_.jobGroup.exists(_ == jobGroup)).map(_.jobId).toArray
-    }
-  }
-
-  /**
-   * Returns job information, or None if the job info could not be found or was garbage collected.
-   */
-  def getJobInfo(jobId: Int): Option[SparkJobInfo] = {
-    jobProgressListener.synchronized {
-      jobProgressListener.jobIdToData.get(jobId).map { data =>
-        new SparkJobInfoImpl(jobId, data.stageIds.toArray, data.status)
-      }
-    }
-  }
-
-  /**
-   * Returns stage information, or None if the stage info could not be found or was
-   * garbage collected.
-   */
-  def getStageInfo(stageId: Int): Option[SparkStageInfo] = {
-    jobProgressListener.synchronized {
-      for (
-        info <- jobProgressListener.stageIdToInfo.get(stageId);
-        data <- jobProgressListener.stageIdToData.get((stageId, info.attemptId))
-      ) yield {
-        new SparkStageInfoImpl(
-          stageId,
-          info.name,
-          info.numTasks,
-          data.numActiveTasks,
-          data.numCompleteTasks,
-          data.numFailedTasks)
-      }
-    }
-  }
-
-  /**
-   * Return a map from the slave to the max memory available for caching and the remaining
-   * memory available for caching.
-   */
-  def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
-    env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
-      (blockManagerId.host + ":" + blockManagerId.port, mem)
-    }
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return information about what RDDs are cached, if they are in mem or on disk, how much space
-   * they take, etc.
-   */
-  @DeveloperApi
-  def getRDDStorageInfo: Array[RDDInfo] = {
-    val rddInfos = persistentRdds.values.map(RDDInfo.fromRdd).toArray
-    StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
-    rddInfos.filter(_.isCached)
-  }
-
-  /**
-   * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
-   */
-  def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
-
-  /**
-   * :: DeveloperApi ::
-   * Return information about blocks stored in all of the slaves
-   */
-  @DeveloperApi
-  def getExecutorStorageStatus: Array[StorageStatus] = {
-    env.blockManager.master.getStorageStatus
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return pools for fair scheduler
-   */
-  @DeveloperApi
-  def getAllPools: Seq[Schedulable] = {
-    // TODO(xiajunluan): We should take nested pools into account
-    taskScheduler.rootPool.schedulableQueue.toSeq
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return the pool associated with the given name, if one exists
-   */
-  @DeveloperApi
-  def getPoolForName(pool: String): Option[Schedulable] = {
-    Option(taskScheduler.rootPool.schedulableNameToSchedulable.get(pool))
-  }
-
-  /**
-   * Return current scheduling mode
-   */
-  def getSchedulingMode: SchedulingMode.SchedulingMode = {
-    taskScheduler.schedulingMode
-  }
 
   /**
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
