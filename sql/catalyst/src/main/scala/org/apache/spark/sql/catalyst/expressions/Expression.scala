@@ -44,9 +44,6 @@ abstract class Expression extends TreeNode[Expression] {
   def nullable: Boolean
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
-  /** Returns the metadata when an expression is a reference to another expression with metadata. */
-  def metadata: Metadata = Metadata.empty
-
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: Row = null): EvaluatedType
 

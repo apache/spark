@@ -44,6 +44,9 @@ abstract class NamedExpression extends Expression {
 
   def toAttribute: Attribute
 
+  /** Returns the metadata when an expression is a reference to another expression with metadata. */
+  def metadata: Metadata = Metadata.empty
+
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -89,11 +92,16 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
-  override def metadata: Metadata = child.metadata
+  override def metadata: Metadata = {
+    child match {
+      case named: NamedExpression => named.metadata
+      case _ => Metadata.empty
+    }
+  }
 
   override def toAttribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, child.metadata)(exprId, qualifiers)
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifiers)
     } else {
       UnresolvedAttribute(name)
     }
