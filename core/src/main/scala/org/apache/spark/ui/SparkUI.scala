@@ -29,7 +29,7 @@ import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 /**
  * Top level user interface for a Spark application.
  */
-private[spark] class SparkUI private[ui] (
+private[spark] class SparkUI private (
     val sc: Option[SparkContext],
     val conf: SparkConf,
     val securityManager: SecurityManager,
@@ -95,6 +95,26 @@ private[spark] object SparkUI {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
 
+  def createLiveUI(
+      sc: SparkContext,
+      conf: SparkConf,
+      listenerBus: SparkListenerBus,
+      jobProgressListener: JobProgressListener,
+      securityManager: SecurityManager,
+      appName: String): SparkUI =  {
+    create(Some(sc), conf, listenerBus, securityManager, appName,
+      jobProgressListener = Some(jobProgressListener))
+  }
+
+  def createHistoryUI(
+      conf: SparkConf,
+      listenerBus: ReplayListenerBus,
+      securityManager: SecurityManager,
+      appName: String,
+      basePath: String): SparkUI = {
+    create(None, conf, listenerBus, securityManager, appName, basePath)
+  }
+
   /**
    * Create a new Spark UI.
    *
@@ -102,14 +122,14 @@ private[spark] object SparkUI {
    * @param jobProgressListener if supplied, this JobProgressListener will be used; otherwise, the
    *                            web UI will create and register its own JobProgressListener.
    */
-  def create(
-    sc: Option[SparkContext],
-    conf: SparkConf,
-    listenerBus: SparkListenerBus,
-    securityManager: SecurityManager,
-    appName: String,
-    basePath: String = "",
-    jobProgressListener: Option[JobProgressListener] = None): SparkUI = {
+  private def create(
+      sc: Option[SparkContext],
+      conf: SparkConf,
+      listenerBus: SparkListenerBus,
+      securityManager: SecurityManager,
+      appName: String,
+      basePath: String = "",
+      jobProgressListener: Option[JobProgressListener] = None): SparkUI = {
 
     val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
       val listener = new JobProgressListener(conf)

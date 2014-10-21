@@ -237,8 +237,8 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
-      Some(SparkUI.create(Some(this), conf, listenerBus, env.securityManager, appName,
-        jobProgressListener = Some(jobProgressListener)))
+      Some(SparkUI.createLiveUI(this, conf, listenerBus, jobProgressListener,
+        env.securityManager,appName))
     } else {
       // For tests, do not enable the UI
       None
