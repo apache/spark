@@ -53,6 +53,23 @@ class MatrixFactorizationModel(object):
     >>> model = ALS.train(ratings, 1)
     >>> model.predictAll(testset).count() == 2
     True
+
+    >>> model = ALS.train(ratings, 4)
+    >>> model.userFeatures().count() == 2
+    True
+
+    >>> first_user = model.userFeatures().take(1)[0]
+    >>> latents = first_user[1]
+    >>> len(latents) == 4
+    True
+
+    >>> model.productFeatures().count() == 2
+    True
+
+    >>> first_product = model.productFeatures().take(1)[0]
+    >>> latents = first_product[1]
+    >>> len(latents) == 4
+    True
     """
 
     def __init__(self, sc, java_model):
