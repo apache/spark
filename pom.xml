@@ -829,6 +829,8 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-language:postfixOps</arg>
+              <arg>-Xmax-classfile-name</arg>
+              <arg>128</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
