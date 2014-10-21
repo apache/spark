@@ -284,9 +284,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     try {
-      // Session state must be initilized before the CommandProcessor is created .
-      SessionState.start(sessionState)
-
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
