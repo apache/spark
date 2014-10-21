@@ -22,7 +22,7 @@ import java.security.KeyStore
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import org.apache.commons.io.FileUtils
+import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -196,13 +196,13 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
     )
   }
 
-  private[spark] val sslOptions = SSLOptions.parse(ns = "ssl", conf = sparkConf)
+  private[spark] val sslOptions = SSLOptions.parse(sparkConf, "ssl")
 
   private[spark] val (sslSocketFactory, hostnameVerifier) = if (sslOptions.enabled) {
     val trustStoreManagers =
       for (trustStore <- sslOptions.trustStore) yield {
         val ks = KeyStore.getInstance(KeyStore.getDefaultType)
-        ks.load(FileUtils.openInputStream(sslOptions.trustStore.get),
+        ks.load(Files.asByteSource(sslOptions.trustStore.get).openStream(),
           sslOptions.trustStorePassword.get.toCharArray)
 
         val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
@@ -230,7 +230,6 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
 
     (Some(sslContext.getSocketFactory), Some(hostVerifier))
   } else {
-    val sslContext = SSLContext.getDefault
     (None, None)
   }
 
