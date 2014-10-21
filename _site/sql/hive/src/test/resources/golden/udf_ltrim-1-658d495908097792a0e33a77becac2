@@ -1,4 +1,0 @@
-ltrim(str) - Removes the leading space characters from str 
-Example:
-  > SELECT ltrim('   facebook') FROM src LIMIT 1;
-  'facebook'

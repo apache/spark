@@ -1,5 +1,0 @@
-datediff(date1, date2) - Returns the number of days between date1 and date2
-date1 and date2 are strings in the format 'yyyy-MM-dd HH:mm:ss' or 'yyyy-MM-dd'. The time parts are ignored.If date1 is earlier than date2, the result is negative.
-Example:
-   > SELECT datediff('2009-30-07', '2009-31-07') FROM src LIMIT 1;
-  1

@@ -1,6 +1,0 @@
-covar_pop(x,y) - Returns the population covariance of a set of number pairs
-The function takes as arguments any pair of numeric types and returns a double.
-Any pair with a NULL is ignored. If the function is applied to an empty set, NULL
-will be returned. Otherwise, it computes the following:
-   (SUM(x*y)-SUM(x)*SUM(y)/COUNT(x,y))/COUNT(x,y)
-where neither x nor y is null.

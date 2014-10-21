@@ -1,2 +1,0 @@
-EXPLAIN
-SELECT `+++` FROM srcpart;

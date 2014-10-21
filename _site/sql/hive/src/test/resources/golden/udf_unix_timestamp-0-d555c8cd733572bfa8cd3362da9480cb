@@ -1,1 +1,0 @@
-unix_timestamp([date[, pattern]]) - Returns the UNIX timestamp

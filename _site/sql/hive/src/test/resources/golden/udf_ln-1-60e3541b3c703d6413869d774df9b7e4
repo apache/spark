@@ -1,4 +1,0 @@
-ln(x) - Returns the natural logarithm of x
-Example:
-  > SELECT ln(1) FROM src LIMIT 1;
-  0

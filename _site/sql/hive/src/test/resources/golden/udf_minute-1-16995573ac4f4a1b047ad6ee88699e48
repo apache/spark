@@ -1,7 +1,0 @@
-minute(date) - Returns the minute of date
-date is a string in the format of 'yyyy-MM-dd HH:mm:ss' or 'HH:mm:ss'.
-Example:
-   > SELECT minute('2009-07-30 12:58:59') FROM src LIMIT 1;
-  58
-  > SELECT minute('12:58:59') FROM src LIMIT 1;
-  58

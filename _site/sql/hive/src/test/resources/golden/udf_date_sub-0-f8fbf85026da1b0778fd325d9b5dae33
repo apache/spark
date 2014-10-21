@@ -1,1 +1,0 @@
-date_sub(start_date, num_days) - Returns the date that is num_days before start_date.

@@ -1,4 +1,0 @@
-log2(x) - Returns the logarithm of x with base 2
-Example:
-  > SELECT log2(2) FROM src LIMIT 1;
-  1
