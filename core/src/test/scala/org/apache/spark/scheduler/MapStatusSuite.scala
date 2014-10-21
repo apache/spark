@@ -51,7 +51,7 @@ class MapStatusSuite extends FunSuite {
     import Math._
     for (
       numSizes <- Seq(1, 10, 100, 1000, 10000);
-      mean <- Seq(0L, 100L, 10000L, Long.MaxValue);
+      mean <- Seq(0L, 100L, 10000L, Int.MaxValue.toLong);
       stddev <- Seq(0.0, 0.01, 0.5, 1.0)
     ) {
       val sizes =
@@ -78,33 +78,19 @@ class MapStatusSuite extends FunSuite {
     assert(status.getSizeForBlock(2000) === 150L)
   }
 
-  test(classOf[HighlyCompressedMapStatus].getName + ": estimated size is within 10%") {
-    val sizes = Array.tabulate[Long](50) { i => i.toLong }
-    val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes)
-    val status1 = compressAndDecompressMapStatus(status)
-    assert(status1.location == loc)
-    for (i <- 0 until sizes.length) {
-      // make sure the estimated size is within 10% of the input; note that we skip the very small
-      // sizes because the compression is very lossy there.
-      val estimate = status1.getSizeForBlock(i)
-      if (estimate > 100) {
-        assert(math.abs(estimate - sizes(i)) * 10 <= sizes(i),
-          s"incorrect estimated size $estimate, original was ${sizes(i)}")
-      }
-    }
-  }
-
-  test(classOf[HighlyCompressedMapStatus].getName + ": estimated size should be the average size") {
+  test("HighlyCompressedMapStatus: estimated size should be the average non-empty block size") {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
-    val avg = sizes.sum / sizes.length
+    val avg = sizes.sum / sizes.filter(_ != 0).length
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
     val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
     for (i <- 0 until 3000) {
       val estimate = status1.getSizeForBlock(i)
-      assert(estimate === avg)
+      if (sizes(i) > 0) {
+        assert(estimate === avg)
+      }
     }
   }
 
