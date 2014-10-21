@@ -46,8 +46,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    *
    * See the following paper for detail:
    *
-   * IR evaluation methods for retrieving highly relevant documents.
-   *    K. Jarvelin and J. Kekalainen
+   * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
    *
    * @param k the position to compute the truncated precision, must be positive
    * @return the average precision at the first k ranking positions
@@ -116,8 +115,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    *
    * See the following paper for detail:
    *
-   * IR evaluation methods for retrieving highly relevant documents.
-   *    K. Jarvelin and J. Kekalainen
+   * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
    *
    * @param k the position to compute the truncated ndcg, must be positive
    * @return the average ndcg at the first k ranking positions
