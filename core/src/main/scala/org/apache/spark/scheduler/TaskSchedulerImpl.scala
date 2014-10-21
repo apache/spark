@@ -363,7 +363,6 @@ private[spark] class TaskSchedulerImpl(
       taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
       blockManagerId: BlockManagerId,
       broadcastInfo: Map[BlockId, Option[BlockStatus]]): Boolean = {
-
     val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
       taskMetrics.flatMap { case (id, metrics) =>
         taskIdToTaskSetId.get(id)

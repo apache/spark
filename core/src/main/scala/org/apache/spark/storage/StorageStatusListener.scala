@@ -36,7 +36,7 @@ class StorageStatusListener extends SparkListener {
 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
-    executorIdToStorageStatus.get(execId).foreach { storageStatus =>
+    executorIdToStorageStatus.get(formatExecutorId(execId)).foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
         if (updatedStatus.storageLevel == StorageLevel.NONE) {
           storageStatus.removeBlock(blockId)
@@ -78,6 +78,7 @@ class StorageStatusListener extends SparkListener {
       val maxMem = blockManagerAdded.maxMem
       val storageStatus = new StorageStatus(blockManagerId, maxMem)
       executorIdToStorageStatus(executorId) = storageStatus
+      println("added %s".format(executorId))
     }
   }
 
@@ -88,7 +89,8 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
+  override def onExecutorMetricsUpdate(
+       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
     val validBroadcastInfo = executorMetricsUpdate.broadcastInfo.filter(_._2.isDefined)
       .mapValues(_.get)
     updateStorageStatus(executorMetricsUpdate.execId, validBroadcastInfo.toSeq)
