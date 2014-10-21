@@ -45,6 +45,9 @@ class AllTypesBean extends Serializable {
   @BeanProperty var shortField: java.lang.Short = _
   @BeanProperty var byteField: java.lang.Byte = _
   @BeanProperty var booleanField: java.lang.Boolean = _
+  @BeanProperty var dateField: java.sql.Date = _
+  @BeanProperty var timestampField: java.sql.Timestamp = _
+  @BeanProperty var bigDecimalField: java.math.BigDecimal = _
 }
 
 class JavaSQLSuite extends FunSuite {
@@ -73,6 +76,9 @@ class JavaSQLSuite extends FunSuite {
     bean.setShortField(0.toShort)
     bean.setByteField(0.toByte)
     bean.setBooleanField(false)
+    bean.setDateField(java.sql.Date.valueOf("2014-10-10"))
+    bean.setTimestampField(java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"))
+    bean.setBigDecimalField(new java.math.BigDecimal(0))
 
     val rdd = javaCtx.parallelize(bean :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
@@ -82,10 +88,11 @@ class JavaSQLSuite extends FunSuite {
       javaSqlCtx.sql(
         """
           |SELECT stringField, intField, longField, floatField, doubleField, shortField, byteField,
-          |       booleanField
+          |       booleanField, dateField, timestampField, bigDecimalField
           |FROM allTypes
         """.stripMargin).collect.head.row ===
-      Seq("", 0, 0L, 0F, 0.0, 0.toShort, 0.toByte, false))
+      Seq("", 0, 0L, 0F, 0.0, 0.toShort, 0.toByte, false, java.sql.Date.valueOf("2014-10-10"),
+        java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"), new java.math.BigDecimal(0)))
   }
 
   test("all types null in JavaBeans") {
@@ -98,6 +105,9 @@ class JavaSQLSuite extends FunSuite {
     bean.setShortField(null)
     bean.setByteField(null)
     bean.setBooleanField(null)
+    bean.setDateField(null)
+    bean.setTimestampField(null)
+    bean.setBigDecimalField(null)
 
     val rdd = javaCtx.parallelize(bean :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
@@ -107,10 +117,10 @@ class JavaSQLSuite extends FunSuite {
       javaSqlCtx.sql(
         """
           |SELECT stringField, intField, longField, floatField, doubleField, shortField, byteField,
-          |       booleanField
+          |       booleanField, dateField, timestampField, bigDecimalField
           |FROM allTypes
         """.stripMargin).collect.head.row ===
-        Seq.fill(8)(null))
+        Seq.fill(11)(null))
   }
 
   test("loads JSON datasets") {
