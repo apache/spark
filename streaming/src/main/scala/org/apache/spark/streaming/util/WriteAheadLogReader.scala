@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.storage
+package org.apache.spark.streaming.util
 
-import java.io.{EOFException, Closeable}
+import java.io.{Closeable, EOFException}
 import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
@@ -24,7 +24,7 @@ import org.apache.spark.Logging
 
 /**
  * A reader for reading write ahead log files written using
- * [[org.apache.spark.streaming.storage.WriteAheadLogWriter]]. This reads
+ * [[org.apache.spark.streaming.util.WriteAheadLogWriter]]. This reads
  * the records (bytebuffers) in the log file sequentially and return them as an
  * iterator of bytebuffers.
  */

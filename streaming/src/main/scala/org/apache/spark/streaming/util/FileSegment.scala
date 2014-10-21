@@ -14,6 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.storage
+package org.apache.spark.streaming.util
 
 private[streaming] case class FileSegment (path: String, offset: Long, length: Int)

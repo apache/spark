@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.storage
+package org.apache.spark.streaming.util
 
 import java.io._
 import java.net.URI
@@ -24,7 +24,6 @@ import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem}
-import org.apache.spark.streaming.storage.FileSegment
 
 /**
  * A writer for writing byte-buffers to a write ahead log file.

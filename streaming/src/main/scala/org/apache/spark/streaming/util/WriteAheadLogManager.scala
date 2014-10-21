@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.storage
+package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
 
@@ -25,9 +25,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.Logging
-import org.apache.spark.streaming.storage.WriteAheadLogManager._
-import org.apache.spark.streaming.util.{Clock, SystemClock}
 import org.apache.spark.util.Utils
+import WriteAheadLogManager._
 
 /**
  * This class manages write ahead log files.
@@ -35,8 +34,8 @@ import org.apache.spark.util.Utils
  * - Recovers the log files and the reads the recovered records upon failures.
  * - Cleans up old log files.
  *
- * Uses [[org.apache.spark.streaming.storage.WriteAheadLogWriter]] to write
- * and [[org.apache.spark.streaming.storage.WriteAheadLogReader]] to read.
+ * Uses [[org.apache.spark.streaming.util.WriteAheadLogWriter]] to write
+ * and [[org.apache.spark.streaming.util.WriteAheadLogReader]] to read.
  *
  *@param logDirectory Directory when rotating log files will be created.
  * @param hadoopConf Hadoop configuration for reading/writing log files.
@@ -199,7 +198,7 @@ private[streaming] class WriteAheadLogManager(
   }
 }
 
-private[storage] object WriteAheadLogManager {
+private[util] object WriteAheadLogManager {
 
   case class LogInfo(startTime: Long, endTime: Long, path: String)
 

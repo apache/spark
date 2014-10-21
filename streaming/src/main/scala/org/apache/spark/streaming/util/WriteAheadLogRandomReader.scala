@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.storage
+package org.apache.spark.streaming.util
 
 import java.io.Closeable
 import java.nio.ByteBuffer
@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 /**
  * A random access reader for reading write ahead log files written using
- * [[org.apache.spark.streaming.storage.WriteAheadLogWriter]]. Given the file segment info,
+ * [[org.apache.spark.streaming.util.WriteAheadLogWriter]]. Given the file segment info,
  * this reads the record (bytebuffer) from the log file.
  */
 private[streaming] class WriteAheadLogRandomReader(path: String, conf: Configuration)

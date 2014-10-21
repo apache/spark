@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.storage
+package org.apache.spark.streaming.util
 
 import java.io.{DataInputStream, File, FileInputStream, RandomAccessFile}
 import java.nio.ByteBuffer
@@ -22,18 +22,16 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.language.postfixOps
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Eventually._
-
+import WriteAheadLogSuite._
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
-import WriteAheadLogSuite._
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.concurrent.Eventually._
 
 /**
  * This testsuite tests all classes related to write ahead logs.
