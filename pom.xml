@@ -249,15 +249,16 @@
     </pluginRepository>
   </pluginRepositories>
   <!-- 
-       This dependency is required by core, and it is added here as well. 
-       So that we can later shade it across the sub-projects. This is required to 
-       generate effective poms. And have no other real purpose. It is supposed to be 
+       This dependency is not required, and it is added - so that we can 
+       later shade it across the sub-projects. This is required to generate 
+       effective poms. And have no other real purpose. It is supposed to be 
        harmless if not usefull.
   -->
   <dependencies>
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-util</artifactId>
+      <groupId>aelfred</groupId>
+      <artifactId>aelfred</artifactId>
+      <version>1.2</version>
     </dependency>
   </dependencies>
   <dependencyManagement>
@@ -1003,6 +1004,34 @@
     </pluginManagement>
 
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <artifactSet>
+                <includes>
+                  <include>aelfred:aelfred</include>
+                </includes>
+              </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>aelfred:aelfred</artifact>
+                  <includes>
+                    <include>Inexistent/So/It/Shades/Nothing</include>
+                  </includes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>      
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
