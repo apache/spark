@@ -29,8 +29,8 @@ import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 /**
  * Top level user interface for a Spark application.
  */
-private[spark] class SparkUI(
-    val sc: SparkContext,
+private[spark] class SparkUI private[ui] (
+    val sc: Option[SparkContext],
     val conf: SparkConf,
     val securityManager: SecurityManager,
     val environmentListener: EnvironmentListener,
@@ -39,14 +39,9 @@ private[spark] class SparkUI(
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
     var appName: String,
-    val basePath: String = "")
+    val basePath: String)
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
   with Logging {
-
-  // If SparkContext is not provided, assume the associated application is not live
-  val live = sc != null
-
-  initialize()
 
   /** Initialize all components of the server. */
   def initialize() {
@@ -59,10 +54,10 @@ private[spark] class SparkUI(
     attachHandler(createRedirectHandler("/", "/stages", basePath = basePath))
     attachHandler(
       createRedirectHandler("/stages/stage/kill", "/stages", jobProgressTab.handleKillRequest))
-    if (live) {
-      sc.env.metricsSystem.getServletHandlers.foreach(attachHandler)
-    }
+    // If the UI is live, then serve
+    sc.foreach { _.env.metricsSystem.getServletHandlers.foreach(attachHandler) }
   }
+  initialize()
 
   def getAppName = appName
 
@@ -100,22 +95,39 @@ private[spark] object SparkUI {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
 
-  // Called by HistoryServer and Master when reconstituting a SparkUI from event logs:
-  def create(conf: SparkConf, listenerBus: SparkListenerBus, securityManager: SecurityManager,
-             appName: String, basePath: String): SparkUI = {
+  /**
+   * Create a new Spark UI.
+   *
+   * @param sc optional SparkContext; this can be None when reconstituting a UI from event logs.
+   * @param jobProgressListener if supplied, this JobProgressListener will be used; otherwise, the
+   *                            web UI will create and register its own JobProgressListener.
+   */
+  def create(
+    sc: Option[SparkContext],
+    conf: SparkConf,
+    listenerBus: SparkListenerBus,
+    securityManager: SecurityManager,
+    appName: String,
+    basePath: String = "",
+    jobProgressListener: Option[JobProgressListener] = None): SparkUI = {
+
+    val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
+      val listener = new JobProgressListener(conf)
+      listenerBus.addListener(listener)
+      listener
+    }
+
     val environmentListener = new EnvironmentListener
     val storageStatusListener = new StorageStatusListener
     val executorsListener = new ExecutorsListener(storageStatusListener)
-    val jobProgressListener = new JobProgressListener(conf)
     val storageListener = new StorageListener(storageStatusListener)
 
     listenerBus.addListener(environmentListener)
     listenerBus.addListener(storageStatusListener)
     listenerBus.addListener(executorsListener)
-    listenerBus.addListener(jobProgressListener)
     listenerBus.addListener(storageListener)
 
-    new SparkUI(null, conf, securityManager, environmentListener, storageStatusListener,
-      executorsListener, jobProgressListener, storageListener, appName)
+    new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
+      executorsListener, _jobProgressListener, storageListener, appName, basePath)
   }
 }
