@@ -269,23 +269,44 @@ private[spark] object Utils extends Logging {
     dir
   }
 
-  /** Copy all data from an InputStream to an OutputStream */
+  /** Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
+    * copying is disabled by default unless explicitly set transferToEnabled as true,
+    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
+    */
   def copyStream(in: InputStream,
                  out: OutputStream,
-                 closeStreams: Boolean = false): Long =
+                 closeStreams: Boolean = false,
+                 transferToEnabled: Boolean = false): Long =
   {
     var count = 0L
     try {
-      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]) {
+      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
+        && transferToEnabled) {
         // When both streams are File stream, use transferTo to improve copy performance.
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
+        val initialPos = outChannel.position()
         val size = inChannel.size()
 
         // In case transferTo method transferred less data than we have required.
         while (count < size) {
           count += inChannel.transferTo(count, size - count, outChannel)
         }
+
+        // Check the position after transferTo loop to see if it is in the right position and
+        // give user information if not.
+        // Position will not be increased to the expected length after calling transferTo in
+        // kernel version 2.6.32, this issue can be seen in
+        // https://bugs.openjdk.java.net/browse/JDK-7052359
+        // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
+        val finalPos = outChannel.position()
+        assert(finalPos == initialPos + size,
+          s"""
+             |Current position $finalPos do not equal to expected position ${initialPos + size}
+             |after transferTo, please check your kernel version to see if it is 2.6.32,
+             |this is a kernel bug which will lead to unexpected behavior when using transferTo.
+             |You can set spark.file.transferTo = false to disable this NIO feature.
+           """.stripMargin)
       } else {
         val buf = new Array[Byte](8192)
         var n = 0
@@ -340,8 +361,8 @@ private[spark] object Utils extends Logging {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
-    Option(uri.getScheme) match {
-      case Some("http") | Some("https") | Some("ftp") =>
+    Option(uri.getScheme).getOrElse("file") match {
+      case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
 
         var uc: URLConnection = null
@@ -374,7 +395,7 @@ private[spark] object Utils extends Logging {
           }
         }
         Files.move(tempFile, targetFile)
-      case Some("file") | None =>
+      case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
@@ -403,7 +424,7 @@ private[spark] object Utils extends Logging {
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
-      case Some(other) =>
+      case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
@@ -727,7 +748,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Determines if a directory contains any files newer than cutoff seconds.
-   * 
+   *
    * @param dir must be the path to a directory, or IllegalArgumentException is thrown
    * @param cutoff measured in seconds. Returns true if there are any files or directories in the
    *               given directory whose last modified time is later than this many seconds ago
@@ -1401,10 +1422,10 @@ private[spark] object Utils extends Logging {
       paths.split(",").filter { p =>
         val formattedPath = if (windows) formatWindowsPath(p) else p
         val uri = new URI(formattedPath)
-        Option(uri.getScheme) match {
-          case Some(windowsDrive(d)) if windows => false
-          case Some("local") | Some("file") | None => false
-          case Some(other) => true
+        Option(uri.getScheme).getOrElse("file") match {
+          case windowsDrive(d) if windows => false
+          case "local" | "file" => false
+          case _ => true
         }
       }
     }
