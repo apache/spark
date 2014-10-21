@@ -221,6 +221,7 @@ private[spark] class TaskSchedulerImpl(
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
+      activeExecutorIds += o.executorId
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -261,7 +262,6 @@ private[spark] class TaskSchedulerImpl(
               val tid = task.taskId
               taskIdToTaskSetId(tid) = taskSet.taskSet.id
               taskIdToExecutorId(tid) = execId
-              activeExecutorIds += execId
               executorsByHost(host) += execId
               availableCpus(i) -= CPUS_PER_TASK
               assert(availableCpus(i) >= 0)
