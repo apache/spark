@@ -62,7 +62,10 @@ object DecisionTreeRunner {
       minInfoGain: Double = 0.0,
       numTrees: Int = 1,
       featureSubsetStrategy: String = "auto",
-      fracTest: Double = 0.2) extends AbstractParams[Params]
+      fracTest: Double = 0.2,
+      useNodeIdCache: Boolean = false,
+      checkpointDir: Option[String] = None,
+      checkpointInterval: Int = 10) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -102,6 +105,21 @@ object DecisionTreeRunner {
         .text(s"fraction of data to hold out for testing.  If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
+      opt[Boolean]("useNodeIdCache")
+        .text(s"whether to use node Id cache during training, " +
+          s"default: ${defaultParams.useNodeIdCache}")
+        .action((x, c) => c.copy(useNodeIdCache = x))
+      opt[String]("checkpointDir")
+        .text(s"checkpoint directory where intermediate node Id caches will be stored, " +
+         s"default: ${defaultParams.checkpointDir match {
+           case Some(strVal) => strVal
+           case None => "None"
+         }}")
+        .action((x, c) => c.copy(checkpointDir = Some(x)))
+      opt[Int]("checkpointInterval")
+        .text(s"how often to checkpoint the node Id cache, " +
+         s"default: ${defaultParams.checkpointInterval}")
+        .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
@@ -236,7 +254,10 @@ object DecisionTreeRunner {
           maxBins = params.maxBins,
           numClassesForClassification = numClasses,
           minInstancesPerNode = params.minInstancesPerNode,
-          minInfoGain = params.minInfoGain)
+          minInfoGain = params.minInfoGain,
+          useNodeIdCache = params.useNodeIdCache,
+          checkpointDir = params.checkpointDir,
+          checkpointInterval = params.checkpointInterval)
     if (params.numTrees == 1) {
       val startTime = System.nanoTime()
       val model = DecisionTree.train(training, strategy)

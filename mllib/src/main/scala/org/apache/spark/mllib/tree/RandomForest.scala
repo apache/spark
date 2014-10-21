@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Average
 import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impl.{BaggedPoint, TreePoint, DecisionTreeMetadata, TimeTracker}
+import org.apache.spark.mllib.tree.impl.{BaggedPoint, TreePoint, DecisionTreeMetadata, TimeTracker, NodeIdCache }
 import org.apache.spark.mllib.tree.impurity.Impurities
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
@@ -160,6 +160,19 @@ private class RandomForest (
      * in lower levels).
      */
 
+    // Create an RDD of node Id cache.
+    // At first, all the rows belong to the root nodes (node Id == 1).
+    val nodeIdCache = if (strategy.useNodeIdCache) {
+      Some(NodeIdCache.init(
+        data = baggedInput,
+        numTrees = numTrees,
+        checkpointDir = strategy.checkpointDir,
+        checkpointInterval = strategy.checkpointInterval,
+        initVal = 1))
+    } else {
+      None
+    }
+
     // FIFO queue of nodes to train: (treeIndex, node)
     val nodeQueue = new mutable.Queue[(Int, Node)]()
 
@@ -182,7 +195,7 @@ private class RandomForest (
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
       DecisionTree.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
-        treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
+        treeToNodeToIndexInfo, splits, bins, nodeQueue, timer, nodeIdCache = nodeIdCache)
       timer.stop("findBestSplits")
     }
 
@@ -192,6 +205,11 @@ private class RandomForest (
 
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
+
+    // Delete any remaining checkpoints used for node Id cache.
+    if (nodeIdCache.nonEmpty) {
+      nodeIdCache.get.deleteAllCheckpoints()
+    }
 
     val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))
     val treeWeights = Array.fill[Double](numTrees)(1.0)
