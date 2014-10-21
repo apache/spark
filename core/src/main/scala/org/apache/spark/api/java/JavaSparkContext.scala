@@ -140,13 +140,13 @@ class JavaSparkContext(val sc: SparkContext)
   def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.getJobIdsForGroup(jobGroup)
 
   /**
-   * Returns job information, or `null` if the job info could not be found or was garbage-collected.
+   * Returns job information, or `null` if the job info could not be found or was garbage collected.
    */
   def getJobInfo(jobId: Int): SparkJobInfo = sc.getJobInfo(jobId).orNull
 
   /**
    * Returns stage information, or `null` if the stage info could not be found or was
-   * garbage-collected.
+   * garbage collected.
    */
   def getStageInfo(stageId: Int): SparkStageInfo = sc.getStageInfo(stageId).orNull
 

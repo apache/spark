@@ -72,21 +72,23 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onJobStart(jobStart: SparkListenerJobStart) = synchronized {
     val jobGroup = Option(jobStart.properties).map(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
     val jobData: JobUIData =
-      JobUIData(jobStart.jobId, jobStart.stageIds, jobGroup,ExecutionStatus.RUNNING)
+      new JobUIData(jobStart.jobId, jobStart.stageIds, jobGroup, JobExecutionStatus.RUNNING)
     jobIdToData(jobStart.jobId) = jobData
     activeJobs(jobStart.jobId) = jobData
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
-    val jobData: JobUIData = activeJobs(jobEnd.jobId)
-    activeJobs.remove(jobEnd.jobId)
+    val jobData = activeJobs.remove(jobEnd.jobId).getOrElse {
+      logWarning(s"Job completed for unknown job ${jobEnd.jobId}")
+      new JobUIData(jobId = jobEnd.jobId)
+    }
     jobEnd.jobResult match {
       case JobSucceeded =>
         completedJobs += jobData
-        jobData.status = ExecutionStatus.SUCCEEDED
+        jobData.status = JobExecutionStatus.SUCCEEDED
       case JobFailed(exception) =>
         failedJobs += jobData
-        jobData.status = ExecutionStatus.FAILED
+        jobData.status = JobExecutionStatus.FAILED
     }
   }
 

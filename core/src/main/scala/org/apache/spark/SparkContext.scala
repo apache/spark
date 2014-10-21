@@ -871,7 +871,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Returns job information, or None if the job info could not be found or was garbage-collected.
+   * Returns job information, or None if the job info could not be found or was garbage collected.
    */
   def getJobInfo(jobId: Int): Option[SparkJobInfo] = {
     jobProgressListener.synchronized {
@@ -883,7 +883,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Returns stage information, or None if the stage info could not be found or was
-   * garbage-collected.
+   * garbage collected.
    */
   def getStageInfo(stageId: Int): Option[SparkStageInfo] = {
     jobProgressListener.synchronized {

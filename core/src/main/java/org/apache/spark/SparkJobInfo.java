@@ -26,5 +26,5 @@ package org.apache.spark;
 public interface SparkJobInfo {
   int jobId();
   int[] stageIds();
-  ExecutionStatus status();
+  JobExecutionStatus status();
 }
