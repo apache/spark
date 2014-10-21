@@ -523,13 +523,7 @@ private[spark] class TaskSchedulerImpl(
    */
   def newPendingTask(taskSetId: String): Unit = executorAllocationLock.synchronized {
     taskSetsWithPendingTasks.add(taskSetId)
-    executorAllocationManager.foreach { m =>
-      // Start a timer to request new executors if it is not already running
-      if (!m.isAddTimerRunning) {
-        logDebug("Starting add executor timer because a new pending task is received")
-        m.startAddTimer()
-      }
-    }
+    executorAllocationManager.foreach(_.startAddTimer())
   }
 
   /**
@@ -570,14 +564,7 @@ private[spark] class TaskSchedulerImpl(
       val contains = executorIdToRunningTaskSets.contains(executorId)
       if (!contains || executorIdToRunningTaskSets(executorId).isEmpty) {
         executorIdToRunningTaskSets.remove(executorId)
-        executorAllocationManager.foreach { m =>
-          // Start a timer to remove this executor if the timer is not already running
-          if (!m.isRemoveTimerRunning(executorId)) {
-            logDebug(s"Starting idle timer for executor $executorId " +
-              s"because there are no more tasks scheduled on the executor")
-            m.startRemoveTimer(executorId)
-          }
-        }
+        executorAllocationManager.foreach(_.startRemoveTimer(executorId))
       }
       if (!contains) {
         logWarning(s"Unknown executor $executorId has no more running tasks in task set $taskSetId")
