@@ -927,32 +927,15 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
-   * combine step happens locally on the master, equivalent to running a single reduce task.
+   * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
+   *
+   * Note that this method should only be used if the resulting map is expected to be small, as
+   * the whole thing is loaded into the driver's memory.
+   * To handle very large results, consider using rdd.map(x => (x, 1L)).reduceByKey(_ + _), which
+   * returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
-    if (elementClassTag.runtimeClass.isArray) {
-      throw new SparkException("countByValue() does not support arrays")
-    }
-    // TODO: This should perhaps be distributed by default.
-    val countPartition = (iter: Iterator[T]) => {
-      val map = new OpenHashMap[T,Long]
-      iter.foreach {
-        t => map.changeValue(t, 1L, _ + 1L)
-      }
-      Iterator(map)
-    }: Iterator[OpenHashMap[T,Long]]
-    val mergeMaps = (m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]) => {
-      m2.foreach { case (key, value) =>
-        m1.changeValue(key, value, _ + value)
-      }
-      m1
-    }: OpenHashMap[T,Long]
-    val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    // Convert to a Scala mutable map
-    val mutableResult = scala.collection.mutable.Map[T,Long]()
-    myResult.foreach { case (k, v) => mutableResult.put(k, v) }
-    mutableResult
+    map(value => (value, null)).countByKey()
   }
 
   /**
