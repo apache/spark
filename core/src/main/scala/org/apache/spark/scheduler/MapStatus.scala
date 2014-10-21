@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.util
 
 import org.apache.spark.storage.BlockManagerId
 
@@ -29,7 +30,12 @@ private[spark] sealed trait MapStatus {
   /** Location where this task was run. */
   def location: BlockManagerId
 
-  /** Estimated size for the reduce block, in bytes. */
+  /**
+   * Estimated size for the reduce block, in bytes.
+   *
+   * If a block is non-empty, then this method MUST return a non-zero size.  This invariant is
+   * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
+   */
   def getSizeForBlock(reduceId: Int): Long
 }
 
@@ -38,7 +44,15 @@ private[spark] object MapStatus {
 
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
     if (uncompressedSizes.length > 2000) {
-      new HighlyCompressedMapStatus(loc, uncompressedSizes)
+      val avgSize: Long = uncompressedSizes.sum / uncompressedSizes.length
+      if (avgSize == 0) {
+        val nonEmptySizes = uncompressedSizes.zipWithIndex.filter { case (size, _) => size != 0 }
+        val compressedSizes = nonEmptySizes.map(x => MapStatus.compressSize(x._1))
+        val indices = nonEmptySizes.map(_._2)
+        new SparseCompressedMapStatus(loc, indices, compressedSizes)
+      } else {
+        new HighlyCompressedMapStatus(loc, avgSize)
+      }
     } else {
       new CompressedMapStatus(loc, uncompressedSizes)
     }
@@ -112,6 +126,49 @@ private[spark] class CompressedMapStatus(
   }
 }
 
+/**
+ * A [[MapStatus]] implementation that only tracks the sizes of non-empty blocks.
+ * The size of each block is represented using a single byte.
+ *
+ * @param loc location where the task is being executed.
+ * @param compressedSizes size of the blocks, indexed by reduce partition id.
+ */
+private[spark] class SparseCompressedMapStatus(
+    private[this] var loc: BlockManagerId,
+    private[this] var indices: Array[Int],
+    private[this] var compressedSizes: Array[Byte])
+  extends MapStatus with Externalizable {
+
+  require(indices.size == compressedSizes.size, "Indices and compressedSizes must be the same size")
+
+  protected def this() = this(null, Array.empty, Array.empty)  // For deserialization only
+
+  override def location: BlockManagerId = loc
+
+  override def getSizeForBlock(reduceId: Int): Long = {
+    val sizeIndex = util.Arrays.binarySearch(indices, reduceId)
+    if (sizeIndex >= 0 && indices(sizeIndex) == reduceId) {
+      MapStatus.decompressSize(compressedSizes(sizeIndex))
+    } else {
+      0
+    }
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    loc.writeExternal(out)
+    out.writeInt(compressedSizes.length)
+    indices.foreach(out.writeInt)
+    out.write(compressedSizes)
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    loc = BlockManagerId(in)
+    val len = in.readInt()
+    indices = Array.fill(len)(in.readInt())
+    compressedSizes = new Array[Byte](len)
+    in.readFully(compressedSizes)
+  }
+}
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of the blocks.
@@ -124,11 +181,10 @@ private[spark] class HighlyCompressedMapStatus(
     private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
 
-  def this(loc: BlockManagerId, uncompressedSizes: Array[Long]) {
-    this(loc, uncompressedSizes.sum / uncompressedSizes.length)
-  }
+  require(avgSize != 0, "HighlyCompressedMapStatus does not support avgSize = 0; use" +
+    " SparseMapStatus instead")
 
-  protected def this() = this(null, 0L)  // For deserialization only
+  protected def this() = this(null, -1L)  // For deserialization only
 
   override def location: BlockManagerId = loc
 

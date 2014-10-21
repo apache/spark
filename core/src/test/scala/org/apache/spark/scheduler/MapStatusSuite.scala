@@ -23,6 +23,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.JavaSerializer
 
+import scala.util.Random
 
 class MapStatusSuite extends FunSuite {
 
@@ -46,6 +47,27 @@ class MapStatusSuite extends FunSuite {
     }
   }
 
+  test("MapStatus should never report non-empty blocks' sizes as 0") {
+    import Math._
+    for (
+      numSizes <- Seq(1, 10, 100, 1000, 10000);
+      mean <- Seq(0L, 100L, 10000L, Long.MaxValue);
+      stddev <- Seq(0.0, 0.01, 0.5, 1.0)
+    ) {
+      val sizes =
+        Array.tabulate[Long](numSizes)(_ => abs(round(Random.nextGaussian() * stddev)) + mean)
+      val status = MapStatus(BlockManagerId("a", "b", 10), sizes)
+      val status1 = compressAndDecompressMapStatus(status)
+      for (i <- 0 until numSizes) {
+        if (sizes(i) != 0) {
+          val failureMessage = s"Failed with $numSizes sizes with mean=$mean, stddev=$stddev"
+          assert(status.getSizeForBlock(i) !== 0, failureMessage)
+          assert(status1.getSizeForBlock(i) !== 0, failureMessage)
+        }
+      }
+    }
+  }
+
   test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(150L)
     val status = MapStatus(null, sizes)
@@ -60,9 +82,7 @@ class MapStatusSuite extends FunSuite {
     val sizes = Array.tabulate[Long](50) { i => i.toLong }
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
-    val ser = new JavaSerializer(new SparkConf)
-    val buf = ser.newInstance().serialize(status)
-    val status1 = ser.newInstance().deserialize[MapStatus](buf)
+    val status1 = compressAndDecompressMapStatus(status)
     assert(status1.location == loc)
     for (i <- 0 until sizes.length) {
       // make sure the estimated size is within 10% of the input; note that we skip the very small
@@ -80,13 +100,17 @@ class MapStatusSuite extends FunSuite {
     val avg = sizes.sum / sizes.length
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
-    val ser = new JavaSerializer(new SparkConf)
-    val buf = ser.newInstance().serialize(status)
-    val status1 = ser.newInstance().deserialize[MapStatus](buf)
+    val status1 = compressAndDecompressMapStatus(status)
     assert(status1.location == loc)
     for (i <- 0 until 3000) {
       val estimate = status1.getSizeForBlock(i)
       assert(estimate === avg)
     }
+  }
+
+  def compressAndDecompressMapStatus(status: MapStatus): MapStatus = {
+    val ser = new JavaSerializer(new SparkConf)
+    val buf = ser.newInstance().serialize(status)
+    ser.newInstance().deserialize[MapStatus](buf)
   }
 }
