@@ -170,8 +170,8 @@ class Statistics(object):
             ser = PickleSerializer()
             return ser.loads(str(bytes)).toArray()
         else:
-            jx = _to_java_object_rdd(x)
-            jy = _to_java_object_rdd(y)
+            jx = _to_java_object_rdd(x.map(float))
+            jy = _to_java_object_rdd(y.map(float))
             return sc._jvm.PythonMLLibAPI().corr(jx, jy, method)
 
 

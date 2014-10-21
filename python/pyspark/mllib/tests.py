@@ -206,12 +206,19 @@ class ListTests(PySparkTestCase):
 
 class StatTests(PySparkTestCase):
     # SPARK-4023
-    def test_col_with_random_rdd(self):
+    def test_col_with_different_rdds(self):
+        # numpy
         data = RandomRDDs.normalVectorRDD(self.sc, 1000, 10, 10)
         summary = Statistics.colStats(data)
         self.assertEqual(1000, summary.count())
-        mean = summary.mean()
-        self.assertTrue(all(abs(v) < 0.1 for v in mean))
+        # array
+        data = self.sc.parallelize([range(10)] * 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, summary.count())
+        # array
+        data = self.sc.parallelize([pyarray.array("d", range(10))] * 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, summary.count())
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
