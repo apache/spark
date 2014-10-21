@@ -131,7 +131,8 @@ class SparkHadoopUtil extends Logging {
    * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
    * Returns None if the required method can't be found.
    */
-  def getFSBytesReadOnThreadCallback(path: Path, conf: Configuration): Option[() => Long] = {
+  private[spark] def getFSBytesReadOnThreadCallback(path: Path, conf: Configuration)
+    : Option[() => Long] = {
     val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
     val scheme = qualifiedPath.toUri().getScheme()
     val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
