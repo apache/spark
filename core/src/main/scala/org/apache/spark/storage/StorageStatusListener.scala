@@ -91,9 +91,10 @@ class StorageStatusListener extends SparkListener {
 
   override def onExecutorMetricsUpdate(
        executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
-    val validBroadcastInfo = executorMetricsUpdate.broadcastInfo.filter(_._2.isDefined)
-      .mapValues(_.get)
-    updateStorageStatus(executorMetricsUpdate.execId, validBroadcastInfo.toSeq)
+    if (executorMetricsUpdate.broadcastInfo != null) {
+      val validBroadcastInfo = executorMetricsUpdate.broadcastInfo
+      updateStorageStatus(executorMetricsUpdate.execId, validBroadcastInfo.toSeq)
+    }
   }
 
   /**

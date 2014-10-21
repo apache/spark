@@ -36,7 +36,7 @@ private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId,
-    broadcastBlocks: Map[BlockId, Option[BlockStatus]])
+    broadcastBlocks: Map[BlockId, BlockStatus])
 
 private[spark] case object ExpireDeadHosts 
     

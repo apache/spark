@@ -59,7 +59,7 @@ class BlockManagerSlaveActor(
       }
 
     case RemoveBroadcast(broadcastId, _) =>
-      doAsync[Int]("removing broadcast " + broadcastId, sender) {
+      doAsync[Int]("removing broadcast " + broadcastId + " in bmSlave", sender) {
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 

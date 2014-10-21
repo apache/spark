@@ -166,7 +166,7 @@ class DAGScheduler(
       execId: String,
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId,
-      broadcastInfo: immutable.Map[BlockId, Option[BlockStatus]]): Boolean = {
+      broadcastInfo: immutable.Map[BlockId, BlockStatus]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics, broadcastInfo))
     implicit val timeout = Timeout(600 seconds)
 

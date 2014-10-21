@@ -31,6 +31,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
+
     val rddContent = UIUtils.listingTable(rddHeader, rddRow, rdds)
     val broadcastContent = UIUtils.listingTable(broadcastHeader, blockRow, List())
     UIUtils.headerSparkPageWithMultipleTables("Storage", parent, None,

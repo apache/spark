@@ -65,7 +65,7 @@ private[spark] trait TaskScheduler {
    * indicating that the block manager should re-register.
    */
   def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-    blockManagerId: BlockManagerId, broadcastInfo: Map[BlockId, Option[BlockStatus]]): Boolean
+    blockManagerId: BlockManagerId, broadcastInfo: Map[BlockId, BlockStatus]): Boolean
 
   /**
    * Get an application ID associated with the job.
