@@ -81,7 +81,8 @@ case class HiveTableScan(
     // Specifies needed column IDs for those non-partitioning columns.
     val neededColumnIDs =
       attributes.map(a =>
-        relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
+        relation.attributes.indexWhere(
+          _.name.toLowerCase == a.name): Integer).filter(index => index >= 0)
 
     ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
     ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
