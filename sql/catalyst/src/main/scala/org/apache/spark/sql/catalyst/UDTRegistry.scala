@@ -35,7 +35,7 @@ private[sql] object UDTRegistry {
    * RDDs of user types and SchemaRDDs.
    * If this type has already been registered, this does nothing.
    */
-  def registerType[UserType](implicit userType: Type): Unit = {
+  def registerType(userType: Type): Unit = {
     // TODO: Check to see if type is built-in.  Throw exception?
     if (!UDTRegistry.udtRegistry.contains(userType)) {
       val udt =
