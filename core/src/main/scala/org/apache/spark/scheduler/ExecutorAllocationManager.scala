@@ -79,11 +79,11 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   // How frequently to add and remove executors (seconds)
-  private val addThreshold =
+  private val addThresholdSeconds =
     conf.getLong("spark.dynamicAllocation.addExecutorThresholdSeconds", 60)
-  private val addInterval =
-    conf.getLong("spark.dynamicAllocation.addExecutorIntervalSeconds", addThreshold)
-  private val removeThreshold =
+  private val addIntervalSeconds =
+    conf.getLong("spark.dynamicAllocation.addExecutorIntervalSeconds", addThresholdSeconds)
+  private val removeThresholdSeconds =
     conf.getLong("spark.dynamicAllocation.removeExecutorThresholdSeconds", 600)
 
   // Number of executors to add in the next round
@@ -98,15 +98,25 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
   private val executorIds = new mutable.HashSet[String]
 
-  // A timestamp of when the add timer expires, or NOT_STARTED if the timer is not started.
-  // This timer is started when there are pending tasks built up, and canceled when there are
-  // no more pending tasks.
-  private var addExpirationTime = NOT_STARTED
+  // A timestamp of when the add timer should be triggered, or NOT_STARTED if the timer is not
+  // started. This timer is started when there are pending tasks built up, and canceled when
+  // there are no more pending tasks.
+  private var addTime = NOT_STARTED
 
-  // A timestamp for each executor of when the remove timer for that executor expires.
-  // Each remove timer is started when the executor first registers or when the executor
-  // finishes running a task, and canceled when the executor is scheduled to run a new task.
-  private val removeExpirationTimes = new mutable.HashMap[String, Long]
+  // A timestamp for each executor of when the remove timer for that executor should be triggered.
+  // Each remove timer is started when the executor first registers or when the executor finishes
+  // running a task, and canceled when the executor is scheduled to run a new task.
+  private val removeTimes = new mutable.HashMap[String, Long]
+
+  // A timestamp of when all pending add requests should expire
+  private var pendingAddExpirationTime = NOT_STARTED
+
+  // A timestamp for each executor of when the pending remove request for the executor should expire
+  private val pendingRemoveExpirationTimes = new mutable.HashMap[String, Long]
+
+  // How long before expiring pending requests to add or remove executors (seconds)
+  private val pendingAddTimeoutSeconds = 300 // 5 min
+  private val pendingRemoveTimeoutSeconds = 300
 
   // Polling loop interval (ms)
   private val intervalMillis = 100
@@ -128,7 +138,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
 
   /**
    * Start the main polling thread that keeps track of when to add and remove executors.
-   * During each loop interval, this thread checks if any of the timers have expired, and,
+   * During each loop interval, this thread checks if any of the timers have timed out, and,
    * if so, triggers the relevant timer actions.
    */
   def initialize(): Unit = {
@@ -138,18 +148,37 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
           ExecutorAllocationManager.this.synchronized {
             val now = System.currentTimeMillis
             try {
-              // If the add timer has expired, add executors and refresh the timer
-              if (addExpirationTime != NOT_STARTED && now >= addExpirationTime) {
+              // If the add timer has timed out, add executors and refresh the timer
+              if (addTime != NOT_STARTED && now >= addTime) {
                 addExecutors()
-                addExpirationTime += addInterval * 1000
-                logDebug(s"Restarting add executor timer (to expire in $addInterval seconds)")
+                logDebug(s"Restarting add executor timer " +
+                  s"(to be triggered in $addIntervalSeconds seconds)")
+                addTime += addIntervalSeconds * 1000
               }
 
-              // If a remove timer has expired, remove the executor and cancel the timer
-              removeExpirationTimes.foreach { case (executorId, expirationTime) =>
-                if (now > expirationTime) {
+              // If a remove timer has timed out, remove the executor and cancel the timer
+              removeTimes.foreach { case (executorId, triggerTime) =>
+                if (now > triggerTime) {
                   removeExecutor(executorId)
                   cancelRemoveTimer(executorId)
+                }
+              }
+
+              // Expire any outstanding pending add requests that have timed out
+              if (pendingAddExpirationTime != NOT_STARTED && now >= pendingAddExpirationTime) {
+                logDebug(s"Expiring all pending add requests because they have " +
+                  s"not been fulfilled after $pendingAddTimeoutSeconds seconds")
+                numExecutorsPendingToAdd = 0
+                pendingAddExpirationTime = NOT_STARTED
+              }
+
+              // Expire any outstanding pending remove requests that have timed out
+              pendingRemoveExpirationTimes.foreach { case (executorId, expirationTime) =>
+                if (now > expirationTime) {
+                  logDebug(s"Expiring pending request to remove executor $executorId because " +
+                    s"it has not been fulfilled after $pendingRemoveTimeoutSeconds seconds")
+                  executorsPendingToRemove.remove(executorId)
+                  pendingRemoveExpirationTimes.remove(executorId)
                 }
               }
             } catch {
@@ -189,6 +218,9 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     numExecutorsToAdd *= 2
     numExecutorsPendingToAdd += actualNumExecutorsToAdd
     backend.requestExecutors(actualNumExecutorsToAdd)
+
+    // In case this pending add request is not fulfilled, set a timeout to expire it
+    pendingAddExpirationTime = System.currentTimeMillis + pendingAddTimeoutSeconds * 1000
   }
 
   /**
@@ -217,9 +249,13 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
 
     // Send a request to the backend to kill this executor
     logInfo(s"Removing executor $executorId because it has been idle for " +
-      s"$removeThreshold seconds (new total will be ${numExistingExecutors - 1})")
+      s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
     executorsPendingToRemove.add(executorId)
     backend.killExecutor(executorId)
+
+    // In case this pending remove request is not fulfilled, set a timeout to expire it
+    pendingRemoveExpirationTimes(executorId) =
+      System.currentTimeMillis + pendingRemoveTimeoutSeconds * 1000
   }
 
   /**
@@ -233,6 +269,9 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
       if (numExecutorsPendingToAdd > 0) {
         numExecutorsPendingToAdd -= 1
         logDebug(s"Decremented pending executors to add ($numExecutorsPendingToAdd left)")
+        if (numExecutorsPendingToAdd == 0) {
+          pendingAddExpirationTime = NOT_STARTED
+        }
       }
     }
   }
@@ -248,6 +287,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
         executorsPendingToRemove.remove(executorId)
         logDebug(s"Removing executor $executorId from pending executors to remove " +
           s"(${executorsPendingToRemove.size} left)")
+        pendingRemoveExpirationTimes.remove(executorId)
       }
     } else {
       logWarning(s"Unknown executor $executorId has been removed!")
@@ -255,27 +295,27 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   /**
-   * Start a timer to add executors if it is not already started. This timer expires in
-   * `addThreshold` seconds in the first round, and `addInterval` seconds in every round
+   * Start a timer to add executors if it is not already started. This timer is to be triggered
+   * in `addThresholdSeconds` in the first round, and `addIntervalSeconds` in every round
    * thereafter. This is called when the scheduler receives new pending tasks.
    */
   def startAddTimer(): Unit = synchronized {
-    if (addExpirationTime == NOT_STARTED) {
+    if (addTime == NOT_STARTED) {
       logDebug(s"Starting add executor timer because pending tasks " +
-        s"are building up (to expire in $addThreshold seconds)")
-      addExpirationTime = System.currentTimeMillis + (addThreshold * 1000)
+        s"are building up (to be triggered in $addThresholdSeconds seconds)")
+      addTime = System.currentTimeMillis + addThresholdSeconds * 1000
     }
   }
 
   /**
-   * Start a timer to remove the given executor in `removeThreshold` seconds if the timer is
+   * Start a timer to remove the given executor in `removeThresholdSeconds` if the timer is
    * not already started. This is called when an executor registers or finishes running a task.
    */
   def startRemoveTimer(executorId: String): Unit = synchronized {
-    if (!removeExpirationTimes.contains(executorId)) {
+    if (!removeTimes.contains(executorId)) {
       logDebug(s"Starting remove timer for $executorId because there are no tasks " +
-        s"scheduled to run on the executor (to expire in $removeThreshold seconds)")
-      removeExpirationTimes(executorId) = System.currentTimeMillis + (removeThreshold * 1000)
+        s"scheduled to run on the executor (to be triggered in $removeThresholdSeconds seconds)")
+      removeTimes(executorId) = System.currentTimeMillis + removeThresholdSeconds * 1000
     }
   }
 
@@ -285,7 +325,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    */
   def cancelAddTimer(): Unit = synchronized {
     logDebug(s"Canceling add executor timer")
-    addExpirationTime = NOT_STARTED
+    addTime = NOT_STARTED
     numExecutorsToAdd = 1
   }
 
@@ -295,7 +335,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    */
   def cancelRemoveTimer(executorId: String): Unit = synchronized {
     logDebug(s"Canceling remove executor timer for $executorId")
-    removeExpirationTimes.remove(executorId)
+    removeTimes.remove(executorId)
   }
 
 }
