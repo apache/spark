@@ -28,7 +28,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val listener = parent.listener
-  private lazy val isFairScheduler = parent.isFairScheduler
+  private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
