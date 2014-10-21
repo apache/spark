@@ -28,7 +28,7 @@ import org.json4s.JValue
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.ExecutorInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UITable, UITableBuilder, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
@@ -47,6 +47,25 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
     JsonProtocol.writeApplicationInfo(app)
   }
 
+  private val executorsTable: UITable[ExecutorInfo] = {
+    val builder = new UITableBuilder[ExecutorInfo]()
+    import builder._
+    col("ExecutorID") { _.id.toString }
+    customCol("Worker") { executor =>
+      <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
+    }
+    intCol("Cores") { _.cores }
+    memCol("Memory") { _.memory }
+    col("State") { _.state.toString }
+    customCol("Logs") { executor =>
+      <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
+        .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
+        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
+    }
+    build
+  }
+
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
@@ -56,15 +75,14 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq
     // This includes executors that are either still running or have exited cleanly
     val executors = allExecutors.filter { exec =>
       !ExecutorState.isFinished(exec.state) || exec.state == ExecutorState.EXITED
     }
     val removedExecutors = allExecutors.diff(executors)
-    val executorsTable = UIUtils.listingTable(executorHeaders, executorRow, executors)
-    val removedExecutorsTable = UIUtils.listingTable(executorHeaders, executorRow, removedExecutors)
+    val executorsTable = this.executorsTable.render(executors)
+    val removedExecutorsTable = this.executorsTable.render(removedExecutors)
 
     val content =
       <div class="row-fluid">
@@ -107,23 +125,5 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
         </div>
       </div>;
     UIUtils.basicSparkPage(content, "Application: " + app.desc.name)
-  }
-
-  private def executorRow(executor: ExecutorInfo): Seq[Node] = {
-    <tr>
-      <td>{executor.id}</td>
-      <td>
-        <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
-      </td>
-      <td>{executor.cores}</td>
-      <td>{executor.memory}</td>
-      <td>{executor.state}</td>
-      <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
-      </td>
-    </tr>
   }
 }
