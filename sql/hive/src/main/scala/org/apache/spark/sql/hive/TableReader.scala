@@ -67,10 +67,6 @@ class HadoopTableReader(
   private val _broadcastedHiveConf =
     sc.sparkContext.broadcast(new SerializableWritable(hiveExtraConf))
 
-  def broadcastedHiveConf = _broadcastedHiveConf
-
-  def hiveConf = _broadcastedHiveConf.value.value
-
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
       hiveTable,
