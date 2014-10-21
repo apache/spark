@@ -30,8 +30,8 @@ public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
   public void onTaskCompletion(TaskContext context) {
     context.isCompleted();
     context.isInterrupted();
-    context.getStageId();
-    context.getPartitionId();
+    context.stageId();
+    context.partitionId();
     context.isRunningLocally();
     context.addTaskCompletionListener(this);
   }
