@@ -229,7 +229,19 @@ private[spark] class UITableBuilder[T](fixedWidth: Boolean = false) {
    * Display a column of durations, in milliseconds, as human-readable strings, such as "12 s".
    */
   def durationCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
-    col[Long](name, formatter = UIUtils.formatDuration)(fieldExtractor)
+    col[Long](name, formatter = UIUtils.formatDuration, sortKey = Some(_.toString))(fieldExtractor)
+  }
+
+  /**
+   * Display a column of optional durations, in milliseconds, as human-readable strings,
+   * such as "12 s".  If the duration is None, then '-' will be displayed.
+   */
+  def optDurationCol(name: String)(fieldExtractor: T => Option[Long]): UITableBuilder[T] = {
+    col[Option[Long]](
+      name,
+      formatter = { _.map(UIUtils.formatDuration).getOrElse("-")},
+      sortKey = Some(_.getOrElse("-").toString)
+    )(fieldExtractor)
   }
 
   def build: UITable[T] = {
