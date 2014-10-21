@@ -461,7 +461,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("collect large number of empty partitions") {
     // Regression test for SPARK-4019
-    assert(sc.makeRDD(0 until 10, 1000).repartition(2001).collect() === (0 until 10))
+    assert(sc.makeRDD(0 until 10, 1000).repartition(2001).collect().toSet === (0 until 10).toSet)
   }
 
   test("take") {
