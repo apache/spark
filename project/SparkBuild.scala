@@ -209,6 +209,8 @@ object Catalyst {
 
 object SQL {
   lazy val settings = Seq(
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
+    libraryDependencies += "ch.epfl.lamp" %% "scala-records" % "0.3",
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
@@ -235,7 +237,7 @@ object Hive {
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
-      currentOpts.filterNot(_ == "-deprecation")
+      currentOpts.filterNot(_ == "-deprecation") :+ "-Ymacro-debug-lite"
     },
     initialCommands in console :=
       """

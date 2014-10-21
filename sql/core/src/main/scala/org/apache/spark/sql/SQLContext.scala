@@ -53,7 +53,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   with CacheManager
   with ExpressionConversions
   with UDFRegistration
-  with Serializable {
+  with Serializable
+  with TypedSQL {
 
   self =>
 
