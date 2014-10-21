@@ -26,17 +26,21 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem}
 import org.apache.spark.streaming.storage.FileSegment
 
-private[streaming] class WriteAheadLogWriter(path: String, conf: Configuration) extends Closeable {
+/**
+ * A writer for writing byte-buffers to a write ahead log file.
+ */
+private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configuration)
+  extends Closeable {
   private val underlyingStream: Either[DataOutputStream, FSDataOutputStream] = {
     val uri = new URI(path)
-    val defaultFs = FileSystem.getDefaultUri(conf).getScheme
+    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
     if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
       assert(!new File(uri.getPath).exists)
       Left(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(uri.getPath))))
     } else {
-      Right(HdfsUtils.getOutputStream(path, conf))
+      Right(HdfsUtils.getOutputStream(path, hadoopConf))
     }
   }
 
@@ -49,9 +53,7 @@ private[streaming] class WriteAheadLogWriter(path: String, conf: Configuration) 
   private var closed = false
 
 
-  // Data is always written as:
-  // - Length - Long
-  // - Data - of length = Length
+  /** Write the bytebuffer to the log file */
   def write(data: ByteBuffer): FileSegment = synchronized {
     assertOpen()
     data.rewind() // Rewind to ensure all data in the buffer is retrieved

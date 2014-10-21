@@ -13,6 +13,24 @@ import org.apache.spark.streaming.storage.WriteAheadLogManager._
 import org.apache.spark.streaming.util.{Clock, SystemClock}
 import org.apache.spark.util.Utils
 
+/**
+ * This class manages write ahead log files.
+ * - Writes records (bytebuffers) to periodically rotating log files.
+ * - Recovers the log files and the reads the recovered records upon failures.
+ * - Cleans up old log files.
+ *
+ * Uses [[org.apache.spark.streaming.storage.WriteAheadLogWriter]] to write
+ * and [[org.apache.spark.streaming.storage.WriteAheadLogReader]] to read.
+ *
+ *@param logDirectory Directory when rotating log files will be created.
+ * @param hadoopConf Hadoop configuration for reading/writing log files.
+ * @param rollingIntervalSecs The interval in seconds with which logs will be rolled over.
+ *                            Default is one minute.
+ * @param maxFailures Max number of failures that is tolerated for every attempt to write to log.
+ *                    Default is three.
+ * @param callerName Optional name of the class who is using this manager.
+ * @param clock Optional clock that is used to check for rotation interval.
+ */
 private[streaming] class WriteAheadLogManager(
     logDirectory: String,
     hadoopConf: Configuration,
@@ -37,6 +55,7 @@ private[streaming] class WriteAheadLogManager(
 
   initializeOrRecover()
 
+  /** Write a byte buffer to the log file */
   def writeToLog(byteBuffer: ByteBuffer): FileSegment = synchronized {
     var fileSegment: FileSegment = null
     var failures = 0
@@ -49,17 +68,27 @@ private[streaming] class WriteAheadLogManager(
       } catch {
         case ex: Exception =>
           lastException = ex
-          logWarning("Failed to ...")
+          logWarning("Failed to write to write ahead log")
           resetWriter()
           failures += 1
       }
     }
     if (fileSegment == null) {
+      logError(s"Failed to write to write ahead log after $failures failures")
       throw lastException
     }
     fileSegment
   }
 
+  /**
+   * Read all the existing logs from the log directory.
+   *
+   * Note that this is typically called when the caller is initializing and wants
+   * to recover past  state from the write ahead logs (that is, before making any writes).
+   * If this is called after writes have been made using this manager, then it may not return
+   * the latest the records. This does not deal with currently active log files, and
+   * hence the implementation is kept simple.
+   */
   def readFromLog(): Iterator[ByteBuffer] = synchronized {
     val logFilesToRead = pastLogs.map{ _.path} ++ Option(currentLogPath)
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
@@ -73,7 +102,7 @@ private[streaming] class WriteAheadLogManager(
    * Delete the log files that are older than the threshold time.
    *
    * Its important to note that the threshold time is based on the time stamps used in the log
-   * files, and is therefore based on the local system time. So if there is coordination necessary
+   * files, which is usually based on the local system time. So if there is coordination necessary
    * between the node calculating the threshTime (say, driver node), and the local system time
    * (say, worker node), the caller has to take account of possible time skew.
    */
@@ -92,7 +121,7 @@ private[streaming] class WriteAheadLogManager(
           logDebug(s"Cleared log file $logInfo")
         } catch {
           case ex: Exception =>
-            logWarning(s"Error clearing log file $logInfo", ex)
+            logWarning(s"Error clearing write ahead log file $logInfo", ex)
         }
       }
       logInfo(s"Cleared log files in $logDirectory older than $threshTime")
@@ -102,14 +131,16 @@ private[streaming] class WriteAheadLogManager(
     }
   }
 
+  /** Stop the manager, close any open log writer */
   def stop(): Unit = synchronized {
     if (currentLogWriter != null) {
       currentLogWriter.close()
     }
     executionContext.shutdown()
-    logInfo("Stopped log manager")
+    logInfo("Stopped write ahead log manager")
   }
 
+  /** Get the current log writer while taking care of rotation */
   private def getLogWriter(currentTime: Long): WriteAheadLogWriter = synchronized {
     if (currentLogWriter == null || currentTime > currentLogWriterStopTime) {
       resetWriter()
@@ -126,6 +157,7 @@ private[streaming] class WriteAheadLogManager(
     currentLogWriter
   }
 
+  /** Initialize the log directory or recover existing logs inside the directory */
   private def initializeOrRecover(): Unit = synchronized {
     val logDirectoryPath = new Path(logDirectory)
     val fileSystem = logDirectoryPath.getFileSystem(hadoopConf)
@@ -134,12 +166,12 @@ private[streaming] class WriteAheadLogManager(
       val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
       pastLogs.clear()
       pastLogs ++= logFileInfo
-      logInfo(s"Recovered ${logFileInfo.size} log files from $logDirectory")
+      logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
       logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
     } else {
       fileSystem.mkdirs(logDirectoryPath,
         FsPermission.createImmutable(Integer.parseInt("770", 8).toShort))
-      logInfo(s"Created ${logDirectory} for log files")
+      logInfo(s"Created ${logDirectory} for write ahead log files")
     }
   }
 

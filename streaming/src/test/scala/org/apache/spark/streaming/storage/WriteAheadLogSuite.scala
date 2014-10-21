@@ -16,22 +16,28 @@
  */
 package org.apache.spark.streaming.storage
 
-import java.io.{DataInputStream, FileInputStream, File, RandomAccessFile}
+import java.io.{DataInputStream, File, FileInputStream, RandomAccessFile}
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.language.implicitConversions
 import scala.util.Random
 
-import scala.collection.mutable.ArrayBuffer
-import scala.language.implicitConversions
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.concurrent.Eventually._
 
 import com.google.common.io.Files
-import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
 import WriteAheadLogSuite._
 
+/**
+ * This testsuite tests all classes related to write ahead logs.
+ */
 class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
 
   val hadoopConf = new Configuration()
@@ -163,8 +169,25 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     assert(dataToWrite.toList === readData.toList)
   }
 
+  test("WriteAheadLogManager - cleanup old logs") {
+    // Write data with manager, recover with new manager and verify
+    val dataToWrite = generateRandomData(100)
+    val fakeClock = new ManualClock
+    val manager = new WriteAheadLogManager(tempDirectory.toString, hadoopConf,
+      rollingIntervalSecs = 1, callerName = "WriteAheadLogSuite", clock = fakeClock)
+    dataToWrite.foreach { item =>
+      fakeClock.addToTime(500) // half second for each
+      manager.writeToLog(item)
+    }
+    val logFiles = getLogFilesInDirectory(tempDirectory)
+    assert(logFiles.size > 1)
+    manager.cleanupOldLogs(fakeClock.currentTime() / 2)
+    eventually(timeout(1 second), interval(10 milliseconds)) {
+      assert(getLogFilesInDirectory(tempDirectory).size < logFiles.size)
+    }
+  }
+
   // TODO (Hari, TD): Test different failure conditions of writers and readers.
-  //  - Failure in the middle of write
   //  - Failure while reading incomplete/corrupt file
 }
 

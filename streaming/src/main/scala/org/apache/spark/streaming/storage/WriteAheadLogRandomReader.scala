@@ -21,6 +21,11 @@ import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
 
+/**
+ * A random access reader for reading write ahead log files written using
+ * [[org.apache.spark.streaming.storage.WriteAheadLogWriter]]. Given the file segment info,
+ * this reads the record (bytebuffer) from the log file.
+ */
 private[streaming] class WriteAheadLogRandomReader(path: String, conf: Configuration)
   extends Closeable {
 

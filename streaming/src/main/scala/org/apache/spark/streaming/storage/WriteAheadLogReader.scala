@@ -22,6 +22,12 @@ import java.nio.ByteBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.Logging
 
+/**
+ * A reader for reading write ahead log files written using
+ * [[org.apache.spark.streaming.storage.WriteAheadLogWriter]]. This reads
+ * the records (bytebuffers) in the log file sequentially and return them as an
+ * iterator of bytebuffers.
+ */
 private[streaming] class WriteAheadLogReader(path: String, conf: Configuration)
   extends Iterator[ByteBuffer] with Closeable with Logging {
 
