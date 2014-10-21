@@ -130,6 +130,7 @@ private[spark] trait SparkStatusAPI { this: SparkContext =>
       ) yield {
         new SparkStageInfoImpl(
           stageId,
+          info.attemptId,
           info.name,
           info.numTasks,
           data.numActiveTasks,

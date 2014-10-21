@@ -25,6 +25,7 @@ private class SparkJobInfoImpl (
 
 private class SparkStageInfoImpl(
   val stageId: Int,
+  val currentAttemptId: Int,
   val name: String,
   val numTasks: Int,
   val numActiveTasks: Int,
