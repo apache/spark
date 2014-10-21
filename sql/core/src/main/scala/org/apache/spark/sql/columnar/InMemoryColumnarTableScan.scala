@@ -66,14 +66,29 @@ private[sql] case class InMemoryRelation(
     batchStats.value.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
   }
 
+  // Statistics propagation contracts:
+  // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
+  // 2. Only propagate statistics when `_statistics` is non-null
+  private def statisticsToBePropagated = if (_statistics == null) {
+    val updatedStats = statistics
+    if (_statistics == null) null else updatedStats
+  } else {
+    _statistics
+  }
+
   override def statistics = if (_statistics == null) {
     if (batchStats.value.isEmpty) {
+      // Underlying columnar RDD hasn't been materialized, no useful statistics information
+      // available, return the default statistics.
       Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
     } else {
+      // Underlying columnar RDD has been materialized, required information has also been collected
+      // via the `batchStats` accumulator, compute the final statistics, and update `_statistics`.
       _statistics = Statistics(sizeInBytes = computeSizeInBytes)
       _statistics
     }
   } else {
+    // Pre-computed statistics
     _statistics
   }
 
@@ -129,7 +144,7 @@ private[sql] case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child)(
-      _cachedColumnBuffers, if (_statistics == null) statistics else _statistics)
+      _cachedColumnBuffers, statisticsToBePropagated)
   }
 
   override def children = Seq.empty
@@ -142,7 +157,7 @@ private[sql] case class InMemoryRelation(
       storageLevel,
       child)(
       _cachedColumnBuffers,
-      if (_statistics == null) statistics else _statistics).asInstanceOf[this.type]
+      statisticsToBePropagated).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers = _cachedColumnBuffers
