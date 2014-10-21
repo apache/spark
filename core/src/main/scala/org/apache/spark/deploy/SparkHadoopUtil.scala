@@ -20,18 +20,17 @@ package org.apache.spark.deploy
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
-import org.apache.hadoop.fs.{FileSystem, Path}
-
-import org.apache.spark.util.Utils
-import org.apache.hadoop.fs.FileSystem.Statistics
 
 /**
  * :: DeveloperApi ::
@@ -126,12 +125,13 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Returns a function that can be called to find the number of Hadoop FileSystem bytes read by
-   * this thread so far. Reflection is required because thread-level FileSystem statistics are only
-   * available as of Hadoop 2.5 (see HADOOP-10688). Returns None if the required method can't be
-   * found.
+   * Returns a function that can be called to find Hadoop FileSystem bytes read. If
+   * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes read on r since t.  Reflection is required because thread-level FileSystem
+   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
+   * Returns None if the required method can't be found.
    */
-  def getInputBytesReadCallback(path: Path, conf: Configuration): Option[() => Long] = {
+  def getFSBytesReadOnThreadCallback(path: Path, conf: Configuration): Option[() => Long] = {
     val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
     val scheme = qualifiedPath.toUri().getScheme()
     val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
@@ -141,10 +141,10 @@ class SparkHadoopUtil extends Logging {
         Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
       val getBytesReadMethod = statisticsDataClass.getDeclaredMethod("getBytesRead")
       val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
-      val start = f()
-      Some(() => f() - start)
+      val baselineBytesRead = f()
+      Some(() => f() - baselineBytesRead)
     } catch {
-      case e: Exception => {
+      case e: NoSuchMethodException => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
       }

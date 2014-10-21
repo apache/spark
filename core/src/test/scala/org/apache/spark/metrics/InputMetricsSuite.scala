@@ -46,7 +46,7 @@ class InputMetricsSuite extends FunSuite with SharedSparkContext {
     sc.textFile("file://" + file.getAbsolutePath, 2).count()
 
     // Wait for task end events to come in
-    Thread.sleep(100)
+    sc.listenerBus.waitUntilEmpty(500)
     assert(taskBytesRead.length == 2)
     assert(taskBytesRead.sum == file.length())
   }

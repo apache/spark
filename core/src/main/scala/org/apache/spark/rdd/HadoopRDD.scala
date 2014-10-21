@@ -226,7 +226,7 @@ class HadoopRDD[K, V](
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       // Find a function that will return the FileSystem bytes read by this thread.
       val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
-        SparkHadoopUtil.get.getInputBytesReadCallback(
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
           split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf)
       } else {
         None
@@ -244,10 +244,12 @@ class HadoopRDD[K, V](
             finished = true
         }
 
-        // Update bytes read metric every 32 records
-        if (recordsSinceMetricsUpdate == 32 && bytesReadCallback.isDefined) {
+        // Update bytes read metric every few records
+        if (recordsSinceMetricsUpdate == HadoopRDD.RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES
+            && bytesReadCallback.isDefined) {
           recordsSinceMetricsUpdate = 0
-          inputMetrics.bytesRead = bytesReadCallback.get()
+          val bytesReadFn = bytesReadCallback.get
+          inputMetrics.bytesRead = bytesReadFn()
         } else {
           recordsSinceMetricsUpdate += 1
         }
@@ -321,6 +323,9 @@ private[spark] object HadoopRDD extends Logging {
    * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
    */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
+  /** Update the input bytes read metric each time this number of records has been read */
+  val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of

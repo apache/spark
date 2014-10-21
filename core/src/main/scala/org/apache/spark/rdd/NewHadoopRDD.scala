@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.input.WholeTextFileInputFormat
@@ -37,7 +38,6 @@ import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.Utils
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -122,7 +122,7 @@ class NewHadoopRDD[K, V](
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       // Find a function that will return the FileSystem bytes read by this thread.
       val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
-        SparkHadoopUtil.get.getInputBytesReadCallback(
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
           split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf)
       } else {
         None
@@ -151,8 +151,9 @@ class NewHadoopRDD[K, V](
         }
         havePair = false
 
-        // Update bytes read metric every 32 records
-        if (recordsSinceMetricsUpdate == 32 && bytesReadCallback.isDefined) {
+        // Update bytes read metric every few records
+        if (recordsSinceMetricsUpdate == HadoopRDD.RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES
+            && bytesReadCallback.isDefined) {
           recordsSinceMetricsUpdate = 0
           inputMetrics.bytesRead = bytesReadCallback.get()
         } else {
