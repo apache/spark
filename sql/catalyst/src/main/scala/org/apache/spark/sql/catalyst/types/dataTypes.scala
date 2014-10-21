@@ -333,7 +333,7 @@ case object ByteType extends IntegralType {
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
 object FractionalType {
-  def unapply[T <: Expression](a: T): Option[T] =
+  def unapply(a: Expression): Option[Expression] =
     if (a.dataType.isInstanceOf[FractionalType]) Some(a) else None
 }
 abstract class FractionalType extends NumericType {

@@ -126,14 +126,14 @@ trait HiveTypeCoercion {
           b.makeCopy(Array(r, Literal(Double.NaN)))
         case b @ BinaryExpression(DoubleType(l), StringNaN) =>
           b.makeCopy(Array(Literal(Double.NaN), l))
-        case b @ BinaryExpression(l @ StringNaN, StringNaN) =>
-          b.makeCopy(Array(Literal(Double.NaN), l))
 
         /* Float Conversions */
         case b @ BinaryExpression(StringNaN, FloatType(r)) =>
           b.makeCopy(Array(r, Literal(Float.NaN)))
         case b @ BinaryExpression(FloatType(l), StringNaN) =>
           b.makeCopy(Array(Literal(Float.NaN), l))
+
+        /* Use float NaN by default to avoid unnecessary type widening */
         case b @ BinaryExpression(l @ StringNaN, StringNaN) =>
           b.makeCopy(Array(Literal(Float.NaN), l))
       }
