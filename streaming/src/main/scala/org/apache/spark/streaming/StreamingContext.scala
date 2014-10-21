@@ -47,7 +47,7 @@ import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab
  * The associated SparkContext can be accessed using `context.sparkContext`. After
  * creating and transforming DStreams, the streaming computation can be started and stopped
  * using `context.start()` and `context.stop()`, respectively.
- * `context.awaitTransformation()` allows the current thread to wait for the termination
+ * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
