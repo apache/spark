@@ -31,6 +31,8 @@ private class PairwiseRRDD[T: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Array[Byte])] = {
 
+    val parentIterator = firstParent[T].iterator(split, context)
+
     val pb = RRDD.rWorkerProcessBuilder(rLibDir)
     val proc = pb.start()
 
@@ -38,7 +40,7 @@ private class PairwiseRRDD[T: ClassTag](
 
     val tempFile = RRDD.startStdinThread(rLibDir, proc, hashFunc, dataSerialized,
       functionDependencies, packageNames, broadcastVars,
-      firstParent[T].iterator(split, context), numPartitions,
+      parentIterator, numPartitions,
       split.index)
 
     // Return an iterator that read lines from the process's stdout
@@ -109,6 +111,8 @@ class RRDD[T: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
 
+    val parentIterator = firstParent[T].iterator(split, context)
+
     val pb = RRDD.rWorkerProcessBuilder(rLibDir)
     val proc = pb.start()
 
@@ -117,8 +121,7 @@ class RRDD[T: ClassTag](
     // Write -1 in numPartitions to indicate this is a normal RDD
     val tempFile = RRDD.startStdinThread(rLibDir, proc, func, dataSerialized,
       functionDependencies, packageNames, broadcastVars,
-      firstParent[T].iterator(split, context),
-      numPartitions = -1, split.index)
+      parentIterator, numPartitions = -1, split.index)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
