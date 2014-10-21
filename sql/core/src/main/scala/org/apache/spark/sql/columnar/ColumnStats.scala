@@ -54,7 +54,14 @@ private[sql] sealed trait ColumnStats extends Serializable {
   /**
    * Gathers statistics information from `row(ordinal)`.
    */
-  def gatherStats(row: Row, ordinal: Int): Unit
+  def gatherStats(row: Row, ordinal: Int): Unit = {
+    if (row.isNullAt(ordinal)) {
+      nullCount += 1
+      // 4 bytes for null position
+      sizeInBytes += 4
+    }
+    count += 1
+  }
 
   /**
    * Column statistics represented as a single row, currently including closed lower bound, closed
@@ -75,15 +82,13 @@ private[sql] class ByteColumnStats extends ColumnStats {
   protected var lower = Byte.MaxValue
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getByte(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += BYTE.defaultSize
     }
-    count += 1
-    sizeInBytes += BYTE.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -94,15 +99,13 @@ private[sql] class ShortColumnStats extends ColumnStats {
   protected var lower = Short.MaxValue
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getShort(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += SHORT.defaultSize
     }
-    count += 1
-    sizeInBytes += SHORT.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -113,15 +116,13 @@ private[sql] class LongColumnStats extends ColumnStats {
   protected var lower = Long.MaxValue
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getLong(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += LONG.defaultSize
     }
-    count += 1
-    sizeInBytes += LONG.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -132,15 +133,13 @@ private[sql] class DoubleColumnStats extends ColumnStats {
   protected var lower = Double.MaxValue
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getDouble(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += DOUBLE.defaultSize
     }
-    count += 1
-    sizeInBytes += DOUBLE.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -151,15 +150,13 @@ private[sql] class FloatColumnStats extends ColumnStats {
   protected var lower = Float.MaxValue
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getFloat(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += FLOAT.defaultSize
     }
-    count += 1
-    sizeInBytes += FLOAT.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -170,15 +167,13 @@ private[sql] class IntColumnStats extends ColumnStats {
   protected var lower = Int.MaxValue
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getInt(ordinal)
       if (value > upper) upper = value
       if (value < lower) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += INT.defaultSize
     }
-    count += 1
-    sizeInBytes += INT.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -189,15 +184,13 @@ private[sql] class StringColumnStats extends ColumnStats {
   protected var lower: String = null
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getString(ordinal)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += STRING.actualSize(row, ordinal)
     }
-    count += 1
-    sizeInBytes += STRING.actualSize(row, ordinal)
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -208,15 +201,13 @@ private[sql] class DateColumnStats extends ColumnStats {
   protected var lower: Date = null
 
   override def gatherStats(row: Row, ordinal: Int) {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row(ordinal).asInstanceOf[Date]
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += DATE.defaultSize
     }
-    count += 1
-    sizeInBytes += DATE.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
@@ -227,15 +218,13 @@ private[sql] class TimestampColumnStats extends ColumnStats {
   protected var lower: Timestamp = null
 
   override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row(ordinal).asInstanceOf[Timestamp]
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
-    } else {
-      nullCount += 1
+      sizeInBytes += TIMESTAMP.defaultSize
     }
-    count += 1
-    sizeInBytes += TIMESTAMP.defaultSize
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
