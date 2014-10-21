@@ -249,10 +249,8 @@
     </pluginRepository>
   </pluginRepositories>
   <!-- 
-       This dependency is not required, and it is added - so that we can 
-       later shade it across the sub-projects. This is required to generate 
-       effective poms. And have no other real purpose. It is supposed to be 
-       harmless if not usefull.
+       This is a dummy dependency that is used along with the shading plug-in
+       to create effective poms on publishing (see SPARK-3812).
   -->
   <dependencies>
     <dependency>
@@ -1004,6 +1002,7 @@
     </pluginManagement>
 
     <plugins>
+      <!-- The shade plug-in is used here to create effective pom's (see SPARK-3812). -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -1031,7 +1030,7 @@
             </configuration>
           </execution>
         </executions>
-      </plugin>      
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
