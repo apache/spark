@@ -111,7 +111,8 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
    * implementation, the relevance value is binary.
 
-   * If a query has an empty ground truth set, zero will be used as ndcg together with a log warning.
+   * If a query has an empty ground truth set, zero will be used as ndcg together with
+   * a log warning.
    *
    * See the following paper for detail:
    *
