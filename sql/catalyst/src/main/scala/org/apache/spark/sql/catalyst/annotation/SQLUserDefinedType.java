@@ -24,6 +24,11 @@ import java.lang.annotation.*;
 
 /**
  * A user-defined type which can be automatically recognized by a SQLContext and registered.
+ *
+ * WARNING: This annotation will only work if both Java and Scala reflection return the same class
+ *          names (after erasure) for the UDT.  This will NOT be the case when, e.g., the UDT class
+ *          is enclosed in an object (a singleton).  In these cases, the UDT must be registered
+ *          manually.
  */
 // TODO: Should I used @Documented ?
 @DeveloperApi
