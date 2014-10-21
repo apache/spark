@@ -98,7 +98,7 @@ private[spark] class UITable[T] (cols: Seq[UITableColumn[T, _]], fixedWidth: Boo
   }
 
   /** Render the table with the given data */
-  def render(data: Seq[T]): Seq[Node] = {
+  def render(data: Iterable[T]): Seq[Node] = {
     val rows = data.map(renderRow)
     <table class={tableClass}>
       <thead>{headerRow}</thead>
@@ -216,6 +216,13 @@ private[spark] class UITableBuilder[T](fixedWidth: Boolean = false) {
    */
   def dateCol(name: String)(fieldExtractor: T => Date): UITableBuilder[T] = {
     col[Date](name, formatter = UIUtils.formatDate)(fieldExtractor)
+  }
+
+  /**
+   * Display a column of dates as yyyy/MM/dd HH:mm:ss format.
+   */
+  def epochDateCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
+    col[Long](name, formatter = UIUtils.formatDate)(fieldExtractor)
   }
 
   /**
