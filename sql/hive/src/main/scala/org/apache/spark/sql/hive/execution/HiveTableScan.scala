@@ -69,6 +69,9 @@ case class HiveTableScan(
   @transient
   private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
 
+  // append columns ids and names before broadcast
+  addColumnMetadataToConf(hiveExtraConf)
+
   @transient
   private[this] val hadoopReader = 
     new HadoopTableReader(attributes, relation, context, hiveExtraConf)
@@ -106,8 +109,6 @@ case class HiveTableScan(
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
     hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
   }
-
-  addColumnMetadataToConf(hiveExtraConf)
 
   /**
    * Prunes partitions not involve the query plan.
