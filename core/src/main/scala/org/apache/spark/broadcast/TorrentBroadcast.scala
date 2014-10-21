@@ -63,12 +63,22 @@ private[spark] class TorrentBroadcast[T: ClassTag](
    */
   @transient private var _value: T = obj
 
+  @volatile private var available = true
+
   private val broadcastId = BroadcastBlockId(id)
 
   /** Total number of blocks this broadcast variable contains. */
   private val numBlocks: Int = writeBlocks()
 
-  override protected def getValue() = _value
+  override protected def getValue() = {
+    if (!available) {
+      // NOTE: If two threads find the block unavailable, they will synchronize on 
+      // readBroadcastBlock and the second thread will read the block from the local
+      // BlockManager.
+      readBroadcastBlock()
+    }
+    _value
+  }
 
   /**
    * Divide the object into multiple blocks and put those blocks in the block manager.
@@ -152,9 +162,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](
     out.defaultWriteObject()
   }
 
-  /** Used by the JVM when deserializing this object. */
-  private def readObject(in: ObjectInputStream) {
-    in.defaultReadObject()
+  private def readBroadcastBlock() {
     TorrentBroadcast.synchronized {
       SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
         case Some(x) =>
@@ -173,7 +181,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](
           SparkEnv.get.blockManager.putSingle(
             broadcastId, _value, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
       }
+      available = true
     }
+  }
+
+  /** Used by the JVM when deserializing this object. */
+  private def readObject(in: ObjectInputStream) {
+    in.defaultReadObject()
+    available = false
   }
 }
 
