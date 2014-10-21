@@ -17,19 +17,15 @@
 
 package org.apache.spark.input
 
-import scala.collection.JavaConversions._
-import com.google.common.io.{ ByteStreams, Closeables }
-import org.apache.hadoop.mapreduce.InputSplit
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
-import org.apache.hadoop.mapreduce.RecordReader
-import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.hadoop.fs.{ FSDataInputStream, Path }
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat
-import org.apache.hadoop.mapreduce.JobContext
-import org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader
-import java.io.{ ByteArrayInputStream, ByteArrayOutputStream, DataOutputStream, DataInputStream }
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
+
+import scala.collection.JavaConversions._
 
 /**
  *  A general format for reading whole files in as streams, byte arrays,
@@ -61,7 +57,6 @@ private[spark] abstract class StreamFileInputFormat[T]
  * @note TaskAttemptContext is not serializable resulting in the confBytes construct
  * @note CombineFileSplit is not serializable resulting in the splitBytes construct
  */
-@DeveloperApi
 class PortableDataStream(@transient isplit: CombineFileSplit,
   @transient context: TaskAttemptContext, index: Integer)
   extends Serializable {
