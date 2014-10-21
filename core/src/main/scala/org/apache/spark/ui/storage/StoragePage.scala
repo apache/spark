@@ -22,46 +22,33 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.RDDInfo
-import org.apache.spark.ui.{WebUIPage, UIUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.ui.{UITableBuilder, UITable, WebUIPage, UIUtils}
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
 
-  def render(request: HttpServletRequest): Seq[Node] = {
-    val rdds = listener.rddInfoList
-    val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage("Storage", content, parent)
+  val rddTable: UITable[RDDInfo] = {
+    val builder = new UITableBuilder[RDDInfo]()
+    import builder._
+    customCol("RDD Name") { rdd =>
+      <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
+        {rdd.name}
+      </a>
+    }
+    col("Storage Level") { _.storageLevel.description }
+    intCol("Cached Partitions") { _.numCachedPartitions }
+    col("Fraction Cached") { rdd =>
+      "%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)
+    }
+    memCol("Size in Memory") { _.memSize }
+    memCol("Size in Tachyon") { _.tachyonSize }
+    memCol("Size on Disk") { _.diskSize }
+    build
   }
 
-  /** Header fields for the RDD table */
-  private def rddHeader = Seq(
-    "RDD Name",
-    "Storage Level",
-    "Cached Partitions",
-    "Fraction Cached",
-    "Size in Memory",
-    "Size in Tachyon",
-    "Size on Disk")
-
-  /** Render an HTML row representing an RDD */
-  private def rddRow(rdd: RDDInfo): Seq[Node] = {
-    // scalastyle:off
-    <tr>
-      <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
-          {rdd.name}
-        </a>
-      </td>
-      <td>{rdd.storageLevel.description}
-      </td>
-      <td>{rdd.numCachedPartitions}</td>
-      <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
-      <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
-      <td sorttable_customkey={rdd.tachyonSize.toString}>{Utils.bytesToString(rdd.tachyonSize)}</td>
-      <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
-    </tr>
-    // scalastyle:on
+  def render(request: HttpServletRequest): Seq[Node] = {
+    val content = rddTable.render(listener.rddInfoList)
+    UIUtils.headerSparkPage("Storage", content, parent)
   }
 }
