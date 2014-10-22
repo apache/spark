@@ -1263,7 +1263,7 @@ abstract class RDD[T: ClassTag](
   }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
-  @transient private var doCheckpointCalled = false
+  @transient private var doCheckpointCalled = 0
 
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
@@ -1271,13 +1271,12 @@ abstract class RDD[T: ClassTag](
    * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
-      }
+    if (checkpointData == None && doCheckpointCalled == 0) {
+      dependencies.foreach(_.rdd.doCheckpoint())
+      doCheckpointCalled = 1
+    } else if (checkpointData.isDefined && doCheckpointCalled < 2) {
+      checkpointData.get.doCheckpoint()
+      doCheckpointCalled = 2
     }
   }
 
