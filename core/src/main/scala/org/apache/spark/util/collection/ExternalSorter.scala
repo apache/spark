@@ -264,7 +264,7 @@ private[spark] class ExternalSorter[K, V, C](
   private def spillToMergeableFile(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
     assert(!bypassMergeSort)
 
-    // Because these files may be read during shuffle, they must be compressed using
+    // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
     val (blockId, file) = diskBlockManager.createTempShuffleBlock()
@@ -346,7 +346,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (partitionWriters == null) {
       curWriteMetrics = new ShuffleWriteMetrics()
       partitionWriters = Array.fill(numPartitions) {
-        // Because these files may be read during shuffle, they must be compressed using
+        // Because these files may be read during shuffle, their compression must be controlled by
         // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
         // createTempShuffleBlock here; see SPARK-3426 for more context.
         val (blockId, file) = diskBlockManager.createTempShuffleBlock()
