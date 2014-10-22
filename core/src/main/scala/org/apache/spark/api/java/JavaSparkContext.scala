@@ -641,7 +641,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param logLevel The desired log level as a string.
    */
   def setLoggingLevel(logLevel: String) = {
-    Utils.setLoggingLevel(org.apache.log4j.Level.toLevel(logLevel))
+    sc.setLoggingLevel(logLevel)
   }
 
 
