@@ -73,7 +73,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * concatenating them together. Much faster alternatives exist for common operations such as
    * contains, get, and size.
    */
-  def blocks: Map[BlockId, BlockStatus] = _nonRddNorBroadcastBlocks ++ rddBlocks
+  def blocks: Map[BlockId, BlockStatus] = _nonRddNorBroadcastBlocks ++ _broadcastBlocks ++ rddBlocks
 
   /**
    * Return the RDD blocks stored in this block manager.
@@ -164,7 +164,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Return the number of blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
    */
-  def numBlocks: Int = _nonRddNorBroadcastBlocks.size + numRddBlocks
+  def numBlocks: Int = _nonRddNorBroadcastBlocks.size + _broadcastBlocks.size + numRddBlocks
 
   /**
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.

@@ -33,7 +33,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     val rdds = listener.rddInfoList
 
     val rddContent = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    val broadcastContent = UIUtils.listingTable(broadcastHeader, blockRow, List())
+    val broadcastContent = UIUtils.listingTable(broadcastHeader, blockRow, listener.broadcastVarSeq)
     UIUtils.headerSparkPageWithMultipleTables("Storage", parent, None,
       subTitleContentPair = ("RDDs", rddContent), ("Broadcast", broadcastContent))
   }
