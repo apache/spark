@@ -325,12 +325,9 @@ private[python] class PythonReducedWindowedDStream(
   }
 }
 
-private[python] class PythonReceiverWrapper(
+private[spark] class PythonReceiverWrapper(
      receiver: PythonReceiver,
      storageLevel: StorageLevel) extends Receiver[Array[Byte]](storageLevel) {
-
-  // The Python receiver need py4j, it can only run in the driver
-  override def localOnly(): Boolean = true
 
   /**
    * Call onStart() in Python

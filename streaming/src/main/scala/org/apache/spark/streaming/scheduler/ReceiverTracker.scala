@@ -27,6 +27,7 @@ import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
 import org.apache.spark.util.AkkaUtils
+import org.apache.spark.streaming.api.python.PythonReceiverWrapper
 
 /** Information about blocks received by the receiver */
 private[streaming] case class ReceivedBlockInfo(
@@ -212,7 +213,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
           // start local receiver
           val t1 = new Thread() {
             override def run(): Unit = {
-              startLocalReceivers(receivers.filter(_.localOnly))
+              startLocalReceivers(receivers.filter(_.isInstanceOf[PythonReceiverWrapper]))
             }
           }
           t1.start()
@@ -220,7 +221,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
           // start other receivers
           val t2 = new Thread() {
             override def run(): Unit = {
-              startReceivers(receivers.filterNot(_.localOnly))
+              startReceivers(receivers.filterNot(_.isInstanceOf[PythonReceiverWrapper]))
             }
           }
           t2.start()
