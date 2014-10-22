@@ -18,7 +18,7 @@
 package org.apache.spark.examples.graphx
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.graphx.PartitionStrategy
+import org.apache.spark.graphx.{GraphXUtils, PartitionStrategy}
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.graphx.util.GraphGenerators
 import java.io.{PrintWriter, FileOutputStream}
@@ -80,8 +80,7 @@ object SynthBenchmark {
 
     val conf = new SparkConf()
       .setAppName(s"GraphX Synth Benchmark (nverts = $numVertices, app = $app)")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+    GraphXUtils.registerKryoClasses(conf)
 
     val sc = new SparkContext(conf)
 

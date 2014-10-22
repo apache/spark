@@ -129,9 +129,9 @@ class EdgePartitionSuite extends FunSuite {
     val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
     val a: EdgePartition[Int, Int] = makeEdgePartition(aList)
     val javaSer = new JavaSerializer(new SparkConf())
-    val kryoSer = new KryoSerializer(new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator"))
+    val conf = new SparkConf()
+    GraphXUtils.registerKryoClasses(conf)
+    val kryoSer = new KryoSerializer(conf)
 
     for (ser <- List(javaSer, kryoSer); s = ser.newInstance()) {
       val aSer: EdgePartition[Int, Int] = s.deserialize(s.serialize(a))

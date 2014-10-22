@@ -19,7 +19,6 @@ package org.apache.spark.examples.mllib
 
 import scala.collection.mutable
 
-import com.esotericsoftware.kryo.Kryo
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
@@ -27,7 +26,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -39,13 +37,6 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object MovieLensALS {
-
-  class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-      kryo.register(classOf[mutable.BitSet])
-    }
-  }
 
   case class Params(
       input: String = null,
@@ -108,8 +99,7 @@ object MovieLensALS {
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
-      conf.set("spark.serializer", classOf[KryoSerializer].getName)
-        .set("spark.kryo.registrator", classOf[ALSRegistrator].getName)
+      conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
         .set("spark.kryoserializer.buffer.mb", "8")
     }
     val sc = new SparkContext(conf)

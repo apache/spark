@@ -18,22 +18,30 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
 
-/**
- * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
- * after each test.
-*/
-trait LocalSparkContext {
-  /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
-  def withSpark[T](f: SparkContext => T) = {
-    val conf = new SparkConf()
-    GraphXUtils.registerKryoClasses(conf)
-    val sc = new SparkContext("local", "test", conf)
-    try {
-      f(sc)
-    } finally {
-      sc.stop()
-    }
+import org.apache.spark.graphx.impl._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+
+import org.apache.spark.util.collection.{OpenHashSet, BitSet}
+import org.apache.spark.util.BoundedPriorityQueue
+
+object GraphXUtils {
+  /**
+   * Registers classes that GraphX uses with Kryo.
+   */
+  def registerKryoClasses(conf: SparkConf) {
+    conf.registerKryoClasses(Array(
+      classOf[Edge[Object]],
+      classOf[(VertexId, Object)],
+      classOf[EdgePartition[Object, Object]],
+      classOf[BitSet],
+      classOf[VertexIdToIndexMap],
+      classOf[VertexAttributeBlock[Object]],
+      classOf[PartitionStrategy],
+      classOf[BoundedPriorityQueue[Object]],
+      classOf[EdgeDirection],
+      classOf[GraphXPrimitiveKeyOpenHashMap[VertexId, Int]],
+      classOf[OpenHashSet[Int]],
+      classOf[OpenHashSet[Long]]))
   }
 }
