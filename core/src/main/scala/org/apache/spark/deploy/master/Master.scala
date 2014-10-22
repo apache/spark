@@ -740,7 +740,8 @@ private[spark] class Master(
         msg = URLEncoder.encode(msg, "UTF-8")
         app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
         false
-    }  }
+    }
+  }
 
   /** Generate a new app ID given a app's submission date */
   def newApplicationId(submitDate: Date): String = {

@@ -49,8 +49,8 @@ private[spark] class ZooKeeperPersistenceEngine(val serialization: Serializer, c
     zk.delete().forPath(WORKING_DIR + "/" + name)
   }
 
-  override def read[T: ClassTag](name: String) = {
-    val file = zk.getChildren.forPath(WORKING_DIR).filter(_.startsWith(name))
+  override def read[T: ClassTag](prefix: String) = {
+    val file = zk.getChildren.forPath(WORKING_DIR).filter(_.startsWith(prefix))
     file.map(deserializeFromFile[T]).flatten
   }
 

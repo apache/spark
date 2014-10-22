@@ -48,8 +48,8 @@ private[spark] class FileSystemPersistenceEngine(
     new File(dir + File.separator + name).delete()
   }
 
-  override def read[T: ClassTag](name: String) = {
-    val files = new File(dir).listFiles().filter(_.getName.startsWith(name))
+  override def read[T: ClassTag](prefix: String) = {
+    val files = new File(dir).listFiles().filter(_.getName.startsWith(prefix))
     files.map(deserializeFromFile[T])
   }
 

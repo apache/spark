@@ -27,7 +27,6 @@ import org.apache.spark.serializer.JavaSerializer
  * Implementation of this class can be plugged in as recovery mode alternative for Spark's
  * Standalone mode.
  *
- * @param conf SparkConf
  */
 @DeveloperApi
 abstract class StandaloneRecoveryModeFactory(conf: SparkConf) {
@@ -36,14 +35,11 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf) {
    * PersistenceEngine defines how the persistent data(Information about worker, driver etc..)
    * is handled for recovery.
    *
-   * @return
    */
   def createPersistenceEngine(): PersistenceEngine
 
   /**
    * Create an instance of LeaderAgent that decides who gets elected as master.
-   * @param master
-   * @return
    */
   def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent
 }
@@ -51,8 +47,6 @@ abstract class StandaloneRecoveryModeFactory(conf: SparkConf) {
 /**
  * LeaderAgent in this case is a no-op. Since leader is forever leader as the actual
  * recovery is made by restoring from filesystem.
- *
- * @param conf SparkConf
  */
 private[spark] class FileSystemRecoveryModeFactory(conf: SparkConf)
   extends StandaloneRecoveryModeFactory(conf) with Logging {

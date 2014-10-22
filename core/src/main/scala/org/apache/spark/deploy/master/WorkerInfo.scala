@@ -24,8 +24,7 @@ import akka.actor.ActorRef
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
-@DeveloperApi
-class WorkerInfo(
+private[spark] class WorkerInfo(
     val id: String,
     val host: String,
     val port: Int,

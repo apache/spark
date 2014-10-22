@@ -22,8 +22,7 @@ import java.util.Date
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.DriverDescription
 
-@DeveloperApi
-class DriverInfo(
+private[spark] class DriverInfo(
     val startTime: Long,
     val id: String,
     val desc: DriverDescription,

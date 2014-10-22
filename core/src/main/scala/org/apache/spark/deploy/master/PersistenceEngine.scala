@@ -29,37 +29,50 @@ import scala.reflect.ClassTag
  * Given these two requirements, we will have all apps and workers persisted, but
  * we might not have yet deleted apps or workers that finished (so their liveness must be verified
  * during recovery).
+ *
+ * The implementation of this trait defines how name-object pairs are stored or retrieved.
  */
 @DeveloperApi
 trait PersistenceEngine {
 
+  /**
+   * Defines how the object is serialized and persisted. Implementation will
+   * depend on the store used.
+   */
   def persist(name: String, obj: Object)
 
+  /**
+   * Defines how the object referred by its name is removed from the store.
+   */
   def unpersist(name: String)
 
-  def read[T: ClassTag](name: String): Seq[T]
+  /**
+   * Gives all objects, matching a prefix. This defines how objects are
+   * read/deserialized back.
+   */
+  def read[T: ClassTag](prefix: String): Seq[T]
 
-  def addApplication(app: ApplicationInfo): Unit = {
+  final def addApplication(app: ApplicationInfo): Unit = {
     persist("app_" + app.id, app)
   }
 
-  def removeApplication(app: ApplicationInfo): Unit = {
+  final def removeApplication(app: ApplicationInfo): Unit = {
     unpersist("app_" + app.id)
   }
 
-  def addWorker(worker: WorkerInfo): Unit = {
+  final def addWorker(worker: WorkerInfo): Unit = {
     persist("worker_" + worker.id, worker)
   }
 
-  def removeWorker(worker: WorkerInfo): Unit = {
+  final def removeWorker(worker: WorkerInfo): Unit = {
     unpersist("worker_" + worker.id)
   }
 
-  def addDriver(driver: DriverInfo): Unit = {
+  final def addDriver(driver: DriverInfo): Unit = {
     persist("driver_" + driver.id, driver)
   }
 
-  def removeDriver(driver: DriverInfo): Unit = {
+  final def removeDriver(driver: DriverInfo): Unit = {
     unpersist("driver_" + driver.id)
   }
 
@@ -67,7 +80,7 @@ trait PersistenceEngine {
    * Returns the persisted data sorted by their respective ids (which implies that they're
    * sorted by time of creation).
    */
-  def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
+  final def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
     (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
   }
 

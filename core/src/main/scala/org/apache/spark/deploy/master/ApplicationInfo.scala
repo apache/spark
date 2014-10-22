@@ -27,8 +27,7 @@ import akka.actor.ActorRef
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 
-@DeveloperApi
-class ApplicationInfo(
+private[spark] class ApplicationInfo(
     val startTime: Long,
     val id: String,
     val desc: ApplicationDescription,
