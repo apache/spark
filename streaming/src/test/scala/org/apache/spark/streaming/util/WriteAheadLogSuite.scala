@@ -59,6 +59,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
   override def afterAll() {
     cluster.shutdown()
     FileUtils.deleteDirectory(dfsDir)
+    System.setProperty(TEST_BUILD_DATA_KEY, oldTestBuildDataProp)
   }
 
   test("WriteAheadLogWriter - writing data") {
