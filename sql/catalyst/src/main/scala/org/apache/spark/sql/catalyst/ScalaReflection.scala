@@ -89,6 +89,7 @@ object ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
+    println(s"schemaFor: className = $className")
     tpe match {
       case t if Utils.classIsLoadable(className) &&
         Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
@@ -96,8 +97,10 @@ object ScalaReflection {
         //       whereas className is from Scala reflection.  This can make it hard to find classes
         //       in some cases, such as when a class is enclosed in an object (in which case
         //       Java appends a '$' to the object name but Scala does not).
-        UDTRegistry.registerType(t)
-        Schema(UDTRegistry.udtRegistry(t), nullable = true)
+        val udt = Utils.classForName(className)
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        UDTRegistry.registerType(t, udt)
+        Schema(udt, nullable = true)
       case t if UDTRegistry.udtRegistry.contains(t) =>
         Schema(UDTRegistry.udtRegistry(t), nullable = true)
       case t if t <:< typeOf[Option[_]] =>
