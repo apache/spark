@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.types.UserDefinedType
 /**
  * Global registry for user-defined types (UDTs).
  */
-private[sql] object UDTRegistry {
+object UDTRegistry {
   /** Map: UserType --> UserDefinedType */
   val udtRegistry = new mutable.HashMap[Any, UserDefinedType[_]]()
 
@@ -35,14 +35,9 @@ private[sql] object UDTRegistry {
    * RDDs of user types and SchemaRDDs.
    * If this type has already been registered, this does nothing.
    */
-  def registerType(userType: Type): Unit = {
+  def registerType(userType: Type, udt: UserDefinedType[_]): Unit = {
     // TODO: Check to see if type is built-in.  Throw exception?
-    if (!UDTRegistry.udtRegistry.contains(userType)) {
-      val udt =
-        getClass.getClassLoader.loadClass(userType.typeSymbol.asClass.fullName)
-          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
-      UDTRegistry.udtRegistry(userType) = udt
-    }
+    UDTRegistry.udtRegistry(userType) = udt
     // TODO: Else: Should we check (assert) that udt is the same as what is in the registry?
   }
 }

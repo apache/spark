@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.LogicalRDD
  * Contains functions that are shared between all SchemaRDD types (i.e., Scala, Java)
  */
 private[sql] trait SchemaRDDLike {
-  @transient val sqlContext: SQLContext
+  @transient def sqlContext: SQLContext
   @transient val baseLogicalPlan: LogicalPlan
 
   private[sql] def baseSchemaRDD: SchemaRDD

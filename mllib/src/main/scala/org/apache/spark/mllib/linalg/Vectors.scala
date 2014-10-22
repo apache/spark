@@ -25,8 +25,13 @@ import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
-import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.SparkException
+import org.apache.spark.mllib.util.NumericParser
+import org.apache.spark.sql.catalyst.UDTRegistry
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.Row
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -80,6 +85,8 @@ sealed trait Vector extends Serializable {
  * [[scala.collection.immutable.Vector]] by default.
  */
 object Vectors {
+
+  UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[Vector], new VectorUDT())
 
   /**
    * Creates a dense vector from its values.
@@ -191,6 +198,7 @@ object Vectors {
 /**
  * A dense vector represented by a value array.
  */
+@SQLUserDefinedType(udt = classOf[DenseVectorUDT])
 class DenseVector(val values: Array[Double]) extends Vector {
 
   override def size: Int = values.length
@@ -241,4 +249,125 @@ class SparseVector(
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+}
+
+/**
+ * User-defined type for [[Vector]] which allows easy interaction with SQL
+ * via [[org.apache.spark.sql.SchemaRDD]].
+ */
+private[spark] class VectorUDT extends UserDefinedType[Vector] {
+
+  /**
+   * vectorType: 0 = dense, 1 = sparse.
+   * dense, sparse: One element holds the vector, and the other is null.
+   */
+  override def sqlType: StructType = StructType(Seq(
+    StructField("vectorType", ByteType, nullable = false),
+    StructField("dense", new DenseVectorUDT(), nullable = true),
+    StructField("sparse", new SparseVectorUDT(), nullable = true)))
+
+  override def serialize(obj: Any): Row = {
+    val row = new GenericMutableRow(3)
+    obj match {
+      case v: DenseVector =>
+        row.setByte(0, 0)
+        row.update(1, new DenseVectorUDT().serialize(obj))
+        row.setNullAt(2)
+      case v: SparseVector =>
+        row.setByte(0, 1)
+        row.setNullAt(1)
+        row.update(2, new SparseVectorUDT().serialize(obj))
+    }
+    row
+  }
+
+  override def deserialize(row: Row): Vector = {
+    require(row.length == 3,
+      s"VectorUDT.deserialize given row with length ${row.length} but requires length == 3")
+    val vectorType = row.getByte(0)
+    vectorType match {
+      case 0 =>
+        new DenseVectorUDT().deserialize(row.getAs[Row](1))
+      case 1 =>
+        new SparseVectorUDT().deserialize(row.getAs[Row](2))
+    }
+  }
+}
+
+/**
+ * User-defined type for [[DenseVector]] which allows easy interaction with SQL
+ * via [[org.apache.spark.sql.SchemaRDD]].
+ */
+private[spark] class DenseVectorUDT extends UserDefinedType[DenseVector] {
+
+  override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
+
+  override def serialize(obj: Any): Row = obj match {
+    case v: DenseVector =>
+      val row: GenericMutableRow = new GenericMutableRow(v.size)
+      var i = 0
+      while (i < v.size) {
+        row.setDouble(i, v(i))
+        i += 1
+      }
+      row
+  }
+
+  override def deserialize(row: Row): DenseVector = {
+    val values = new Array[Double](row.length)
+    var i = 0
+    while (i < row.length) {
+      values(i) = row.getDouble(i)
+      i += 1
+    }
+    new DenseVector(values)
+  }
+}
+
+/**
+ * User-defined type for [[SparseVector]] which allows easy interaction with SQL
+ * via [[org.apache.spark.sql.SchemaRDD]].
+ */
+private[spark] class SparseVectorUDT extends UserDefinedType[SparseVector] {
+
+  override def sqlType: StructType = StructType(Seq(
+    StructField("size", IntegerType, nullable = false),
+    StructField("indices", ArrayType(DoubleType, containsNull = false), nullable = false),
+    StructField("values", ArrayType(DoubleType, containsNull = false), nullable = false)))
+
+  override def serialize(obj: Any): Row = obj match {
+    case v: SparseVector =>
+      val nnz = v.indices.size
+      val row: GenericMutableRow = new GenericMutableRow(1 + 2 * nnz)
+      row.setInt(0, v.size)
+      var i = 0
+      while (i < nnz) {
+        row.setInt(1 + i, v.indices(i))
+        i += 1
+      }
+      i = 0
+      while (i < nnz) {
+        row.setDouble(1 + nnz + i, v.values(i))
+        i += 1
+      }
+      row
+  }
+
+  override def deserialize(row: Row): SparseVector = {
+    require(row.length >= 1,
+      s"SparseVectorUDT.deserialize given row with length ${row.length} but requires length >= 1")
+    val vSize = row.getInt(0)
+    val nnz: Int = (row.length - 1) / 2
+    require(nnz * 2 + 1 == row.length,
+      s"SparseVectorUDT.deserialize given row with non-matching indices, values lengths")
+    val indices = new Array[Int](nnz)
+    val values = new Array[Double](nnz)
+    var i = 0
+    while (i < nnz) {
+      indices(i) = row.getInt(1 + i)
+      values(i) = row.getDouble(1 + nnz + i)
+      i += 1
+    }
+    new SparseVector(vSize, indices, values)
+  }
 }

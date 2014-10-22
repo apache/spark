@@ -33,6 +33,8 @@ case class LabeledPoint(label: Double, features: Vector) {
   }
 }
 
+
+
 /**
  * Parser for [[org.apache.spark.mllib.regression.LabeledPoint]].
  */
