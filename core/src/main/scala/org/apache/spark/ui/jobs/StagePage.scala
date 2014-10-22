@@ -98,13 +98,27 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val showAdditionalMetrics =
         <div>
-          <strong>Show additional metrics:</strong>
-          <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/> Scheduler Delay
-          <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/> GC Time
-          <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
-          Result Serialization Time
-          <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
-          Getting Result Time
+          <span class="expand-additional-metrics-arrow arrow-closed"></span>
+          <span class="expand-additional-metrics"><strong>Show additional metrics</strong></span>
+          <div class="additional-metrics collapsed">
+            <ul style="list-style-type:none">
+              <li>
+                <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/>
+                Scheduler Delay
+              </li>
+              <li>
+                <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/> GC Time
+              </li>
+              <li>
+                <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
+                Result Serialization Time
+              </li>
+              <li>
+                <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
+                Getting Result Time
+              </li>
+            </ul>
+          </div>
         </div>
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")

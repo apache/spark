@@ -29,20 +29,7 @@ function stripeTables(){
     });
 }
 
-
-/* Register functions to show/hide columns based on checkboxes. These need
- * to be registered after the page loads. */
+/* Stripe all tables after pages finish loading. */
 $(function() {
-    $("input:checkbox:not(:checked)").each(function() {
-        var column = "table ." + $(this).attr("name");
-        $(column).hide();
-    });
-
-    $("input:checkbox").click(function(){
-        var column = "table ." + $(this).attr("name");
-        $(column).toggle();
-        stripeTables();
-    });
-
     stripeTables();
 });
