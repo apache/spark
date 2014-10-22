@@ -57,7 +57,7 @@ public class JavaCustomReceiver extends Receiver<String> {
 
   public static void main(String[] args) {
     if (args.length < 2) {
-      System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
+      System.err.println("Usage: JavaCustomReceiver <hostname> <port>");
       System.exit(1);
     }
 
