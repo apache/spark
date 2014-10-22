@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.random
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
+import org.apache.commons.math3.random.MersenneTwister
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
@@ -89,12 +89,16 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
 @DeveloperApi
 class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new Poisson(mean, new DRand)
+  private var rng = new PoissonDistribution(mean)
 
-  override def nextValue(): Double = rng.nextDouble()
+  override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new Poisson(mean, new DRand(seed.toInt))
+    rng = new PoissonDistribution(
+      new MersenneTwister(seed),
+      mean,
+      PoissonDistribution.DEFAULT_EPSILON,
+      PoissonDistribution.DEFAULT_MAX_ITERATIONS)
   }
 
   override def copy(): PoissonGenerator = new PoissonGenerator(mean)

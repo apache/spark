@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.tree.impl
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
+import org.apache.commons.math3.random.MersenneTwister
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -60,12 +60,16 @@ private[tree] object BaggedPoint {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
-      val poisson = new Poisson(1.0, new DRand(seed + partitionIndex + 1))
+      val poisson = new PoissonDistribution(
+          new MersenneTwister(seed + partitionIndex + 1),
+          1.0,
+          PoissonDistribution.DEFAULT_EPSILON,
+          PoissonDistribution.DEFAULT_MAX_ITERATIONS)
       instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)
         var subsampleIndex = 0
         while (subsampleIndex < numSubsamples) {
-          subsampleWeights(subsampleIndex) = poisson.nextInt()
+          subsampleWeights(subsampleIndex) = poisson.sample()
           subsampleIndex += 1
         }
         new BaggedPoint(instance, subsampleWeights)

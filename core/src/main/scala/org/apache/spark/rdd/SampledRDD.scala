@@ -21,8 +21,8 @@ import java.util.Random
 
 import scala.reflect.ClassTag
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
+import org.apache.commons.math3.random.MersenneTwister
 
 import org.apache.spark.{Partition, TaskContext}
 
@@ -53,9 +53,14 @@ private[spark] class SampledRDD[T: ClassTag](
     if (withReplacement) {
       // For large datasets, the expected number of occurrences of each element in a sample with
       // replacement is Poisson(frac). We use that to get a count for each element.
-      val poisson = new Poisson(frac, new DRand(split.seed))
+      val poisson = new PoissonDistribution(
+        new MersenneTwister(split.seed),
+        frac,
+        PoissonDistribution.DEFAULT_EPSILON,
+        PoissonDistribution.DEFAULT_MAX_ITERATIONS)
+
       firstParent[T].iterator(split.prev, context).flatMap { element =>
-        val count = poisson.nextInt()
+        val count = poisson.sample()
         if (count == 0) {
           Iterator.empty  // Avoid object allocation when we return 0 items, which is quite often
         } else {

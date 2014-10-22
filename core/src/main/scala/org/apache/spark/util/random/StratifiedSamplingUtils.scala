@@ -22,8 +22,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
+import org.apache.commons.math3.random.MersenneTwister
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
@@ -245,9 +245,9 @@ private[spark] object StratifiedSamplingUtils extends Logging {
           // Must use the same invoke pattern on the rng as in getSeqOp for with replacement
           // in order to generate the same sequence of random numbers when creating the sample
           val copiesAccepted = if (acceptBound == 0) 0L else rng.nextPoisson(acceptBound)
-          val copiesWailisted = rng.nextPoisson(finalResult(key).waitListBound)
+          val copiesWaitlisted = rng.nextPoisson(finalResult(key).waitListBound)
           val copiesInSample = copiesAccepted +
-            (0 until copiesWailisted).count(i => rng.nextUniform() < thresholdByKey(key))
+            (0 until copiesWaitlisted).count(i => rng.nextUniform() < thresholdByKey(key))
           if (copiesInSample > 0) {
             Iterator.fill(copiesInSample.toInt)(item)
           } else {
@@ -261,10 +261,10 @@ private[spark] object StratifiedSamplingUtils extends Logging {
         rng.reSeed(seed + idx)
         iter.flatMap { item =>
           val count = rng.nextPoisson(fractions(item._1))
-          if (count > 0) {
-            Iterator.fill(count)(item)
-          } else {
+          if (count == 0) {
             Iterator.empty
+          } else {
+            Iterator.fill(count)(item)
           }
         }
       }
@@ -274,15 +274,22 @@ private[spark] object StratifiedSamplingUtils extends Logging {
   /** A random data generator that generates both uniform values and Poisson values. */
   private class RandomDataGenerator {
     val uniform = new XORShiftRandom()
-    var poisson = new Poisson(1.0, new DRand)
+    var poissonSeed: Long = 0L
 
     def reSeed(seed: Long) {
       uniform.setSeed(seed)
-      poisson = new Poisson(1.0, new DRand(seed.toInt))
+      poissonSeed = seed
     }
 
     def nextPoisson(mean: Double): Int = {
-      poisson.nextInt(mean)
+      val seed = poissonSeed
+      poissonSeed += 1
+      val poisson = new PoissonDistribution(
+        new MersenneTwister(seed),
+        mean,
+        PoissonDistribution.DEFAULT_EPSILON,
+        PoissonDistribution.DEFAULT_MAX_ITERATIONS)
+      poisson.sample()
     }
 
     def nextUniform(): Double = {
