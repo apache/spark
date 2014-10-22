@@ -30,18 +30,8 @@ import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem}
  */
 private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configuration)
   extends Closeable {
-  private val underlyingStream: Either[DataOutputStream, FSDataOutputStream] = {
-    val uri = new URI(path)
-    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
-    val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
-    if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
-      assert(!new File(uri.getPath).exists)
-      Left(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(uri.getPath))))
-    } else {
-      Right(HdfsUtils.getOutputStream(path, hadoopConf))
-    }
-  }
+  private lazy val stream = HdfsUtils.getOutputStream(path, hadoopConf)
 
   private lazy val hadoopFlushMethod = {
     val cls = classOf[FSDataOutputStream]
@@ -77,21 +67,14 @@ private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configura
     stream.close()
   }
 
-  private def stream(): DataOutputStream = {
-    underlyingStream.fold(x => x,  x => x)
-  }
 
   private def getPosition(): Long = {
-    underlyingStream match {
-      case Left(localStream) => localStream.size
-      case Right(dfsStream) => dfsStream.getPos()
-    }
+    stream.getPos()
   }
 
   private def flush() {
-    underlyingStream match {
-      case Left(localStream) => localStream.flush
-      case Right(dfsStream) => hadoopFlushMethod.foreach { _.invoke(dfsStream) }
+    hadoopFlushMethod.foreach {
+      _.invoke(stream)
     }
   }
 
