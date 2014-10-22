@@ -254,9 +254,9 @@
   -->
   <dependencies>
     <dependency>
-      <groupId>aelfred</groupId>
-      <artifactId>aelfred</artifactId>
-      <version>1.2</version>
+      <groupId>org.spark-project.spark</groupId>
+      <artifactId>unused</artifactId>
+      <version>1.0.0</version>
     </dependency>
   </dependencies>
   <dependencyManagement>
@@ -1016,17 +1016,9 @@
               <shadedArtifactAttached>false</shadedArtifactAttached>
               <artifactSet>
                 <includes>
-                  <include>aelfred:aelfred</include>
+                  <include>org.spark-project.spark:unused</include>
                 </includes>
               </artifactSet>
-              <filters>
-                <filter>
-                  <artifact>aelfred:aelfred</artifact>
-                  <includes>
-                    <include>Inexistent/So/It/Shades/Nothing</include>
-                  </includes>
-                </filter>
-              </filters>
             </configuration>
           </execution>
         </executions>
