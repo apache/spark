@@ -797,6 +797,10 @@ class SparkContext(object):
         it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
         return list(mappedRDD._collect_iterator_through_file(it))
 
+    def setLoggingLevel(self, logLevel):
+        """Control our logLevel. This overrides any user-defined log settings."""
+        self._jsc.setLoggingLevel(logLevel)
+
     def _add_profile(self, id, profileAcc):
         if not self._profile_stats:
             dump_path = self._conf.get("spark.python.profile.dump")
