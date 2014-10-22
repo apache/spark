@@ -56,7 +56,7 @@ private[streaming] class WriteAheadLogReader(path: String, conf: Configuration)
           close()
           false
         case e: Exception =>
-          logDebug("Error reading next item, EOF reached", e)
+          logWarning("Error while trying to read data from HDFS.", e)
           close()
           throw e
       }
