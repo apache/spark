@@ -1721,7 +1721,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the current system LD_LIBRARY_PATH environment
+   * Return the current system LD_LIBRARY_PATH name
    */
   def libraryPathName: String = {
     if (isWindows) {
@@ -1733,6 +1733,9 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Return the LD_LIBRARY_PATH script variable
+   */
   def libraryPathScriptVar: String = {
     if (isWindows) {
       s"%${libraryPathName}%"

@@ -250,7 +250,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       val warning =
         s"""
           |spark.driver.libraryPath was detected (set to '$value').
-          |This is deprecated in Spark 1.1+.
+          |This is deprecated in Spark 1.2+.
           |
           |Please instead use: $driverLibraryPathKey
         """.stripMargin
