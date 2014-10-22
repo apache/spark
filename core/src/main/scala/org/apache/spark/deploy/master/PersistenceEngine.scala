@@ -91,8 +91,6 @@ private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
 
   override def persist(name: String, obj: Object): Unit = {}
 
-  override def readPersistedData() = (Nil, Nil, Nil)
-
   override def unpersist(name: String): Unit = {}
 
   override def read[T: ClassTag](name: String): Seq[T] = Nil
