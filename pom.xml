@@ -888,9 +888,9 @@
                  by Spark SQL for code generation. -->
             <compilerPlugins>
               <compilerPlugin>
-                  <groupId>org.scalamacros</groupId>
-                  <artifactId>paradise_${scala.version}</artifactId>
-                  <version>${scala.macros.version}</version>
+                <groupId>org.scalamacros</groupId>
+                <artifactId>paradise_${scala.version}</artifactId>
+                <version>${scala.macros.version}</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
