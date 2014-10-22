@@ -122,11 +122,20 @@ private[spark] class DiskBlockManager(shuffleBlockManager: ShuffleBlockManager, 
     getAllFiles().map(f => BlockId(f.getName))
   }
 
-  /** Produces a unique block id and File suitable for intermediate results. */
-  def createTempBlock(): (TempBlockId, File) = {
-    var blockId = new TempBlockId(UUID.randomUUID())
+  /** Produces a unique block id and File suitable for storing local intermediate results. */
+  def createTempLocalBlock(): (TempLocalBlockId, File) = {
+    var blockId = new TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempBlockId(UUID.randomUUID())
+      blockId = new TempLocalBlockId(UUID.randomUUID())
+    }
+    (blockId, getFile(blockId))
+  }
+
+  /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
+  def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
+    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    while (getFile(blockId).exists()) {
+      blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
   }
