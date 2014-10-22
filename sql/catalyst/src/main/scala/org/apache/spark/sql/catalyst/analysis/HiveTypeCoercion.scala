@@ -212,9 +212,9 @@ trait HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case a: BinaryArithmetic if a.left.dataType == StringType =>
-        a.makeCopy(Array(Cast(a.left, DoubleType), a.right))
+        a.makeCopy(Array(Cast(a.left, a.right.dataType), a.right))
       case a: BinaryArithmetic if a.right.dataType == StringType =>
-        a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
+        a.makeCopy(Array(a.left, Cast(a.right, a.left.dataType)))
 
       case p: BinaryPredicate if p.left.dataType == StringType && p.right.dataType != StringType =>
         p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
