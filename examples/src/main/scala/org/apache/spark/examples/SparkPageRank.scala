@@ -37,7 +37,7 @@ object SparkPageRank {
   def showWarning() {
     System.err.println(
       """WARN: This is a naive implementation of PageRank and is given as an example!
-        |Please use the PageRank implementation found in org.apache.spark.mllib.classification
+        |Please use the PageRank implementation found in org.apache.spark.graphx.lib.PageRank
         |for more conventional use.
       """.stripMargin)
   }
