@@ -113,7 +113,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
           case ByteType =>
             to.addColumnValue(ColumnValue.byteValue(from.getByte(ordinal)))
           case ShortType =>
-            to.addColumnValue(ColumnValue.intValue(from.getShort(ordinal)))
+            to.addColumnValue(ColumnValue.shortValue(from.getShort(ordinal)))
           case TimestampType =>
             to.addColumnValue(
               ColumnValue.timestampValue(from.get(ordinal).asInstanceOf[Timestamp]))
@@ -145,7 +145,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
           case ByteType =>
             to.addColumnValue(ColumnValue.byteValue(null))
           case ShortType =>
-            to.addColumnValue(ColumnValue.intValue(null))
+            to.addColumnValue(ColumnValue.shortValue(null))
           case TimestampType =>
             to.addColumnValue(ColumnValue.timestampValue(null))
           case BinaryType | _: ArrayType | _: StructType | _: MapType =>
@@ -172,7 +172,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
           result = hiveContext.sql(statement)
           logDebug(result.queryExecution.toString())
           result.queryExecution.logical match {
-            case SetCommand(Some(key), Some(value)) if (key == SQLConf.THRIFTSERVER_POOL) =>
+            case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value)))) =>
               sessionToActivePool(parentSession) = value
               logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
             case _ =>

@@ -25,7 +25,7 @@ To build Spark and its example programs, run:
 
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
-["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
+["Building Spark with Maven"](http://spark.apache.org/docs/latest/building-with-maven.html).
 
 ## Interactive Scala Shell
 
@@ -75,7 +75,7 @@ can be run using:
     ./dev/run-tests
 
 Please see the guidance on how to 
-[run all automated tests](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-AutomatedTesting)
+[run all automated tests](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-AutomatedTesting).
 
 ## A Note About Hadoop Versions
 
