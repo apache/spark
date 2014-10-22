@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -28,7 +29,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.storage.{BlockStatus, BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
 
@@ -85,7 +86,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     override def start() = {}
     override def stop() = {}
     override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-      blockManagerId: BlockManagerId): Boolean = true
+      blockManagerId: BlockManagerId, broadcastInfo: immutable.Map[BlockId, BlockStatus]): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -386,7 +387,8 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
       override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
       override def defaultParallelism() = 2
       override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-        blockManagerId: BlockManagerId): Boolean = true
+      blockManagerId: BlockManagerId,
+      broadcastInfo: immutable.Map[BlockId, BlockStatus]): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
