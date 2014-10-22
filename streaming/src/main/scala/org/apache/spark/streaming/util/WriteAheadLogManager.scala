@@ -63,14 +63,18 @@ private[streaming] class WriteAheadLogManager(
     Utils.newDaemonFixedThreadPool(1, threadpoolName))
   override protected val logName = s"WriteAheadLogManager $callerNameTag"
 
-  private var currentLogPath: String = null
+  private var currentLogPath: Option[String] = None
   private var currentLogWriter: WriteAheadLogWriter = null
   private var currentLogWriterStartTime: Long = -1L
   private var currentLogWriterStopTime: Long = -1L
 
   initializeOrRecover()
 
-  /** Write a byte buffer to the log file */
+  /**
+   * Write a byte buffer to the log file. This method synchronously writes the data in the
+   * ByteBuffer to HDFS. When this method returns, the data is guaranteed to have been flushed
+   * to HDFS, and will be available for readers to read.
+   */
   def writeToLog(byteBuffer: ByteBuffer): FileSegment = synchronized {
     var fileSegment: FileSegment = null
     var failures = 0
@@ -99,13 +103,13 @@ private[streaming] class WriteAheadLogManager(
    * Read all the existing logs from the log directory.
    *
    * Note that this is typically called when the caller is initializing and wants
-   * to recover past  state from the write ahead logs (that is, before making any writes).
+   * to recover past state from the write ahead logs (that is, before making any writes).
    * If this is called after writes have been made using this manager, then it may not return
    * the latest the records. This does not deal with currently active log files, and
    * hence the implementation is kept simple.
    */
   def readFromLog(): Iterator[ByteBuffer] = synchronized {
-    val logFilesToRead = pastLogs.map{ _.path} ++ Option(currentLogPath)
+    val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
     logFilesToRead.iterator.map { file =>
         logDebug(s"Creating log reader with $file")
@@ -130,7 +134,7 @@ private[streaming] class WriteAheadLogManager(
       oldLogFiles.foreach { logInfo =>
         try {
           val path = new Path(logInfo.path)
-          val fs = hadoopConf.synchronized { path.getFileSystem(hadoopConf) }
+          val fs = HdfsUtils.getFileSystemForPath(path, hadoopConf)
           fs.delete(path, true)
           synchronized { pastLogs -= logInfo }
           logDebug(s"Cleared log file $logInfo")
@@ -159,15 +163,15 @@ private[streaming] class WriteAheadLogManager(
   private def getLogWriter(currentTime: Long): WriteAheadLogWriter = synchronized {
     if (currentLogWriter == null || currentTime > currentLogWriterStopTime) {
       resetWriter()
-      if (currentLogPath != null) {
-        pastLogs += LogInfo(currentLogWriterStartTime, currentLogWriterStopTime, currentLogPath)
+      currentLogPath.foreach {
+        pastLogs += LogInfo(currentLogWriterStartTime, currentLogWriterStopTime, _)
       }
       currentLogWriterStartTime = currentTime
       currentLogWriterStopTime = currentTime + (rollingIntervalSecs * 1000)
       val newLogPath = new Path(logDirectory,
         timeToLogFile(currentLogWriterStartTime, currentLogWriterStopTime))
-      currentLogPath = newLogPath.toString
-      currentLogWriter = new WriteAheadLogWriter(currentLogPath, hadoopConf)
+      currentLogPath = Some(newLogPath.toString)
+      currentLogWriter = new WriteAheadLogWriter(currentLogPath.get, hadoopConf)
     }
     currentLogWriter
   }
@@ -175,7 +179,7 @@ private[streaming] class WriteAheadLogManager(
   /** Initialize the log directory or recover existing logs inside the directory */
   private def initializeOrRecover(): Unit = synchronized {
     val logDirectoryPath = new Path(logDirectory)
-    val fileSystem = logDirectoryPath.getFileSystem(hadoopConf)
+    val fileSystem =  HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
       val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
