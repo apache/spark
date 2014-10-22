@@ -634,6 +634,11 @@ class RDD(object):
     def foreachPartition(self, f):
         """
         Applies a function to each partition of this RDD.
+        
+        
+        Note: Due to implementation, f must either return an iterable object
+        or be a generator function. However, foreachPartition always returns 
+        `None`.
 
         >>> def f(iterator):
         ...      for x in iterator:
