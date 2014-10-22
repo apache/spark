@@ -124,7 +124,8 @@ require_arg () {
   local opt="$2"
   local arg="$3"
   if [[ -z "$arg" ]] || [[ "${arg:0:1}" == "-" ]]; then
-    die "$opt requires <$type> argument"
+    echo "$opt requires <$type> argument" 1>&2
+    exit 1
   fi
 }
 
