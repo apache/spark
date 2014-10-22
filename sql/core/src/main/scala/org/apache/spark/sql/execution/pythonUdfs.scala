@@ -105,13 +105,21 @@ private[spark] object ExtractPythonUdfs extends Rule[LogicalPlan] {
   }
 }
 
+object EvaluatePython {
+  def apply(udf: PythonUDF, child: LogicalPlan) =
+    new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
+}
+
 /**
  * :: DeveloperApi ::
  * Evaluates a [[PythonUDF]], appending the result to the end of the input tuple.
  */
 @DeveloperApi
-case class EvaluatePython(udf: PythonUDF, child: LogicalPlan) extends logical.UnaryNode {
-  val resultAttribute = AttributeReference("pythonUDF", udf.dataType, nullable=true)()
+case class EvaluatePython(
+    udf: PythonUDF,
+    child: LogicalPlan,
+    resultAttribute: AttributeReference)
+  extends logical.UnaryNode {
 
   def output = child.output :+ resultAttribute
 }

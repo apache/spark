@@ -24,9 +24,7 @@ import org.apache.spark.sql.catalyst.types.DataType
 /**
  * The data type representing [[DynamicRow]] values.
  */
-case object DynamicType extends DataType {
-  def simpleString: String = "dynamic"
-}
+case object DynamicType extends DataType
 
 /**
  * Wrap a [[Row]] as a [[DynamicRow]].

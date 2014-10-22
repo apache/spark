@@ -870,7 +870,7 @@ private[spark] class BlockManager(
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
-            logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
+            logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %d ms"
               .format((System.currentTimeMillis - onePeerStartTime)))
             peersReplicatedTo += peer
             peersForReplication -= peer
