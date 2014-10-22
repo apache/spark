@@ -99,7 +99,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def waitForApplication(): Unit = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
-    val state = client.monitorApplication(appId, returnOnRunning = true) // blocking
+    val (state, _) = client.monitorApplication(appId, returnOnRunning = true) // blocking
     if (state == YarnApplicationState.FINISHED ||
       state == YarnApplicationState.FAILED ||
       state == YarnApplicationState.KILLED) {

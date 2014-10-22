@@ -417,17 +417,19 @@ private[spark] trait ClientBase extends Logging {
 
   /**
    * Report the state of an application until it has exited, either successfully or
-   * due to some failure, then return the application state.
+   * due to some failure, then return a pair of the yarn application state (FINISHED, FAILED,
+   * KILLED, or RUNNING) and the final application state (UNDEFINED, SUCCEEDED, FAILED,
+   * or KILLED).
    *
    * @param appId ID of the application to monitor.
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
-   * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
+   * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
-      logApplicationReport: Boolean = true): YarnApplicationState = {
+      logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     var lastState: YarnApplicationState = null
     while (true) {
@@ -468,11 +470,11 @@ private[spark] trait ClientBase extends Logging {
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
-        return state
+        return (state, report.getFinalApplicationStatus)
       }
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
-        return state
+        return (state, report.getFinalApplicationStatus)
       }
 
       lastState = state
@@ -485,8 +487,23 @@ private[spark] trait ClientBase extends Logging {
   /**
    * Submit an application to the ResourceManager and monitor its state.
    * This continues until the application has exited for any reason.
+   * If the application finishes with a failed, killed, or undefined status,
+   * throw an appropriate SparkException.
    */
-  def run(): Unit = monitorApplication(submitApplication())
+  def run(): Unit = {
+    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
+    if (yarnApplicationState == YarnApplicationState.FAILED ||
+      finalApplicationStatus == FinalApplicationStatus.FAILED) {
+      throw new SparkException("Application finished with failed status")
+    }
+    if (yarnApplicationState == YarnApplicationState.KILLED ||
+      finalApplicationStatus == FinalApplicationStatus.KILLED) {
+      throw new SparkException("Application is killed")
+    }
+    if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
+      throw new SparkException("The final status of application is undefined")
+    }
+  }
 
   /* --------------------------------------------------------------------------------------- *
    |  Methods that cannot be implemented here due to API differences across hadoop versions  |
