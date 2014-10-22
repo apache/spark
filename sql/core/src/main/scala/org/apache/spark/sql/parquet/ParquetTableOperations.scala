@@ -76,6 +76,10 @@ case class ParquetTableScan(
     s"$normalOutput + $partOutput != $attributes, ${relation.output}")
 
   override def execute(): RDD[Row] = {
+    import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
+    import parquet.filter2.compat.FilterCompat.Filter
+    import parquet.filter2.predicate.FilterPredicate
+
     val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
@@ -106,7 +110,11 @@ case class ParquetTableScan(
     // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
     if (columnPruningPred.length > 0 &&
       sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-      ParquetFilters.serializeFilterExpressions(columnPruningPred, conf)
+      //ParquetFilters.serializeFilterExpressions(columnPruningPred, conf)
+      //Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
+      val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
+      val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
+      ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
     }
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
@@ -362,15 +370,19 @@ private[parquet] class FilteringParquetRowInputFormat
   override def createRecordReader(
       inputSplit: InputSplit,
       taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
+    
+    import parquet.filter2.compat.FilterCompat.NoOpFilter
+    import parquet.filter2.compat.FilterCompat.Filter
+
     val readSupport: ReadSupport[Row] = new RowReadSupport()
 
-    val filterExpressions =
-      ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
-    if (filterExpressions.length > 0) {
-      logInfo(s"Pushing down predicates for RecordFilter: ${filterExpressions.mkString(", ")}")
+    //val filterExpressions =
+    //ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
+    val filter = ParquetInputFormat.getFilter(ContextUtil.getConfiguration(taskAttemptContext))
+    if (!filter.isInstanceOf[NoOpFilter]) {
       new ParquetRecordReader[Row](
         readSupport,
-        ParquetFilters.createRecordFilter(filterExpressions))
+        filter)
     } else {
       new ParquetRecordReader[Row](readSupport)
     }
