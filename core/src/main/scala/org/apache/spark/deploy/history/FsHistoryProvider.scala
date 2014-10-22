@@ -23,6 +23,8 @@ import java.util.concurrent.{Executors, TimeUnit}
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -30,8 +32,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
-
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   with Logging {
@@ -44,8 +44,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // One week
   private val DEFAULT_SPARK_HISTORY_FS_MAXAGE_S = Duration(7, TimeUnit.DAYS).toSeconds
 
-  private def warnUpdateInterval(value: String): String = {
-    logWarning("Using spark.history.fs.updateInterval to set interval " +
+  private def warnUpdateInterval(key: String, value: String): String = {
+    logWarning(s"Using $key to set interval " +
       "between each check for event log updates is deprecated, " +
       "please use spark.history.fs.update.interval.seconds instead.")
     value
@@ -53,8 +53,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_MS = conf.getOption("spark.history.fs.update.interval.seconds")
-    .orElse(conf.getOption("spark.history.fs.updateInterval").map(warnUpdateInterval))
-    .orElse(conf.getOption("spark.history.updateInterval"))
+    .orElse(conf.getOption("spark.history.fs.updateInterval")
+      .map(warnUpdateInterval("spark.history.fs.updateInterval", _)))
+    .orElse(conf.getOption("spark.history.updateInterval")
+      .map(warnUpdateInterval("spark.history.updateInterval", _)))
     .map(_.toInt)
     .getOrElse(10) * 1000
 
@@ -261,7 +263,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             fs.delete(dir.getPath, true)
           }
         } catch {
-          case t: IOException => logError("IOException in cleaning logs", t)
+          case t: IOException => logError(s"IOException in cleaning logs of  $dir", t)
         }
       }
     } catch {
