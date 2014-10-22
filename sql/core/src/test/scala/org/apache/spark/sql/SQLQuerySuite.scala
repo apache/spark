@@ -43,6 +43,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     TimeZone.setDefault(origZone)
   }
 
+  test("grouping on nested fields") {
+    jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
+     .registerTempTable("rows")
+
+    checkAnswer(
+      sql(
+        """
+          |select attribute, sum(cnt)
+          |from (
+          |  select nested.attribute, count(*) as cnt
+          |  from rows
+          |  group by nested.attribute) a
+          |group by attribute
+        """.stripMargin),
+      Row(1, 1) :: Nil)
+  }
+
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
       sql("SELECT ABS(-1.3)"),
@@ -719,5 +736,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
     checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
+  }
+
+  test("Multiple join") {
+    checkAnswer(
+      sql(
+        """SELECT a.key, b.key, c.key
+          |FROM testData a
+          |JOIN testData b ON a.key = b.key
+          |JOIN testData c ON a.key = c.key
+        """.stripMargin),
+      (1 to 100).map(i => Seq(i, i, i)))
   }
 }
