@@ -131,4 +131,9 @@ private[spark] class Stage(
   override def toString = "Stage " + id
 
   override def hashCode(): Int = id
+
+  override def equals(other: Any): Boolean = other match {
+    case stage: Stage => stage != null && stage.id == id
+    case _ => false
+  }
 }

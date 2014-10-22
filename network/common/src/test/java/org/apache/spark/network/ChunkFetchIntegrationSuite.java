@@ -43,8 +43,10 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ChunkFetchIntegrationSuite {
@@ -93,7 +95,7 @@ public class ChunkFetchIntegrationSuite {
         }
       }
     };
-    TransportContext context = new TransportContext(conf, streamManager, new NoOpRpcHandler());
+    TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }

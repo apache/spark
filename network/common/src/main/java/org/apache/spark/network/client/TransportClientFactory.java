@@ -78,7 +78,7 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) throws TimeoutException {
+  public TransportClient createClient(String remoteHost, int remotePort) {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
@@ -115,7 +115,7 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
-      throw new TimeoutException(
+      throw new RuntimeException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {
       throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());

@@ -109,7 +109,7 @@ private[spark] class MetricsSystem private (
    */
   def buildRegistryName(source: Source): String = {
     val appId = conf.getOption("spark.app.id")
-    val executorId = conf.getOption("spark.executor.id")
+    val executorId = conf.getOption("spark.executor.id").map("executor." + _)
     val defaultName = MetricRegistry.name(source.sourceName)
 
     if (instance == "driver" || instance == "executor") {

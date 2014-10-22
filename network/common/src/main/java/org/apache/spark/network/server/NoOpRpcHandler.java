@@ -1,4 +1,6 @@
-package org.apache.spark.network;/*
+package org.apache.spark.network.server;
+
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -17,12 +19,20 @@ package org.apache.spark.network;/*
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.server.RpcHandler;
 
-/** Test RpcHandler which always returns a zero-sized success. */
+/** An RpcHandler suitable for a client-only TransportContext, which cannot receive RPCs. */
 public class NoOpRpcHandler implements RpcHandler {
+  private final StreamManager streamManager;
+
+  public NoOpRpcHandler() {
+    streamManager = new OneForOneStreamManager();
+  }
+
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    callback.onSuccess(new byte[0]);
+    throw new UnsupportedOperationException("Cannot handle messages");
   }
+
+  @Override
+  public StreamManager getStreamManager() { return streamManager; }
 }

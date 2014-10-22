@@ -40,6 +40,12 @@ import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
+// TODO: Remove me before merge!
+import org.apache.spark.network.util.SystemPropertyConfigProvider
+import org.apache.spark.network.TransportContext
+import org.apache.spark.network.shuffle.StandaloneShuffleBlockHandler
+import org.apache.spark.network.util.TransportConf
+
 /**
   * @param masterUrls Each url should look like spark://host:port.
   */
@@ -186,11 +192,11 @@ private[spark] class Worker(
   private def retryConnectToMaster() {
     Utils.tryOrExit {
       connectionAttemptCount += 1
-      logInfo(s"Attempting to connect to master (attempt # $connectionAttemptCount")
       if (registered) {
         registrationRetryTimer.foreach(_.cancel())
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
+        logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
         tryRegisterAllMasters()
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel())
@@ -428,6 +434,17 @@ private[spark] object Worker extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
+
+    // Create external shuffle server
+    // TODO: Remove this before PR goes in -- this is just to demonstrate how it looks!
+    scala.util.Try {
+      val port = conf.getInt("spark.shuffle.service.port", 7337)
+      val transportConf = new TransportConf(new SystemPropertyConfigProvider())
+      val rpcHandler = new StandaloneShuffleBlockHandler()
+      val transportContext = new TransportContext(transportConf, rpcHandler)
+      transportContext.createServer(port)
+    }
+
     val args = new WorkerArguments(argStrings, conf)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)
