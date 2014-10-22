@@ -18,6 +18,9 @@
 import os
 
 
+__all__ = ['SparkFiles']
+
+
 class SparkFiles(object):
 
     """

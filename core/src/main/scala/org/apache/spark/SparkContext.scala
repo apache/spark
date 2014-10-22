@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
+import java.util.Arrays
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
@@ -187,6 +188,15 @@ class SparkContext(config: SparkConf) extends Logging {
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
 
+  private[spark] val isEventLogEnabled = conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] val eventLogDir: Option[String] = {
+    if (isEventLogEnabled) {
+      Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
+    } else {
+      None
+    }
+  }
+
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
   val tachyonFolderName = "spark-" + randomUUID.toString()
@@ -200,6 +210,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val listenerBus = new LiveListenerBus
 
   // Create the Spark execution environment (cache, map output tracker, etc)
+  conf.set("spark.executor.id", "driver")
   private[spark] val env = SparkEnv.create(
     conf,
     "<driver>",
@@ -220,43 +231,20 @@ class SparkContext(config: SparkConf) extends Logging {
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
   // Initialize the Spark UI, registering all associated listeners
-  private[spark] val ui = new SparkUI(this)
-  ui.bind()
+  private[spark] val ui: Option[SparkUI] =
+    if (conf.getBoolean("spark.ui.enabled", true)) {
+      Some(new SparkUI(this))
+    } else {
+      // For tests, do not enable the UI
+      None
+    }
+
+  // Bind the UI before starting the task scheduler to communicate
+  // the bound port to the cluster manager properly
+  ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
-  val hadoopConfiguration: Configuration = {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration()
-    // Explicitly check for S3 environment variables
-    if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
-        System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
-      hadoopConf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
-      hadoopConf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
-      hadoopConf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
-      hadoopConf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
-    }
-    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-    conf.getAll.foreach { case (key, value) =>
-      if (key.startsWith("spark.hadoop.")) {
-        hadoopConf.set(key.substring("spark.hadoop.".length), value)
-      }
-    }
-    val bufferSize = conf.get("spark.buffer.size", "65536")
-    hadoopConf.set("io.file.buffer.size", bufferSize)
-    hadoopConf
-  }
-
-  // Optionally log Spark events
-  private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
-      logger.start()
-      listenerBus.addListener(logger)
-      Some(logger)
-    } else None
-  }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
+  val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
   val startTime = System.currentTimeMillis()
 
@@ -321,6 +309,29 @@ class SparkContext(config: SparkConf) extends Logging {
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
   // constructor
   taskScheduler.start()
+
+  val applicationId: String = taskScheduler.applicationId()
+  conf.set("spark.app.id", applicationId)
+
+  val metricsSystem = env.metricsSystem
+
+  // The metrics system for Driver need to be set spark.app.id to app ID.
+  // So it should start after we get app ID from the task scheduler and set spark.app.id.
+  metricsSystem.start()
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (isEventLogEnabled) {
+      val logger =
+        new EventLoggingListener(applicationId, eventLogDir.get, conf, hadoopConfiguration)
+      logger.start()
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
@@ -424,8 +435,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // Post init
   taskScheduler.postStartHook()
 
-  private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
-  private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
+  private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
+  private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
 
   private def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
@@ -772,20 +783,20 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
    * with `+=`. Only the driver can access the accumuable's `value`.
-   * @tparam T accumulator type
-   * @tparam R type that can be added to the accumulator
+   * @tparam R accumulator result type
+   * @tparam T type that can be added to the accumulator
    */
-  def accumulable[T, R](initialValue: T)(implicit param: AccumulableParam[T, R]) =
+  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) =
     new Accumulable(initialValue, param)
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
    * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
    * access the accumuable's `value`.
-   * @tparam T accumulator type
-   * @tparam R type that can be added to the accumulator
+   * @tparam R accumulator result type
+   * @tparam T type that can be added to the accumulator
    */
-  def accumulable[T, R](initialValue: T, name: String)(implicit param: AccumulableParam[T, R]) =
+  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) =
     new Accumulable(initialValue, param, Some(name))
 
   /**
@@ -807,6 +818,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val callSite = getCallSite
+    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
@@ -815,7 +828,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
-   * use `SparkFiles.get(path)` to find its download location.
+   * use `SparkFiles.get(fileName)` to find its download location.
    */
   def addFile(path: String) {
     val uri = new URI(path)
@@ -827,7 +840,8 @@ class SparkContext(config: SparkConf) extends Logging {
     addedFiles(key) = System.currentTimeMillis
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
-    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager)
+    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
+      hadoopConfiguration)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
@@ -843,7 +857,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** The version of Spark on which this application is running. */
-  def version = SparkContext.SPARK_VERSION
+  def version = SPARK_VERSION
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
@@ -1008,7 +1022,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Shut down the SparkContext. */
   def stop() {
     postApplicationEnd()
-    ui.stop()
+    ui.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -1042,28 +1056,40 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Support function for API backtraces.
+   * Set the thread-local property for overriding the call sites
+   * of actions and RDDs.
    */
-  def setCallSite(site: String) {
-    setLocalProperty("externalCallSite", site)
+  def setCallSite(shortCallSite: String) {
+    setLocalProperty(CallSite.SHORT_FORM, shortCallSite)
   }
 
   /**
-   * Support function for API backtraces.
+   * Set the thread-local property for overriding the call sites
+   * of actions and RDDs.
+   */
+  private[spark] def setCallSite(callSite: CallSite) {
+    setLocalProperty(CallSite.SHORT_FORM, callSite.shortForm)
+    setLocalProperty(CallSite.LONG_FORM, callSite.longForm)
+  }
+
+  /**
+   * Clear the thread-local property for overriding the call sites
+   * of actions and RDDs.
    */
   def clearCallSite() {
-    setLocalProperty("externalCallSite", null)
+    setLocalProperty(CallSite.SHORT_FORM, null)
+    setLocalProperty(CallSite.LONG_FORM, null)
   }
 
   /**
    * Capture the current user callsite and return a formatted version for printing. If the user
-   * has overridden the call site, this will return the user's version.
+   * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
   private[spark] def getCallSite(): CallSite = {
-    Option(getLocalProperty("externalCallSite")) match {
-      case Some(callSite) => CallSite(callSite, longForm = "")
-      case None => Utils.getCallSite
-    }
+    Option(getLocalProperty(CallSite.SHORT_FORM)).map { case shortCallSite =>
+      val longCallSite = Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse("")
+      CallSite(shortCallSite, longCallSite)
+    }.getOrElse(Utils.getCallSite())
   }
 
   /**
@@ -1084,11 +1110,8 @@ class SparkContext(config: SparkConf) extends Logging {
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
-    val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
-    logInfo(
-      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
   }
 
@@ -1279,7 +1302,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Post the application start event */
   private def postApplicationStart() {
-    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
+    // Note: this code assumes that the task scheduler has been initialized and has contacted
+    // the cluster manager to get an application ID (in case the cluster manager provides one).
+    listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
+      startTime, sparkUser))
   }
 
   /** Post the application end event */
@@ -1311,8 +1337,6 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
-
-  private[spark] val SPARK_VERSION = "1.0.0"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
@@ -1411,7 +1435,10 @@ object SparkContext extends Logging {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+      // getBytes method returns array which is longer then data to be returned
+      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
+    )
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =
@@ -1637,4 +1664,3 @@ private[spark] class WritableConverter[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable
-

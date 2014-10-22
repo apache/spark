@@ -57,12 +57,15 @@ abstract class NamedExpression extends Expression {
 abstract class Attribute extends NamedExpression {
   self: Product =>
 
+  override def references = AttributeSet(this)
+
   def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
+  def withName(newName: String): Attribute
 
   def toAttribute = this
-  def newInstance: Attribute
-  override def references = Set(this)
+  def newInstance(): Attribute
+
 }
 
 /**
@@ -85,7 +88,6 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
-  override def references = child.references
 
   override def toAttribute = {
     if (resolved) {
@@ -129,7 +131,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     h
   }
 
-  override def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  override def newInstance() = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -139,6 +141,14 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
       this
     } else {
       AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+    }
+  }
+
+  override def withName(newName: String): AttributeReference = {
+    if (name == newName) {
+      this
+    } else {
+      AttributeReference(newName, dataType, nullable)(exprId, qualifiers)
     }
   }
 

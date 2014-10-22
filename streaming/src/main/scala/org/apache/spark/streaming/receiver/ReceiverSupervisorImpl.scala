@@ -20,22 +20,21 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 
 import akka.actor.{Actor, Props}
 import akka.pattern.ask
 
+import com.google.common.base.Throwables
+
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler.DeregisterReceiver
 import org.apache.spark.streaming.scheduler.AddBlock
-import scala.Some
 import org.apache.spark.streaming.scheduler.RegisterReceiver
-import com.google.common.base.Throwables
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -56,7 +55,8 @@ private[streaming] class ReceiverSupervisorImpl(
   private val trackerActor = {
     val ip = env.conf.get("spark.driver.host", "localhost")
     val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://spark@%s:%s/user/ReceiverTracker".format(ip, port)
+    val url = "akka.tcp://%s@%s:%s/user/ReceiverTracker".format(
+      SparkEnv.driverActorSystemName, ip, port)
     env.actorSystem.actorSelection(url)
   }
 

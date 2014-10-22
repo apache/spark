@@ -45,6 +45,11 @@ public abstract class DataType {
   public static final BooleanType BooleanType = new BooleanType();
 
   /**
+   * Gets the DateType object.
+   */
+  public static final DateType DateType = new DateType();
+
+  /**
    * Gets the TimestampType object.
    */
   public static final TimestampType TimestampType = new TimestampType();
@@ -86,14 +91,14 @@ public abstract class DataType {
 
   /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
-   * The field of {@code containsNull} is set to {@code false}.
+   * The field of {@code containsNull} is set to {@code true}.
    */
   public static ArrayType createArrayType(DataType elementType) {
     if (elementType == null) {
       throw new IllegalArgumentException("elementType should not be null.");
     }
 
-    return new ArrayType(elementType, false);
+    return new ArrayType(elementType, true);
   }
 
   /**

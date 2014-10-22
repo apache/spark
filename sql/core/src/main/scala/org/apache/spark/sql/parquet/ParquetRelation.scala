@@ -100,8 +100,13 @@ private[sql] object ParquetRelation {
   // The compression type
   type CompressionType = parquet.hadoop.metadata.CompressionCodecName
 
-  // The default compression
-  val defaultCompression = CompressionCodecName.GZIP
+  // The parquet compression short names
+  val shortParquetCompressionCodecNames = Map(
+    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
+    "SNAPPY"       -> CompressionCodecName.SNAPPY,
+    "GZIP"         -> CompressionCodecName.GZIP,
+    "LZO"          -> CompressionCodecName.LZO)
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
@@ -141,9 +146,8 @@ private[sql] object ParquetRelation {
                   conf: Configuration,
                   sqlContext: SQLContext): ParquetRelation = {
     val path = checkPath(pathString, allowExisting, conf)
-    if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
-      conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
-    }
+    conf.set(ParquetOutputFormat.COMPRESSION, shortParquetCompressionCodecNames.getOrElse(
+      sqlContext.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED).name())
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {

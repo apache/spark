@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+
+import scala.collection.immutable.HashSet
 
 import org.scalatest.FunSuite
+import org.scalatest.Matchers._
+import org.scalautils.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
+
 
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -129,11 +134,46 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
   }
 
+  def checkDoubleEvaluation(expression: Expression, expected: Spread[Double], inputRow: Row = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    actual.asInstanceOf[Double] shouldBe expected 
+  }
+
   test("IN") {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
+  }
+
+  test("INSET") {
+    val hS = HashSet[Any]() + 1 + 2
+    val nS = HashSet[Any]() + 1 + 2 + null
+    val one = Literal(1)
+    val two = Literal(2)
+    val three = Literal(3)
+    val nl = Literal(null)
+    val s = Seq(one, two)
+    val nullS = Seq(one, two, null)
+    checkEvaluation(InSet(one, hS, one +: s), true)
+    checkEvaluation(InSet(two, hS, two +: s), true)
+    checkEvaluation(InSet(two, nS, two +: nullS), true)
+    checkEvaluation(InSet(nl, nS, nl +: nullS), true)
+    checkEvaluation(InSet(three, hS, three +: s), false)
+    checkEvaluation(InSet(three, nS, three +: nullS), false)
+    checkEvaluation(InSet(one, hS, one +: s) && InSet(two, hS, two +: s), true)
+  }
+ 
+  test("MaxOf") {
+    checkEvaluation(MaxOf(1, 2), 2)
+    checkEvaluation(MaxOf(2, 1), 2)
+    checkEvaluation(MaxOf(1L, 2L), 2L)
+    checkEvaluation(MaxOf(2L, 1L), 2L)
+
+    checkEvaluation(MaxOf(Literal(null, IntegerType), 2), 2)
+    checkEvaluation(MaxOf(2, Literal(null, IntegerType)), 2)
   }
 
   test("LIKE literal Regular Expression") {
@@ -212,8 +252,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.1"
-    val ts = Timestamp.valueOf(sts)
+    val sd = "1970-01-01"
+    val d = Date.valueOf(sd)
+    val sts = sd + " 00:00:02"
+    val nts = sts + ".1"
+    val ts = Timestamp.valueOf(nts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
     checkEvaluation("abdef" cast DecimalType, null)
@@ -221,22 +264,31 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
 
     checkEvaluation(Literal(1) cast LongType, 1)
-    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
+    checkEvaluation(Cast(Literal(1000) cast TimestampType, LongType), 1.toLong)
+    checkEvaluation(Cast(Literal(-1200) cast TimestampType, LongType), -2.toLong)
+    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
-    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
+    checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), d)
+    checkEvaluation(Cast(Literal(nts) cast TimestampType, StringType), nts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
+    // all convert to string type to check
+    checkEvaluation(
+      Cast(Cast(Literal(nts) cast TimestampType, DateType), StringType), sd)
+    checkEvaluation(
+      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), sts)
 
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
+      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 0)
     checkEvaluation(Cast(Cast(Cast(Cast(
       Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 5)
+      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 0)
     checkEvaluation(Literal(true) cast IntegerType, 1)
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
@@ -274,6 +326,12 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
 
+  test("date") {
+    val d1 = Date.valueOf("1970-01-01")
+    val d2 = Date.valueOf("1970-01-02")
+    checkEvaluation(Literal(d1) < Literal(d2), true)
+  }
+
   test("timestamp") {
     val ts1 = new Timestamp(12)
     val ts2 = new Timestamp(123)
@@ -281,18 +339,31 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(ts1) < Literal(ts2), true)
   }
 
+  test("date casting") {
+    val d = Date.valueOf("1970-01-01")
+    checkEvaluation(Cast(d, ShortType), null)
+    checkEvaluation(Cast(d, IntegerType), null)
+    checkEvaluation(Cast(d, LongType), null)
+    checkEvaluation(Cast(d, FloatType), null)
+    checkEvaluation(Cast(d, DoubleType), null)
+    checkEvaluation(Cast(d, StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
+  }
+
   test("timestamp casting") {
     val millis = 15 * 1000 + 2
+    val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
     val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
+    val tss = new Timestamp(seconds)
     checkEvaluation(Cast(ts, ShortType), 15)
     checkEvaluation(Cast(ts, IntegerType), 15)
     checkEvaluation(Cast(ts, LongType), 15)
     checkEvaluation(Cast(ts, FloatType), 15.002f)
     checkEvaluation(Cast(ts, DoubleType), 15.002)
-    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
+    checkEvaluation(Cast(Cast(tss, ShortType), TimestampType), ts)
+    checkEvaluation(Cast(Cast(tss, IntegerType), TimestampType), ts)
+    checkEvaluation(Cast(Cast(tss, LongType), TimestampType), ts)
     checkEvaluation(Cast(Cast(millis.toFloat / 1000, TimestampType), FloatType),
       millis.toFloat / 1000)
     checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
@@ -457,6 +528,29 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 % c2, 1, row)
   }
 
+  test("fractional arithmetic") {
+    val row = new GenericRow(Array[Any](1.1, 2.0, 3.1, null))
+    val c1 = 'a.double.at(0)
+    val c2 = 'a.double.at(1)
+    val c3 = 'a.double.at(2)
+    val c4 = 'a.double.at(3)
+
+    checkEvaluation(UnaryMinus(c1), -1.1, row)
+    checkEvaluation(UnaryMinus(Literal(100.0, DoubleType)), -100.0)
+    checkEvaluation(Add(c1, c4), null, row)
+    checkEvaluation(Add(c1, c2), 3.1, row)
+    checkEvaluation(Add(c1, Literal(null, DoubleType)), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), c2), null, row)
+    checkEvaluation(Add(Literal(null, DoubleType), Literal(null, DoubleType)), null, row)
+
+    checkEvaluation(-c1, -1.1, row)
+    checkEvaluation(c1 + c2, 3.1, row)
+    checkDoubleEvaluation(c1 - c2, (-0.9 +- 0.001), row)
+    checkDoubleEvaluation(c1 * c2, (2.2 +- 0.001), row)
+    checkDoubleEvaluation(c1 / c2, (0.55 +- 0.001), row)
+    checkDoubleEvaluation(c3 % c2, (1.1 +- 0.001), row)
+  }
+
   test("BinaryComparison") {
     val row = new GenericRow(Array[Any](1, 2, 3, null, 3, null))
     val c1 = 'a.int.at(0)
@@ -566,5 +660,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substr(0), "example", row)
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
+  }
+
+  test("SQRT") {
+    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
+    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
+    val rowSequence = inputSequence.map(l => new GenericRow(Array[Any](l.toDouble)))
+    val d = 'a.double.at(0)
+    
+    for ((row, expected) <- rowSequence zip expectedResults) {
+      checkEvaluation(Sqrt(d), expected, row)
+    }
+
+    checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
   }
 }

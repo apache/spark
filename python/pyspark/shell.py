@@ -28,6 +28,7 @@ if sys.version_info[0] != 2:
     sys.exit(1)
 
 
+import atexit
 import os
 import platform
 import pyspark
@@ -42,14 +43,15 @@ if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
 sc = SparkContext(appName="PySparkShell", pyFiles=add_files)
+atexit.register(lambda: sc.stop())
 
 print("""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /__ / .__/\_,_/_/ /_/\_\   version 1.0.0-SNAPSHOT
+   /__ / .__/\_,_/_/ /_/\_\   version %s
       /_/
-""")
+""" % sc.version)
 print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
