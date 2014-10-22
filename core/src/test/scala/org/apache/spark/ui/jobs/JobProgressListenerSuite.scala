@@ -279,7 +279,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
       (1234L, 0, 0, makeTaskMetrics(0)),
       (1235L, 0, 0, makeTaskMetrics(100)),
-      (1236L, 1, 0, makeTaskMetrics(200)))))
+      (1236L, 1, 0, makeTaskMetrics(200))), Map()))
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get
