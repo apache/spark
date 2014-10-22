@@ -311,11 +311,6 @@ object WriteAheadLogSuite {
     }
   }
 
-  def printData(data: Seq[String]) {
-    println("# items in data = " + data.size)
-    println(data.mkString("\n"))
-  }
-
   implicit def stringToByteBuffer(str: String): ByteBuffer = {
     ByteBuffer.wrap(Utils.serialize(str))
   }
