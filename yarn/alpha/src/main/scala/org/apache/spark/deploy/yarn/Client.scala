@@ -31,7 +31,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, Records}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /**
  * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's alpha API.
@@ -84,7 +84,9 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
   def run() {
     val appId = runApp()
-    monitorApplication(appId)
+    if (!monitorApplication(appId)) {
+      throw new SparkException("Application is not successful")
+    }
   }
 
   def logClusterResourceDetails() {
@@ -138,10 +140,12 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
       )
 
       val state = report.getYarnApplicationState()
-      if (state == YarnApplicationState.FINISHED ||
-        state == YarnApplicationState.FAILED ||
+      if (state == YarnApplicationState.FINISHED) {
+        return report.getFinalApplicationStatus() == FinalApplicationStatus.SUCCEEDED
+      }
+      if (state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
-        return true
+        return false
       }
     }
     true
@@ -162,16 +166,7 @@ object Client {
 
     val sparkConf = new SparkConf
 
-    try {
-      val args = new ClientArguments(argStrings, sparkConf)
-      new Client(args, sparkConf).run()
-    } catch {
-      case e: Exception => {
-        Console.err.println(e.getMessage)
-        System.exit(1)
-      }
-    }
-
-    System.exit(0)
+    val args = new ClientArguments(argStrings, sparkConf)
+    new Client(args, sparkConf).run()
   }
 }
