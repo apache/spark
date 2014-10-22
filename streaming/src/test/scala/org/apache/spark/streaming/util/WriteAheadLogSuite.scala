@@ -19,7 +19,7 @@ package org.apache.spark.streaming.util
 import java.io._
 import java.nio.ByteBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -41,14 +41,14 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
   val hadoopConf = new Configuration()
   val dfsDir = Files.createTempDir()
   val TEST_BUILD_DATA_KEY: String = "test.build.data"
-  val oldTestBuildDataProp = System.getProperty(TEST_BUILD_DATA_KEY)
+  val oldTestBuildDataProp = Option(System.getProperty(TEST_BUILD_DATA_KEY))
+  System.setProperty(TEST_BUILD_DATA_KEY, dfsDir.toString)
   val cluster = new MiniDFSCluster(new Configuration, 2, true, null)
   val nnPort = cluster.getNameNode.getNameNodeAddress.getPort
-  val hdfsUrl =  s"hdfs://localhost:$nnPort/${getRandomString()}/"
+  val hdfsUrl = s"hdfs://localhost:$nnPort/${getRandomString()}/"
   var pathForTest: String = null
 
   override def beforeAll() {
-    System.setProperty(TEST_BUILD_DATA_KEY, dfsDir.toString)
     cluster.waitActive()
   }
 
@@ -59,7 +59,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
   override def afterAll() {
     cluster.shutdown()
     FileUtils.deleteDirectory(dfsDir)
-    System.setProperty(TEST_BUILD_DATA_KEY, oldTestBuildDataProp)
+    oldTestBuildDataProp.foreach(System.setProperty(TEST_BUILD_DATA_KEY, _))
   }
 
   test("WriteAheadLogWriter - writing data") {
@@ -71,8 +71,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
     assert(writtenData.toArray === dataToWrite.toArray)
   }
 
-  test("WriteAheadLogWriter - syncing of data by writing and reading immediately using " +
-    "Minicluster") {
+  test("WriteAheadLogWriter - syncing of data by writing and reading immediately") {
     val dataToWrite = generateRandomData()
     val writer = new WriteAheadLogWriter(pathForTest, hadoopConf)
     dataToWrite.foreach { data =>
@@ -98,7 +97,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
     reader.close()
   }
 
-  test("WriteAheadLogReader - sequentially reading data written with writer using Minicluster") {
+  test("WriteAheadLogReader - sequentially reading data written with writer") {
     // Write data manually for testing the sequential reader
     val dataToWrite = generateRandomData()
     writeDataUsingWriter(pathForTest, dataToWrite)
@@ -124,8 +123,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
     reader.close()
   }
 
-  test("WriteAheadLogRandomReader - reading data using random reader written with writer using " +
-    "Minicluster") {
+  test("WriteAheadLogRandomReader - reading data using random reader written with writer") {
     // Write data using writer for testing the random reader
     val data = generateRandomData()
     val segments = writeDataUsingWriter(pathForTest, data)
@@ -148,17 +146,16 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
     // Read data manually to verify the written data
     val logFiles = getLogFilesInDirectory(dir)
     assert(logFiles.size > 1)
-    val writtenData = logFiles.flatMap { file => readDataManually(file) }
-    assert(writtenData.toSet === dataToWrite.toSet)
+    val writtenData = logFiles.flatMap { file => readDataManually(file)}
+    assert(writtenData.toList === dataToWrite.toList)
   }
 
-  // This one is failing right now -- commenting out for now.
   test("WriteAheadLogManager - read rotating logs") {
     // Write data manually for testing reading through manager
     val dir = pathForTest
     val writtenData = (1 to 10).map { i =>
       val data = generateRandomData(10)
-      val file = dir + "/log-" + i
+      val file = dir + s"/log-$i-$i"
       writeDataManually(data, file)
       data
     }.flatten
@@ -169,7 +166,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
 
     // Read data using manager and verify
     val readData = readDataUsingManager(dir)
-//    assert(readData.toList === writtenData.toList)
+    assert(readData.toList === writtenData.toList)
   }
 
   test("WriteAheadLogManager - recover past logs when creating new manager") {
@@ -201,7 +198,6 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter with BeforeAndAfte
       assert(getLogFilesInDirectory(dir).size < logFiles.size)
     }
   }
-
   // TODO (Hari, TD): Test different failure conditions of writers and readers.
   //  - Failure while reading incomplete/corrupt file
 }
@@ -271,7 +267,8 @@ object WriteAheadLogSuite {
     val reader = HdfsUtils.getInputStream(file, hadoopConf)
     val buffer = new ArrayBuffer[String]
     try {
-      while (true) { // Read till EOF is thrown
+      while (true) {
+        // Read till EOF is thrown
         val length = reader.readInt()
         val bytes = new Array[Byte](length)
         reader.read(bytes)
@@ -294,15 +291,20 @@ object WriteAheadLogSuite {
   }
 
   def generateRandomData(numItems: Int = 50, itemSize: Int = 50): Seq[String] = {
-    (1 to numItems).map { _.toString }
+    (1 to numItems).map {
+      _.toString
+    }
   }
 
   def getLogFilesInDirectory(directory: String): Seq[String] = {
     val logDirectoryPath = new Path(directory)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
+    implicit def fileStatusOrdering[A <: FileStatus]: Ordering[A] = Ordering
+      .by(f => f.getModificationTime)
+
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
-      fileSystem.listStatus(logDirectoryPath).map {
+      fileSystem.listStatus(logDirectoryPath).sorted.map {
         _.getPath.toString
       }
     } else {
