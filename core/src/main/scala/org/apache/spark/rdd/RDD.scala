@@ -1210,8 +1210,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
    * directory set with SparkContext.setCheckpointDir() and all references to its parent
-   * RDDs will be removed. This function must be called before any job has been
-   * executed on this RDD. It is strongly recommended that this RDD is persisted in
+   * RDDs will be removed. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
   def checkpoint() {
