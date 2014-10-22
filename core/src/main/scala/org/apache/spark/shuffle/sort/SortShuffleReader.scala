@@ -18,15 +18,13 @@
 package org.apache.spark.shuffle.sort
 
 import java.io.{BufferedOutputStream, FileOutputStream, File}
-import java.nio.ByteBuffer
 import java.util.Comparator
 import java.util.concurrent.{CountDownLatch, TimeUnit, LinkedBlockingQueue}
-
-import org.apache.spark.network.ManagedBuffer
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.{Logging, InterruptibleIterator, SparkEnv, TaskContext}
+import org.apache.spark.network.ManagedBuffer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleReader, BaseShuffleHandle}
 import org.apache.spark.shuffle.hash.BlockStoreShuffleFetcher
@@ -34,6 +32,21 @@ import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
+/**
+ * SortShuffleReader assumes that the records within each block are sorted by key, and essentially
+ * performs a huge tiered merge between all the map output blocks for a partition.
+ *
+ * As blocks are fetched, stores them on disk or in memory depending on their size. A single
+ * background thread merges these blocks and writes the results to disk.
+ *
+ * The shape of the tiered merge is controlled by a single parameter, maxMergeWidth, which limits
+ * the number of blocks merged at once. At any point during its operation, we can think of the
+ * shuffle reader being at a merge "level". The first level merges the fetched map output blocks,
+ * at most maxMergeWidth at a time. If the merged blocks created from the first level merge exceed
+ * maxMergeWidth, a second level merges the results of the first, and so on. When at last the total
+ * blocks fall beneath maxMergeWidth, the final merge feeds into the iterator that read(...)
+ * returns.
+ */
 private[spark] class SortShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
@@ -44,17 +57,25 @@ private[spark] class SortShuffleReader[K, C](
   require(endPartition == startPartition + 1,
     "Sort shuffle currently only supports fetching one partition")
 
-  sealed trait ShufflePartition
-  case class MemoryPartition(blockId: BlockId, blockData: ManagedBuffer) extends ShufflePartition
-  case class FilePartition(blockId: BlockId, mappedFile: File) extends ShufflePartition
+  sealed trait ShuffleBlock
+  case class MemoryBlock(blockId: BlockId, blockData: ManagedBuffer) extends ShuffleBlock
+  case class FileBlock(blockId: BlockId, mappedFile: File) extends ShuffleBlock
 
-  private val mergingGroup = new LinkedBlockingQueue[ShufflePartition]()
-  private val mergedGroup = new LinkedBlockingQueue[ShufflePartition]()
-  private var numSplits: Int = 0
+  /**
+   * Blocks awaiting merge at the current level. All fetched blocks go here immediately. After the
+   * first level merge of fetched blocks has completed, more levels of merge may be required in
+   * order to not overwhelm the final merge. In those cases, the already-merged blocks awaiting
+   * further merges will go here as well.
+   */
+  private val blocksAwaitingMerge = new LinkedBlockingQueue[ShuffleBlock]()
+  /** Blocks already merged at the current level. */
+  private val mergedBlocks = new LinkedBlockingQueue[ShuffleBlock]()
+  /** The total number of map output blocks to be fetched. */
+  private var numMapBlocks: Int = 0
   private val mergeFinished = new CountDownLatch(1)
   private val mergingThread = new MergingThread()
-  private val tid = Thread.currentThread().getId
-  private var shuffleRawBlockFetcherItr: ShuffleRawBlockFetcherIterator = null
+  private val threadId = Thread.currentThread().getId
+  private var shuffleRawBlockFetcherItr: ShuffleRawBlockFetcherIterator = _
 
   private val dep = handle.dependency
   private val conf = SparkEnv.get.conf
@@ -62,7 +83,7 @@ private[spark] class SortShuffleReader[K, C](
   private val ser = Serializer.getSerializer(dep.serializer)
   private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
-  private val ioSortFactor = conf.getInt("spark.shuffle.ioSortFactor", 100)
+  private val maxMergeWidth = conf.getInt("spark.shuffle.maxMergeWidth", 100)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
   private val keyComparator: Comparator[K] = dep.keyOrdering.getOrElse(new Comparator[K] {
@@ -84,31 +105,21 @@ private[spark] class SortShuffleReader[K, C](
   }
 
   private def sortShuffleRead(): Iterator[Product2[K, C]] = {
-    val rawBlockIterator = fetchRawBlock()
-
-    mergingThread.setNumSplits(numSplits)
     mergingThread.setDaemon(true)
     mergingThread.start()
 
-    for ((blockId, blockData) <- rawBlockIterator) {
+    for ((blockId, blockData) <- fetchRawBlocks()) {
       if (blockData.isEmpty) {
         throw new IllegalStateException(s"block $blockId is empty for unknown reason")
       }
 
-      val amountToRequest = blockData.get.size
-      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
-      val shouldSpill = if (granted < amountToRequest) {
+      val blockSize = blockData.get.size
+      // Try to fit block in memory. If this fails, spill it to disk.
+      val granted = shuffleMemoryManager.tryToAcquire(blockSize)
+      if (granted < blockSize) {
         shuffleMemoryManager.release(granted)
-        logInfo(s"Grant memory $granted less than the amount to request $amountToRequest, " +
+        logInfo(s"Granted memory $granted for block less than its size $blockSize, " +
           s"spilling data to file")
-        true
-      } else {
-        false
-      }
-
-      if (!shouldSpill) {
-        mergingGroup.offer(MemoryPartition(blockId, blockData.get))
-      } else {
         val (tmpBlockId, file) = blockManager.diskBlockManager.createTempBlock()
         val channel = new FileOutputStream(file).getChannel()
         val byteBuffer = blockData.get.nioByteBuffer()
@@ -116,7 +127,9 @@ private[spark] class SortShuffleReader[K, C](
           channel.write(byteBuffer)
         }
         channel.close()
-        mergingGroup.offer(FilePartition(tmpBlockId, file))
+        blocksAwaitingMerge.offer(FileBlock(tmpBlockId, file))
+      } else {
+        blocksAwaitingMerge.offer(MemoryBlock(blockId, blockData.get))
       }
 
       shuffleRawBlockFetcherItr.currentResult = null
@@ -125,8 +138,8 @@ private[spark] class SortShuffleReader[K, C](
     mergeFinished.await()
 
     // Merge the final group for combiner to directly feed to the reducer
-    val finalMergedPartArray = mergedGroup.toArray(new Array[ShufflePartition](mergedGroup.size()))
-    val finalItrGroup = getIteratorGroup(finalMergedPartArray)
+    val finalMergedPartArray = mergedBlocks.toArray(new Array[ShuffleBlock](mergedBlocks.size()))
+    val finalItrGroup = blocksToRecordIterators(finalMergedPartArray)
     val mergedItr = if (dep.aggregator.isDefined) {
       ExternalSorter.mergeWithAggregation(finalItrGroup, dep.aggregator.get.mergeCombiners,
         keyComparator, dep.keyOrdering.isDefined)
@@ -134,21 +147,21 @@ private[spark] class SortShuffleReader[K, C](
       ExternalSorter.mergeSort(finalItrGroup, keyComparator)
     }
 
-    mergedGroup.clear()
+    mergedBlocks.clear()
 
     // Release the shuffle used memory of this thread
     shuffleMemoryManager.releaseMemoryForThisThread()
 
     // Release the in-memory block and on-disk file when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
-      mergedItr, releaseUnusedShufflePartition(finalMergedPartArray))
+      mergedItr, releaseUnusedShuffleBlock(finalMergedPartArray))
 
     new InterruptibleIterator(context, completionItr.map(p => (p._1, p._2)))
   }
 
   override def stop(): Unit = ???
 
-  private def fetchRawBlock(): Iterator[(BlockId, Option[ManagedBuffer])] = {
+  private def fetchRawBlocks(): Iterator[(BlockId, Option[ManagedBuffer])] = {
     val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]()
     for (((address, size), index) <- statuses.zipWithIndex) {
@@ -159,9 +172,9 @@ private[spark] class SortShuffleReader[K, C](
         (address, splits.map(s => (ShuffleBlockId(handle.shuffleId, s._1, startPartition), s._2)))
     }
     blocksByAddress.foreach { case (_, blocks) =>
-      blocks.foreach { case (_, len) => if (len > 0) numSplits += 1 }
+      blocks.foreach { case (_, len) => if (len > 0) numMapBlocks += 1 }
     }
-    logInfo(s"Fetch $numSplits partitions for $tid")
+    logInfo(s"Fetching $numMapBlocks blocks for $threadId")
 
     shuffleRawBlockFetcherItr = new ShuffleRawBlockFetcherIterator(
       context,
@@ -172,22 +185,21 @@ private[spark] class SortShuffleReader[K, C](
 
     val completionItr = CompletionIterator[
       (BlockId, Option[ManagedBuffer]),
-      Iterator[(BlockId, Option[ManagedBuffer])]](shuffleRawBlockFetcherItr, {
-      context.taskMetrics.updateShuffleReadMetrics()
-    })
+      Iterator[(BlockId, Option[ManagedBuffer])]](shuffleRawBlockFetcherItr,
+      () => context.taskMetrics.updateShuffleReadMetrics())
 
     new InterruptibleIterator[(BlockId, Option[ManagedBuffer])](context, completionItr)
   }
 
-  private def getIteratorGroup(shufflePartGroup: Array[ShufflePartition])
+  private def blocksToRecordIterators(shufflePartGroup: Seq[ShuffleBlock])
       : Seq[Iterator[Product2[K, C]]] = {
      shufflePartGroup.map { part =>
       val itr = part match {
-        case MemoryPartition(id, buf) =>
+        case MemoryBlock(id, buf) =>
           // Release memory usage
-          shuffleMemoryManager.release(buf.size, tid)
+          shuffleMemoryManager.release(buf.size, threadId)
           blockManager.dataDeserialize(id, buf.nioByteBuffer(), ser)
-        case FilePartition(id, file) =>
+        case FileBlock(id, file) =>
           val blockData = blockManager.diskStore.getBytes(id).getOrElse(
             throw new IllegalStateException(s"cannot get data from block $id"))
           blockManager.dataDeserialize(id, blockData, ser)
@@ -200,11 +212,11 @@ private[spark] class SortShuffleReader[K, C](
   /**
    * Release the left in-memory buffer or on-disk file after merged.
    */
-  private def releaseUnusedShufflePartition(shufflePartGroup: Array[ShufflePartition]): Unit = {
+  private def releaseUnusedShuffleBlock(shufflePartGroup: Array[ShuffleBlock]): Unit = {
     shufflePartGroup.map { part =>
       part match {
-        case MemoryPartition(id, buf) => buf.release()
-        case FilePartition(id, file) =>
+        case MemoryBlock(id, buf) => buf.release()
+        case FileBlock(id, file) =>
           try {
             file.delete()
           } catch {
@@ -217,80 +229,72 @@ private[spark] class SortShuffleReader[K, C](
   }
 
   private class MergingThread extends Thread {
-    private var isLooped = true
-    private var leftTobeMerged = 0
-
-    def setNumSplits(numSplits: Int) {
-      leftTobeMerged = numSplits
+    override def run() {
+      while (blocksAwaitingMerge.size() > 0) {
+        mergeLevel()
+        if (mergedBlocks.size() > maxMergeWidth) {
+          // End of the current merge level, but not yet ready to proceed to the final merge.
+          // Swap the merged group and merging group to proceed to the next merge level,
+          assert(blocksAwaitingMerge.size() == 0)
+          blocksAwaitingMerge.addAll(mergedBlocks)
+          mergedBlocks.clear()
+        }
+      }
+      mergeFinished.countDown()
     }
 
-    override def run() {
-      while (isLooped) {
-        if (leftTobeMerged < ioSortFactor && leftTobeMerged > 0) {
-          var count = leftTobeMerged
-          while (count > 0) {
-            val part = mergingGroup.poll(100, TimeUnit.MILLISECONDS)
+    /**
+     * Carry out the current merge level. I.e. move all blocks out of blocksAwaitingMerge, either by
+     * merging them or placing them directly in mergedBlocks..
+     */
+    private def mergeLevel() {
+      while (blocksAwaitingMerge.size() > 0) {
+        if (blocksAwaitingMerge.size() < maxMergeWidth) {
+          // If the remaining blocks awaiting merge at this level don't exceed the maxMergeWidth,
+          // pass them all on to the next level.
+          while (blocksAwaitingMerge.size() > 0) {
+            val part = blocksAwaitingMerge.poll(100, TimeUnit.MILLISECONDS)
             if (part != null) {
-              mergedGroup.offer(part)
-              count -= 1
-              leftTobeMerged -= 1
+              mergedBlocks.offer(part)
             }
           }
-        } else if (leftTobeMerged >= ioSortFactor) {
-          val mergingPartArray = ArrayBuffer[ShufflePartition]()
-          var count = if (numSplits / ioSortFactor > ioSortFactor) {
-            ioSortFactor
+        } else if (blocksAwaitingMerge.size() >= maxMergeWidth) {
+          // Because the remaining blocks awaiting merge at this level exceed the maxMergeWidth, a
+          // merge is required.
+          // TODO: is numMapBlocks right here?
+          var numToMerge = if (numMapBlocks / maxMergeWidth > maxMergeWidth) {
+            maxMergeWidth
           } else {
-            val mergedSize = mergedGroup.size()
-            val left = leftTobeMerged - (ioSortFactor - mergedSize - 1)
-            if (left <= ioSortFactor) {
-              left
-            } else {
-              ioSortFactor
-            }
+            val mergedSize = mergedBlocks.size()
+            val left = blocksAwaitingMerge.size() - (maxMergeWidth - mergedSize - 1)
+            math.min(left, maxMergeWidth)
           }
-          val countCopy = count
 
-          while (count > 0) {
-            val part = mergingGroup.poll(100, TimeUnit.MILLISECONDS)
+          val blocksToMerge = ArrayBuffer[ShuffleBlock]()
+          while (numToMerge > 0) {
+            val part = blocksAwaitingMerge.poll(100, TimeUnit.MILLISECONDS)
             if (part != null) {
-              mergingPartArray += part
-              count -= 1
-              leftTobeMerged -= 1
+              blocksToMerge += part
+              numToMerge -= 1
             }
           }
 
-          // Merge the partitions
-          val itrGroup = getIteratorGroup(mergingPartArray.toArray)
+          // Merge the blocks
+          val itrGroup = blocksToRecordIterators(blocksToMerge)
           val partialMergedIter = if (dep.aggregator.isDefined) {
             ExternalSorter.mergeWithAggregation(itrGroup, dep.aggregator.get.mergeCombiners,
               keyComparator, dep.keyOrdering.isDefined)
           } else {
             ExternalSorter.mergeSort(itrGroup, keyComparator)
           }
-          // Write merged partitions to disk
+          // Write merged blocks to disk
           val (tmpBlockId, file) = blockManager.diskBlockManager.createTempBlock()
           val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
           blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedIter, ser)
-          logInfo(s"Merge $countCopy partitions and write into file ${file.getName}")
+          logInfo(s"Merged ${blocksToMerge.size} blocks into file ${file.getName}")
 
-          releaseUnusedShufflePartition(mergingPartArray.toArray)
-          mergedGroup.add(FilePartition(tmpBlockId, file))
-        } else {
-          val mergedSize = mergedGroup.size()
-          if (mergedSize > ioSortFactor) {
-            leftTobeMerged = mergedSize
-
-            // Swap the merged group and merging group and do merge again,
-            // since file number is still larger than ioSortFactor
-            assert(mergingGroup.size() == 0)
-            mergingGroup.addAll(mergedGroup)
-            mergedGroup.clear()
-          } else {
-            assert(mergingGroup.size() == 0)
-            isLooped = false
-            mergeFinished.countDown()
-          }
+          releaseUnusedShuffleBlock(blocksToMerge.toArray)
+          mergedBlocks.add(FileBlock(tmpBlockId, file))
         }
       }
     }
