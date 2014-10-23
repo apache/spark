@@ -305,7 +305,7 @@ class StructField(DataType):
 
     """
 
-    def __init__(self, name, dataType, nullable, metadata={}):
+    def __init__(self, name, dataType, nullable, metadata=None):
         """Creates a StructField
         :param name: the name of this field.
         :param dataType: the data type of this field.
@@ -325,7 +325,7 @@ class StructField(DataType):
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
-        self.metadata = metadata
+        self.metadata = metadata or {}
 
     def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
