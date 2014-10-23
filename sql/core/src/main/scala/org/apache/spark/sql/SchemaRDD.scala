@@ -117,14 +117,18 @@ class SchemaRDD(
 
   override def getPartitions: Array[Partition] = firstParent[Row].partitions
 
-  override protected def getDependencies: Seq[Dependency[_]] =
-    List(new OneToOneDependency(queryExecution.toRdd))
+  override protected def getDependencies: Seq[Dependency[_]] = {
+    schema // Force reification of the schema so it is available on executors.
 
-  /** Returns the schema of this SchemaRDD (represented by a [[StructType]]).
-    *
-    * @group schema
-    */
-  val schema: StructType = queryExecution.analyzed.schema
+    List(new OneToOneDependency(queryExecution.toRdd))
+  }
+
+  /**
+   * Returns the schema of this SchemaRDD (represented by a [[StructType]]).
+   *
+   * @group schema
+   */
+  lazy val schema: StructType = queryExecution.analyzed.schema
 
   // =======================================================================
   // Query DSL
