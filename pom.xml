@@ -89,9 +89,9 @@
     <module>core</module>
     <module>bagel</module>
     <module>graphx</module>
+    <module>streaming</module>
     <module>mllib</module>
     <module>tools</module>
-    <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
@@ -99,8 +99,8 @@
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/kafka</module>
-    <module>external/flume</module>
     <module>external/flume-sink</module>
+    <module>external/flume</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
     <module>examples</module>
@@ -816,9 +816,20 @@
   </dependencyManagement>
 
   <build>
+    <finalName>
+      ${project.artifactId}_${scala.binary.version}-${project.version}
+    </finalName>
     <pluginManagement>
       <plugins>
         <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>2.5.2</version>
+          <configuration>
+            <skip>true</skip>
+          </configuration>
+        </plugin>
+        <plugin>          
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
           <version>1.3.1</version>
@@ -1020,6 +1031,30 @@
                 </includes>
               </artifactSet>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>scala-install-plugin</artifactId>
+        <version>0.1-SNAPSHOT</version>
+        <executions>
+          <execution>
+            <id>install</id>
+            <goals>
+              <goal>install</goal>
+            </goals>
+            <phase>install</phase>
+            <configuration>
+              <artifactId>${project.artifactId}_${scala.binary.version}</artifactId>
+            </configuration>
+          </execution>
+          <execution>
+            <id>load</id>
+            <goals>
+              <goal>init-scala</goal>
+            </goals>
+            <phase>initialize</phase>
           </execution>
         </executions>
       </plugin>

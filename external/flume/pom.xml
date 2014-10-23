@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-flume_2.10</artifactId>
+  <artifactId>spark-streaming-flume</artifactId>
   <properties>
     <sbt.project.name>streaming-flume</sbt.project.name>
   </properties>

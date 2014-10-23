@@ -25,7 +25,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-tools_2.10</artifactId>
+  <artifactId>spark-tools</artifactId>
   <properties>
     <sbt.project.name>tools</sbt.project.name>
   </properties>
