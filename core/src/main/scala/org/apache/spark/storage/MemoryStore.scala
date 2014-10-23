@@ -228,6 +228,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     // Request enough memory to begin unrolling
     keepUnrolling = reserveUnrollMemoryForThisThread(initialMemoryThreshold)
 
+    if (!keepUnrolling) {
+      logWarning(s"Failed to reserve initial memory threshold of " +
+        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+    }
+
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     try {
       while (values.hasNext && keepUnrolling) {
