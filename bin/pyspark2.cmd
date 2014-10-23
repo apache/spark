@@ -62,8 +62,7 @@ if [%PYTHON_FILE%] == [] (
   set PYSPARK_SHELL=1
   if [%IPYTHON%] == [1] (
 	ipython %IPYTHON_OPTS%
-  )
-  else (
+  ) else (
 	%PYSPARK_PYTHON%
   ) 
 ) else (
