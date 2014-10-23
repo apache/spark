@@ -155,7 +155,8 @@ class NewHadoopRDD[K, V](
         if (recordsSinceMetricsUpdate == HadoopRDD.RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES
             && bytesReadCallback.isDefined) {
           recordsSinceMetricsUpdate = 0
-          inputMetrics.bytesRead = bytesReadCallback.get()
+          val bytesReadFn = bytesReadCallback.get
+          inputMetrics.bytesRead = bytesReadFn()
         } else {
           recordsSinceMetricsUpdate += 1
         }
@@ -169,7 +170,8 @@ class NewHadoopRDD[K, V](
 
           // Update metrics with final amount
           if (bytesReadCallback.isDefined) {
-            inputMetrics.bytesRead = bytesReadCallback.get()
+            val bytesReadFn = bytesReadCallback.get
+            inputMetrics.bytesRead = bytesReadFn()
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.

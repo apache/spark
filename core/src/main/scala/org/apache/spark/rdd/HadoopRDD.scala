@@ -260,7 +260,8 @@ class HadoopRDD[K, V](
         try {
           reader.close()
           if (bytesReadCallback.isDefined) {
-            inputMetrics.bytesRead = bytesReadCallback.get()
+            val bytesReadFn = bytesReadCallback.get
+            inputMetrics.bytesRead = bytesReadFn()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
