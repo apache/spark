@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.Map
-
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
@@ -29,6 +27,9 @@ import org.apache.spark.sql.catalyst.types._
  * Provides experimental support for generating catalyst schemas for scala objects.
  */
 object ScalaReflection {
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
   import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConversions._
-import scala.collection.Map
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.conf.HiveConf
@@ -92,6 +91,10 @@ case class InsertIntoHiveTable(
       (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
 
     case moi: MapObjectInspector =>
+      // The Predef.Map is scala.collection.immutable.Map.
+      // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+      import scala.collection.Map
+
       val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
       val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
       (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
