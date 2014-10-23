@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConversions._
+import scala.collection.Map
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.conf.HiveConf

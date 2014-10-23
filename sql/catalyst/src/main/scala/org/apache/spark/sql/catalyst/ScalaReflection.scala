@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
+import scala.collection.Map
+
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
