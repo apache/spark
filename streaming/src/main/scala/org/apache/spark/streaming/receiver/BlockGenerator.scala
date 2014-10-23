@@ -27,8 +27,17 @@ import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
+  /** Called when new data is added into BlockGenerator, this hook function will be called each
+    * time new data is added into BlockGenerator, any heavy or blocking operation will hurt the
+    * throughput */
+  def onStoreData(data: Any, metadata: Any)
+
+  /** Called when a new block is generated */
+  def onGenerateBlock(blockId: StreamBlockId)
+
   /** Called when a new block needs to be pushed */
   def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_])
+
   /** Called when an error has occurred in BlockGenerator */
   def onError(message: String, throwable: Throwable)
 }
@@ -80,9 +89,10 @@ private[streaming] class BlockGenerator(
    * Push a single data item into the buffer. All received data items
    * will be periodically pushed into BlockManager.
    */
-  def += (data: Any): Unit = synchronized {
+  def += (data: Any, metadata: Any = null): Unit = synchronized {
     waitToPush()
     currentBuffer += data
+    listener.onStoreData(data, metadata)
   }
 
   /** Change the buffer to which single records are added to. */
@@ -93,6 +103,7 @@ private[streaming] class BlockGenerator(
       if (newBlockBuffer.size > 0) {
         val blockId = StreamBlockId(receiverId, time - blockInterval)
         val newBlock = new Block(blockId, newBlockBuffer)
+        listener.onGenerateBlock(blockId)
         blocksForPushing.put(newBlock)  // put is blocking when queue is full
         logDebug("Last element in " + blockId + " is " + newBlockBuffer.last)
       }

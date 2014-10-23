@@ -70,7 +70,7 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, false, storageLevel)
   }
 
   /**
@@ -142,6 +142,73 @@ object KafkaUtils {
     implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
 
     createStream[K, V, U, T](
+      jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+  }
+
+  def createReliableStream(
+      ssc: StreamingContext,
+      zkQuorum: String,
+      groupId: String,
+      topics: Map[String, Int],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2)
+    : ReceiverInputDStream[(String, String)] = {
+    val kafkaParams = Map[String, String](
+      "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
+      "zookeeper.connection.timeout.ms" -> "10000")
+    createReliableStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topics, storageLevel)
+  }
+
+  def createReliableStream[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag](
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Map[String, Int],
+      storageLevel: StorageLevel
+    ): ReceiverInputDStream[(K, V)] = {
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, true, storageLevel)
+  }
+
+    def createReliableStream(
+      jssc: JavaStreamingContext,
+      zkQuorum: String,
+      groupId: String,
+      topics: JMap[String, JInt]
+    ): JavaPairReceiverInputDStream[String, String] = {
+    createReliableStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+  }
+
+  def createReliableStream(
+      jssc: JavaStreamingContext,
+      zkQuorum: String,
+      groupId: String,
+      topics: JMap[String, JInt],
+      storageLevel: StorageLevel
+    ): JavaPairReceiverInputDStream[String, String] = {
+    createReliableStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+      storageLevel)
+  }
+
+  def createReliableStream[K, V, U <: Decoder[_], T <: Decoder[_]](
+      jssc: JavaStreamingContext,
+      keyTypeClass: Class[K],
+      valueTypeClass: Class[V],
+      keyDecoderClass: Class[U],
+      valueDecoderClass: Class[T],
+      kafkaParams: JMap[String, String],
+      topics: JMap[String, JInt],
+      storageLevel: StorageLevel
+    ): JavaPairReceiverInputDStream[K, V] = {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueTypeClass)
+
+    implicit val keyCmd: ClassTag[U] = ClassTag(keyDecoderClass)
+    implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
+
+    createReliableStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
   }
 }

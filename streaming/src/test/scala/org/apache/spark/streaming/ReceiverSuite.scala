@@ -299,6 +299,10 @@ class ReceiverSuite extends FunSuite with Timeouts {
     val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
     val errors = new ArrayBuffer[Throwable]
 
+    def onStoreData(data: Any, metadata: Any) { }
+
+    def onGenerateBlock(blockId: StreamBlockId) { }
+
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
       val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
       arrayBuffers += bufferOfInts
