@@ -433,6 +433,12 @@ class RDDTests(ReusedPySparkTestCase):
         os.unlink(tempFile.name)
         self.assertRaises(Exception, lambda: filtered_data.count())
 
+    def test_sampling_default_seed(self):
+        # Test for SPARK-3995 (default seed setting)
+        data = self.sc.parallelize(range(1000), 1)
+        subset = data.takeSample(False, 10)
+        self.assertEqual(len(subset), 10)
+
     def testAggregateByKey(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
 
