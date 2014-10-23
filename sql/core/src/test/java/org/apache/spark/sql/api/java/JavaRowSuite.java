@@ -79,7 +79,7 @@ public class JavaRowSuite {
       new Boolean(booleanValue),
       stringValue,               // StringType
       binaryValue,               // BinaryType
-      dateValue,            // DateType
+      dateValue,                 // DateType
       timestampValue,            // TimestampType
       null                       // null
     );
