@@ -124,57 +124,69 @@ private[spark] class CompressedMapStatus(
  * plus a bitmap for tracking which blocks are non-empty.
  *
  * @param loc location where the task is being executed
- * @param nonEmptyBlocks a bitmap tracking which blocks are non-empty
+ * @param numNonEmptyBlocks the number of non-empty blocks
+ * @param emptyBlocks a bitmap tracking which blocks are empty
  * @param avgSize average size of the non-empty blocks
  */
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
-    private[this] var nonEmptyBlocks: RoaringBitmap,
+    private[this] var numNonEmptyBlocks: Int,
+    private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
 
-  require(loc == null || avgSize > 0 || nonEmptyBlocks.getCardinality == 0,
+  require(loc == null || avgSize > 0 || numNonEmptyBlocks == 0,
     "Average size can only be zero for map stages that produced no output")
 
-  protected def this() = this(null, null, -1)  // For deserialization only
+  protected def this() = this(null, -1, null, -1)  // For deserialization only
 
   override def location: BlockManagerId = loc
 
+  // This set allows for constant-time lookup of whether a block is empty
+  private var emptyBlocksSet: Set[Int] = Option(emptyBlocks).map(_.toArray.toSet).orNull
+
   override def getSizeForBlock(reduceId: Int): Long = {
-    if (nonEmptyBlocks.contains(reduceId)) {
-      avgSize
-    } else {
+    if (emptyBlocksSet.contains(reduceId)) {
       0
+    } else {
+      avgSize
     }
   }
 
   override def writeExternal(out: ObjectOutput): Unit = {
     loc.writeExternal(out)
-    nonEmptyBlocks.writeExternal(out)
+    emptyBlocks.writeExternal(out)
     out.writeLong(avgSize)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
     loc = BlockManagerId(in)
-    nonEmptyBlocks = new RoaringBitmap()
-    nonEmptyBlocks.readExternal(in)
+    emptyBlocks = new RoaringBitmap()
+    emptyBlocks.readExternal(in)
+    emptyBlocksSet = emptyBlocks.toArray.toSet
     avgSize = in.readLong()
   }
 }
 
 object HighlyCompressedMapStatus {
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): HighlyCompressedMapStatus = {
+    // We must keep track of which blocks are empty so that we don't report a zero-sized
+    // block as being non-empty (or vice-versa) when using the average block size.
     var i = 0
-    var numNonEmptyBlocks: Long = 0
+    var numNonEmptyBlocks: Int = 0
     var totalSize: Long = 0
-    val nonEmptyBlocks = new RoaringBitmap()
+    // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
+    // blocks.  From a performance standpoint, we benefit from tracking empty blocks because
+    // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
+    val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
     while (i < totalNumBlocks) {
       var size = uncompressedSizes(i)
       if (size > 0) {
-        nonEmptyBlocks.add(i)
         numNonEmptyBlocks += 1
         totalSize += size
+      } else {
+        emptyBlocks.add(i)
       }
       i += 1
     }
@@ -183,6 +195,6 @@ object HighlyCompressedMapStatus {
     } else {
       0
     }
-    new HighlyCompressedMapStatus(loc, nonEmptyBlocks, avgSize)
+    new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize)
   }
 }
