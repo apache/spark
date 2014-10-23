@@ -165,6 +165,12 @@
     <hbase.deps.scope>compile</hbase.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
 
+    <!--
+      Overridable test home. So that you can call individual pom files directory without
+      things breaking.
+    -->
+    <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
@@ -1111,7 +1117,7 @@
             <stderr/>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
-              <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+              <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>

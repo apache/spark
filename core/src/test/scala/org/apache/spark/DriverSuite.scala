@@ -35,7 +35,7 @@ class DriverSuite extends FunSuite with Timeouts {
     forAll(masters) { (master: String) =>
       failAfter(60 seconds) {
         Utils.executeAndGetOutput(
-          Seq("./bin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
+          Seq(s"$sparkHome/bin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
           new File(sparkHome),
           Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
       }
