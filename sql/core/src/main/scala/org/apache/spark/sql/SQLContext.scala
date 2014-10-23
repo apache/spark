@@ -454,9 +454,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     // Converts value to the type specified by the data type.
-    // Because Python does not have data types for DateType, TimestampType, FloatType, ShortType, and
-    // ByteType, we need to explicitly convert values in columns of these data types to the desired
-    // JVM data types.
+    // Because Python does not have data types for DateType, TimestampType, FloatType, ShortType,
+    // and ByteType, we need to explicitly convert values in columns of these data types to the
+    // desired JVM data types.
     def convert(obj: Any, dataType: DataType): Any = (obj, dataType) match {
       // TODO: We should check nullable
       case (null, _) => null
