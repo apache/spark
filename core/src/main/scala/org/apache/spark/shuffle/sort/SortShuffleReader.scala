@@ -229,14 +229,19 @@ private[spark] class SortShuffleReader[K, C](
   }
 
   private class MergingThread extends Thread {
+    var remainingToMergeAtLevel: Int = _
+
     override def run() {
-      while (blocksAwaitingMerge.size() > 0) {
+      remainingToMergeAtLevel = numMapBlocks
+      while (remainingToMergeAtLevel > 0) {
         mergeLevel()
+        assert(blocksAwaitingMerge.size() == 0)
+        assert(remainingToMergeAtLevel == 0)
         if (mergedBlocks.size() > maxMergeWidth) {
           // End of the current merge level, but not yet ready to proceed to the final merge.
           // Swap the merged group and merging group to proceed to the next merge level,
-          assert(blocksAwaitingMerge.size() == 0)
           blocksAwaitingMerge.addAll(mergedBlocks)
+          remainingToMergeAtLevel = blocksAwaitingMerge.size()
           mergedBlocks.clear()
         }
       }
@@ -245,20 +250,21 @@ private[spark] class SortShuffleReader[K, C](
 
     /**
      * Carry out the current merge level. I.e. move all blocks out of blocksAwaitingMerge, either by
-     * merging them or placing them directly in mergedBlocks..
+     * merging them or placing them directly in mergedBlocks.
      */
     private def mergeLevel() {
-      while (blocksAwaitingMerge.size() > 0) {
-        if (blocksAwaitingMerge.size() < maxMergeWidth) {
+      while (remainingToMergeAtLevel > 0) {
+        if (remainingToMergeAtLevel < maxMergeWidth) {
           // If the remaining blocks awaiting merge at this level don't exceed the maxMergeWidth,
           // pass them all on to the next level.
-          while (blocksAwaitingMerge.size() > 0) {
+          while (remainingToMergeAtLevel > 0) {
             val part = blocksAwaitingMerge.poll(100, TimeUnit.MILLISECONDS)
             if (part != null) {
               mergedBlocks.offer(part)
+              remainingToMergeAtLevel -= 1
             }
           }
-        } else if (blocksAwaitingMerge.size() >= maxMergeWidth) {
+        } else {
           // Because the remaining blocks awaiting merge at this level exceed the maxMergeWidth, a
           // merge is required.
 
@@ -277,6 +283,7 @@ private[spark] class SortShuffleReader[K, C](
             val part = blocksAwaitingMerge.poll(100, TimeUnit.MILLISECONDS)
             if (part != null) {
               blocksToMerge += part
+              remainingToMergeAtLevel -= 1
             }
           }
 
