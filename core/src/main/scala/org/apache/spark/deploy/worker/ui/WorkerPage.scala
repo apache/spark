@@ -43,42 +43,40 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   }
 
   private val executorTable: UITable[ExecutorRunner] = {
-    val builder = new UITableBuilder[ExecutorRunner]()
-    import builder._
-    intCol("Executor ID") { _.execId }
-    intCol("Cores") { _.cores }
-    col("State") { _.state.toString }
-    memCol("Memory") { _.memory }
-    customCol("Job Details") { executor =>
+    val t = new UITableBuilder[ExecutorRunner]()
+    t.intCol("Executor ID") { _.execId }
+    t.intCol("Cores") { _.cores }
+    t.col("State") { _.state.toString }
+    t.memCol("Memory") { _.memory }
+    t.customCol("Job Details") { executor =>
       <ul class="unstyled">
         <li><strong>ID:</strong> {executor.appId}</li>
         <li><strong>Name:</strong> {executor.appDesc.name}</li>
         <li><strong>User:</strong> {executor.appDesc.user}</li>
       </ul>
     }
-    customCol("Logs") { executor =>
+    t.customCol("Logs") { executor =>
       <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
         .format(executor.appId, executor.execId)}>stdout</a>
       <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
         .format(executor.appId, executor.execId)}>stderr</a>
     }
-    build
+    t.build()
   }
 
   private val driverTable: UITable[DriverRunner] = {
-    val builder = new UITableBuilder[DriverRunner]()
-    import builder._
-    col("Driver ID") { _.driverId }
-    col("Main Class") { _.driverDesc.command.arguments(1) }
-    col("State") { _.finalState.getOrElse(DriverState.RUNNING).toString }
-    intCol("Cores") { _.driverDesc.cores }
-    memCol("Memory") { _.driverDesc.mem }
-    customCol("Logs") { driver =>
+    val t = new UITableBuilder[DriverRunner]()
+    t.col("Driver ID") { _.driverId }
+    t.col("Main Class") { _.driverDesc.command.arguments(1) }
+    t.col("State") { _.finalState.getOrElse(DriverState.RUNNING).toString }
+    t.intCol("Cores") { _.driverDesc.cores }
+    t.memCol("Memory") { _.driverDesc.mem }
+    t.customCol("Logs") { driver =>
       <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
       <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
     }
-    col("Notes") { _.finalException.getOrElse("").toString }
-    build
+    t.col("Notes") { _.finalException.getOrElse("").toString }
+    t.build()
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {

@@ -48,22 +48,21 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
   }
 
   private val executorsTable: UITable[ExecutorInfo] = {
-    val builder = new UITableBuilder[ExecutorInfo]()
-    import builder._
-    col("ExecutorID") { _.id.toString }
-    customCol("Worker") { executor =>
+    val t = new UITableBuilder[ExecutorInfo]()
+    t.col("ExecutorID") { _.id.toString }
+    t.customCol("Worker") { executor =>
       <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
     }
-    intCol("Cores") { _.cores }
-    memCol("Memory") { _.memory }
-    col("State") { _.state.toString }
-    customCol("Logs") { executor =>
+    t.intCol("Cores") { _.cores }
+    t.memCol("Memory") { _.memory }
+    t.col("State") { _.state.toString }
+    t.customCol("Logs") { executor =>
       <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
         .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
         <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
           .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
     }
-    build
+    t.build()
   }
 
   /** Executor details for a particular application */

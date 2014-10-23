@@ -30,34 +30,32 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val listener = parent.listener
 
   private val workerTable: UITable[(Int, StorageStatus)] = {
-    val builder = new UITableBuilder[(Int, StorageStatus)]()
-    import builder._
-    col("Host") { case (_, status) =>
+    val t = new UITableBuilder[(Int, StorageStatus)]()
+    t.col("Host") { case (_, status) =>
       s"${status.blockManagerId.host}:${status.blockManagerId.port}"
     }
     def getMemUsed(x: (Int, StorageStatus)): String = x._2.memUsedByRdd(x._1).toString
-    customCol(
+    t.customCol(
       "Memory usage",
       sortKey = Some(getMemUsed)) { case (rddId, status) =>
         val used = Utils.bytesToString(status.memUsedByRdd(rddId))
         val remaining = Utils.bytesToString(status.memRemaining)
         Text(s"$used ($remaining Remaining)")
       }
-    memCol("Disk Usage") { case (rddId, status) => status.diskUsedByRdd(rddId) }
-    build
+    t.memCol("Disk Usage") { case (rddId, status) => status.diskUsedByRdd(rddId) }
+    t.build()
   }
 
   val blockTable: UITable[(BlockId, BlockStatus, Seq[String])] = {
-    val builder = new UITableBuilder[(BlockId, BlockStatus, Seq[String])]()
-    import builder._
-    col("Block Name") { case (id, block, locations) => id.toString }
-    col("Storage Level") { case (id, block, locations) => block.storageLevel.description }
-    memCol("Size in Memory") { case (id, block, locations) => block.memSize }
-    memCol("Size on Disk") { case (id, block, locations) => block.diskSize }
-    customCol("Executors") { case (id, block, locations) =>
+    val t = new UITableBuilder[(BlockId, BlockStatus, Seq[String])]()
+    t.col("Block Name") { case (id, block, locations) => id.toString }
+    t.col("Storage Level") { case (id, block, locations) => block.storageLevel.description }
+    t. memCol("Size in Memory") { case (id, block, locations) => block.memSize }
+    t.memCol("Size on Disk") { case (id, block, locations) => block.diskSize }
+    t.customCol("Executors") { case (id, block, locations) =>
       locations.map(l => <span>{l}<br/></span>)
     }
-    build
+    t.build()
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {

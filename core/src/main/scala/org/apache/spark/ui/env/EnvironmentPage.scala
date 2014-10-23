@@ -27,11 +27,10 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
   private val listener = parent.listener
 
   private def stringPairTable(col1Name: String, col2Name: String): UITable[(Any, Any)] = {
-    val builder = new UITableBuilder[(Any, Any)](fixedWidth = true)
-    import builder._
-    col(col1Name) { _._1.toString }
-    col(col2Name) { _._2.toString }
-    build
+    val t = new UITableBuilder[(Any, Any)](fixedWidth = true)
+    t.col(col1Name) { _._1.toString }
+    t.col(col2Name) { _._2.toString }
+    t.build()
   }
 
   private val propertyTable = stringPairTable("Name", "Value")

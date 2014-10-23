@@ -28,19 +28,18 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   private val pageSize = 20
 
   val appTable: UITable[ApplicationHistoryInfo] = {
-    val builder = new UITableBuilder[ApplicationHistoryInfo]()
-    import builder._
-    customCol("App ID") { info =>
+    val t = new UITableBuilder[ApplicationHistoryInfo]()
+    t.customCol("App ID") { info =>
       val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
       <a href={uiAddress}>{info.id}</a>
     }
-    col("App Name") { _.name }
-    epochDateCol("Started") { _.startTime }
-    epochDateCol("Completed") { _.endTime }
-    durationCol("Duration") { info => info.endTime - info.startTime }
-    col("Spark User") { _.sparkUser }
-    epochDateCol("Last Updated") { _.lastUpdated }
-    build
+    t.col("App Name") { _.name }
+    t.epochDateCol("Started") { _.startTime }
+    t.epochDateCol("Completed") { _.endTime }
+    t.durationCol("Duration") { info => info.endTime - info.startTime }
+    t.col("Spark User") { _.sparkUser }
+    t.epochDateCol("Last Updated") { _.lastUpdated }
+    t.build()
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {

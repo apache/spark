@@ -244,7 +244,7 @@ private[spark] class UITableBuilder[T](fixedWidth: Boolean = false) {
     )(fieldExtractor)
   }
 
-  def build: UITable[T] = {
+  def build(): UITable[T] = {
     val immutableCols: Seq[UITableColumn[T, _]] = cols.toSeq
     new UITable[T](immutableCols, fixedWidth)
   }

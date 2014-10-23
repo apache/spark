@@ -42,51 +42,48 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private val workerTable: UITable[WorkerInfo] = {
-    val builder = new UITableBuilder[WorkerInfo]()
-    import builder._
-    customCol("ID") { worker =>
+    val t = new UITableBuilder[WorkerInfo]()
+    t.customCol("ID") { worker =>
       <a href={worker.webUiAddress}>{worker.id}</a>
     }
-    col("Address") { worker => s"${worker.host}:${worker.port}"}
-    col("State") { _.state.toString }
-    intCol("Cores", formatter = c => s"$c Used") { _.coresUsed }
-    customCol("Memory",
+    t.col("Address") { worker => s"${worker.host}:${worker.port}"}
+    t.col("State") { _.state.toString }
+    t.intCol("Cores", formatter = c => s"$c Used") { _.coresUsed }
+    t.customCol("Memory",
       sortKey = Some({worker: WorkerInfo => s"${worker.memory}:${worker.memoryUsed}"})) { worker =>
         Text(Utils.megabytesToString(worker.memory)) ++
         Text(Utils.megabytesToString(worker.memoryUsed))
     }
-    build
+    t.build()
   }
 
   private val appTable: UITable[ApplicationInfo] = {
-    val builder = new UITableBuilder[ApplicationInfo]()
-    import builder._
-    customCol("ID") { app =>
+    val t = new UITableBuilder[ApplicationInfo]()
+    t.customCol("ID") { app =>
       <a href={"app?appId=" + app.id}>{app.id}</a>
     }
-    col("Name") { _.id }
-    intCol("Cores") { _.coresGranted }
-    memCol("Memory per Node") { _.desc.memoryPerSlave }
-    dateCol("Submitted Time") { _.submitDate }
-    col("User") { _.desc.user }
-    col("State") { _.state.toString }
-    durationCol("Duration") { _.duration }
-    build
+    t.col("Name") { _.id }
+    t.intCol("Cores") { _.coresGranted }
+    t.memCol("Memory per Node") { _.desc.memoryPerSlave }
+    t.dateCol("Submitted Time") { _.submitDate }
+    t.col("User") { _.desc.user }
+    t.col("State") { _.state.toString }
+    t.durationCol("Duration") { _.duration }
+    t.build()
   }
 
   private val driverTable: UITable[DriverInfo] = {
-    val builder = new UITableBuilder[DriverInfo]()
-    import builder._
-    col("ID") { _.id }
-    dateCol("Submitted Time") { _.submitDate }
-    customCol("Worker") { driver =>
+    val t = new UITableBuilder[DriverInfo]()
+    t.col("ID") { _.id }
+    t.dateCol("Submitted Time") { _.submitDate }
+    t.customCol("Worker") { driver =>
       driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse(Text("None"))
     }
-    col("State") { _.state.toString }
-    intCol("Cores") { _.desc.cores }
-    memCol("Memory") { _.desc.mem.toLong }
-    col("Main Class") { _.desc.command.arguments(1) }
-    build
+    t.col("State") { _.state.toString }
+    t.intCol("Cores") { _.desc.cores }
+    t.memCol("Memory") { _.desc.mem.toLong }
+    t.col("Main Class") { _.desc.command.arguments(1) }
+    t.build()
   }
 
   /** Index view listing applications and executors */

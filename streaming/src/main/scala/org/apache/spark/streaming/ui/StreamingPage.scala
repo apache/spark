@@ -47,16 +47,15 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 
   private val batchStatsTable: UITable[(String, Option[Long], Option[Seq[Double]])] = {
-    val builder = new UITableBuilder[(String, Option[Long], Option[Seq[Double]])]()
-    import builder._
-    col("Metric") { _._1 }
-    optDurationCol("Last batch") { _._2 }
-    optDurationCol("Minimum") { _._3.map(_(0).toLong) }
-    optDurationCol("25th percentile") { _._3.map(_(1).toLong) }
-    optDurationCol("Median") { _._3.map(_(2).toLong) }
-    optDurationCol("75th percentile") { _._3.map(_(3).toLong) }
-    optDurationCol("Maximum") { _._3.map(_(4).toLong) }
-    build
+    val t = new UITableBuilder[(String, Option[Long], Option[Seq[Double]])]()
+    t.col("Metric") { _._1 }
+    t.optDurationCol("Last batch") { _._2 }
+    t.optDurationCol("Minimum") { _._3.map(_(0).toLong) }
+    t.optDurationCol("25th percentile") { _._3.map(_(1).toLong) }
+    t.optDurationCol("Median") { _._3.map(_(2).toLong) }
+    t.optDurationCol("75th percentile") { _._3.map(_(3).toLong) }
+    t.optDurationCol("Maximum") { _._3.map(_(4).toLong) }
+    t.build()
   }
 
   /** Generate basic stats of the streaming program */
@@ -90,40 +89,39 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val lastBatchReceivedRecord = listener.lastReceivedBatchRecords
     val table = if (receivedRecordDistributions.size > 0) {
       val tableRenderer: UITable[(Int, Option[ReceiverInfo])] = {
-        val builder = new UITableBuilder[(Int, Option[ReceiverInfo])]()
-        import builder._
-        col("Receiver") { case (receiverId, receiverInfo) =>
+        val t = new UITableBuilder[(Int, Option[ReceiverInfo])]()
+        t.col("Receiver") { case (receiverId, receiverInfo) =>
           receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
         }
-        col("Status") { case (_, receiverInfo) =>
+        t.col("Status") { case (_, receiverInfo) =>
           receiverInfo.map { info => if (info.active) "ACTIVE" else "INACTIVE" }.getOrElse(empty)
         }
-        col("Location") { case (_, receiverInfo) => receiverInfo.map(_.location).getOrElse(empty) }
-        col("Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]") {
+        t.col("Location") { case (_, receiverInfo) => receiverInfo.map(_.location).getOrElse(empty) }
+        t.col("Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]") {
           case (receiverId, _) => formatNumber(lastBatchReceivedRecord(receiverId))
         }
-        col("Minimum rate\n[records/sec]") {
+        t.col("Minimum rate\n[records/sec]") {
           case (receiverId, _) => receivedRecordDistributions(receiverId).map {
             _.getQuantiles(Seq(0.0)).map(formatNumber).head
           }.getOrElse(empty)
         }
-        col("Median rate\n[records/sec]") {
+        t.col("Median rate\n[records/sec]") {
           case (receiverId, _) => receivedRecordDistributions(receiverId).map {
             _.getQuantiles(Seq(0.5)).map(formatNumber).head
           }.getOrElse(empty)
         }
-        col("Maximum rate\n[records/sec]") {
+        t.col("Maximum rate\n[records/sec]") {
           case (receiverId, _) => receivedRecordDistributions(receiverId).map {
             _.getQuantiles(Seq(1.0)).map(formatNumber).head
           }.getOrElse(empty)
         }
-        col("Last Error") {
+        t.col("Last Error") {
           case (_, receiverInfo) => receiverInfo.map { info =>
             val msg = s"${info.lastErrorMessage} - ${info.lastError}"
             if (msg.size > 100) msg.take(97) + "..." else msg
           }.getOrElse(empty)
         }
-        build
+        t.build()
       }
 
       val dataRows = (0 until listener.numReceivers).map { id => (id, listener.receiverInfo(id)) }

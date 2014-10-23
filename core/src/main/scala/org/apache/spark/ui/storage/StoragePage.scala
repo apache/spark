@@ -29,22 +29,21 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
 
   val rddTable: UITable[RDDInfo] = {
-    val builder = new UITableBuilder[RDDInfo]()
-    import builder._
-    customCol("RDD Name") { rdd =>
+    val t = new UITableBuilder[RDDInfo]()
+    t.customCol("RDD Name") { rdd =>
       <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
         {rdd.name}
       </a>
     }
-    col("Storage Level") { _.storageLevel.description }
-    intCol("Cached Partitions") { _.numCachedPartitions }
-    col("Fraction Cached") { rdd =>
+    t.col("Storage Level") { _.storageLevel.description }
+    t.intCol("Cached Partitions") { _.numCachedPartitions }
+    t. col("Fraction Cached") { rdd =>
       "%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)
     }
-    memCol("Size in Memory") { _.memSize }
-    memCol("Size in Tachyon") { _.tachyonSize }
-    memCol("Size on Disk") { _.diskSize }
-    build
+    t.memCol("Size in Memory") { _.memSize }
+    t.memCol("Size in Tachyon") { _.tachyonSize }
+    t.memCol("Size on Disk") { _.diskSize }
+    t.build()
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
