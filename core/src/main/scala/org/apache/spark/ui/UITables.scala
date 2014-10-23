@@ -47,7 +47,8 @@ private case class UITableColumn[T, V](
   def renderCell(row: T): Seq[Node] =  {
     val data = fieldExtractor(row)
     val cellContents = renderCellContents(data)
-    <td sorttable_customkey={sortKey.map(k => Text(k(data)))}>
+    val cls = if (sortable) None else Some(Text("sorttable_nosort"))
+    <td sorttable_customkey={sortKey.map(k => Text(k(data)))} class={cls}>
       {cellContents}
     </td>
   }

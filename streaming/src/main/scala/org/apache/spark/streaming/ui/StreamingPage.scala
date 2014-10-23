@@ -96,7 +96,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
         t.col("Status") { case (_, receiverInfo) =>
           receiverInfo.map { info => if (info.active) "ACTIVE" else "INACTIVE" }.getOrElse(empty)
         }
-        t.col("Location") { case (_, receiverInfo) => receiverInfo.map(_.location).getOrElse(empty) }
+        t.col("Location") { case (_, receiverInfo) =>
+          receiverInfo.map(_.location).getOrElse(empty)
+        }
         t.col("Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]") {
           case (receiverId, _) => formatNumber(lastBatchReceivedRecord(receiverId))
         }
