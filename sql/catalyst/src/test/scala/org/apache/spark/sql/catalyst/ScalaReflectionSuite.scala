@@ -43,7 +43,7 @@ case class NullableData(
     booleanField: java.lang.Boolean,
     stringField: String,
     decimalField: BigDecimal,
-    DateField: Date,
+    dateField: Date,
     timestampField: Timestamp,
     binaryField: Array[Byte])
 
