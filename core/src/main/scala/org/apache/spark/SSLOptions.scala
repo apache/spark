@@ -18,11 +18,9 @@
 package org.apache.spark
 
 import java.io.{FileReader, File}
-import java.nio.file.Paths
 import java.util.Properties
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
-import org.apache.commons.io.FilenameUtils
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
 import scala.util.Try
@@ -138,23 +136,14 @@ object SSLOptions extends Logging {
    * as a base directory to resolve relative paths to keystore and truststore.
    */
   def parse(conf: SparkConf, ns: String): SSLOptions = {
-    val configFilePath = conf.getOption("sslConfigurationFileLocation")
-
-    def makeFile(pathString: String): File = {
-      val path = Paths.get(pathString)
-
-      if (path.isAbsolute || configFilePath.isEmpty) {
-        path.toFile
-      } else {
-        new File(FilenameUtils.concat(new File(configFilePath.get).getParent, pathString))
-      }
-    }
+    val parentDir = conf.getOption("sslConfigurationFileLocation").map(new File(_).getParentFile)
+      .getOrElse(new File(".")).toPath
 
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = false)
-    val keyStore = Try(conf.get(s"$ns.keyStore")).toOption.map(makeFile)
+    val keyStore = Try(conf.get(s"$ns.keyStore")).toOption.map(parentDir.resolve(_).toFile)
     val keyStorePassword = Try(conf.get(s"$ns.keyStorePassword")).toOption
     val keyPassword = Try(conf.get(s"$ns.keyPassword")).toOption
-    val trustStore = Try(conf.get(s"$ns.trustStore")).toOption.map(makeFile)
+    val trustStore = Try(conf.get(s"$ns.trustStore")).toOption.map(parentDir.resolve(_).toFile)
     val trustStorePassword = Try(conf.get(s"$ns.trustStorePassword")).toOption
     val protocol = Try(conf.get(s"$ns.protocol")).toOption
     val enabledAlgorithms = Try(conf.get(s"$ns.enabledAlgorithms")).toOption
