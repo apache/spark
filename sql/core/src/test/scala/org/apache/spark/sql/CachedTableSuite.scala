@@ -59,7 +59,6 @@ class CachedTableSuite extends QueryTest {
     cacheTable("tempTable")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
     uncacheTable("tempTable")
-    //sql("DROP TABLE tempTable")
   }
 
   test("cache table as select") {
