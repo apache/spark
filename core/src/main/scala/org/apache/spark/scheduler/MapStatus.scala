@@ -121,7 +121,8 @@ private[spark] class CompressedMapStatus(
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a bitmap for tracking which blocks are non-empty.
+ * plus a bitmap for tracking which blocks are non-empty.  During serialization, this bitmap
+ * is compressed.
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
@@ -135,6 +136,7 @@ private[spark] class HighlyCompressedMapStatus private (
     private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
 
+  // loc could be null when the default constructor is called during deserialization
   require(loc == null || avgSize > 0 || numNonEmptyBlocks == 0,
     "Average size can only be zero for map stages that produced no output")
 
@@ -168,7 +170,7 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 }
 
-object HighlyCompressedMapStatus {
+private[spark] object HighlyCompressedMapStatus {
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): HighlyCompressedMapStatus = {
     // We must keep track of which blocks are empty so that we don't report a zero-sized
     // block as being non-empty (or vice-versa) when using the average block size.
@@ -176,7 +178,7 @@ object HighlyCompressedMapStatus {
     var numNonEmptyBlocks: Int = 0
     var totalSize: Long = 0
     // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
-    // blocks.  From a performance standpoint, we benefit from tracking empty blocks because
+    // blocks. From a performance standpoint, we benefit from tracking empty blocks because
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
     val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
