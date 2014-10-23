@@ -187,10 +187,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
     val info = blockManagerInfo(blockManagerId)
-    
+
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
-    
+
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
     val iterator = info.blocks.keySet.iterator
