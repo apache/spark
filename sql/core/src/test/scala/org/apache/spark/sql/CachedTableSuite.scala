@@ -68,6 +68,21 @@ class CachedTableSuite extends QueryTest {
     uncacheTable("tempTable")
   }
 
+  test("uncaching temp table") {
+    testData.select('key).registerTempTable("tempTable1")
+    testData.select('key).registerTempTable("tempTable2")
+    cacheTable("tempTable1")
+
+    assertCached(sql("SELECT COUNT(*) FROM tempTable1"))
+    assertCached(sql("SELECT COUNT(*) FROM tempTable2"))
+
+    // Is this valid?
+    uncacheTable("tempTable2")
+
+    // Should this be cached?
+    assertCached(sql("SELECT COUNT(*) FROM tempTable1"), 0)
+  }
+
   test("too big for memory") {
     val data = "*" * 10000
     sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
