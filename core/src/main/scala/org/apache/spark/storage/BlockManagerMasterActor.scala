@@ -145,17 +145,12 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
     val info = blockManagerInfo(blockManagerId)
-    
+
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
-    
-    logInfo("removed executorId %s from blockManagerIdByExecutor".format(blockManagerId.executorId))
 
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
-    
-    logInfo("removed blockManagerId %s from blockManagerInfo".format(blockManagerId))
-
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -165,8 +160,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
         blockLocations.remove(locations)
       }
     }
-    
-    logInfo("done with remove "+blockManagerId)
+    logInfo(s"Removing block manager $blockManagerId")
   }
 
   private def expireDeadHosts() {
@@ -187,7 +181,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
   private def removeExecutor(execId: String) {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-    logInfo("removed executor " + execId + " from BlockManagerMaster.")
   }
 
   private def heartBeat(blockManagerId: BlockManagerId): Boolean = {
@@ -231,24 +224,22 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
-    logInfo("Registering block manager %s with %s RAM, %s".format(id.hostPort, Utils.bytesToString(maxMemSize), id))
-    
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
-        case Some(manager) =>
-          // A block manager of the same executor already exists so remove it (assumed dead).
-          logError("Got two different block manager registrations on same executor - will remove, new Id " + id+", orig id - "+manager)
-          removeExecutor(id.executorId)
+        case Some(oldId) =>
+          // A block manager of the same executor already exists, so remove it (assumed dead)
+          logError("Got two different block manager registrations on same executor - " 
+              + s" will replace old one $oldId with new one $id")
+          removeExecutor(id.executorId)  
         case None =>
-          logInfo("about to register new id "+id)
       }
+      logInfo("Registering block manager %s with %s RAM, %s".format(
+        id.hostPort, Utils.bytesToString(maxMemSize), id))
       
       blockManagerIdByExecutor(id.executorId) = id
-      logInfo("Added %s to blockManagerIdByExecutor".format(id.executorId))
       
-      val info = new BlockManagerMasterActor.BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
-      blockManagerInfo(id) = info
-      logInfo("Added %s, %s to blockManagerInfo".format(id, info))
+      blockManagerInfo(id) = new BlockManagerMasterActor.BlockManagerInfo(
+        id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
   }
 
