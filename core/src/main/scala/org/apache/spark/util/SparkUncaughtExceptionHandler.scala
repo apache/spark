@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.executor.ExecutorExitCode
 
 /**
  * The default uncaught exception handler for Executors terminates the whole process, to avoid
  * getting into a bad state indefinitely. Since Executors are relatively lightweight, it's better
  * to fail fast when things go wrong.
  */
-private[spark] object ExecutorUncaughtExceptionHandler
+private[spark] object SparkUncaughtExceptionHandler
   extends Thread.UncaughtExceptionHandler with Logging {
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
