@@ -190,8 +190,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockManagerIdByExecutor -= blockManagerId.executorId
     
     // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)
-    
+    blockManagerInfo.remove(blockManagerId)   
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -202,7 +201,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
-    logInfo("removed " + blockManagerId)
+    logInfo(s"Removing block manager $blockManagerId")
   }
 
   private def expireDeadHosts() {
@@ -328,10 +327,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
-        case Some(manager) =>
-          // A block manager of the same executor already exists so remove it (assumed dead).
+        case Some(oldId) =>
+          // already exists so remove it (assumed dead).
           logError("Got two different block manager registrations on same executor - " 
-              + " will remove, new Id " + id + ", orig id - " + manager)
+              + " will remove, new Id %s, orig id - %s".format(id, oldId))
           removeExecutor(id.executorId)  
         case None =>
       }
@@ -340,8 +339,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       
       blockManagerIdByExecutor(id.executorId) = id
       
-      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), 
-                                                  maxMemSize, slaveActor)
+      blockManagerInfo(id) = new BlockManagerInfo(
+          id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
