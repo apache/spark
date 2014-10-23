@@ -15,3 +15,5 @@ sphinx
 sphinx_rtd_theme
 sqlalchemy
 thrift
+celery
+hive-thrift-py
