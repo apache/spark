@@ -18,18 +18,20 @@
 package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
+
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.duration._
+
 import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
+
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
-
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
