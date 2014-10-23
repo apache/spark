@@ -181,7 +181,8 @@ object RRDD {
       appName: String,
       sparkHome: String,
       jars: Array[String],
-      vars: JMap[Object, Object]): JavaSparkContext = {
+      vars: JMap[Object, Object],
+      eevars: JMap[Object, Object]): JavaSparkContext = {
 
     val sparkConf = new SparkConf().setMaster(master)
                                    .setAppName(appName)
@@ -189,6 +190,9 @@ object RRDD {
                                    .setJars(jars)
     for ( (name, value) <- vars) {
       sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
+    }
+    for ( (name, value) <- eevars) {
+      sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
     }
     new JavaSparkContext(sparkConf)
   }
