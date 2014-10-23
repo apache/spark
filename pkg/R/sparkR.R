@@ -32,7 +32,9 @@ sparkR.init <- function(
   master = "local",
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),
-  sparkEnvir = list() ) {
+  sparkEnvir = list(),
+  sparkJars = "",
+  sparkExecutorEnv = list()) {
 
   if (exists(".sparkRjsc", envir=.sparkREnv)) {
     return(get(".sparkRjsc", envir=.sparkREnv))
@@ -46,7 +48,14 @@ sparkR.init <- function(
   for (varname in names(sparkEnvir)) {
     hm$put(varname, sparkEnvir[[varname]])
   }
-
+  
+  ee <- .jnew("java/util/HashMap")
+  for (varname in names(sparkExecutorEnv)) {
+    ee$put(varname, sparkExecutorEnv[[varname]])
+  }
+  
+  jars=c(as.character(.sparkREnv$assemblyJarPath),as.character(sparkJars))
+  
   assign(
     ".sparkRjsc",
     J("edu.berkeley.cs.amplab.sparkr.RRDD",
@@ -54,9 +63,9 @@ sparkR.init <- function(
       master,
       appName,
       as.character(sparkHome),
-      .jarray(as.character(.sparkREnv$assemblyJarPath),
-               "java/lang/String"),
-      hm),
+      .jarray(jars,"java/lang/String"),
+      hm,
+      ee ),
     envir=.sparkREnv
   )
 
