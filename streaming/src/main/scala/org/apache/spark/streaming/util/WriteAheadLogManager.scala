@@ -75,8 +75,8 @@ private[streaming] class WriteAheadLogManager(
    * ByteBuffer to HDFS. When this method returns, the data is guaranteed to have been flushed
    * to HDFS, and will be available for readers to read.
    */
-  def writeToLog(byteBuffer: ByteBuffer): FileSegment = synchronized {
-    var fileSegment: FileSegment = null
+  def writeToLog(byteBuffer: ByteBuffer): WriteAheadLogFileSegment = synchronized {
+    var fileSegment: WriteAheadLogFileSegment = null
     var failures = 0
     var lastException: Exception = null
     var succeeded = false
@@ -112,8 +112,8 @@ private[streaming] class WriteAheadLogManager(
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
     logFilesToRead.iterator.map { file =>
-        logDebug(s"Creating log reader with $file")
-        new WriteAheadLogReader(file, hadoopConf)
+      logDebug(s"Creating log reader with $file")
+      new WriteAheadLogReader(file, hadoopConf)
     } flatMap { x => x }
   }
 
@@ -208,6 +208,7 @@ private[util] object WriteAheadLogManager {
     s"log-$startTime-$stopTime"
   }
 
+  /** Convert a sequence of files to a sequence of sorted LogInfo objects */
   def logFilesTologInfo(files: Seq[Path]): Seq[LogInfo] = {
     files.flatMap { file =>
       logFileRegex.findFirstIn(file.getName()) match {

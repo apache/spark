@@ -34,49 +34,46 @@ private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configura
   private lazy val stream = HdfsUtils.getOutputStream(path, hadoopConf)
 
   private lazy val hadoopFlushMethod = {
+    // Use reflection to get the right flush operation
     val cls = classOf[FSDataOutputStream]
     Try(cls.getMethod("hflush")).orElse(Try(cls.getMethod("sync"))).toOption
   }
 
-  private var nextOffset = getPosition()
+  private var nextOffset = stream.getPos()
   private var closed = false
 
-
   /** Write the bytebuffer to the log file */
-  def write(data: ByteBuffer): FileSegment = synchronized {
+  def write(data: ByteBuffer): WriteAheadLogFileSegment = synchronized {
     assertOpen()
     data.rewind() // Rewind to ensure all data in the buffer is retrieved
     val lengthToWrite = data.remaining()
-    val segment = new FileSegment(path, nextOffset, lengthToWrite)
+    val segment = new WriteAheadLogFileSegment(path, nextOffset, lengthToWrite)
     stream.writeInt(lengthToWrite)
     if (data.hasArray) {
       stream.write(data.array())
     } else {
-      // If the buffer is not backed by an array we need to write the data byte by byte
+      // If the buffer is not backed by an array, we transfer using temp array
+      // Note that despite the extra array copy, this should be faster than byte-by-byte copy
       while (data.hasRemaining) {
-        stream.write(data.get())
+        val array = new Array[Byte](data.remaining)
+        data.get(array)
+        stream.write(array)
       }
     }
     flush()
-    nextOffset = getPosition()
+    nextOffset = stream.getPos()
     segment
   }
 
-  override private[streaming] def close(): Unit = synchronized {
+  override def close(): Unit = synchronized {
     closed = true
     stream.close()
   }
 
-
-  private def getPosition(): Long = {
-    stream.getPos()
-  }
-
   private def flush() {
+    hadoopFlushMethod.foreach { _.invoke(stream) }
+    // Useful for local file system where hflush/sync does not work (HADOOP-7844)
     stream.getWrappedStream.flush()
-    hadoopFlushMethod.foreach {
-      _.invoke(stream)
-    }
   }
 
   private def assertOpen() {

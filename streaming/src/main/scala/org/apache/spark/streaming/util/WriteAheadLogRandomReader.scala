@@ -32,12 +32,12 @@ private[streaming] class WriteAheadLogRandomReader(path: String, conf: Configura
   private val instream = HdfsUtils.getInputStream(path, conf)
   private var closed = false
 
-  def read(segment: FileSegment): ByteBuffer = synchronized {
+  def read(segment: WriteAheadLogFileSegment): ByteBuffer = synchronized {
     assertOpen()
     instream.seek(segment.offset)
     val nextLength = instream.readInt()
     HdfsUtils.checkState(nextLength == segment.length,
-      "Expected message length to be " + segment.length + ", " + "but was " + nextLength)
+      s"Expected message length to be ${segment.length}, but was $nextLength")
     val buffer = new Array[Byte](nextLength)
     instream.readFully(buffer)
     ByteBuffer.wrap(buffer)
