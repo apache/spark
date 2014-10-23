@@ -144,11 +144,8 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def location: BlockManagerId = loc
 
-  // This set allows for constant-time lookup of whether a block is empty
-  private var emptyBlocksSet: Set[Int] = Option(emptyBlocks).map(_.toArray.toSet).orNull
-
   override def getSizeForBlock(reduceId: Int): Long = {
-    if (emptyBlocksSet.contains(reduceId)) {
+    if (emptyBlocks.contains(reduceId)) {
       0
     } else {
       avgSize
@@ -165,7 +162,6 @@ private[spark] class HighlyCompressedMapStatus private (
     loc = BlockManagerId(in)
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.readExternal(in)
-    emptyBlocksSet = emptyBlocks.toArray.toSet
     avgSize = in.readLong()
   }
 }
