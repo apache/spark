@@ -192,7 +192,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockManagerIdByExecutor -= blockManagerId.executorId
     
     // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)   
+    blockManagerInfo.remove(blockManagerId)
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -326,7 +326,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     val time = System.currentTimeMillis()
-    
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
