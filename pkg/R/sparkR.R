@@ -44,17 +44,17 @@ sparkR.init <- function(
     sparkHome <- normalizePath(sparkHome)
   }
 
-  hm <- .jnew("java/util/HashMap")
+  sparkEnvirMap <- .jnew("java/util/HashMap")
   for (varname in names(sparkEnvir)) {
     hm$put(varname, sparkEnvir[[varname]])
   }
   
-  ee <- .jnew("java/util/HashMap")
+  ExecutorEnv <- .jnew("java/util/HashMap")
   for (varname in names(sparkExecutorEnv)) {
     ee$put(varname, sparkExecutorEnv[[varname]])
   }
   
-  jars=c(as.character(.sparkREnv$assemblyJarPath),as.character(sparkJars))
+  jars=c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
   
   assign(
     ".sparkRjsc",
@@ -63,9 +63,9 @@ sparkR.init <- function(
       master,
       appName,
       as.character(sparkHome),
-      .jarray(jars,"java/lang/String"),
-      hm,
-      ee ),
+      .jarray(jars, "java/lang/String"),
+      sparkEnvirMap,
+      ExecutorEnv),
     envir=.sparkREnv
   )
 
