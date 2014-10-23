@@ -121,9 +121,9 @@ public class SVD {
 The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
 
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
+In order to run the above application, follow the instructions
+provided in the [Self-Contained
+Applications](quick-start.html#self-contained-applications) section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 
@@ -200,10 +200,11 @@ public class PCA {
 }
 {% endhighlight %}
 
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
+</div>
+</div>
+
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
-</div>
-</div>
