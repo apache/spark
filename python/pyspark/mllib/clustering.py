@@ -22,7 +22,32 @@ from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 __all__ = ['KMeansModel', 'KMeans']
 
 
-class KMeansModel(object):
+class ClusteringModel(object):
+
+    """A clustering model abstract"""
+
+    def __init__(self, centers):
+        self.centers = centers
+
+    @property
+    def clusterCenters(self):
+        """Get the cluster centers, represented as a list of NumPy arrays."""
+        return self.centers
+
+    def predict(self, x):
+        """Find the cluster to which x belongs in this model."""
+        best = 0
+        best_distance = float("inf")
+        x = _convert_to_vector(x)
+        for i in xrange(len(self.centers)):
+            distance = x.squared_distance(self.centers[i])
+            if distance < best_distance:
+                best = i
+                best_distance = distance
+        return best
+
+
+class KMeansModel(ClusteringModel):
 
     """A clustering model derived from the k-means method.
 
@@ -55,24 +80,7 @@ class KMeansModel(object):
     """
 
     def __init__(self, centers):
-        self.centers = centers
-
-    @property
-    def clusterCenters(self):
-        """Get the cluster centers, represented as a list of NumPy arrays."""
-        return self.centers
-
-    def predict(self, x):
-        """Find the cluster to which x belongs in this model."""
-        best = 0
-        best_distance = float("inf")
-        x = _convert_to_vector(x)
-        for i in xrange(len(self.centers)):
-            distance = x.squared_distance(self.centers[i])
-            if distance < best_distance:
-                best = i
-                best_distance = distance
-        return best
+        super(KMeansModel, self).__init__(centers)
 
 
 class KMeans(object):
@@ -86,6 +94,58 @@ class KMeans(object):
                               initializationMode)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
+
+
+class HierarchicalClusteringModel(ClusteringModel):
+
+    """A clustering model derived from the hierarchical clustering method.
+
+    >>> from numpy import array
+    >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
+    >>> model = HierarchicalClustering.train(
+    ...     sc.parallelize(data), 2)
+    >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
+    True
+    >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
+    True
+    >>> model = HierarchicalClustering.train(sc.parallelize(data), 2)
+    >>> sparse_data = [
+    ...     SparseVector(3, {1: 1.0}),
+    ...     SparseVector(3, {1: 1.1}),
+    ...     SparseVector(3, {2: 1.0}),
+    ...     SparseVector(3, {2: 1.1})
+    ... ]
+    >>> model = HierarchicalClustering.train(sc.parallelize(sparse_data), 2)
+    >>> model.predict(array([0., 1., 0.])) == model.predict(array([0, 1.1, 0.]))
+    True
+    >>> model.predict(array([0., 0., 1.])) == model.predict(array([0, 0, 1.1]))
+    True
+    >>> model.predict(sparse_data[0]) == model.predict(sparse_data[1])
+    True
+    >>> model.predict(sparse_data[2]) == model.predict(sparse_data[3])
+    True
+    >>> type(model.clusterCenters)
+    <type 'list'>
+    """
+
+    def __init__(self, centers):
+        super(HierarchicalClusteringModel, self).__init__(centers)
+
+
+class HierarchicalClustering(object):
+
+    @classmethod
+    def train(cls, rdd, k):
+        """Train a hierarchical clustering model."""
+        sc = rdd.context
+        ser = PickleSerializer()
+        # cache serialized data to avoid objects over head in JVM
+        cached = rdd.map(_convert_to_vector)._reserialize(AutoBatchedSerializer(ser)).cache()
+        model = sc._jvm.PythonMLLibAPI().trainHierarchicalClusteringModel(
+            _to_java_object_rdd(cached), k)
+        bytes = sc._jvm.SerDe.dumps(model.getCenters())
+        centers = ser.loads(str(bytes))
+        return HierarchicalClusteringModel([c.toArray() for c in centers])
 
 
 def _test():

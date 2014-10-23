@@ -254,6 +254,17 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib HierarchicalClustering.train()
+   */
+  def trainHierarchicalClusteringModel(
+    data: JavaRDD[Vector],
+    k: Int
+  ): HierarchicalClusteringModel = {
+    val conf = new HierarchicalClusteringConf().setNumClusters(k)
+    new HierarchicalClustering(conf).run(data)
+  }
+
+  /**
    * A Wrapper of MatrixFactorizationModel to provide helpfer method for Python
    */
   private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorizationModel)
