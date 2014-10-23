@@ -53,17 +53,33 @@ class CachedTableSuite extends QueryTest {
     sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
   }
 
+  test("cache temp table") {
+    testData.select('key).registerTempTable("tempTable")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
+    cacheTable("tempTable")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"))
+    uncacheTable("tempTable")
+    //sql("DROP TABLE tempTable")
+  }
+
+  test("cache table as select") {
+    sql("CACHE TABLE tempTable AS SELECT key FROM testData")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"))
+    uncacheTable("tempTable")
+  }
+
   test("too big for memory") {
     val data = "*" * 10000
     sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
     table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(table("bigData").count() === 200000L)
-    table("bigData").unpersist()
+    table("bigData").unpersist(blocking = true)
   }
 
   test("calling .cache() should use in-memory columnar caching") {
     table("testData").cache()
     assertCached(table("testData"))
+    table("testData").unpersist(blocking = true)
   }
 
   test("calling .unpersist() should drop in-memory columnar cache") {
@@ -108,6 +124,8 @@ class CachedTableSuite extends QueryTest {
         case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan) => r
       }.size
     }
+
+    uncacheTable("testData")
   }
 
   test("read from cached table and uncache") {
