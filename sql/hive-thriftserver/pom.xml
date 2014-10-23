@@ -42,11 +42,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-cli</artifactId>
       <version>${hive.version}</version>
@@ -60,6 +55,11 @@
       <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-beeline</artifactId>
       <version>${hive.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
