@@ -100,23 +100,23 @@ private[ui] class StreamingPage(parent: StreamingTab)
         t.col("Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]") {
           case (receiverId, _) => formatNumber(lastBatchReceivedRecord(receiverId))
         }
-        t.col("Minimum rate\n[records/sec]") {
-          case (receiverId, _) => receivedRecordDistributions(receiverId).map {
+        t.col("Minimum rate\n[records/sec]") { case (receiverId, _) =>
+          receivedRecordDistributions(receiverId).map {
             _.getQuantiles(Seq(0.0)).map(formatNumber).head
           }.getOrElse(empty)
         }
-        t.col("Median rate\n[records/sec]") {
-          case (receiverId, _) => receivedRecordDistributions(receiverId).map {
+        t.col("Median rate\n[records/sec]") { case (receiverId, _) =>
+          receivedRecordDistributions(receiverId).map {
             _.getQuantiles(Seq(0.5)).map(formatNumber).head
           }.getOrElse(empty)
         }
-        t.col("Maximum rate\n[records/sec]") {
-          case (receiverId, _) => receivedRecordDistributions(receiverId).map {
+        t.col("Maximum rate\n[records/sec]") { case (receiverId, _) =>
+          receivedRecordDistributions(receiverId).map {
             _.getQuantiles(Seq(1.0)).map(formatNumber).head
           }.getOrElse(empty)
         }
-        t.col("Last Error") {
-          case (_, receiverInfo) => receiverInfo.map { info =>
+        t.col("Last Error") { case (_, receiverInfo) =>
+          receiverInfo.map { info =>
             val msg = s"${info.lastErrorMessage} - ${info.lastError}"
             if (msg.size > 100) msg.take(97) + "..." else msg
           }.getOrElse(empty)

@@ -40,9 +40,9 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     t. col("Fraction Cached") { rdd =>
       "%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)
     }
-    t.memCol("Size in Memory") { _.memSize }
-    t.memCol("Size in Tachyon") { _.tachyonSize }
-    t.memCol("Size on Disk") { _.diskSize }
+    t.sizeCol("Size in Memory") { _.memSize }
+    t.sizeCol("Size in Tachyon") { _.tachyonSize }
+    t.sizeCol("Size on Disk") { _.diskSize }
     t.build()
   }
 

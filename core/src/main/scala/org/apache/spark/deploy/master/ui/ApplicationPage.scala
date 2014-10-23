@@ -54,7 +54,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
       <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
     }
     t.intCol("Cores") { _.cores }
-    t.memCol("Memory") { _.memory }
+    t.sizeCol("Memory") { _.memory }
     t.col("State") { _.state.toString }
     t.customCol("Logs") { executor =>
       <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"

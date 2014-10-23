@@ -47,7 +47,7 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     t.intCol("Executor ID") { _.execId }
     t.intCol("Cores") { _.cores }
     t.col("State") { _.state.toString }
-    t.memCol("Memory") { _.memory }
+    t.sizeCol("Memory") { _.memory }
     t.customCol("Job Details") { executor =>
       <ul class="unstyled">
         <li><strong>ID:</strong> {executor.appId}</li>
@@ -70,7 +70,7 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     t.col("Main Class") { _.driverDesc.command.arguments(1) }
     t.col("State") { _.finalState.getOrElse(DriverState.RUNNING).toString }
     t.intCol("Cores") { _.driverDesc.cores }
-    t.memCol("Memory") { _.driverDesc.mem }
+    t.sizeCol("Memory") { _.driverDesc.mem }
     t.customCol("Logs") { driver =>
       <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
       <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>

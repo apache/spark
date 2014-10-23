@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import java.util.Date
 
 import scala.collection.mutable
-import scala.xml.{Text, Node}
+import scala.xml.{Node, Text}
 
 import org.apache.spark.util.Utils
 
@@ -142,17 +142,7 @@ private[spark] class UITable[T] (cols: Seq[UITableColumn[T, _]], fixedWidth: Boo
  *    Columns have additional options, such as controlling their sort keys; see the individual
  *    methods' documentation for more details.
  *
- *  - Call `build` to construct an immutable object which can be used to render tables.
- *   *
- * To remove some of the boilerplate here, you can statically import the `col` methods; for example:
- *
- *    val myTable: UITable[MyRowDataType] = {
- *      val builder = new UITableBuilder[MyRowDataType]()
- *      import builder._
- *      col("Name") { _.name }
- *      [...]
- *      build
- *    }
+ *  - Call `build()` to construct an immutable object which can be used to render tables.
  *
  * There are many other features, including support for arbitrary markup in custom column types;
  * see the actual uses in the web UI code for more details.
@@ -168,9 +158,9 @@ private[spark] class UITableBuilder[T](fixedWidth: Boolean = false) {
    * render the contents of the TD tag, not the TD tag itself.
    */
   def customCol[V](
-    name: String,
-    sortable: Boolean = true,
-    sortKey: Option[T => String] = None)(renderer: T => Seq[Node]): UITableBuilder[T] = {
+      name: String,
+      sortable: Boolean = true,
+      sortKey: Option[T => String] = None)(renderer: T => Seq[Node]): UITableBuilder[T] = {
     val customColumn = new UITableColumn[T, T](name, null, sortable, sortKey, identity) {
       override def renderCellContents(row: T) = renderer(row)
     }
@@ -179,32 +169,32 @@ private[spark] class UITableBuilder[T](fixedWidth: Boolean = false) {
   }
 
   def col[V](
-    name: String,
-    formatter: V => String,
-    sortable: Boolean = true,
-    sortKey: Option[V => String] = None)(fieldExtractor: T => V): UITableBuilder[T] = {
+      name: String,
+      formatter: V => String,
+      sortable: Boolean = true,
+      sortKey: Option[V => String] = None)(fieldExtractor: T => V): UITableBuilder[T] = {
     cols.append(UITableColumn(name, formatter, sortable, sortKey, fieldExtractor))
     this
   }
 
   def col(
-    name: String,
-    sortable: Boolean = true,
-    sortKey: Option[String => String] = None)(fieldExtractor: T => String): UITableBuilder[T] = {
+      name: String,
+      sortable: Boolean = true,
+      sortKey: Option[String => String] = None)(fieldExtractor: T => String): UITableBuilder[T] = {
     col[String](name, {x: String => x}, sortable, sortKey)(fieldExtractor)
   }
 
   def intCol(
-    name: String,
-    formatter: Int => String = { x: Int => x.toString },
-    sortable: Boolean = true)(fieldExtractor: T => Int): UITableBuilder[T] = {
+      name: String,
+      formatter: Int => String = { x: Int => x.toString },
+      sortable: Boolean = true)(fieldExtractor: T => Int): UITableBuilder[T] = {
     col[Int](name, formatter, sortable = sortable)(fieldExtractor)
   }
 
   /**
-   * Display a column of memory sizes, in megabytes, as human-readable strings, such as "4.0 MB".
+   * Display a column of sizes, in megabytes, as human-readable strings, such as "4.0 MB".
    */
-  def memCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
+  def sizeCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
     col[Long](
       name,
       formatter = Utils.megabytesToString,

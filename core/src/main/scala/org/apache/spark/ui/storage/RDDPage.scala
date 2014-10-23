@@ -42,16 +42,16 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         val remaining = Utils.bytesToString(status.memRemaining)
         Text(s"$used ($remaining Remaining)")
       }
-    t.memCol("Disk Usage") { case (rddId, status) => status.diskUsedByRdd(rddId) }
+    t.sizeCol("Disk Usage") { case (rddId, status) => status.diskUsedByRdd(rddId) }
     t.build()
   }
 
-  val blockTable: UITable[(BlockId, BlockStatus, Seq[String])] = {
+  private val blockTable: UITable[(BlockId, BlockStatus, Seq[String])] = {
     val t = new UITableBuilder[(BlockId, BlockStatus, Seq[String])]()
     t.col("Block Name") { case (id, block, locations) => id.toString }
     t.col("Storage Level") { case (id, block, locations) => block.storageLevel.description }
-    t. memCol("Size in Memory") { case (id, block, locations) => block.memSize }
-    t.memCol("Size on Disk") { case (id, block, locations) => block.diskSize }
+    t. sizeCol("Size in Memory") { case (id, block, locations) => block.memSize }
+    t.sizeCol("Size on Disk") { case (id, block, locations) => block.diskSize }
     t.customCol("Executors") { case (id, block, locations) =>
       locations.map(l => <span>{l}<br/></span>)
     }

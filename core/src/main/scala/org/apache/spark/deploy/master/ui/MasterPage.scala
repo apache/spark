@@ -64,7 +64,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
     t.col("Name") { _.id }
     t.intCol("Cores") { _.coresGranted }
-    t.memCol("Memory per Node") { _.desc.memoryPerSlave }
+    t.sizeCol("Memory per Node") { _.desc.memoryPerSlave }
     t.dateCol("Submitted Time") { _.submitDate }
     t.col("User") { _.desc.user }
     t.col("State") { _.state.toString }
@@ -81,7 +81,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
     t.col("State") { _.state.toString }
     t.intCol("Cores") { _.desc.cores }
-    t.memCol("Memory") { _.desc.mem.toLong }
+    t.sizeCol("Memory") { _.desc.mem.toLong }
     t.col("Main Class") { _.desc.command.arguments(1) }
     t.build()
   }
