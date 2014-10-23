@@ -197,7 +197,7 @@ print Statistics.corr(data, method="pearson")
 
 ## Stratified sampling
 
-Unlike the other statistics functions, which reside in MLLib, stratified sampling methods, 
+Unlike the other statistics functions, which reside in MLlib, stratified sampling methods,
 `sampleByKey` and `sampleByKeyExact`, can be performed on RDD's of key-value pairs. For stratified
 sampling, the keys can be thought of as a label and the value as a specific attribute. For example 
 the key can be man or woman, or document ids, and the respective values can be the list of ages 

@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
 import scala.Tuple2;
 
 /**
- * Example using MLLib ALS from Java.
+ * Example using MLlib ALS from Java.
  */
 public final class JavaALS {
 
