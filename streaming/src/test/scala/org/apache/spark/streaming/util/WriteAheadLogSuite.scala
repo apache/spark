@@ -49,7 +49,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   after {
-    FileUtils.deleteDirectory(tempDir)
+    FileUtils.deleteQuietly(tempDir)
   }
 
   test("WriteAheadLogWriter - writing data") {
