@@ -261,21 +261,22 @@ private[spark] class SortShuffleReader[K, C](
         } else if (blocksAwaitingMerge.size() >= maxMergeWidth) {
           // Because the remaining blocks awaiting merge at this level exceed the maxMergeWidth, a
           // merge is required.
-          // TODO: is numMapBlocks right here?
-          var numToMerge = if (numMapBlocks / maxMergeWidth > maxMergeWidth) {
-            maxMergeWidth
-          } else {
-            val mergedSize = mergedBlocks.size()
-            val left = blocksAwaitingMerge.size() - (maxMergeWidth - mergedSize - 1)
-            math.min(left, maxMergeWidth)
-          }
+
+          // Pick a number of blocks to merge that (1) is <= maxMergeWidth, (2) if possible,
+          // ensures that the number of blocks in the next level be <= maxMergeWidth so that it can
+          // be the final merge, and (3) is as small as possible.
+          val mergedBlocksHeadroomAfterMerge = (maxMergeWidth - mergedBlocks.size() - 1)
+          // Ideal in the sense that we would move on to the next level after this merge and that
+          // level would have exactly maxMergeWidth blocks to merge. This can never be negative,
+          // because, at this point, we know blocksAwaitingMerge is at least maxMergeWidth.
+          val idealWidth = blocksAwaitingMerge.size() - mergedBlocksHeadroomAfterMerge
+          val mergeWidth = math.min(idealWidth, maxMergeWidth)
 
           val blocksToMerge = ArrayBuffer[ShuffleBlock]()
-          while (numToMerge > 0) {
+          while (blocksToMerge.size < mergeWidth) {
             val part = blocksAwaitingMerge.poll(100, TimeUnit.MILLISECONDS)
             if (part != null) {
               blocksToMerge += part
-              numToMerge -= 1
             }
           }
 
