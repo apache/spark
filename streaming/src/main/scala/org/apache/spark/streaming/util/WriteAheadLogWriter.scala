@@ -73,6 +73,7 @@ private[streaming] class WriteAheadLogWriter(path: String, hadoopConf: Configura
   }
 
   private def flush() {
+    stream.getWrappedStream.flush()
     hadoopFlushMethod.foreach {
       _.invoke(stream)
     }
