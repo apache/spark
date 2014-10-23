@@ -25,7 +25,7 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 class JsonSuite extends QueryTest {
   import TestJsonData._
@@ -58,8 +58,11 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(new Timestamp(intNumber), enforceCorrectType(intNumber, TimestampType))
     checkTypePromotion(new Timestamp(intNumber.toLong), 
         enforceCorrectType(intNumber.toLong, TimestampType))
-    val strDate = "2014-09-30 12:34:56"
-    checkTypePromotion(Timestamp.valueOf(strDate), enforceCorrectType(strDate, TimestampType))
+    val strTime = "2014-09-30 12:34:56"
+    checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
+
+    val strDate = "2014-10-15"
+    checkTypePromotion(Date.valueOf(strDate), enforceCorrectType(strDate, DateType))
   }
 
   test("Get compatible type") {
