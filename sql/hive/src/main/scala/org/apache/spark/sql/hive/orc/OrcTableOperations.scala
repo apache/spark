@@ -188,10 +188,11 @@ private[sql] case class InsertIntoOrcTable(
       val fieldOIs = standardOI
         .getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
       val outputData = new Array[Any](fieldOIs.length)
+      val wrappers = fieldOIs.map(HadoopTypeConverter.wrapperFor)
       iter.map { row =>
         var i = 0
         while (i < row.length) {
-          outputData(i) = HadoopTypeConverter.wrap((row(i), fieldOIs(i)))
+          outputData(i) = wrappers(i)(row(i))
           i += 1
         }
         orcSerde.serialize(outputData, standardOI)
