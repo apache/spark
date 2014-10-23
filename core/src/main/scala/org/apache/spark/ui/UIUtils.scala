@@ -20,6 +20,10 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.xml.Node
 
 import org.apache.spark.Logging
@@ -156,10 +160,11 @@ private[spark] object UIUtils extends Logging {
           type="text/css" />
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
           type="text/css" />
-    <script src={prependBaseUri("/static/sorttable.js")} ></script>
+    <script src={prependBaseUri("/static/sorttable.js")}></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+    <script src={prependBaseUri("/static/spark.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -240,7 +245,6 @@ private[spark] object UIUtils extends Logging {
       generateDataRow: T => Seq[Node],
       data: Iterable[T],
       fixedWidth: Boolean = false): Seq[Node] = {
-
     var listingTableClass = TABLE_CLASS
     if (fixedWidth) {
       listingTableClass += " table-fixed"
@@ -269,5 +273,73 @@ private[spark] object UIUtils extends Logging {
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+  }
+
+  /** Returns an HTML table constructed by generating a row for each object in a sequence. */
+  def listingEmptyTable[T](
+                       headers: Seq[String],
+                       tableId: String,
+                       fixedWidth: Boolean = false): Seq[Node] = {
+    var listingTableClass = TABLE_CLASS
+    if (fixedWidth) {
+      listingTableClass += " table-fixed"
+    }
+    val colWidth = 100.toDouble / headers.size
+    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val headerRow: Seq[Node] = {
+      // if none of the headers have "\n" in them
+      if (headers.forall(!_.contains("\n"))) {
+        // represent header as simple text
+        headers.map(h => <th class="sorttable_numeric" width={colWidthAttr}>{h}</th>)
+      } else {
+        // represent header text as list while respecting "\n"
+        headers.map { case h =>
+          <th class="sorttable_numeric" width={colWidthAttr}>
+            <ul class ="unstyled">
+              { h.split("\n").map { case t => <li> {t} </li> } }
+            </ul>
+          </th>
+        }
+      }
+    }
+    <table class={listingTableClass} id={tableId}>
+      <thead>{headerRow}</thead>
+      <tbody>
+      </tbody>
+      </table>
+      <text id={tableId + "Text"}> Loading table data... </text>
+  }
+
+  /** create a JSON object representing a cell with a sorttable custom key */
+  def cellWithSorttableCustomKey(content: String, customKey: String): JValue = {
+    ("value" -> content) ~ ("sorttable_customkey" -> customKey)
+  }
+
+  /** Returns an HTML containing Javascript that fills the table with that tableId using
+    * a JSON representation under the given path. You can optionally pass an id param */
+  def fillTableJavascript(path: String, tableId: String,
+                          id: Option[Integer] = None,
+                          attemptId: Option[Integer] = None ): Seq[Node] = {
+    val paramId = id match {
+      case Some(s) => "id: " + s
+      case None => ""
+    }
+    val paramAttemptId = attemptId match {
+      case Some(s) => ", attempt: " + s
+      case None => ""
+    }
+    <script>
+      $.get('/{path}/json', {{ {paramId} {paramAttemptId} }})
+      .done( function(data) {{
+        $('#' + '{tableId}' + 'Text').text('Received data. Rendering table...');
+        Spark.UI.fillTable(data, '{tableId}') }});
+    </script>
+  }
+
+  /** Returns an JSON list constructed by generating a row for each object in a sequence. */
+  def listingJson[T](
+    generateDataRow: T => JValue,
+    data: Seq[T]) : JValue = {
+      data.map(r => generateDataRow(r))
   }
 }

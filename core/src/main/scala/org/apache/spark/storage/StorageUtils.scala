@@ -271,4 +271,22 @@ private[spark] object StorageUtils {
     blockLocations
   }
 
+  /** get workers for a given rddId */
+  def workersFromRDDId(rddId: Int,
+                 storageStatusList: Seq[StorageStatus]): Seq[(Int, StorageStatus)] = {
+    storageStatusList.map((rddId, _))
+  }
+
+  /** get blocks for a given rddId */
+  def blocksFromRDDId(rddId: Int,
+                storageStatusList: Seq[StorageStatus]):
+  Seq[(BlockId, BlockStatus, Seq[String])] = {
+    val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
+    storageStatusList
+      .flatMap(_.rddBlocksById(rddId))
+      .sortWith(_._1.name < _._1.name)
+      .map { case (blockId, status) =>
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
+    }
+  }
 }

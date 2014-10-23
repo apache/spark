@@ -30,6 +30,7 @@ import org.apache.spark.scheduler.AccumulableInfo
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val listener = parent.listener
+  private val jsRenderingEnabled = parent.jsRenderingEnabled
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -111,9 +112,14 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
-      val taskTable = UIUtils.listingTable(
-        taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
-
+      val taskTableId = "taskTable"
+      val taskTable = if (jsRenderingEnabled) {
+         UIUtils.listingEmptyTable(taskHeaders, taskTableId)
+      }
+      else {
+        UIUtils.listingTable(
+          taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+      }
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
 
@@ -219,13 +225,19 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val maybeAccumulableTable: Seq[Node] =
         if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
-      val content =
+      var content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
+
+      if (jsRenderingEnabled) {
+        content ++=
+          UIUtils.fillTableJavascript(parent.prefix + "/stage/tasks", taskTableId,
+            Some(stageId), Some(stageAttemptId))
+      }
 
       UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }

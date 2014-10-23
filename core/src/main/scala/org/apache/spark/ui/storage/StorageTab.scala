@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui.storage
 
+import org.apache.spark.SparkConf
+
 import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
@@ -27,9 +29,16 @@ import org.apache.spark.storage._
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storage") {
   val listener = new StorageListener(parent.storageStatusListener)
+  val live = parent.live
+  val sc = parent.sc
+  val conf = if (live) sc.conf else new SparkConf
+  val jsRenderingEnabled = conf.getBoolean("spark.ui.jsRenderingEnabled", true)
 
   attachPage(new StoragePage(this))
   attachPage(new RDDPage(this))
+  attachPage(new BlocksPage(this))
+  attachPage(new WorkersPage(this))
+
   parent.registerListener(listener)
 }
 

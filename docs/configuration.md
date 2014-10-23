@@ -386,6 +386,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.jsRenderingEnabled</code></td>
+  <td>true</td>
+  <td>
+    Render parts of the web ui by the browser using Javascript.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.enabled</code></td>
   <td>false</td>
   <td>

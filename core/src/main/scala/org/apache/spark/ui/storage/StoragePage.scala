@@ -19,6 +19,10 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.xml.Node
 
 import org.apache.spark.storage.RDDInfo
@@ -28,11 +32,26 @@ import org.apache.spark.util.Utils
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
+  private val jsRenderingEnabled = parent.jsRenderingEnabled
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
-    val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage("Storage", content, parent)
+    val tableId = "storageTable"
+    val content = if (jsRenderingEnabled) {
+      UIUtils.listingEmptyTable(rddHeader, tableId) ++
+        UIUtils.fillTableJavascript(parent.prefix, tableId)
+    } else {
+      UIUtils.listingTable(rddHeader, rddRow, rdds)
+    }
+    UIUtils.headerSparkPage("Storage ", content, parent)
+  }
+
+  /** Render the whole JSON */
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val rdds = listener.rddInfoList
+    val rddsJson = UIUtils.listingJson(rddRowJson, rdds)
+
+    rddsJson
   }
 
   /** Header fields for the RDD table */
@@ -63,5 +82,22 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
     // scalastyle:on
+  }
+
+  /** Render a Json row representing an RDD */
+  private def rddRowJson(rdd: RDDInfo): JValue = {
+    val rddNameVal = "<a href=" +
+      {"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)} +
+      ">" + {rdd.name} + "</a>"
+    ("RDD Name" -> rddNameVal) ~
+    ("Storage Level" -> {rdd.storageLevel.description}) ~
+    ("Cached Partitions" -> {rdd.numCachedPartitions}) ~
+    ("Fraction Cached" -> {"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}) ~
+    ("Size in Memory" -> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(rdd.memSize),
+      rdd.memSize.toString)) ~
+    ("Size in Tachyon" -> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(rdd.tachyonSize),
+      rdd.tachyonSize.toString)) ~
+    ("Size on Disk" -> UIUtils.cellWithSorttableCustomKey(Utils.bytesToString(rdd.diskSize),
+      rdd.diskSize.toString))
   }
 }

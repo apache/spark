@@ -19,15 +19,20 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
+import org.apache.spark.storage._
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val listener = parent.listener
+  private val jsRenderingEnabled = parent.jsRenderingEnabled
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
@@ -38,20 +43,24 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     }
 
     // Worker table
-    val workers = storageStatusList.map((rddId, _))
-    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
+    val workers = StorageUtils.workersFromRDDId(rddId, storageStatusList)
+    val workerTableId = "workerTable"
+    val workerTable = if (jsRenderingEnabled) {
+      UIUtils.listingEmptyTable(workerHeader, workerTableId)
+    } else {
+      UIUtils.listingTable(workerHeader, workerRow, workers)
+    }
 
     // Block table
-    val blockLocations = StorageUtils.getRddBlockLocations(rddId, storageStatusList)
-    val blocks = storageStatusList
-      .flatMap(_.rddBlocksById(rddId))
-      .sortWith(_._1.name < _._1.name)
-      .map { case (blockId, status) =>
-        (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
-      }
-    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
+    val blocks = StorageUtils.blocksFromRDDId(rddId, storageStatusList)
+    val blockTableId = "blockTable"
+    val blockTable = if (jsRenderingEnabled) {
+      UIUtils.listingEmptyTable(blockHeader, blockTableId)
+    } else {
+      UIUtils.listingTable(blockHeader, blockRow, blocks)
+    }
 
-    val content =
+    var content =
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
@@ -93,7 +102,12 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage("RDD Storage Info for " + rddInfo.name, content, parent)
+    if (jsRenderingEnabled) {
+      content ++=
+        UIUtils.fillTableJavascript(parent.prefix + "/rdd/workers", workerTableId, Some(rddId)) ++
+          UIUtils.fillTableJavascript(parent.prefix + "/rdd/blocks", blockTableId, Some(rddId))
+    }
+    UIUtils.headerSparkPage( "RDD Storage Info for " + rddInfo.name, content, parent)
   }
 
   /** Header fields for the worker table */
