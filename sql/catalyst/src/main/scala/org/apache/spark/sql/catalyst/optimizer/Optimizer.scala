@@ -28,7 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 
-object Optimizer extends RuleExecutor[LogicalPlan] {
+abstract class Optimizer extends RuleExecutor[LogicalPlan]
+
+object DefaultOptimizer extends Optimizer {
   val batches =
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::

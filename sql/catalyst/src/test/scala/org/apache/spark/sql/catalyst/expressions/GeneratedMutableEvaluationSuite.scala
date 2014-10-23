@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 

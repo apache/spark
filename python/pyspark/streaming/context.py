@@ -79,7 +79,7 @@ class StreamingContext(object):
     L{DStream} various input sources. It can be from an existing L{SparkContext}.
     After creating and transforming DStreams, the streaming computation can
     be started and stopped using `context.start()` and `context.stop()`,
-    respectively. `context.awaitTransformation()` allows the current thread
+    respectively. `context.awaitTermination()` allows the current thread
     to wait for the termination of the context by `stop()` or by an exception.
     """
     _transformerSerializer = None

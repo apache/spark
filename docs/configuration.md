@@ -125,11 +125,22 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.classesToRegister</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, give a comma-separated list of custom class names to register
+    with Kryo.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryo.registrator</code></td>
   <td>(none)</td>
   <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    It should be set to a class that extends
+    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
+    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
+    set to a class that extends
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
@@ -618,6 +629,15 @@ Apart from these, the following properties are also available, and may be useful
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
+<tr>
+    <td><code>spark.hadoop.cloneConf</code></td>
+    <td>false</td>
+    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
+    This is disabled by default in order to avoid unexpected performance regressions for jobs that
+    are not affected by these issues.</td>
 </tr>
 <tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
