@@ -133,6 +133,10 @@
       <artifactId>chill-java</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.roaringbitmap</groupId>
+      <artifactId>RoaringBitmap</artifactId>
+    </dependency>
+    <dependency>
       <groupId>commons-net</groupId>
       <artifactId>commons-net</artifactId>
     </dependency>
