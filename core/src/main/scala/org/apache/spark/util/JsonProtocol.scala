@@ -267,7 +267,7 @@ private[spark] object JsonProtocol {
 
   def inputMetricsToJson(inputMetrics: InputMetrics): JValue = {
     ("Data Read Method" -> inputMetrics.readMethod.toString) ~
-    ("Bytes Read" -> inputMetrics.bytesRead)
+    ("Bytes Read" -> inputMetrics.bytesRead.get())
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -605,7 +605,7 @@ private[spark] object JsonProtocol {
   def inputMetricsFromJson(json: JValue): InputMetrics = {
     val metrics = new InputMetrics(
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
-    metrics.bytesRead = (json \ "Bytes Read").extract[Long]
+    metrics.bytesRead.set((json \ "Bytes Read").extract[Long])
     metrics
   }
 

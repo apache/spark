@@ -122,7 +122,7 @@ class NewHadoopRDD[K, V](
         /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
          * always at record boundaries, so tasks may need to read into other splits to complete
          * a record. */
-        inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength()
+        inputMetrics.bytesRead.addAndGet(split.serializableHadoopSplit.value.getLength())
       } catch {
         case e: Exception =>
           logWarning("Unable to get input split size in order to set task input bytes", e)

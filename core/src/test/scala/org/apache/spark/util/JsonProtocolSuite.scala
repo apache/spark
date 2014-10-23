@@ -369,7 +369,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def assertEquals(metrics1: InputMetrics, metrics2: InputMetrics) {
     assert(metrics1.readMethod === metrics2.readMethod)
-    assert(metrics1.bytesRead === metrics2.bytesRead)
+    assert(metrics1.bytesRead.get() === metrics2.bytesRead.get())
   }
 
   private def assertEquals(bm1: BlockManagerId, bm2: BlockManagerId) {
@@ -563,7 +563,7 @@ class JsonProtocolSuite extends FunSuite {
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.bytesRead = d + e + f
+      inputMetrics.bytesRead.set(d + e + f)
       t.inputMetrics = Some(inputMetrics)
     } else {
       val sr = new ShuffleReadMetrics

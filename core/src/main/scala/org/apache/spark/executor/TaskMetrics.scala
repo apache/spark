@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import java.util.concurrent.atomic.AtomicLong
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
@@ -166,7 +168,7 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
   /**
    * Total bytes read.
    */
-  var bytesRead: Long = 0L
+  var bytesRead: AtomicLong = new AtomicLong(0)
 }
 
 

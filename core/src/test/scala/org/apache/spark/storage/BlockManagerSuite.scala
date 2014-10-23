@@ -436,18 +436,18 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list1Get = store.get("list1")
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
-    assert(list1Get.get.inputMetrics.bytesRead === list1SizeEstimate)
+    assert(list1Get.get.inputMetrics.bytesRead.get() === list1SizeEstimate)
     assert(list1Get.get.inputMetrics.readMethod === DataReadMethod.Memory)
     val list2MemoryGet = store.get("list2memory")
     assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
     assert(list2MemoryGet.get.data.size === 3)
-    assert(list2MemoryGet.get.inputMetrics.bytesRead === list2SizeEstimate)
+    assert(list2MemoryGet.get.inputMetrics.bytesRead.get() === list2SizeEstimate)
     assert(list2MemoryGet.get.inputMetrics.readMethod === DataReadMethod.Memory)
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
-    assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
+    assert(list2DiskGet.get.inputMetrics.bytesRead.get() > 0)
     assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
   }
 
