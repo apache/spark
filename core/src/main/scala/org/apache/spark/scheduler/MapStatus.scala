@@ -127,7 +127,7 @@ private[spark] class CompressedMapStatus(
  * @param nonEmptyBlocks a bitmap tracking which blocks are non-empty
  * @param avgSize average size of the non-empty blocks
  */
-private[spark] class HighlyCompressedMapStatus(
+private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
     private[this] var nonEmptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long)

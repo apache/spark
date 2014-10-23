@@ -54,8 +54,7 @@ class MapStatusSuite extends FunSuite {
       mean <- Seq(0L, 100L, 10000L, Int.MaxValue.toLong);
       stddev <- Seq(0.0, 0.01, 0.5, 1.0)
     ) {
-      val sizes =
-        Array.tabulate[Long](numSizes)(_ => abs(round(Random.nextGaussian() * stddev)) + mean)
+      val sizes = Array.fill[Long](numSizes)(abs(round(Random.nextGaussian() * stddev)) + mean)
       val status = MapStatus(BlockManagerId("a", "b", 10), sizes)
       val status1 = compressAndDecompressMapStatus(status)
       for (i <- 0 until numSizes) {
