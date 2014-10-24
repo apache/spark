@@ -21,20 +21,13 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UITableBuilder, UITable, UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val listener = parent.listener
 
-  private def stringPairTable(col1Name: String, col2Name: String): UITable[(Any, Any)] = {
-    val t = new UITableBuilder[(Any, Any)](fixedWidth = true)
-    t.col(col1Name) { _._1.toString }
-    t.col(col2Name) { _._2.toString }
-    t.build()
-  }
-
-  private val propertyTable = stringPairTable("Name", "Value")
-  private val classpathTable = stringPairTable("Resource", "Source")
+  private val propertyTable = UIUtils.stringPairTable("Name", "Value")
+  private val classpathTable = UIUtils.stringPairTable("Resource", "Source")
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =

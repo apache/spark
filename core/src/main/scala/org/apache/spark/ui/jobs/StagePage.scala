@@ -31,6 +31,8 @@ import org.apache.spark.scheduler.AccumulableInfo
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val listener = parent.listener
 
+  private val accumulableTable = UIUtils.stringPairTable("Accumulable", "Value")
+
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
@@ -96,10 +98,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </ul>
         </div>
         // scalastyle:on
-      val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
-      val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
-        accumulables.values.toSeq)
+      val accumulableTable =
+        this.accumulableTable.render(accumulables.values.map(a => (a.name, a.value)))
 
       val taskHeaders: Seq[String] =
         Seq(
