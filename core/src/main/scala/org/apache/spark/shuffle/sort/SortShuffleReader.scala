@@ -275,7 +275,7 @@ private[spark] class SortShuffleReader[K, C](
           // Ideal in the sense that we would move on to the next level after this merge and that
           // level would have exactly maxMergeWidth blocks to merge. This can never be negative,
           // because, at this point, we know blocksAwaitingMerge is at least maxMergeWidth.
-          val idealWidth = blocksAwaitingMerge.size() - mergedBlocksHeadroomAfterMerge
+          val idealWidth = remainingToMergeAtLevel - mergedBlocksHeadroomAfterMerge
           val mergeWidth = math.min(idealWidth, maxMergeWidth)
 
           val blocksToMerge = ArrayBuffer[ShuffleBlock]()
