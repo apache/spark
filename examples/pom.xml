@@ -282,6 +282,8 @@
       </dependencies>
     </profile>
     <profile>
+      <!-- We add source directories specific to Scala 2.10 and 2.11 since some examples
+           work only in one and not the other -->
       <id>scala-2.10</id>
       <activation>
         <activeByDefault>true</activeByDefault>
