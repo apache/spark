@@ -76,11 +76,9 @@ object ScalaReflection {
   }
 
   /** Returns a Sequence of attributes for the given case class type. */
-  def attributesFor[T: TypeTag]: Seq[Attribute] = {
-    schemaFor[T] match {
-      case Schema(s: StructType, _) =>
-        s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
-    }
+  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
+    case Schema(s: StructType, _) =>
+      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -89,7 +87,6 @@ object ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = {
     val className: String = tpe.erasure.typeSymbol.asClass.fullName
-    println(s"schemaFor: className = $className")
     tpe match {
       case t if Utils.classIsLoadable(className) &&
         Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
@@ -180,8 +177,6 @@ object ScalaReflection {
      * for the the data in the sequence.
      */
     def asRelation: LocalRelation = {
-      // Pass empty map to attributesFor since this method is only used for debugging Catalyst,
-      // not used with SparkSQL.
       val output = attributesFor[A]
       LocalRelation(output, data)
     }

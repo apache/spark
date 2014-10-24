@@ -252,5 +252,4 @@ class ScalaReflectionSuite extends FunSuite {
       convertToCatalyst(primitiveData, dataType))
     assert(convertToCatalyst(data, dataType) === convertedData)
   }
-
 }

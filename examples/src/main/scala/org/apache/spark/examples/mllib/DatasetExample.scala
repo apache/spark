@@ -30,7 +30,7 @@ import org.apache.spark.sql.{Row, SQLContext, SchemaRDD}
 /**
  * An example of how to use [[org.apache.spark.sql.SchemaRDD]] as a Dataset for ML. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.Dataset [options]
+ * ./bin/run-example org.apache.spark.examples.mllib.DatasetExample [options]
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
@@ -43,7 +43,7 @@ object DatasetExample {
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("Dataset") {
+    val parser = new OptionParser[Params]("DatasetExample") {
       head("Dataset: an example app using SchemaRDD as a Dataset for ML.")
       opt[String]("input")
         .text(s"input path to dataset")
@@ -65,7 +65,7 @@ object DatasetExample {
 
   def run(params: Params) {
 
-    val conf = new SparkConf().setAppName(s"Dataset with $params")
+    val conf = new SparkConf().setAppName(s"DatasetExample with $params")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext._ // for implicit conversions

@@ -737,32 +737,28 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("throw errors for non-aggregate attributes with aggregation") {
-    try {
-      def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
-        val logicalPlan = sql(query).queryExecution.logical
+    def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
+      val logicalPlan = sql(query).queryExecution.logical
 
-        if (isInvalidQuery) {
-          val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
-          assert(
-            e.getMessage.startsWith("Expression not in GROUP BY"),
-            "Non-aggregate attribute(s) not detected\n" + logicalPlan)
-        } else {
-          // Should not throw
-          sql(query).queryExecution.analyzed
-        }
+      if (isInvalidQuery) {
+        val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
+        assert(
+          e.getMessage.startsWith("Expression not in GROUP BY"),
+          "Non-aggregate attribute(s) not detected\n" + logicalPlan)
+      } else {
+        // Should not throw
+        sql(query).queryExecution.analyzed
       }
-
-      checkAggregation("SELECT key, COUNT(*) FROM testData")
-      checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", false)
-
-      checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
-      checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)
-
-      checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
-      checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
-    } catch {
-      case e: Exception => println(e.getStackTraceString)
     }
+
+    checkAggregation("SELECT key, COUNT(*) FROM testData")
+    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", false)
+
+    checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
+    checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)
+
+    checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
+    checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
   }
 
   test("Test to check we can use Long.MinValue") {

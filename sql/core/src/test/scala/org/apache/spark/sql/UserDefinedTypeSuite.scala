@@ -23,23 +23,23 @@ import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
-@SQLUserDefinedType(udt = classOf[DenseVectorUDT])
-class DenseVector(val data: Array[Double]) extends Serializable {
+@SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
+class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
-    case v: DenseVector =>
+    case v: MyDenseVector =>
       java.util.Arrays.equals(this.data, v.data)
     case _ => false
   }
 }
 
-case class LabeledPoint(label: Double, features: DenseVector)
+case class MyLabeledPoint(label: Double, features: MyDenseVector)
 
-class DenseVectorUDT extends UserDefinedType[DenseVector] {
+class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
 
   override def serialize(obj: Any): Row = obj match {
-    case features: DenseVector =>
+    case features: MyDenseVector =>
       val row: GenericMutableRow = new GenericMutableRow(features.data.length)
       var i = 0
       while (i < features.data.length) {
@@ -49,8 +49,8 @@ class DenseVectorUDT extends UserDefinedType[DenseVector] {
       row
   }
 
-  override def deserialize(row: Row): DenseVector = {
-    val features = new DenseVector(new Array[Double](row.length))
+  override def deserialize(row: Row): MyDenseVector = {
+    val features = new MyDenseVector(new Array[Double](row.length))
     var i = 0
     while (i < row.length) {
       features.data(i) = row.getDouble(i)
@@ -60,13 +60,33 @@ class DenseVectorUDT extends UserDefinedType[DenseVector] {
   }
 }
 
+object UserDefinedTypeSuiteObject {
+
+  class ClassInObject(val dv: MyDenseVector) extends Serializable
+
+  case class MyLabeledPointInObject(label: Double, features: ClassInObject)
+
+  class ClassInObjectUDT extends UserDefinedType[ClassInObject] {
+
+    override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
+
+    private val dvUDT = new MyDenseVectorUDT()
+
+    override def serialize(obj: Any): Row = obj match {
+      case cio: ClassInObject => dvUDT.serialize(cio)
+    }
+
+    override def deserialize(row: Row): ClassInObject = new ClassInObject(dvUDT.deserialize(row))
+  }
+}
+
 class UserDefinedTypeSuite extends QueryTest {
 
-  test("register user type: DenseVector for LabeledPoint") {
+  test("register user type: MyDenseVector for MyLabeledPoint") {
     val points = Seq(
-      LabeledPoint(1.0, new DenseVector(Array(0.1, 1.0))),
-      LabeledPoint(0.0, new DenseVector(Array(0.2, 2.0))))
-    val pointsRDD: RDD[LabeledPoint] = sparkContext.parallelize(points)
+      MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
+      MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
+    val pointsRDD: RDD[MyLabeledPoint] = sparkContext.parallelize(points)
 
     val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
@@ -74,12 +94,12 @@ class UserDefinedTypeSuite extends QueryTest {
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
-    val features: RDD[DenseVector] =
-      pointsRDD.select('features).map { case Row(v: DenseVector) => v }
-    val featuresArrays: Array[DenseVector] = features.collect()
+    val features: RDD[MyDenseVector] =
+      pointsRDD.select('features).map { case Row(v: MyDenseVector) => v }
+    val featuresArrays: Array[MyDenseVector] = features.collect()
     assert(featuresArrays.size === 2)
-    assert(featuresArrays.contains(new DenseVector(Array(0.1, 1.0))))
-    assert(featuresArrays.contains(new DenseVector(Array(0.2, 2.0))))
+    assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
+    assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
   }
 
 }
