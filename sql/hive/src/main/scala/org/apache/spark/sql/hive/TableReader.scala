@@ -64,8 +64,7 @@ class HadoopTableReader(
 
   // TODO: set aws s3 credentials.
 
-  private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableWritable(hiveExtraConf))
+  private val conf = new SerializableWritable(hiveExtraConf)
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
@@ -93,7 +92,7 @@ class HadoopTableReader(
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
     val tableDesc = relation.tableDesc
-    val broadcastedHiveConf = _broadcastedHiveConf
+    val _conf = conf
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
@@ -107,7 +106,7 @@ class HadoopTableReader(
     val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHiveConf.value.value
+      val hconf = _conf.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow)

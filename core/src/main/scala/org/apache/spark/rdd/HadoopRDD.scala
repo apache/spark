@@ -99,7 +99,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 @DeveloperApi
 class HadoopRDD[K, V](
     sc: SparkContext,
-    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+    conf: SerializableWritable[Configuration],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
@@ -116,8 +116,7 @@ class HadoopRDD[K, V](
       minPartitions: Int) = {
     this(
       sc,
-      sc.broadcast(new SerializableWritable(conf))
-        .asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
+      new SerializableWritable(conf),
       None /* initLocalJobConfFuncOpt */,
       inputFormatClass,
       keyClass,
@@ -136,7 +135,7 @@ class HadoopRDD[K, V](
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
-    val conf: Configuration = broadcastedConf.value.value
+    val conf: Configuration = this.conf.value
     if (shouldCloneJobConf) {
       // Hadoop Configuration objects are not thread-safe, which may lead to various problems if
       // one job modifies a configuration while another reads it (SPARK-2546).  This problem occurs

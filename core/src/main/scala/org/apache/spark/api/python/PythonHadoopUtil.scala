@@ -61,7 +61,7 @@ private[python] object Converter extends Logging {
  * Other objects are passed through without conversion.
  */
 private[python] class WritableToJavaConverter(
-    conf: Broadcast[SerializableWritable[Configuration]],
+    conf: SerializableWritable[Configuration],
     batchSize: Int) extends Converter[Any, Any] {
 
   /**
@@ -95,7 +95,7 @@ private[python] class WritableToJavaConverter(
         }
         map
       case w: Writable =>
-        if (batchSize > 1) WritableUtils.clone(w, conf.value.value) else w
+        if (batchSize > 1) WritableUtils.clone(w, conf.value) else w
       case other => other
     }
   }
