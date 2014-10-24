@@ -374,13 +374,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def logical: LogicalPlan
 
     lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
-    lazy val optimizedPlan = optimizer(analyzed)
-    lazy val withCachedData = useCachedData(optimizedPlan)
+    lazy val withCachedData = useCachedData(analyzed)
+    lazy val optimizedPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(withCachedData).next()
+      planner(optimizedPlan).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.

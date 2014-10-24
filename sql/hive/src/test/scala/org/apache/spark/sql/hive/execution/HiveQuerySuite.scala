@@ -508,14 +508,14 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a partition is a native command
     assertResult(
       Array(
-        Array("key", "int", "None"),
-        Array("value", "string", "None"),
-        Array("dt", "string", "None"),
+        Array("key", "int", HiveShim.getEmptyCommentsFieldValue),
+        Array("value", "string", HiveShim.getEmptyCommentsFieldValue),
+        Array("dt", "string", HiveShim.getEmptyCommentsFieldValue),
         Array("", "", ""),
         Array("# Partition Information", "", ""),
         Array("# col_name", "data_type", "comment"),
         Array("", "", ""),
-        Array("dt", "string", "None"))
+        Array("dt", "string", HiveShim.getEmptyCommentsFieldValue))
     ) {
       sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
@@ -561,11 +561,15 @@ class HiveQuerySuite extends HiveComparisonTest {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    sql(s"ADD JAR $testJar")
-    sql(
-      """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-        |WITH serdeproperties('s1'='9')
-      """.stripMargin)
+    // Now only verify 0.12.0, and ignore other versions due to binary compatability
+    // current TestSerDe.jar is from 0.12.0
+    if (HiveShim.version == "0.12.0") {
+      sql(s"ADD JAR $testJar")
+      sql(
+        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+          |WITH serdeproperties('s1'='9')
+        """.stripMargin)
+    }
     sql("DROP TABLE alter1")
   }
 

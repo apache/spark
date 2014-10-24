@@ -18,7 +18,8 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
-
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
@@ -216,7 +217,18 @@ private[hive] object HiveQl {
   /**
    * Returns the AST for the given SQL string.
    */
-  def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
+  def getAst(sql: String): ASTNode = {
+    /*
+     * Context has to be passed in hive0.13.1.
+     * Otherwise, there will be Null pointer exception,
+     * when retrieving properties form HiveConf.
+     */
+    val hContext = new Context(new HiveConf())
+    val node = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql, hContext))
+    hContext.clear()
+    node
+  }
+
 
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = hqlParser(sql)
