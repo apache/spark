@@ -20,8 +20,8 @@
 # also should not be passed any arguments, since we need original $*
 
 # resolve links - $0 may be a softlink
-this="${BASH_SOURCE-$0}"
-common_bin=$(cd -P -- "$(dirname -- "$this")" && pwd -P)
+this="${BASH_SOURCE:-$0}"
+common_bin="$(cd -P -- "$(dirname -- "$this")" && pwd -P)"
 script="$(basename -- "$this")"
 this="$common_bin/$script"
 
