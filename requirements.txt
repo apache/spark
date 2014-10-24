@@ -1,3 +1,4 @@
+celery
 chartkick
 flake8
 flask
@@ -15,5 +16,3 @@ sphinx
 sphinx_rtd_theme
 sqlalchemy
 thrift
-celery
-hive-thrift-py
