@@ -29,6 +29,8 @@ import copy_reg
 
 import numpy as np
 
+from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
+
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
 
 
@@ -48,6 +50,17 @@ try:
 except:
     # No SciPy in environment, but that's okay
     _have_scipy = False
+
+
+# this will call the MLlib version of pythonToJava()
+def _to_java_object_rdd(rdd):
+    """ Return an JavaRDD of Object by unpickling
+
+    It will convert each Python object into Java object by Pyrolite, whenever the
+    RDD is serialized in batch or not.
+    """
+    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
+    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
 def _convert_to_vector(l):
@@ -238,8 +251,8 @@ class SparseVector(Vector):
         (index, value) pairs, or two separate arrays of indices and
         values (sorted by index).
 
-        @param size: Size of the vector.
-        @param args: Non-zero entries, as a dictionary, list of tupes,
+        :param size: Size of the vector.
+        :param args: Non-zero entries, as a dictionary, list of tupes,
                or two sorted lists containing indices and values.
 
         >>> print SparseVector(4, {1: 1.0, 3: 5.5})
@@ -458,8 +471,8 @@ class Vectors(object):
         (index, value) pairs, or two separate arrays of indices and
         values (sorted by index).
 
-        @param size: Size of the vector.
-        @param args: Non-zero entries, as a dictionary, list of tupes,
+        :param size: Size of the vector.
+        :param args: Non-zero entries, as a dictionary, list of tupes,
                      or two sorted lists containing indices and values.
 
         >>> print Vectors.sparse(4, {1: 1.0, 3: 5.5})

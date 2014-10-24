@@ -118,7 +118,7 @@
     <mesos.version>0.18.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <akka.group>org.spark-project.akka</akka.group>
-    <akka.version>2.2.3-shaded-protobuf</akka.version>
+    <akka.version>2.3.4-spark</akka.version>
     <slf4j.version>1.7.5</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
@@ -127,7 +127,11 @@
     <hbase.version>0.94.6</hbase.version>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
-    <hive.version>0.12.0</hive.version>
+    <!-- Version used in Maven Hive dependency -->
+    <hive.version>0.13.1</hive.version>
+    <!-- Version used for internal directory structure -->
+    <hive.version.short>0.13.1</hive.version.short>
+    <derby.version>10.10.1.1</derby.version>
     <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
@@ -223,6 +227,18 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <!-- This is temporarily included to fix issues with Hive 0.12 -->
+      <id>spark-staging</id>
+      <name>Spring Staging Repository</name>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
@@ -236,7 +252,17 @@
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
-
+  <!-- 
+       This is a dummy dependency that is used along with the shading plug-in
+       to create effective poms on publishing (see SPARK-3812).
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>org.spark-project.spark</groupId>
+      <artifactId>unused</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+  </dependencies>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -417,6 +443,11 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.roaringbitmap</groupId>
+        <artifactId>RoaringBitmap</artifactId>
+        <version>0.4.1</version>
+      </dependency>
+      <dependency>
         <groupId>commons-net</groupId>
         <artifactId>commons-net</artifactId>
         <version>2.2</version>
@@ -429,7 +460,7 @@
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
-        <version>10.4.2.0</version>
+        <version>${derby.version}</version>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
@@ -980,6 +1011,27 @@
     </pluginManagement>
 
     <plugins>
+      <!-- The shade plug-in is used here to create effective pom's (see SPARK-3812). -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>org.spark-project.spark:unused</include>
+            </includes>
+          </artifactSet>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
@@ -1260,16 +1312,31 @@
         </dependency>
       </dependencies>
     </profile>
-
     <profile>
-      <id>hive</id>
+      <id>hive-0.12.0</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
+      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
+      <properties>
+        <hive.version>0.12.0-protobuf-2.5</hive.version>
+        <hive.version.short>0.12.0</hive.version.short>
+        <derby.version>10.4.2.0</derby.version>
+      </properties>
     </profile>
-
+    <profile>
+      <id>hive-0.13.1</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <properties>
+        <hive.version>0.13.1</hive.version>
+        <hive.version.short>0.13.1</hive.version.short>
+        <derby.version>10.10.1.1</derby.version>
+      </properties>
+    </profile>
   </profiles>
 </project>

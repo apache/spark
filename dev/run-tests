@@ -24,6 +24,16 @@ cd "$FWDIR"
 # Remove work directory
 rm -rf ./work
 
+source "$FWDIR/dev/run-tests-codes.sh"
+
+CURRENT_BLOCK=$BLOCK_GENERAL
+
+function handle_error () {
+  echo "[error] Got a return code of $? on line $1 of the run-tests script."
+  exit $CURRENT_BLOCK
+}
+
+
 # Build against the right verison of Hadoop.
 {
   if [ -n "$AMPLAB_JENKINS_BUILD_PROFILE" ]; then
@@ -32,7 +42,7 @@ rm -rf ./work
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.0" ]; then
       export SBT_MAVEN_PROFILES_ARGS="-Dhadoop.version=2.0.0-mr1-cdh4.1.1"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.2" ]; then
-      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Dhadoop.version=2.2.0"
+      export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0"
     elif [ "$AMPLAB_JENKINS_BUILD_PROFILE" = "hadoop2.3" ]; then
       export SBT_MAVEN_PROFILES_ARGS="-Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0"
     fi
@@ -91,26 +101,34 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   fi
 fi
 
-# Fail fast
-set -e
 set -o pipefail
+trap 'handle_error $LINENO' ERR
 
 echo ""
 echo "========================================================================="
 echo "Running Apache RAT checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_RAT
+
 ./dev/check-license
 
 echo ""
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_SCALA_STYLE
+
 ./dev/lint-scala
 
 echo ""
 echo "========================================================================="
 echo "Running Python style checks"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
+
 ./dev/lint-python
 
 echo ""
@@ -118,9 +136,11 @@ echo "========================================================================="
 echo "Building Spark"
 echo "========================================================================="
 
+CURRENT_BLOCK=$BLOCK_BUILD
+
 {
   # We always build with Hive because the PySpark Spark SQL tests need it.
-  BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
+  BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
 
   echo "[info] Building Spark with these arguments: $BUILD_MVN_PROFILE_ARGS"
 
@@ -141,11 +161,13 @@ echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 
+CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
+
 {
   # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
   # This must be a single argument, as it is.
   if [ -n "$_RUN_SQL_TESTS" ]; then
-    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
+    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
   fi
   
   if [ -n "$_SQL_TESTS_ONLY" ]; then
@@ -175,10 +197,16 @@ echo ""
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_PYSPARK_UNIT_TESTS
+
 ./python/run-tests
 
 echo ""
 echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_MIMA
+
 ./dev/mima

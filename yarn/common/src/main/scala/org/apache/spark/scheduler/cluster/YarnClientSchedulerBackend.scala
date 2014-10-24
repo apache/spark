@@ -99,7 +99,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def waitForApplication(): Unit = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
-    val state = client.monitorApplication(appId, returnOnRunning = true) // blocking
+    val (state, _) = client.monitorApplication(appId, returnOnRunning = true) // blocking
     if (state == YarnApplicationState.FINISHED ||
       state == YarnApplicationState.FAILED ||
       state == YarnApplicationState.KILLED) {
@@ -155,6 +155,10 @@ private[spark] class YarnClientSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
-  override def applicationId(): Option[String] = Option(appId).map(_.toString())
+  override def applicationId(): String =
+    Option(appId).map(_.toString).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
 
 }
