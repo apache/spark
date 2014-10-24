@@ -51,6 +51,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val completedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
+  var totalCompletedStages = 0
+  var totalFailedStages = 0
 
   // Map from pool name to a hash map (map from stage id to StageInfo).
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
@@ -78,9 +80,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     activeStages.remove(stage.stageId)
     if (stage.failureReason.isEmpty) {
       completedStages += stage
+      totalCompletedStages += 1
       trimIfNecessary(completedStages)
     } else {
       failedStages += stage
+      totalFailedStages += 1
       trimIfNecessary(failedStages)
     }
   }
