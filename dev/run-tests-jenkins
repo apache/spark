@@ -53,9 +53,9 @@ function post_message () {
   local message=$1
   local data="{\"body\": \"$message\"}"
   local HTTP_CODE_HEADER="HTTP Response Code: "
-  
+
   echo "Attempting to post to Github..."
-  
+
   local curl_output=$(
     curl `#--dump-header -` \
       --silent \
@@ -75,12 +75,12 @@ function post_message () {
       echo " > data: ${data}" >&2
       # exit $curl_status
   fi
-  
+
   local api_response=$(
     echo "${curl_output}" \
     | grep -v -e "^${HTTP_CODE_HEADER}"
   )
-  
+
   local http_code=$(
     echo "${curl_output}" \
     | grep -e "^${HTTP_CODE_HEADER}" \
@@ -92,9 +92,36 @@ function post_message () {
       echo " > api_response: ${api_response}" >&2
       echo " > data: ${data}" >&2
   fi
-  
+
   if [ "$curl_status" -eq 0 ] && [ "$http_code" -eq "201" ]; then
     echo " > Post successful."
+  fi
+}
+
+function send_archived_logs () {
+  echo "Archiving unit tests logs..."
+
+  local log_files=$(find . -name "unit-tests.log")
+
+  if [ -z "$log_files" ]; then
+    echo "> No log files found." >&2
+  else
+    local log_archive="unit-tests-logs.tar.gz"
+    echo "$log_files" | xargs tar czf ${log_archive}
+
+    local jenkins_build_dir=${JENKINS_HOME}/jobs/${JOB_NAME}/builds/${BUILD_NUMBER}
+    local scp_output=$(scp ${log_archive} amp-jenkins-master:${jenkins_build_dir}/${log_archive})
+    local scp_status="$?"
+
+    if [ "$scp_status" -ne 0 ]; then
+      echo "Failed to send archived unit tests logs to Jenkins master." >&2
+      echo "> scp_status: ${scp_status}" >&2
+      echo "> scp_output: ${scp_output}" >&2
+    else
+      echo "> Send successful."
+    fi
+
+    rm -f ${log_archive}
   fi
 }
 
@@ -109,7 +136,7 @@ function post_message () {
   else
     merge_note=" * This patch merges cleanly."
   fi
-  
+
   source_files=$(
       git diff master...$ghprbActualCommit --name-only  `# diff patch against master from branch point` \
     | grep -v -e "\/test"                               `# ignore files in test directories` \
@@ -144,12 +171,12 @@ function post_message () {
 # post start message
 {
   start_message="\
-  [QA tests have started](${BUILD_URL}consoleFull) for \
+  [Test build ${BUILD_DISPLAY_NAME} has started](${BUILD_URL}consoleFull) for \
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
-  
+
   start_message="${start_message}\n${merge_note}"
   # start_message="${start_message}\n${public_classes_note}"
-  
+
   post_message "$start_message"
 }
 
@@ -159,7 +186,7 @@ function post_message () {
   test_result="$?"
 
   if [ "$test_result" -eq "124" ]; then
-    fail_message="**[Tests timed out](${BUILD_URL}consoleFull)** \
+    fail_message="**[Test build ${BUILD_DISPLAY_NAME} timed out](${BUILD_URL}consoleFull)** \
     for PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL}) \
     after a configured wait of \`${TESTS_TIMEOUT}\`."
 
@@ -187,15 +214,17 @@ function post_message () {
     else
       failing_test="some tests"
     fi
-    
+
     test_result_note=" * This patch **fails $failing_test**."
   fi
+
+  send_archived_logs
 }
 
 # post end message
 {
   result_message="\
-  [QA tests have finished](${BUILD_URL}consoleFull) for \
+  [Test build ${BUILD_DISPLAY_NAME} has finished](${BUILD_URL}consoleFull) for \
   PR $ghprbPullId at commit [\`${SHORT_COMMIT_HASH}\`](${COMMIT_URL})."
 
   result_message="${result_message}\n${test_result_note}"
