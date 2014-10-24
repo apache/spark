@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy
 
+import java.net.{URI, URISyntaxException}
+
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
@@ -114,5 +116,12 @@ private[spark] class ClientArguments(args: Array[String]) {
 }
 
 object ClientArguments {
-  def isValidJarUrl(s: String): Boolean = s.matches("(.+):(.+)jar")
+  def isValidJarUrl(s: String): Boolean = {
+    try {
+      val uri = new URI(s)
+      uri.getScheme != null && uri.getAuthority != null && s.endsWith("jar")
+    } catch {
+      case _: URISyntaxException => false
+    }
+  }
 }
