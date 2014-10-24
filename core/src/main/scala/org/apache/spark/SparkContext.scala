@@ -837,11 +837,12 @@ class SparkContext(config: SparkConf) extends Logging {
       case "local"       => "file:" + uri.getPath
       case _             => path
     }
-    addedFiles(key) = System.currentTimeMillis
+    val timestamp = System.currentTimeMillis
+    addedFiles(key) = timestamp
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-      hadoopConfiguration)
+      hadoopConfiguration, timestamp, useCache = false)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
