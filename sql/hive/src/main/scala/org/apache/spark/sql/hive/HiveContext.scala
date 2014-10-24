@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.io.TimestampWritable
 import org.apache.hadoop.hive.serde2.io.DateWritable
 
@@ -47,6 +46,7 @@ import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.hive.HiveShim
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -171,13 +171,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
         val tableParameters = relation.hiveQlTable.getParameters
         val oldTotalSize =
-          Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE)).map(_.toLong).getOrElse(0L)
+          Option(tableParameters.get(HiveShim.getStatsSetupConstTotalSize))
+            .map(_.toLong)
+            .getOrElse(0L)
         val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
         // Update the Hive metastore if the total size of the table is different than the size
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          tableParameters.put(StatsSetupConst.TOTAL_SIZE, newTotalSize.toString)
+          tableParameters.put(HiveShim.getStatsSetupConstTotalSize, newTotalSize.toString)
           val hiveTTable = relation.hiveQlTable.getTTable
           hiveTTable.setParameters(tableParameters)
           val tableFullName =
@@ -282,29 +284,24 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     try {
-      // Session state must be initilized before the CommandProcessor is created .
-      SessionState.start(sessionState)
-
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc: CommandProcessor = CommandProcessorFactory.get(tokens(0), hiveconf)
+      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hiveconf)
 
       proc match {
         case driver: Driver =>
-          driver.init()
-
-          val results = new JArrayList[String]
+          val results = HiveShim.createDriverResultsArray
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
-            driver.destroy()
+            driver.close()
             throw new QueryExecutionException(response.getErrorMessage)
           }
           driver.setMaxRows(maxRows)
           driver.getResults(results)
-          driver.destroy()
-          results
+          driver.close()
+          HiveShim.processResults(results)
         case _ =>
           sessionState.out.println(tokens(0) + " " + cmd_1)
           Seq(proc.run(cmd_1).getResponseCode.toString)

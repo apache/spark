@@ -97,12 +97,20 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
+<!--- TODO: Update this when Hive 0.13 JDBC is added -->
+
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
-add the `-Phive` profile to your existing build options.
+add the `-Phive` profile to your existing build options. By default Spark
+will build with Hive 0.13.1 bindings. You can also build for Hive 0.12.0 using
+the `-Phive-0.12.0` profile. NOTE: currently the JDBC server is only
+supported for Hive 0.12.0.
 {% highlight bash %}
-# Apache Hadoop 2.4.X with Hive support
+# Apache Hadoop 2.4.X with Hive 13 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
+
+# Apache Hadoop 2.4.X with Hive 12 support
+mvn -Pyarn -Phive-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
 {% endhighlight %}
 
 # Spark Tests in Maven
@@ -111,8 +119,8 @@ Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.o
 
 Some of the tests require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time.  The following is an example of a correct (build, test) sequence:
 
-    mvn -Pyarn -Phadoop-2.3 -DskipTests -Phive clean package
-    mvn -Pyarn -Phadoop-2.3 -Phive test
+    mvn -Pyarn -Phadoop-2.3 -DskipTests -Phive -Phive-0.12.0 clean package
+    mvn -Pyarn -Phadoop-2.3 -Phive -Phive-0.12.0 test
 
 The ScalaTest plugin also supports running only a specific test suite as follows:
 
@@ -175,16 +183,16 @@ can be set to control the SBT build. For example:
 
 Some of the tests require Spark to be packaged first, so always run `sbt/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive assembly
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive test
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-0.12.0 assembly
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-0.12.0 test
 
 To run only a specific test suite as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive "test-only org.apache.spark.repl.ReplSuite"
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-0.12.0 "test-only org.apache.spark.repl.ReplSuite"
 
 To run test suites of a specific sub project as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive core/test
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-0.12.0 core/test
 
 # Speeding up Compilation with Zinc
 

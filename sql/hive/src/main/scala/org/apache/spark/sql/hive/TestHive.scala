@@ -26,6 +26,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
@@ -63,6 +64,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
+  CommandProcessorFactory.clean(hiveconf)
 
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
@@ -374,6 +376,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * tests.
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
+
+  // Database default may not exist in 0.13.1, create it if not exist
+  HiveShim.createDefaultDBIfNeeded(this)
 
   /**
    * Resets the test instance by deleting any tables that have been created.

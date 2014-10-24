@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.execution.{Command, LeafNode}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveShim
 
 /**
  * Implementation for "describe [extended] table".
@@ -43,7 +44,8 @@ case class DescribeHiveTableCommand(
   // Strings with the format like Hive. It is used for result comparison in our unit tests.
   lazy val hiveString: Seq[String] = sideEffectResult.map {
     case Row(name: String, dataType: String, comment) =>
-      Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse("None"))
+      Seq(name, dataType,
+        Option(comment.asInstanceOf[String]).getOrElse(HiveShim.getEmptyCommentsFieldValue))
         .map(s => String.format(s"%-20s", s))
         .mkString("\t")
   }
