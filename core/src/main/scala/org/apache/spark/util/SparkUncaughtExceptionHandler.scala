@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
 
 /**
  * The default uncaught exception handler for Executors terminates the whole process, to avoid
  * getting into a bad state indefinitely. Since Executors are relatively lightweight, it's better
  * to fail fast when things go wrong.
  */
-private[spark] object ExecutorUncaughtExceptionHandler
+private[spark] object SparkUncaughtExceptionHandler
   extends Thread.UncaughtExceptionHandler with Logging {
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
@@ -36,14 +35,14 @@ private[spark] object ExecutorUncaughtExceptionHandler
       // (If we do, we will deadlock.)
       if (!Utils.inShutdown()) {
         if (exception.isInstanceOf[OutOfMemoryError]) {
-          System.exit(ExecutorExitCode.OOM)
+          System.exit(SparkExitCode.OOM)
         } else {
-          System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+          System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
       }
     } catch {
-      case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
-      case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
+      case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkExitCode.OOM)
+      case t: Throwable => Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
     }
   }
 
