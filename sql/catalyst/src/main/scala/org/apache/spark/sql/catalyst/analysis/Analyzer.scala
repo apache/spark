@@ -216,8 +216,16 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
-            registry.lookupFunction(name, children)
+          case u @ UnresolvedFunction(name, children, windowRange) if u.childrenResolved => {
+            val function = registry.lookupFunction(name, children)
+            if (windowRange != null) function match {
+              case agg: AggregateExpression =>
+                function.asInstanceOf[AggregateExpression].windowRange = windowRange
+              case _ => logError(s"function " + name + " does not support window range")
+            }
+            function
+          }
+
         }
     }
   }

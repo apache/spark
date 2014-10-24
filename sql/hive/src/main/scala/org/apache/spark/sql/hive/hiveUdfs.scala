@@ -58,7 +58,7 @@ private[hive] abstract class HiveFunctionRegistry
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(functionClassName, children)
     } else if (
-         classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
+         classOf[GenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdaf(functionClassName, children)
     } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveUdaf(functionClassName, children)
@@ -191,10 +191,10 @@ private[hive] case class HiveGenericUdaf(
   with HiveInspectors
   with HiveFunctionFactory {
 
-  type UDFType = AbstractGenericUDAFResolver
+  type UDFType = GenericUDAFResolver
 
   @transient
-  protected lazy val resolver: AbstractGenericUDAFResolver = createFunction()
+  protected lazy val resolver: GenericUDAFResolver = createFunction()
 
   @transient
   protected lazy val objectInspector  = {
@@ -224,7 +224,7 @@ private[hive] case class HiveUdaf(
   type UDFType = UDAF
 
   @transient
-  protected lazy val resolver: AbstractGenericUDAFResolver = new GenericUDAFBridge(createFunction())
+  protected lazy val resolver: GenericUDAFResolver = new GenericUDAFBridge(createFunction())
 
   @transient
   protected lazy val objectInspector  = {
@@ -338,7 +338,7 @@ private[hive] case class HiveUdafFunction(
     if (isUDAFBridgeRequired) {
       new GenericUDAFBridge(createFunction[UDAF]())
     } else {
-      createFunction[AbstractGenericUDAFResolver]()
+      createFunction[GenericUDAFResolver]()
     }
 
   private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
@@ -347,9 +347,8 @@ private[hive] case class HiveUdafFunction(
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
-  // Cast required to avoid type inference selecting a deprecated Hive API.
-  private val buffer =
-    function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+  // remove cast to support row_number,rank etc.
+  private val buffer = function.getNewAggregationBuffer
 
   override def eval(input: Row): Any = unwrap(function.evaluate(buffer), returnInspector)
 

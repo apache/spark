@@ -272,6 +272,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
+      case logical.WindowFunction(partition, function, child) =>
+        execution.WindowFunction(partition, function, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil

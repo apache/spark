@@ -24,14 +24,21 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.util.collection.OpenHashSet
 
-abstract class AggregateExpression extends Expression {
+abstract class AggregateExpression extends Expression with Serializable {
   self: Product =>
 
+  var windowRange: WindowRange = null
   /**
    * Creates a new instance that can be used to compute this aggregate expression for a group
    * of input rows/
    */
   def newInstance(): AggregateFunction
+
+  override def equals(other: Any): Boolean = {
+    if (super.equals(other)) {
+      this.windowRange == other.asInstanceOf[AggregateExpression].windowRange
+    } else false
+  }
 
   /**
    * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
@@ -40,6 +47,8 @@ abstract class AggregateExpression extends Expression {
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
+
+case class WindowRange(windowType:String, preceding: Int, following: Int)
 
 /**
  * Represents an aggregation that has been rewritten to be performed in two steps.
@@ -71,7 +80,7 @@ abstract class PartialAggregate extends AggregateExpression {
  * [[AggregateExpression]] with an algorithm that will be used to compute one specific result.
  */
 abstract class AggregateFunction
-  extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
+  extends AggregateExpression with trees.LeafNode[Expression] {
   self: Product =>
 
   override type EvaluatedType = Any
