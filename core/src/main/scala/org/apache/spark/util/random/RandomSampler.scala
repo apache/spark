@@ -20,7 +20,7 @@ package org.apache.spark.util.random
 import java.util.Random
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.random.MersenneTwister
+import org.apache.commons.math3.random.Well19937c
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -91,7 +91,7 @@ class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
 
   override def setSeed(seed: Long) {
     rng = new PoissonDistribution(
-      new MersenneTwister(seed),
+      new Well19937c(seed),
       mean,
       PoissonDistribution.DEFAULT_EPSILON,
       PoissonDistribution.DEFAULT_MAX_ITERATIONS)

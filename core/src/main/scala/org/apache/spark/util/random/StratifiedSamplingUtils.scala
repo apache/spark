@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.random.MersenneTwister
+import org.apache.commons.math3.random.Well19937c
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
@@ -288,7 +288,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
     def nextPoisson(mean: Double): Int = {
       val poisson = poissonCache.getOrElseUpdate(mean,
         new PoissonDistribution(
-          new MersenneTwister(poissonSeed),
+          new Well19937c(poissonSeed),
           mean,
           PoissonDistribution.DEFAULT_EPSILON,
           PoissonDistribution.DEFAULT_MAX_ITERATIONS))

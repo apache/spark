@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.impl
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.random.MersenneTwister
+import org.apache.commons.math3.random.Well19937c
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -61,7 +61,7 @@ private[tree] object BaggedPoint {
       // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val poisson = new PoissonDistribution(
-          new MersenneTwister(seed + partitionIndex + 1),
+          new Well19937c(seed + partitionIndex + 1),
           1.0,
           PoissonDistribution.DEFAULT_EPSILON,
           PoissonDistribution.DEFAULT_MAX_ITERATIONS)
