@@ -25,7 +25,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SchedulingMode, Schedulable}
 import org.apache.spark.storage.{StorageStatus, StorageUtils, RDDInfo}
 
-
 /**
  * Trait that implements Spark's status APIs.  This trait is designed to be mixed into
  * SparkContext; it allows the status API code to live in its own file.
@@ -108,7 +107,7 @@ private[spark] trait SparkStatusAPI { this: SparkContext =>
   }
 
   /**
-   * Returns job information, or None if the job info could not be found or was garbage collected.
+   * Returns job information, or `None` if the job info could not be found or was garbage collected.
    */
   def getJobInfo(jobId: Int): Option[SparkJobInfo] = {
     jobProgressListener.synchronized {
@@ -119,7 +118,7 @@ private[spark] trait SparkStatusAPI { this: SparkContext =>
   }
 
   /**
-   * Returns stage information, or None if the stage info could not be found or was
+   * Returns stage information, or `None` if the stage info could not be found or was
    * garbage collected.
    */
   def getStageInfo(stageId: Int): Option[SparkStageInfo] = {

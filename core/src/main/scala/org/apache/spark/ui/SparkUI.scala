@@ -98,7 +98,7 @@ private[spark] object SparkUI {
   def createLiveUI(
       sc: SparkContext,
       conf: SparkConf,
-      listenerBus: SparkListenerBus,
+      listenerBus: LiveListenerBus,
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
       appName: String): SparkUI =  {
