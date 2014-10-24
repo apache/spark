@@ -80,8 +80,6 @@ private[hive] object HiveShim {
   def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsForPruner(tbl)
 
   def compatibilityBlackList = Seq(
-    "database_location",
-    "database_properties",
     "decimal_.*",
     "drop_partitions_filter2",
     "show_.*",

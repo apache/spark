@@ -103,6 +103,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf5",
     "udf_java_method",
     "create_merge_compressed",
+    "database_location",
+    "database_properties",
 
     // DFS commands
     "symlink_text_input_format",
