@@ -748,4 +748,19 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         """.stripMargin),
       (1 to 100).map(i => Seq(i, i, i)))
   }
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(sql("SELECT key&1 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(sql("SELECT key|0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(sql("SELECT key^0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), -2)
+  }
 }
