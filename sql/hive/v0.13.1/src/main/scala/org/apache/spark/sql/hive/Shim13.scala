@@ -72,9 +72,6 @@ private[hive] object HiveShim {
     context.runSqlHive("USE default")
   }
 
-  /* The string used to denote an empty comments field in the schema. */
-  def getEmptyCommentsFieldValue = ""
-
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd, conf)
   }
@@ -121,6 +118,8 @@ private[hive] object HiveShim {
   def getDataLocationPath(p: Partition) = p.getDataLocation
 
   def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsOf(tbl)
+
+  def compatibilityBlackList = Seq()
 
   /*
    * Bug introdiced in hive-0.13. FileSinkDesc is serializable, but its member path is not.

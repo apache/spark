@@ -58,9 +58,6 @@ private[hive] object HiveShim {
 
   def createDefaultDBIfNeeded(context: HiveContext) = {  }
 
-  /** The string used to denote an empty comments field in the schema. */
-  def getEmptyCommentsFieldValue = "None"
-
   def getCommandProcessor(cmd: Array[String], conf: HiveConf) = {
     CommandProcessorFactory.get(cmd(0), conf)
   }
@@ -81,6 +78,18 @@ private[hive] object HiveShim {
   def getDataLocationPath(p: Partition) = p.getPartitionPath
 
   def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsForPruner(tbl)
+
+  def compatibilityBlackList = Seq(
+    "database_location",
+    "database_properties",
+    "decimal_.*",
+    "drop_partitions_filter2",
+    "show_.*",
+    "serde_regex",
+    "udf_to_date",
+    "udaf_collect_set",
+    "udf_concat"
+  )
 
 }
 

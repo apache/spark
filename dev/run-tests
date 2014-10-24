@@ -167,7 +167,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
   # This must be a single argument, as it is.
   if [ -n "$_RUN_SQL_TESTS" ]; then
-    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
+    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
   fi
   
   if [ -n "$_SQL_TESTS_ONLY" ]; then
