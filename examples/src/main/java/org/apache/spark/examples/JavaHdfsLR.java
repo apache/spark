@@ -30,11 +30,22 @@ import java.util.regex.Pattern;
 
 /**
  * Logistic regression based classification.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.classification.LogisticRegressionModel
  */
 public final class JavaHdfsLR {
 
   private static final int D = 10;   // Number of dimensions
   private static final Random rand = new Random(42);
+
+  static void showWarning() {
+    String warning = "WARN: This is a naive implementation of Logistic Regression " +
+            "and is given as an example!\n" +
+            "Please use the LogisticRegressionModel found in " +
+            "org.apache.spark.mllib.classification for more conventional use.";
+    System.err.println(warning);
+  }
 
   static class DataPoint implements Serializable {
     DataPoint(double[] x, double y) {
@@ -108,6 +119,8 @@ public final class JavaHdfsLR {
       System.err.println("Usage: JavaHdfsLR <file> <iters>");
       System.exit(1);
     }
+
+    showWarning();
 
     SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
