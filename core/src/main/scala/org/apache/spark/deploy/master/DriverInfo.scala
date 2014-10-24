@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import java.util.Date
 
 import org.apache.spark.deploy.DriverDescription
+import org.apache.spark.util.Utils
 
 private[spark] class DriverInfo(
     val startTime: Long,
@@ -36,7 +37,7 @@ private[spark] class DriverInfo(
 
   init()
 
-  private def readObject(in: java.io.ObjectInputStream): Unit = {
+  private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()
   }

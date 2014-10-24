@@ -73,7 +73,7 @@ class TestOutputStream[T: ClassTag](parent: DStream[T],
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     output.clear()
   }
@@ -95,7 +95,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     output.clear()
   }
