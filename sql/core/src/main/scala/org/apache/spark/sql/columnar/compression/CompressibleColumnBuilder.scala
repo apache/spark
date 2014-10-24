@@ -48,12 +48,16 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   var compressionEncoders: Seq[Encoder[T]] = _
 
-  abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
+  abstract override def initialize(
+      initialSize: Int,
+      columnName: String,
+      useCompression: Boolean): Unit = {
+
     compressionEncoders =
       if (useCompression) {
-        schemes.filter(_.supports(columnType)).map(_.encoder[T])
+        schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
       } else {
-        Seq(PassThrough.encoder)
+        Seq(PassThrough.encoder(columnType))
       }
     super.initialize(initialSize, columnName, useCompression)
   }
@@ -62,17 +66,15 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     encoder.compressionRatio < 0.8
   }
 
-  private def gatherCompressibilityStats(row: Row, ordinal: Int) {
-    val field = columnType.getField(row, ordinal)
-
+  private def gatherCompressibilityStats(row: Row, ordinal: Int): Unit = {
     var i = 0
     while (i < compressionEncoders.length) {
-      compressionEncoders(i).gatherCompressibilityStats(field, columnType)
+      compressionEncoders(i).gatherCompressibilityStats(row, ordinal)
       i += 1
     }
   }
 
-  abstract override def appendFrom(row: Row, ordinal: Int) {
+  abstract override def appendFrom(row: Row, ordinal: Int): Unit = {
     super.appendFrom(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       gatherCompressibilityStats(row, ordinal)
@@ -84,7 +86,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
     val typeId = nonNullBuffer.getInt()
     val encoder: Encoder[T] = {
       val candidate = compressionEncoders.minBy(_.compressionRatio)
-      if (isWorthCompressing(candidate)) candidate else PassThrough.encoder
+      if (isWorthCompressing(candidate)) candidate else PassThrough.encoder(columnType)
     }
 
     // Header = column type ID + null count + null positions
@@ -104,7 +106,7 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
       .putInt(nullCount)
       .put(nulls)
 
-    logInfo(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
-    encoder.compress(nonNullBuffer, compressedBuffer, columnType)
+    logDebug(s"Compressor for [$columnName]: $encoder, ratio: ${encoder.compressionRatio}")
+    encoder.compress(nonNullBuffer, compressedBuffer)
   }
 }

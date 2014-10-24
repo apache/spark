@@ -133,6 +133,10 @@
       <artifactId>chill-java</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.roaringbitmap</groupId>
+      <artifactId>RoaringBitmap</artifactId>
+    </dependency>
+    <dependency>
       <groupId>commons-net</groupId>
       <artifactId>commons-net</artifactId>
     </dependency>
@@ -323,6 +327,17 @@
         </configuration>
       </plugin>
       <plugin>
+        <artifactId>maven-clean-plugin</artifactId>
+        <configuration>
+          <filesets>
+            <fileset>
+              <directory>${basedir}/../python/build</directory>
+            </fileset>
+          </filesets>
+          <verbose>true</verbose>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <executions>
@@ -343,7 +358,9 @@
                 <filter>
                   <artifact>com.google.guava:guava</artifact>
                   <includes>
+                    <include>com/google/common/base/Absent*</include>
                     <include>com/google/common/base/Optional*</include>
+                    <include>com/google/common/base/Present*</include>
                   </includes>
                 </filter>
               </filters>

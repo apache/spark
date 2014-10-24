@@ -105,7 +105,7 @@ else
     exit 1
   fi
 fi
-JAVA_VERSION=$("$RUNNER" -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
+JAVA_VERSION=$("$RUNNER" -version 2>&1 | grep 'version' | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 if [ "$JAVA_VERSION" -ge 18 ]; then
@@ -146,7 +146,7 @@ fi
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   if test -z "$SPARK_TOOLS_JAR"; then
     echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SCALA_VERSION/" 1>&2
-    echo "You need to build spark before running $1." 1>&2
+    echo "You need to build Spark before running $1." 1>&2
     exit 1
   fi
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"

@@ -68,10 +68,9 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
     buffer.order(ByteOrder.nativeOrder()).putInt(columnType.typeId)
   }
 
-  override def appendFrom(row: Row, ordinal: Int) {
-    val field = columnType.getField(row, ordinal)
-    buffer = ensureFreeSpace(buffer, columnType.actualSize(field))
-    columnType.append(field, buffer)
+  override def appendFrom(row: Row, ordinal: Int): Unit = {
+    buffer = ensureFreeSpace(buffer, columnType.actualSize(row, ordinal))
+    columnType.append(row, ordinal, buffer)
   }
 
   override def build() = {
@@ -108,6 +107,8 @@ private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColum
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
+private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
+
 private[sql] class TimestampColumnBuilder
   extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
 
@@ -142,16 +143,17 @@ private[sql] object ColumnBuilder {
       useCompression: Boolean = false): ColumnBuilder = {
 
     val builder = (typeId match {
-      case INT.typeId     => new IntColumnBuilder
-      case LONG.typeId    => new LongColumnBuilder
-      case FLOAT.typeId   => new FloatColumnBuilder
-      case DOUBLE.typeId  => new DoubleColumnBuilder
-      case BOOLEAN.typeId => new BooleanColumnBuilder
-      case BYTE.typeId    => new ByteColumnBuilder
-      case SHORT.typeId   => new ShortColumnBuilder
-      case STRING.typeId  => new StringColumnBuilder
-      case BINARY.typeId  => new BinaryColumnBuilder
-      case GENERIC.typeId => new GenericColumnBuilder
+      case INT.typeId       => new IntColumnBuilder
+      case LONG.typeId      => new LongColumnBuilder
+      case FLOAT.typeId     => new FloatColumnBuilder
+      case DOUBLE.typeId    => new DoubleColumnBuilder
+      case BOOLEAN.typeId   => new BooleanColumnBuilder
+      case BYTE.typeId      => new ByteColumnBuilder
+      case SHORT.typeId     => new ShortColumnBuilder
+      case STRING.typeId    => new StringColumnBuilder
+      case BINARY.typeId    => new BinaryColumnBuilder
+      case GENERIC.typeId   => new GenericColumnBuilder
+      case DATE.typeId      => new DateColumnBuilder
       case TIMESTAMP.typeId => new TimestampColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 

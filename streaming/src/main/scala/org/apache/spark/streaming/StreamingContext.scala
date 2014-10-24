@@ -35,10 +35,9 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.{ActorSupervisorStrategy, ActorReceiver, Receiver}
+import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.MetadataCleaner
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -48,7 +47,7 @@ import org.apache.spark.util.MetadataCleaner
  * The associated SparkContext can be accessed using `context.sparkContext`. After
  * creating and transforming DStreams, the streaming computation can be started and stopped
  * using `context.start()` and `context.stop()`, respectively.
- * `context.awaitTransformation()` allows the current thread to wait for the termination
+ * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
@@ -448,6 +447,7 @@ class StreamingContext private[streaming] (
       throw new SparkException("StreamingContext has already been stopped")
     }
     validate()
+    sparkContext.setCallSite(DStream.getCreationSite())
     scheduler.start()
     state = Started
   }

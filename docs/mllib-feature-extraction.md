@@ -68,7 +68,7 @@ val sc: SparkContext = ...
 val documents: RDD[Seq[String]] = sc.textFile("...").map(_.split(" ").toSeq)
 
 val hashingTF = new HashingTF()
-val tf: RDD[Vector] = hasingTF.transform(documents)
+val tf: RDD[Vector] = hashingTF.transform(documents)
 {% endhighlight %}
 
 While applying `HashingTF` only needs a single pass to the data, applying `IDF` needs two passes: 
@@ -82,6 +82,21 @@ tf.cache()
 val idf = new IDF().fit(tf)
 val tfidf: RDD[Vector] = idf.transform(tf)
 {% endhighlight %}
+
+MLlib's IDF implementation provides an option for ignoring terms which occur in less than a
+minimum number of documents.  In such cases, the IDF for these terms is set to 0.  This feature
+can be used by passing the `minDocFreq` value to the IDF constructor.
+
+{% highlight scala %}
+import org.apache.spark.mllib.feature.IDF
+
+// ... continue from the previous example
+tf.cache()
+val idf = new IDF(minDocFreq = 2).fit(tf)
+val tfidf: RDD[Vector] = idf.transform(tf)
+{% endhighlight %}
+
+
 </div>
 </div>
 

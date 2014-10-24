@@ -32,6 +32,25 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def outputSet: AttributeSet = AttributeSet(output)
 
   /**
+   * All Attributes that appear in expressions from this operator.  Note that this set does not
+   * include attributes that are implicitly referenced by being passed through to the output tuple.
+   */
+  def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
+
+  /**
+   * The set of all attributes that are input to this operator by its children.
+   */
+  def inputSet: AttributeSet =
+    AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
+
+  /**
+   * Attributes that are referenced by expressions but not provided by this nodes children.
+   * Subclasses should override this method if they produce attributes internally as it is used by
+   * assertions designed to prevent the construction of invalid plans.
+   */
+  def missingInput: AttributeSet = references -- inputSet
+
+  /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
@@ -132,4 +151,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   /** Prints out the schema in the tree format */
   def printSchema(): Unit = println(schemaString)
+
+  protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
+
+  override def simpleString = statePrefix + super.simpleString
 }
