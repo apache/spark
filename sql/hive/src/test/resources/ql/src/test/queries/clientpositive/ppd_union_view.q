@@ -5,26 +5,26 @@ drop view v;
 create table t1_new (key string, value string) partitioned by (ds string);
 
 insert overwrite table t1_new partition (ds = '2011-10-15')
-select 'key1', 'value1' from src limit 1;
+select 'key1', 'value1' from src tablesample (1 rows);
 
 insert overwrite table t1_new partition (ds = '2011-10-16')
-select 'key2', 'value2' from src limit 1;
+select 'key2', 'value2' from src tablesample (1 rows);
 
 create table t1_old (keymap string, value string) partitioned by (ds string);
 
 insert overwrite table t1_old partition (ds = '2011-10-13')
-select 'keymap3', 'value3' from src limit 1;
+select 'keymap3', 'value3' from src tablesample (1 rows);
 
 insert overwrite table t1_old partition (ds = '2011-10-14')
-select 'keymap4', 'value4' from src limit 1;
+select 'keymap4', 'value4' from src tablesample (1 rows);
 
 create table t1_mapping (key string, keymap string) partitioned by (ds string);
 
 insert overwrite table t1_mapping partition (ds = '2011-10-13')
-select 'key3', 'keymap3' from src limit 1;
+select 'key3', 'keymap3' from src tablesample (1 rows);
 
 insert overwrite table t1_mapping partition (ds = '2011-10-14')
-select 'key4', 'keymap4' from src limit 1;
+select 'key4', 'keymap4' from src tablesample (1 rows);
 
 
 create view t1 partitioned on (ds) as
