@@ -369,9 +369,9 @@ class StreamingContext private[streaming] (
    * @tparam F Input format for reading HDFS file
    */
   def fileStream[
-  K: ClassTag,
-  V: ClassTag,
-  F <: NewInputFormat[K, V] : ClassTag
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
   ](directory: String, depth: Int = 0): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, depth)
   }
