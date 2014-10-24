@@ -238,6 +238,9 @@ class SparkContext(config: SparkConf) extends Logging {
       // For tests, do not enable the UI
       None
     }
+
+  // Bind the UI before starting the task scheduler to communicate
+  // the bound port to the cluster manager properly
   ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
@@ -815,6 +818,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val callSite = getCallSite
+    logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }

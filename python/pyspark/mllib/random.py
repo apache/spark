@@ -32,7 +32,7 @@ def serialize(f):
     @wraps(f)
     def func(sc, *a, **kw):
         jrdd = f(sc, *a, **kw)
-        return RDD(sc._jvm.PythonRDD.javaToPython(jrdd), sc,
+        return RDD(sc._jvm.SerDe.javaToPython(jrdd), sc,
                    BatchedSerializer(PickleSerializer(), 1024))
     return func
 

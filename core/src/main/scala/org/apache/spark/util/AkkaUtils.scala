@@ -77,7 +77,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
 
-    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 600)
+    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 6000)
     val akkaFailureDetector =
       conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
     val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
