@@ -1938,7 +1938,7 @@ class RDD(object):
         RDD is serialized in batch or not.
         """
         rdd = self._pickled()
-        return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, True)
+        return self.ctx._jvm.SerDeUtil.pythonToJava(rdd._jrdd, True)
 
     def countApprox(self, timeout, confidence=0.95):
         """

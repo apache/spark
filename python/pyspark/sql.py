@@ -938,7 +938,6 @@ class SQLContext(object):
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-        self._pythonToJava = self._jvm.PythonRDD.pythonToJavaArray
         self._scala_SQLContext = sqlContext
 
     @property
@@ -1124,8 +1123,7 @@ class SQLContext(object):
         for row in rows:
             _verify_type(row, schema)
 
-        batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
-        jrdd = self._pythonToJava(rdd._jrdd, batched)
+        jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
@@ -1381,26 +1379,26 @@ class LocalHiveContext(HiveContext):
     An in-process metadata data is created with data stored in ./metadata.
     Warehouse data is stored in in ./warehouse.
 
-    >>> import os
-    >>> hiveCtx = LocalHiveContext(sc)
-    >>> try:
-    ...     supress = hiveCtx.sql("DROP TABLE src")
-    ... except Exception:
-    ...     pass
-    >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
-    ...        'examples/src/main/resources/kv1.txt')
-    >>> supress = hiveCtx.sql(
-    ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
-    ...        % kv1)
-    >>> results = hiveCtx.sql("FROM src SELECT value"
-    ...      ).map(lambda r: int(r.value.split('_')[1]))
-    >>> num = results.count()
-    >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    >>> num
-    500
-    >>> reduce_sum
-    130091
+    # >>> import os
+    # >>> hiveCtx = LocalHiveContext(sc)
+    # >>> try:
+    # ...     supress = hiveCtx.sql("DROP TABLE src")
+    # ... except Exception:
+    # ...     pass
+    # >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
+    # ...        'examples/src/main/resources/kv1.txt')
+    # >>> supress = hiveCtx.sql(
+    # ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    # >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
+    # ...        % kv1)
+    # >>> results = hiveCtx.sql("FROM src SELECT value"
+    # ...      ).map(lambda r: int(r.value.split('_')[1]))
+    # >>> num = results.count()
+    # >>> reduce_sum = results.reduce(lambda x, y: x + y)
+    # >>> num
+    # 500
+    # >>> reduce_sum
+    # 130091
     """
 
     def __init__(self, sparkContext, sqlContext=None):
@@ -1771,7 +1769,6 @@ class SchemaRDD(RDD):
 
 def _test():
     import doctest
-    from array import array
     from pyspark.context import SparkContext
     # let doctest run in pyspark.sql, so DataTypes can be picklable
     import pyspark.sql

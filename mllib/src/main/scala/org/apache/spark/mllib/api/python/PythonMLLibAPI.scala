@@ -685,7 +685,7 @@ private[spark] object SerDe extends Serializable {
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
     jRDD.rdd.mapPartitions { iter =>
       initialize()  // let it called in executor
-      new PythonRDD.AutoBatchedPickler(iter)
+      new SerDeUtil.AutoBatchedPickler(iter)
     }
   }
 

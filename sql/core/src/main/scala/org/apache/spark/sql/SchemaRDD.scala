@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
 
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.JavaConversions._
@@ -414,12 +415,8 @@ class SchemaRDD(
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
-    this.mapPartitions { iter =>
-      val pickle = new Pickler
-      iter.map { row =>
-        rowToJArray(row, rowSchema)
-      }.grouped(100).map(batched => pickle.dumps(batched.toArray))
-    }
+    val jrdd = this.map(rowToJArray(_, rowSchema)).toJavaRDD()
+    SerDeUtil.javaToPython(jrdd)
   }
 
   /**
