@@ -287,10 +287,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>chill-java</artifactId>
-    </dependency>
-    <dependency>
       <groupId>asm</groupId>
       <artifactId>asm</artifactId>
       <scope>test</scope>

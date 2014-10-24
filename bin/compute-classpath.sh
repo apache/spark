@@ -20,8 +20,6 @@
 # This script computes Spark's classpath and prints it to stdout; it's used by both the "run"
 # script and the ExecutorRunner in standalone cluster mode.
 
-SCALA_VERSION=${SCALA_VERSION:-"2.10"}
-
 # Figure out where Spark is installed
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
@@ -34,6 +32,18 @@ if [ -n "$SPARK_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$SPARK_CONF_DIR"
 else
   CLASSPATH="$CLASSPATH:$FWDIR/conf"
+fi
+
+if [ -z "$SCALA_VERSION" ]; then
+
+    ASSEMBLY_DIR2="$FWDIR/assembly/target/scala-2.11"
+    # if scala-2.11 directory for assembly exists,  we use that. Otherwise we default to 
+    # scala 2.10.
+    if [ -d "$ASSEMBLY_DIR2" ]; then
+        SCALA_VERSION="2.11"
+    else
+        SCALA_VERSION="2.10"
+    fi        
 fi
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
