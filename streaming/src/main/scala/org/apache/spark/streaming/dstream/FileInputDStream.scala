@@ -72,7 +72,7 @@ private[streaming]
 class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     @transient ssc_ : StreamingContext,
     directory: String,
-    depth: Int = 0,
+    depth: Int = 1,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
@@ -417,5 +417,4 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       math.ceil(minRememberDurationS.milliseconds.toDouble / batchDuration.milliseconds).toInt
     }
   }
-}
 
