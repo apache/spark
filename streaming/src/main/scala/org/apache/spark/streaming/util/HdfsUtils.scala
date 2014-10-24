@@ -60,7 +60,7 @@ private[streaming] object HdfsUtils {
     blockLocs.map(_.flatMap(_.getHosts))
   }
 
-  def getFileSystemForPath(path: Path, conf: Configuration): FileSystem = synchronized {
+  def getFileSystemForPath(path: Path, conf: Configuration): FileSystem = {
     // For local file systems, return the raw loca file system, such calls to flush()
     // actually flushes the stream.
     val fs = path.getFileSystem(conf)
