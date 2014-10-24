@@ -20,7 +20,6 @@ package org.apache.spark.util.random
 import java.util.Random
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.random.Well19937c
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -90,11 +89,8 @@ class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
   private[random] var rng = new PoissonDistribution(mean)
 
   override def setSeed(seed: Long) {
-    rng = new PoissonDistribution(
-      new Well19937c(seed),
-      mean,
-      PoissonDistribution.DEFAULT_EPSILON,
-      PoissonDistribution.DEFAULT_MAX_ITERATIONS)
+    rng = new PoissonDistribution(mean)
+    rng.reseedRandomGenerator(seed)
   }
 
   override def sample(items: Iterator[T]): Iterator[T] = {

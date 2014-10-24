@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.random
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.random.Well19937c
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
@@ -94,11 +93,8 @@ class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
   override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new PoissonDistribution(
-      new Well19937c(seed),
-      mean,
-      PoissonDistribution.DEFAULT_EPSILON,
-      PoissonDistribution.DEFAULT_MAX_ITERATIONS)
+    rng = new PoissonDistribution(mean)
+    rng.reseedRandomGenerator(seed)
   }
 
   override def copy(): PoissonGenerator = new PoissonGenerator(mean)

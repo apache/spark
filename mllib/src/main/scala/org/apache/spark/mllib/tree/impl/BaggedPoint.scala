@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree.impl
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.random.Well19937c
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -60,11 +59,8 @@ private[tree] object BaggedPoint {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
-      val poisson = new PoissonDistribution(
-          new Well19937c(seed + partitionIndex + 1),
-          1.0,
-          PoissonDistribution.DEFAULT_EPSILON,
-          PoissonDistribution.DEFAULT_MAX_ITERATIONS)
+      val poisson = new PoissonDistribution(1.0)
+      poisson.reseedRandomGenerator(seed + partitionIndex + 1)
       instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)
         var subsampleIndex = 0
