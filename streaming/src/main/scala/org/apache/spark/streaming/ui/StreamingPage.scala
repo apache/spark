@@ -25,7 +25,8 @@ import scala.xml.Node
 import org.apache.spark.Logging
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
-import org.apache.spark.util.Distribution
+import org.apache.spark.streaming.scheduler.ReceiverInfo
+
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class StreamingPage(parent: StreamingTab)
@@ -33,7 +34,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   private val listener = parent.listener
   private val startTime = Calendar.getInstance().getTime()
-  private val emptyCell = "-"
+  private val empty = "-"
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -43,6 +44,26 @@ private[ui] class StreamingPage(parent: StreamingTab)
       generateReceiverStats() ++
       generateBatchStatsTable()
     UIUtils.headerSparkPage("Streaming", content, parent, Some(5000))
+  }
+
+  private type BatchStatsRowType = (String, Option[Long], Option[Seq[Double]])
+  private val batchStatsTable: UITable[BatchStatsRowType] = {
+    val t = new UITableBuilder[BatchStatsRowType]()
+    t.col("Metric") { _._1 }
+    t.col("Last batch") { _._2 }
+    def optDurationCol(name: String)(fieldExtractor: BatchStatsRowType => Option[Long]) {
+      t.col(name)(fieldExtractor) sortBy {
+        _.getOrElse("").toString
+      } formatWith {
+        _.map(UIUtils.formatDuration).getOrElse("-")
+      }
+    }
+    t.col("Minimum") { _._3.map(_(0).toLong) }
+    optDurationCol("25th percentile") { _._3.map(_(1).toLong) }
+    optDurationCol("Median") { _._3.map(_(2).toLong) }
+    optDurationCol("75th percentile") { _._3.map(_(3).toLong) }
+    optDurationCol("Maximum") { _._3.map(_(4).toLong) }
+    t.build()
   }
 
   /** Generate basic stats of the streaming program */
@@ -75,37 +96,46 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receivedRecordDistributions = listener.receivedRecordsDistributions
     val lastBatchReceivedRecord = listener.lastReceivedBatchRecords
     val table = if (receivedRecordDistributions.size > 0) {
-      val headerRow = Seq(
-        "Receiver",
-        "Status",
-        "Location",
-        "Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
-        "Minimum rate\n[records/sec]",
-        "Median rate\n[records/sec]",
-        "Maximum rate\n[records/sec]",
-        "Last Error"
-      )
-      val dataRows = (0 until listener.numReceivers).map { receiverId =>
-        val receiverInfo = listener.receiverInfo(receiverId)
-        val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
-        val receiverActive = receiverInfo.map { info =>
-          if (info.active) "ACTIVE" else "INACTIVE"
-        }.getOrElse(emptyCell)
-        val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
-        val receiverLastBatchRecords = formatNumber(lastBatchReceivedRecord(receiverId))
-        val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
-          d.getQuantiles(Seq(0.0, 0.5, 1.0)).map(r => formatNumber(r.toLong))
-        }.getOrElse {
-          Seq(emptyCell, emptyCell, emptyCell, emptyCell, emptyCell)
+      val tableRenderer: UITable[(Int, Option[ReceiverInfo])] = {
+        val t = new UITableBuilder[(Int, Option[ReceiverInfo])]()
+        t.col("Receiver") { case (receiverId, receiverInfo) =>
+          receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
         }
-        val receiverLastError = listener.receiverInfo(receiverId).map { info =>
-          val msg = s"${info.lastErrorMessage} - ${info.lastError}"
-          if (msg.size > 100) msg.take(97) + "..." else msg
-        }.getOrElse(emptyCell)
-        Seq(receiverName, receiverActive, receiverLocation, receiverLastBatchRecords) ++
-          receivedRecordStats ++ Seq(receiverLastError)
+        t.col("Status") { case (_, receiverInfo) =>
+          receiverInfo.map { info => if (info.active) "ACTIVE" else "INACTIVE" }.getOrElse(empty)
+        }
+        t.col("Location") { case (_, receiverInfo) =>
+          receiverInfo.map(_.location).getOrElse(empty)
+        }
+        t.col("Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]") {
+          case (receiverId, _) => formatNumber(lastBatchReceivedRecord(receiverId))
+        }
+        t.col("Minimum rate\n[records/sec]") { case (receiverId, _) =>
+          receivedRecordDistributions(receiverId).map {
+            _.getQuantiles(Seq(0.0)).map(formatNumber).head
+          }.getOrElse(empty)
+        }
+        t.col("Median rate\n[records/sec]") { case (receiverId, _) =>
+          receivedRecordDistributions(receiverId).map {
+            _.getQuantiles(Seq(0.5)).map(formatNumber).head
+          }.getOrElse(empty)
+        }
+        t.col("Maximum rate\n[records/sec]") { case (receiverId, _) =>
+          receivedRecordDistributions(receiverId).map {
+            _.getQuantiles(Seq(1.0)).map(formatNumber).head
+          }.getOrElse(empty)
+        }
+        t.col("Last Error") { case (_, receiverInfo) =>
+          receiverInfo.map { info =>
+            val msg = s"${info.lastErrorMessage} - ${info.lastError}"
+            if (msg.size > 100) msg.take(97) + "..." else msg
+          }.getOrElse(empty)
+        }
+        t.build()
       }
-      Some(listingTable(headerRow, dataRows))
+
+      val dataRows = (0 until listener.numReceivers).map { id => (id, listener.receiverInfo(id)) }
+      Some(tableRenderer.render(dataRows))
     } else {
       None
     }
@@ -121,33 +151,20 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateBatchStatsTable(): Seq[Node] = {
     val numBatches = listener.retainedCompletedBatches.size
     val lastCompletedBatch = listener.lastCompletedBatch
+
     val table = if (numBatches > 0) {
-      val processingDelayQuantilesRow = {
-        Seq(
-          "Processing Time",
-          formatDurationOption(lastCompletedBatch.flatMap(_.processingDelay))
-        ) ++ getQuantiles(listener.processingDelayDistribution)
-      }
-      val schedulingDelayQuantilesRow = {
-        Seq(
-          "Scheduling Delay",
-          formatDurationOption(lastCompletedBatch.flatMap(_.schedulingDelay))
-        ) ++ getQuantiles(listener.schedulingDelayDistribution)
-      }
-      val totalDelayQuantilesRow = {
-        Seq(
-          "Total Delay",
-          formatDurationOption(lastCompletedBatch.flatMap(_.totalDelay))
-        ) ++ getQuantiles(listener.totalDelayDistribution)
-      }
-      val headerRow = Seq("Metric", "Last batch", "Minimum", "25th percentile",
-        "Median", "75th percentile", "Maximum")
-      val dataRows: Seq[Seq[String]] = Seq(
-        processingDelayQuantilesRow,
-        schedulingDelayQuantilesRow,
-        totalDelayQuantilesRow
+      val rows: Seq[(String, Option[Long], Option[Seq[Double]])] = Seq(
+        ("Processing Time",
+          lastCompletedBatch.flatMap(_.processingDelay),
+          listener.processingDelayDistribution.map(_.getQuantiles())),
+        ("Scheduling Delay",
+          lastCompletedBatch.flatMap(_.schedulingDelay),
+          listener.schedulingDelayDistribution.map(_.getQuantiles())),
+        ("Total Delay",
+          lastCompletedBatch.flatMap(_.totalDelay),
+          listener.totalDelayDistribution.map(_.getQuantiles()))
       )
-      Some(listingTable(headerRow, dataRows))
+      Some(batchStatsTable.render(rows))
     } else {
       None
     }
@@ -162,26 +179,4 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     content
   }
-
-
-  /**
-   * Returns a human-readable string representing a duration such as "5 second 35 ms"
-   */
-  private def formatDurationOption(msOption: Option[Long]): String = {
-    msOption.map(formatDurationVerbose).getOrElse(emptyCell)
-  }
-
-  /** Get quantiles for any time distribution */
-  private def getQuantiles(timeDistributionOption: Option[Distribution]) = {
-    timeDistributionOption.get.getQuantiles().map { ms => formatDurationVerbose(ms.toLong) }
-  }
-
-  /** Generate HTML table from string data */
-  private def listingTable(headers: Seq[String], data: Seq[Seq[String]]) = {
-    def generateDataRow(data: Seq[String]): Seq[Node] = {
-      <tr> {data.map(d => <td>{d}</td>)} </tr>
-    }
-    UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
-  }
 }
-

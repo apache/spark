@@ -20,15 +20,15 @@ package org.apache.spark.deploy.master.ui
 import javax.servlet.http.HttpServletRequest
 
 import scala.concurrent.Await
-import scala.xml.Node
+import scala.xml.{Text, Node}
 
 import akka.pattern.ask
 import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.deploy.master.{WorkerInfo, ApplicationInfo, DriverInfo}
+import org.apache.spark.ui.{UITable, UITableBuilder, WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
@@ -41,32 +41,69 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     JsonProtocol.writeMasterState(state)
   }
 
+  private val workerTable: UITable[WorkerInfo] = {
+    val t = new UITableBuilder[WorkerInfo]()
+    t.col("ID") (identity) withMarkup  { worker =>
+      <a href={worker.webUiAddress}>{worker.id}</a>
+    }
+    t.col("Address") { worker => s"${worker.host}:${worker.port}"}
+    t.col("State") { _.state.toString }
+    t.col("Cores") { _.coresUsed } formatWith { c: Int => s"$c Used" }
+    t.col("Memory") (identity) sortBy { worker =>
+      s"${worker.memory}:${worker.memoryUsed}"
+    } withMarkup { worker =>
+      Text(Utils.megabytesToString(worker.memory)) ++
+      Text(Utils.megabytesToString(worker.memoryUsed))
+    }
+    t.build()
+  }
+
+  private val appTable: UITable[ApplicationInfo] = {
+    val t = new UITableBuilder[ApplicationInfo]()
+    t.col("ID") (_.id) withMarkup { id =>
+      <a href={"app?appId=" + id}>{id}</a>
+    }
+    t.col("Name") { _.id }
+    t.col("Cores") { _.coresGranted }
+    t.sizeCol("Memory per Node") { _.desc.memoryPerSlave }
+    t.dateCol("Submitted Time") { _.submitDate }
+    t.col("User") { _.desc.user }
+    t.col("State") { _.state.toString }
+    t.durationCol("Duration") { _.duration }
+    t.build()
+  }
+
+  private val driverTable: UITable[DriverInfo] = {
+    val t = new UITableBuilder[DriverInfo]()
+    t.col("ID") { _.id }
+    t.dateCol("Submitted Time") { _.submitDate }
+    t.col("Worker") (identity) withMarkup { driver =>
+      driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse(Text("None"))
+    }
+    t.col("State") { _.state.toString }
+    t.col("Cores") { _.desc.cores }
+    t.sizeCol("Memory") { _.desc.mem.toLong }
+    t.col("Main Class") { _.desc.command.arguments(1) }
+    t.build()
+  }
+
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)
 
-    val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
-    val workers = state.workers.sortBy(_.id)
-    val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
+    val allWorkersTable = workerTable.render(state.workers.sortBy(_.id))
 
-    val appHeaders = Seq("ID", "Name", "Cores", "Memory per Node", "Submitted Time", "User",
-      "State", "Duration")
-    val activeApps = state.activeApps.sortBy(_.startTime).reverse
-    val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
-    val completedApps = state.completedApps.sortBy(_.endTime).reverse
-    val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
+    val activeAppsTable = appTable.render(state.activeApps.sortBy(_.startTime).reverse)
+    val completedAppsTable = appTable.render(state.completedApps.sortBy(_.endTime).reverse)
 
-    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory",
-      "Main Class")
-    val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
-    val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
-    val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
-    val completedDriversTable = UIUtils.listingTable(driverHeaders, driverRow, completedDrivers)
+    val activeDriversTable = driverTable.render(state.activeDrivers.sortBy(_.startTime).reverse)
+    val completedDriversTable =
+      driverTable.render(state.completedDrivers.sortBy(_.startTime).reverse)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
-    def hasDrivers = activeDrivers.length > 0 || completedDrivers.length > 0
+    def hasDrivers = state.activeDrivers.length > 0 || state.completedDrivers.length > 0
 
     val content =
         <div class="row-fluid">
@@ -93,7 +130,7 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <div class="row-fluid">
           <div class="span12">
             <h4> Workers </h4>
-            {workerTable}
+            {allWorkersTable}
           </div>
         </div>
 
@@ -137,58 +174,5 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         </div>;
 
     UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
-  }
-
-  private def workerRow(worker: WorkerInfo): Seq[Node] = {
-    <tr>
-      <td>
-        <a href={worker.webUiAddress}>{worker.id}</a>
-      </td>
-      <td>{worker.host}:{worker.port}</td>
-      <td>{worker.state}</td>
-      <td>{worker.cores} ({worker.coresUsed} Used)</td>
-      <td sorttable_customkey={"%s.%s".format(worker.memory, worker.memoryUsed)}>
-        {Utils.megabytesToString(worker.memory)}
-        ({Utils.megabytesToString(worker.memoryUsed)} Used)
-      </td>
-    </tr>
-  }
-
-  private def appRow(app: ApplicationInfo): Seq[Node] = {
-    <tr>
-      <td>
-        <a href={"app?appId=" + app.id}>{app.id}</a>
-      </td>
-      <td>
-        <a href={app.desc.appUiUrl}>{app.desc.name}</a>
-      </td>
-      <td>
-        {app.coresGranted}
-      </td>
-      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.megabytesToString(app.desc.memoryPerSlave)}
-      </td>
-      <td>{UIUtils.formatDate(app.submitDate)}</td>
-      <td>{app.desc.user}</td>
-      <td>{app.state.toString}</td>
-      <td>{UIUtils.formatDuration(app.duration)}</td>
-    </tr>
-  }
-
-  private def driverRow(driver: DriverInfo): Seq[Node] = {
-    <tr>
-      <td>{driver.id} </td>
-      <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
-      </td>
-      <td>{driver.state}</td>
-      <td sorttable_customkey={driver.desc.cores.toString}>
-        {driver.desc.cores}
-      </td>
-      <td sorttable_customkey={driver.desc.mem.toString}>
-        {Utils.megabytesToString(driver.desc.mem.toLong)}
-      </td>
-      <td>{driver.desc.command.arguments(1)}</td>
-    </tr>
   }
 }

@@ -21,11 +21,26 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UITableBuilder, UITable, WebUIPage, UIUtils}
 
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   private val pageSize = 20
+
+  val appTable: UITable[ApplicationHistoryInfo] = {
+    val t = new UITableBuilder[ApplicationHistoryInfo]()
+    t.col("App ID") (identity) withMarkup { info =>
+      val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
+      <a href={uiAddress}>{info.id}</a>
+    }
+    t.col("App Name") { _.name }
+    t.epochDateCol("Started") { _.startTime }
+    t.epochDateCol("Completed") { _.endTime }
+    t.durationCol("Duration") { info => info.endTime - info.startTime }
+    t.col("Spark User") { _.sparkUser }
+    t.epochDateCol("Last Updated") { _.lastUpdated }
+    t.build()
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
@@ -39,7 +54,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val last = Math.min(actualFirst + pageSize, allApps.size) - 1
     val pageCount = allApps.size / pageSize + (if (allApps.size % pageSize > 0) 1 else 0)
 
-    val appTable = UIUtils.listingTable(appHeader, appRow, apps)
+    val appTable = this.appTable.render(apps)
     val providerConfig = parent.getProviderConfig()
     val content =
       <div class="row-fluid">
@@ -64,31 +79,5 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
         </div>
       </div>
     UIUtils.basicSparkPage(content, "History Server")
-  }
-
-  private val appHeader = Seq(
-    "App ID",
-    "App Name",
-    "Started",
-    "Completed",
-    "Duration",
-    "Spark User",
-    "Last Updated")
-
-  private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
-    val startTime = UIUtils.formatDate(info.startTime)
-    val endTime = UIUtils.formatDate(info.endTime)
-    val duration = UIUtils.formatDuration(info.endTime - info.startTime)
-    val lastUpdated = UIUtils.formatDate(info.lastUpdated)
-    <tr>
-      <td><a href={uiAddress}>{info.id}</a></td>
-      <td>{info.name}</td>
-      <td>{startTime}</td>
-      <td>{endTime}</td>
-      <td>{duration}</td>
-      <td>{info.sparkUser}</td>
-      <td>{lastUpdated}</td>
-    </tr>
   }
 }

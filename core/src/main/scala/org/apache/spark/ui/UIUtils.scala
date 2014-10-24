@@ -234,6 +234,14 @@ private[spark] object UIUtils extends Logging {
     </html>
   }
 
+  /** Render key-value pairs as a table */
+  def stringPairTable(col1Name: String, col2Name: String): UITable[(Any, Any)] = {
+    val t = new UITableBuilder[(Any, Any)](fixedWidth = true)
+    t.col(col1Name) { _._1.toString }
+    t.col(col2Name) { _._2.toString }
+    t.build()
+  }
+
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */
   def listingTable[T](
       headers: Seq[String],

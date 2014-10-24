@@ -20,16 +20,17 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.{Text, Node, Unparsed}
 
-import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
+import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Utils, Distribution}
-import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val listener = parent.listener
+
+  private val accumulableTable = UIUtils.stringPairTable("Accumulable", "Value")
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -56,6 +57,101 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
       val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
+
+      val taskTableRenderer: UITable[TaskUIData] = {
+        val t = new UITableBuilder[TaskUIData]()
+        t.col("Index") { _.taskInfo.index }
+        t.col("Id") { _.taskInfo.taskId }
+        t.col("Attempt") { _.taskInfo } formatWith { info =>
+          if (info.speculative) s"${info.attempt} (speculative)" else info.attempt.toString
+        } sortBy { info =>
+          info.taskId.toString
+        }
+        t.col("Status") { _.taskInfo.status }
+        t.col("Locality level") { _.taskInfo.taskLocality }
+        t.col("Executor ID / Host") { case TaskUIData(info, _, _) =>
+          s"${info.executorId} / ${info.host}"
+        }
+        t.dateCol("Launch Time") { case TaskUIData(info, _, _) =>
+          new Date(info.launchTime)
+        }
+        t.col("Duration") { case TaskUIData(info, metrics, _) =>
+          val duration =
+            if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
+            else metrics.map(_.executorRunTime).getOrElse(1L)
+          (info, metrics, duration)
+        } formatWith { case (info, metrics, duration) =>
+          if (info.status == "RUNNING") UIUtils.formatDuration(duration)
+          else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+        } sortBy { case (info, metrics, duration) =>
+          duration.toString
+        }
+
+        t.durationCol("GC Time") { _.taskMetrics.map(_.jvmGCTime).getOrElse(0L)}
+        t.durationCol("Serialization Time") {
+          _.taskMetrics.map(_.resultSerializationTime).getOrElse(0L)
+        }
+        t.col("Accumulators")(identity) withMarkup { case TaskUIData(info, _, _) =>
+          Unparsed(
+            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
+          )
+        }
+        if (hasInput) {
+          t.col("Input") {
+            _.taskMetrics.flatMap(_.inputMetrics)
+          } sortBy {
+            _.map(_.bytesRead.toString).getOrElse("")
+          } formatWith { _.map(
+            m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase})")
+              .getOrElse("")
+          }
+        }
+        if (hasShuffleRead) {
+          t.col("Shuffle Read") {
+            _.taskMetrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
+          } sortBy {
+            _.map(_.toString).getOrElse("")
+          } formatWith {
+            _.map(Utils.bytesToString).getOrElse("")
+          }
+        }
+        if (hasShuffleWrite) {
+          t.col("Write Time") {
+            _.taskMetrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
+          } sortBy {
+            _.map(_.toString).getOrElse("")
+          } formatWith {
+            _.map(t => t / (1000 * 1000)).map { ms =>
+              if (ms == 0) "" else UIUtils.formatDuration(ms)
+            }.getOrElse("")
+          }
+
+          t.col("Shuffle Write") {
+            _.taskMetrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten)
+          } sortBy {
+            _.map(_.toString).getOrElse("")
+          } formatWith {
+            _.map(Utils.bytesToString).getOrElse("")
+          }
+        }
+        if (hasBytesSpilled) {
+          t.col("Shuffle Spill (Memory)") { _.taskMetrics.map(_.memoryBytesSpilled) } sortBy {
+            _.map(_.toString).getOrElse("")
+          } formatWith {
+            _.map(Utils.bytesToString).getOrElse("")
+          }
+
+          t.col("Shuffle Spill (Disk)") { _.taskMetrics.map(_.diskBytesSpilled) } sortBy {
+            _.map(_.toString).getOrElse("")
+          } formatWith {
+            _.map(Utils.bytesToString).getOrElse("")
+          }
+        }
+        t.col("Errors")(identity) withMarkup { case TaskUIData(_, _, errorMessage) =>
+          errorMessage.map { e => <pre>{e}</pre> }.getOrElse(Text(""))
+        }
+        t.build()
+      }
 
       // scalastyle:off
       val summary =
@@ -96,23 +192,10 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </ul>
         </div>
         // scalastyle:on
-      val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
-      val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
-        accumulables.values.toSeq)
+      val accumulableTable =
+        this.accumulableTable.render(accumulables.values.map(a => (a.name, a.value)))
 
-      val taskHeaders: Seq[String] =
-        Seq(
-          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor ID / Host",
-          "Launch Time", "Duration", "GC Time", "Accumulators") ++
-        {if (hasInput) Seq("Input") else Nil} ++
-        {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
-        {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
-        {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
-        Seq("Errors")
-
-      val taskTable = UIUtils.listingTable(
-        taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+      val taskTable = taskTableRenderer.render(tasks)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
@@ -228,109 +311,6 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <h4>Tasks</h4> ++ taskTable
 
       UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
-    }
-  }
-
-  def taskRow(
-      hasInput: Boolean,
-      hasShuffleRead: Boolean,
-      hasShuffleWrite: Boolean,
-      hasBytesSpilled: Boolean)(taskData: TaskUIData): Seq[Node] = {
-    taskData match { case TaskUIData(info, metrics, errorMessage) =>
-      val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
-        else metrics.map(_.executorRunTime).getOrElse(1L)
-      val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-        else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
-      val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
-      val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
-
-      val maybeInput = metrics.flatMap(_.inputMetrics)
-      val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
-      val inputReadable = maybeInput
-        .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
-        .getOrElse("")
-
-      val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
-      val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
-      val shuffleReadReadable = maybeShuffleRead.map(Utils.bytesToString).getOrElse("")
-
-      val maybeShuffleWrite =
-        metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten)
-      val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
-      val shuffleWriteReadable = maybeShuffleWrite.map(Utils.bytesToString).getOrElse("")
-
-      val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
-      val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
-      val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
-        if (ms == 0) "" else UIUtils.formatDuration(ms)
-      }.getOrElse("")
-
-      val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
-      val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
-      val memoryBytesSpilledReadable =
-        maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
-
-      val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
-      val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
-      val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
-
-      <tr>
-        <td>{info.index}</td>
-        <td>{info.taskId}</td>
-        <td sorttable_customkey={info.attempt.toString}>{
-          if (info.speculative) s"${info.attempt} (speculative)" else info.attempt.toString
-        }</td>
-        <td>{info.status}</td>
-        <td>{info.taskLocality}</td>
-        <td>{info.executorId} / {info.host}</td>
-        <td>{UIUtils.formatDate(new Date(info.launchTime))}</td>
-        <td sorttable_customkey={duration.toString}>
-          {formatDuration}
-        </td>
-        <td sorttable_customkey={gcTime.toString}>
-          {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
-        </td>
-        <td>
-          {Unparsed(
-            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
-          )}
-        </td>
-        <!--
-        TODO: Add this back after we add support to hide certain columns.
-        <td sorttable_customkey={serializationTime.toString}>
-          {if (serializationTime > 0) UIUtils.formatDuration(serializationTime) else ""}
-        </td>
-        -->
-        {if (hasInput) {
-          <td sorttable_customkey={inputSortable}>
-            {inputReadable}
-          </td>
-        }}
-        {if (hasShuffleRead) {
-           <td sorttable_customkey={shuffleReadSortable}>
-             {shuffleReadReadable}
-           </td>
-        }}
-        {if (hasShuffleWrite) {
-           <td sorttable_customkey={writeTimeSortable}>
-             {writeTimeReadable}
-           </td>
-           <td sorttable_customkey={shuffleWriteSortable}>
-             {shuffleWriteReadable}
-           </td>
-        }}
-        {if (hasBytesSpilled) {
-          <td sorttable_customkey={memoryBytesSpilledSortable}>
-            {memoryBytesSpilledReadable}
-          </td>
-          <td sorttable_customkey={diskBytesSpilledSortable}>
-            {diskBytesSpilledReadable}
-          </td>
-        }}
-        <td>
-          {errorMessage.map { e => <pre>{e}</pre> }.getOrElse("")}
-        </td>
-      </tr>
     }
   }
 }

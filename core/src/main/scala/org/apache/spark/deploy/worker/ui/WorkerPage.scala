@@ -28,7 +28,7 @@ import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UITable, UITableBuilder, WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
@@ -42,23 +42,56 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     JsonProtocol.writeWorkerState(workerState)
   }
 
+  private val executorTable: UITable[ExecutorRunner] = {
+    val t = new UITableBuilder[ExecutorRunner]()
+    t.col("Executor ID") { _.execId }
+    t.col("Cores") { _.cores }
+    t.col("State") { _.state.toString }
+    t.sizeCol("Memory") { _.memory }
+    t.col("Job Details") (identity) withMarkup  { executor =>
+      <ul class="unstyled">
+        <li><strong>ID:</strong> {executor.appId}</li>
+        <li><strong>Name:</strong> {executor.appDesc.name}</li>
+        <li><strong>User:</strong> {executor.appDesc.user}</li>
+      </ul>
+    } isUnsortable()
+    t.col("Logs") (identity) withMarkup { executor =>
+      <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
+        .format(executor.appId, executor.execId)}>stdout</a>
+      <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
+        .format(executor.appId, executor.execId)}>stderr</a>
+    } isUnsortable()
+    t.build()
+  }
+
+  private val driverTable: UITable[DriverRunner] = {
+    val t = new UITableBuilder[DriverRunner]()
+    t.col("Driver ID") { _.driverId }
+    t.col("Main Class") { _.driverDesc.command.arguments(1) }
+    t.col("State") { _.finalState.getOrElse(DriverState.RUNNING).toString }
+    t.col("Cores") { _.driverDesc.cores }
+    t.sizeCol("Memory") { _.driverDesc.mem }
+    t.col("Logs") (identity) withMarkup { driver =>
+      <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
+      <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+    } isUnsortable()
+    t.col("Notes") { _.finalException.getOrElse("").toString }
+    t.build()
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, timeout)
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
     val runningExecutors = workerState.executors
-    val runningExecutorTable =
-      UIUtils.listingTable(executorHeaders, executorRow, runningExecutors)
+    val runningExecutorTable = executorTable.render(runningExecutors)
     val finishedExecutors = workerState.finishedExecutors
-    val finishedExecutorTable =
-      UIUtils.listingTable(executorHeaders, executorRow, finishedExecutors)
+    val finishedExecutorTable = executorTable.render(finishedExecutors)
 
-    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
     val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
-    val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
+    val runningDriverTable = driverTable.render(runningDrivers)
     val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
-    val finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
+    val finishedDriverTable = driverTable.render(finishedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
@@ -104,51 +137,5 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       </div>;
     UIUtils.basicSparkPage(content, "Spark Worker at %s:%s".format(
       workerState.host, workerState.port))
-  }
-
-  def executorRow(executor: ExecutorRunner): Seq[Node] = {
-    <tr>
-      <td>{executor.execId}</td>
-      <td>{executor.cores}</td>
-      <td>{executor.state}</td>
-      <td sorttable_customkey={executor.memory.toString}>
-        {Utils.megabytesToString(executor.memory)}
-      </td>
-      <td>
-        <ul class="unstyled">
-          <li><strong>ID:</strong> {executor.appId}</li>
-          <li><strong>Name:</strong> {executor.appDesc.name}</li>
-          <li><strong>User:</strong> {executor.appDesc.user}</li>
-        </ul>
-      </td>
-      <td>
-     <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
-        .format(executor.appId, executor.execId)}>stdout</a>
-     <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
-        .format(executor.appId, executor.execId)}>stderr</a>
-      </td>
-    </tr>
-
-  }
-
-  def driverRow(driver: DriverRunner): Seq[Node] = {
-    <tr>
-      <td>{driver.driverId}</td>
-      <td>{driver.driverDesc.command.arguments(1)}</td>
-      <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
-      <td sorttable_customkey={driver.driverDesc.cores.toString}>
-        {driver.driverDesc.cores.toString}
-      </td>
-      <td sorttable_customkey={driver.driverDesc.mem.toString}>
-        {Utils.megabytesToString(driver.driverDesc.mem)}
-      </td>
-      <td>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
-        <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
-      </td>
-      <td>
-        {driver.finalException.getOrElse("")}
-      </td>
-    </tr>
   }
 }
