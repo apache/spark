@@ -1006,20 +1006,20 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>org.spark-project.spark:unused</include>
+            </includes>
+          </artifactSet>
+        </configuration>
         <executions>
           <execution>
             <phase>package</phase>
             <goals>
               <goal>shade</goal>
             </goals>
-            <configuration>
-              <shadedArtifactAttached>false</shadedArtifactAttached>
-              <artifactSet>
-                <includes>
-                  <include>org.spark-project.spark:unused</include>
-                </includes>
-              </artifactSet>
-            </configuration>
           </execution>
         </executions>
       </plugin>
