@@ -247,7 +247,7 @@ class ScalaReflectionSuite extends FunSuite {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true),
       Some(primitiveData))
-    val dataType = schemaFor[PrimitiveData].dataType
+    val dataType = schemaFor[OptionalData].dataType
     val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true,
       convertToCatalyst(primitiveData, dataType))
     assert(convertToCatalyst(data, dataType) === convertedData)
