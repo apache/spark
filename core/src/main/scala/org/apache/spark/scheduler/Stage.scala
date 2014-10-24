@@ -70,8 +70,10 @@ private[spark] class Stage(
   var resultOfJob: Option[ActiveJob] = None
   var pendingTasks = new HashSet[Task[_]]
 
-  /** This is used to track the life cycle of broadcast,
-    * then it can be release by GC once the stage is released */
+  /**
+   * This is used to track the life cycle of broadcast,
+   * then it can be release by GC once the stage is released
+   */
   var broadcastedTaskBinary: Broadcast[Array[Byte]] = _
 
   private var nextAttemptId = 0
