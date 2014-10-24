@@ -34,12 +34,17 @@ import scala.reflect.ClassTag
  */
 // TODO: Making Buffer a real trait would be a better abstraction, but adds some complexity.
 private[spark] trait SortDataFormat[K, Buffer] extends Any {
+
+  /** Creates a new mutable key for reuse. */
+  protected def newKey(): K = null.asInstanceOf[K]
+
   /** Return the sort key for the element at the given index. */
   protected def getKey(data: Buffer, pos: Int): K
 
-  protected def createNewMutableThingy(): K = null.asInstanceOf[K]
-
-  protected def getKey(data: Buffer, pos: Int, mutableThingy: K): K = {
+  /**
+   * Returns the sort key for the element at the given index and reuse the input key if possible.
+   */
+  protected def getKey(data: Buffer, pos: Int, reuse: K): K = {
     getKey(data, pos)
   }
 
