@@ -115,27 +115,48 @@ private[yarn] abstract class YarnAllocator(
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   /**
-   * Lazily request a container for each executor requested to be added.
-   * This happens lazily because we already allocate missing resources periodically.
+   * Request a number of executors from the RM such that the total number pending for this
+   * application is at least the value specified.
    */
-  def requestExecutors(numExecutors: Int): Unit = {
-    maxExecutors += numExecutors
+  def requestPendingExecutors(numPendingRequested: Int): Unit = synchronized {
+    val currentNumPending = numPendingAllocate.get()
+    if (currentNumPending < numPendingRequested) {
+      // Take into account the executors already pending
+      maxExecutors += numPendingRequested - currentNumPending
+      // We need to call `allocateResources` here to avoid the following race condition:
+      // If we request executors twice before `allocateResources` is called, then we will end up
+      // double counting the number requested because `numPendingAllocate` is not updated yet.
+      allocateResources()
+    } else {
+      logInfo(s"Not allocating more executors because there are already " +
+        s"$currentNumPending pending (application requested $numPendingRequested)")
+    }
   }
 
   /**
    * Release the container running the given executor.
    */
-  def killExecutor(executorId: String): Unit = {
-    if (!executorIdToContainer.contains(executorId)) {
+  def killExecutor(executorId: String): Unit = synchronized {
+    if (executorIdToContainer.contains(executorId)) {
+      val container = executorIdToContainer.remove(executorId).get
+      internalReleaseContainer(container)
+      numExecutorsRunning.decrementAndGet()
+      maxExecutors -= 1
+      assert(maxExecutors >= 0, "Allocator killed more executors than are allocated!")
+    } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
-      return
     }
-    internalReleaseContainer(executorIdToContainer(executorId))
-    numExecutorsRunning.decrementAndGet()
-    maxExecutors -= 1
   }
 
-  def allocateResources() = {
+  /**
+   * Allocate missing containers based on the number of executors currently pending and running.
+   *
+   * This method prioritizes the allocated container responses from the RM based on node and
+   * rack locality. Additionally, it releases any extra containers allocated for this application
+   * but are not needed. This must be synchronized because variables read in this block are
+   * mutated by other methods.
+   */
+  def allocateResources(): Unit = synchronized {
     val missing = maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get()
 
     // this is needed by alpha, do it here since we add numPending right after this
@@ -143,7 +164,7 @@ private[yarn] abstract class YarnAllocator(
     if (missing > 0) {
       val totalExecutorMemory = executorMemory + memoryOverhead
       numPendingAllocate.addAndGet(missing)
-      logInfo(s"Will allocate $missing executor containers, each with $totalExecutorMemory MB " + 
+      logInfo(s"Will allocate $missing executor containers, each with $totalExecutorMemory MB " +
         s"memory including $memoryOverhead MB overhead")
     } else {
       logDebug("Empty allocation request ...")

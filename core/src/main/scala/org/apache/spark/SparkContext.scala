@@ -859,13 +859,12 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * :: DeveloperApi ::
-   * Request a number of executors from the cluster manager.
+   * Request an additional number of executors from the cluster manager.
    */
   @DeveloperApi
-  def requestExecutors(numExecutors: Int): Unit = {
+  def requestExecutors(numAdditionalExecutors: Int): Unit = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend => b.requestExecutors(numExecutors)
-      case null => logWarning("Attempted to request executors before initializing the backend")
+      case b: CoarseGrainedSchedulerBackend => b.requestExecutors(numAdditionalExecutors)
       case _ => logWarning("Requesting executors is only supported in coarse-grained mode")
     }
   }
@@ -878,7 +877,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def killExecutors(executorIds: Seq[String]): Unit = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend => b.killExecutors(executorIds)
-      case null => logWarning("Attempted to kill executors before initializing the backend")
       case _ => logWarning("Killing executors is only supported in coarse-grained mode")
     }
   }

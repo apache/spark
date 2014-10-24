@@ -73,7 +73,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object RegisterClusterManager extends CoarseGrainedClusterMessage
 
-  case class RequestExecutors(numExecutors: Int) extends CoarseGrainedClusterMessage
+  case class RequestPendingExecutors(numPendingExecutors: Int) extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 

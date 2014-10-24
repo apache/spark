@@ -153,23 +153,49 @@ private[spark] object AkkaUtils extends Logging {
   }
 
   /**
+   * Send a message to the given actor and return whether the message was acknowledged.
+   * If an exception is thrown during the ask, return false.
+   */
+  def askWithAck(message: Any, actor: ActorRef, timeout: FiniteDuration): Boolean = {
+    try {
+      askWithReply(message, actor, timeout)
+      true
+    } catch {
+      case e: SparkException =>
+        logError(s"Exception when asking actor with acknowledgment", e)
+        false
+    }
+  }
+
+  /**
    * Send a message to the given actor and get its result within a default timeout, or
    * throw a SparkException if this fails.
    */
   def askWithReply[T](
       message: Any,
       actor: ActorRef,
-      retryAttempts: Int,
+      timeout: FiniteDuration): T = {
+    askWithReply[T](message, actor, maxAttempts = 1, retryInterval = Int.MaxValue, timeout)
+  }
+
+  /**
+   * Send a message to the given actor and get its result within a default timeout, or
+   * throw a SparkException if this fails even after the specified number of retries.
+   */
+  def askWithReply[T](
+      message: Any,
+      actor: ActorRef,
+      maxAttempts: Int,
       retryInterval: Int,
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
-      throw new SparkException("Error sending message as driverActor is null " +
+      throw new SparkException("Error sending message as actor is null " +
         "[message = " + message + "]")
     }
     var attempts = 0
     var lastException: Exception = null
-    while (attempts < retryAttempts) {
+    while (attempts < maxAttempts) {
       attempts += 1
       try {
         val future = actor.ask(message)(timeout)

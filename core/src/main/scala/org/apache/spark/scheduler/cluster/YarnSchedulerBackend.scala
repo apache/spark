@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -45,18 +46,26 @@ private[spark] abstract class YarnSchedulerBackend(
       Props(new YarnSchedulerActor),
       name = YarnSchedulerBackend.ACTOR_NAME)
 
+  private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
+
   /**
    * Request the given number of executors from the ApplicationMaster.
    */
-  override def requestExecutors(numExecutors: Int): Unit = {
-    yarnSchedulerActor ! RequestExecutors(numExecutors)
+  override def requestPendingExecutors(numPendingExecutors: Int): Boolean = {
+    AkkaUtils.askWithAck(
+      RequestPendingExecutors(numPendingExecutors),
+      yarnSchedulerActor,
+      askTimeout)
   }
 
   /**
    * Request the ApplicationMaster to kill the specified executors.
    */
-  override def killExecutors(executorIds: Seq[String]): Unit = {
-    yarnSchedulerActor ! KillExecutors(executorIds)
+  override def killExecutors(executorIds: Seq[String]): Boolean = {
+    AkkaUtils.askWithAck(
+      KillExecutors(executorIds),
+      yarnSchedulerActor,
+      askTimeout)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -101,19 +110,23 @@ private[spark] abstract class YarnSchedulerBackend(
         logInfo(s"ApplicationMaster registered as $sender")
         amActor = Some(sender)
 
-      case r: RequestExecutors =>
-        amActor match {
-          case Some(actor) => actor ! r
+      case r: RequestPendingExecutors =>
+        val acked = amActor match {
+          case Some(actor) => AkkaUtils.askWithAck(r, actor, askTimeout)
           case None => logWarning(
             "Attempted to request executors before the ApplicationMaster has registered!")
+            false
         }
+        sender ! acked
 
       case k: KillExecutors =>
-        amActor match {
-          case Some(actor) => actor ! k
+        val acked = amActor match {
+          case Some(actor) => AkkaUtils.askWithAck(k, actor, askTimeout)
           case None => logWarning(
             "Attempted to kill executors before the ApplicationMaster has registered!")
+            false
         }
+        sender ! acked
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)

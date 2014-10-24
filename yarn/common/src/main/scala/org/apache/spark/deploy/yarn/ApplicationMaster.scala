@@ -480,17 +480,17 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Request the given number of executors for this application from the RM.
+   * Send a request to the ResourceManager to set the number of pending executors.
    */
-  private def requestExecutors(numExecutors: Int): Unit = {
+  private def requestPendingExecutors(numPendingExecutors: Int): Unit = {
     Option(allocator) match {
-      case Some(a) => a.requestExecutors(numExecutors)
+      case Some(a) => a.requestPendingExecutors(numPendingExecutors)
       case None => logWarning("Container allocator is not ready to request executors yet.")
     }
   }
 
   /**
-   * Request to kill the container running the specified executors.
+   * Send a request to the ResourceManager to kill the containers running the specified executors.
    */
   private def killExecutors(executorIds: Seq[String]): Unit = {
     Option(allocator) match {
@@ -524,13 +524,15 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         logInfo(s"Add WebUI Filter. $x")
         driver ! x
 
-      case RequestExecutors(numExecutors) =>
-        logInfo(s"Driver requested $numExecutors executors.")
-        requestExecutors(numExecutors)
+      case RequestPendingExecutors(numPendingExecutors) =>
+        logInfo(s"Driver requested $numPendingExecutors executors to be pending.")
+        requestPendingExecutors(numPendingExecutors)
+        sender ! true
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executors ${executorIds.mkString(", ")}.")
         killExecutors(executorIds)
+        sender ! true
     }
   }
 
