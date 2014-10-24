@@ -30,11 +30,15 @@ class SorterSuite extends FunSuite {
     val rand = new XORShiftRandom(123)
     val data0 = Array.tabulate[Int](10000) { i => rand.nextInt() }
     val data1 = data0.clone()
+    val data2 = data0.clone()
 
     Arrays.sort(data0)
     new Sorter(new IntArraySortDataFormat).sort(data1, 0, data1.length, Ordering.Int)
+    new Sorter(new KeyReuseIntArraySortDataFormat)
+      .sort(data2, 0, data2.length, Ordering[IntWrapper])
 
-    data0.zip(data1).foreach { case (x, y) => assert(x === y) }
+    assert(data0.view === data1.view)
+    assert(data0.view === data2.view)
   }
 
   test("KVArraySorter") {
@@ -137,12 +141,7 @@ class SorterSuite extends FunSuite {
   }
 }
 
-
-/** Format to sort a simple Array[Int]. Could be easily generified and specialized. */
-class IntArraySortDataFormat extends SortDataFormat[Int, Array[Int]] {
-  override protected def getKey(data: Array[Int], pos: Int): Int = {
-    data(pos)
-  }
+abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array[Int]] {
 
   override protected def swap(data: Array[Int], pos0: Int, pos1: Int): Unit = {
     val tmp = data(pos0)
@@ -163,5 +162,41 @@ class IntArraySortDataFormat extends SortDataFormat[Int, Array[Int]] {
   /** Allocates a new structure that can hold up to 'length' elements. */
   override protected def allocate(length: Int): Array[Int] = {
     new Array[Int](length)
+  }
+}
+
+/** Format to sort a simple Array[Int]. Could be easily generified and specialized. */
+class IntArraySortDataFormat extends AbstractIntArraySortDataFormat[Int] {
+
+  override protected def getKey(data: Array[Int], pos: Int): Int = {
+    data(pos)
+  }
+}
+
+/** Wrapper of Int for key reuse. */
+class IntWrapper(var key: Int = 0) extends Ordered[IntWrapper] {
+  override def compare(that: IntWrapper): Int = {
+    key.compareTo(that.key)
+  }
+}
+
+/** SortDataFormat for Array[Int] with reused keys. */
+class KeyReuseIntArraySortDataFormat extends AbstractIntArraySortDataFormat[IntWrapper] {
+
+  override protected def newKey(): IntWrapper = {
+    new IntWrapper()
+  }
+
+  override protected def getKey(data: Array[Int], pos: Int, reuse: IntWrapper): IntWrapper = {
+    if (reuse == null) {
+      new IntWrapper(data(pos))
+    } else {
+      reuse.key = data(pos)
+      reuse
+    }
+  }
+
+  override protected def getKey(data: Array[Int], pos: Int): IntWrapper = {
+    getKey(data, pos, null)
   }
 }

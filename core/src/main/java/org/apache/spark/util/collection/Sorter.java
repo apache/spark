@@ -24,12 +24,16 @@ import java.util.Comparator;
  * See the method comment on sort() for more details.
  *
  * This has been kept in Java with the original style in order to match very closely with the
- * Anroid source code, and thus be easy to verify correctness.
+ * Android source code, and thus be easy to verify correctness.
  *
  * The purpose of the port is to generalize the interface to the sort to accept input data formats
  * besides simple arrays where every element is sorted individually. For instance, the AppendOnlyMap
  * uses this to sort an Array with alternating elements of the form [key, value, key, value].
  * This generalization comes with minimal overhead -- see SortDataFormat for more information.
+ *
+ * We allow key reuse to prevent creating many key objects -- see SortDataFormat.
+ *
+ * @see org.apache.spark.util.collection.SortDataFormat
  */
 class Sorter<K, Buffer> {
 
