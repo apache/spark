@@ -238,7 +238,13 @@ private[stat] object ChiSqTest extends Logging {
       j += 1
     }
     val df = (numCols - 1) * (numRows - 1)
-    val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
-    new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    if (df == 0) {
+      // 1 column or 1 row. Constant distribution is independent of anything.
+      // pValue = 1.0 and statistic = 0.0 in this case.
+      new ChiSqTestResult(1.0, 0, 0.0, methodName, NullHypothesis.independence.toString)
+    } else {
+      val pValue = 1.0 - new ChiSquaredDistribution(df).cumulativeProbability(statistic)
+      new ChiSqTestResult(pValue, df, statistic, methodName, NullHypothesis.independence.toString)
+    }
   }
 }

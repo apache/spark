@@ -209,7 +209,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       samplingRateByKey = computeThresholdByKey(finalResult, fractions)
     }
     (idx: Int, iter: Iterator[(K, V)]) => {
-      val rng = new RandomDataGenerator
+      val rng = new RandomDataGenerator()
       rng.reSeed(seed + idx)
       // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
       // in order to generate the same sequence of random numbers when creating the sample
@@ -274,21 +274,24 @@ private[spark] object StratifiedSamplingUtils extends Logging {
   /** A random data generator that generates both uniform values and Poisson values. */
   private class RandomDataGenerator {
     val uniform = new XORShiftRandom()
-    var poissonSeed: Long = 0L
+    // commons-math3 doesn't have a method to generate Poisson from an arbitrary mean;
+    // maintain a cache of Poisson(m) distributions for various m
+    val poissonCache = mutable.Map[Double, PoissonDistribution]()
+    var poissonSeed = 0L
 
-    def reSeed(seed: Long) {
+    def reSeed(seed: Long): Unit = {
       uniform.setSeed(seed)
       poissonSeed = seed
+      poissonCache.clear()
     }
 
     def nextPoisson(mean: Double): Int = {
-      val seed = poissonSeed
-      poissonSeed += 1
-      val poisson = new PoissonDistribution(
-        new MersenneTwister(seed),
-        mean,
-        PoissonDistribution.DEFAULT_EPSILON,
-        PoissonDistribution.DEFAULT_MAX_ITERATIONS)
+      val poisson = poissonCache.getOrElseUpdate(mean,
+        new PoissonDistribution(
+          new MersenneTwister(poissonSeed),
+          mean,
+          PoissonDistribution.DEFAULT_EPSILON,
+          PoissonDistribution.DEFAULT_MAX_ITERATIONS))
       poisson.sample()
     }
 
