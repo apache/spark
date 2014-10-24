@@ -293,8 +293,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private val heartbeatReceiver = env.actorSystem.actorOf(
     Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
 
-  @volatile private[spark] var dagSchedulerStopped = false
-
   @volatile private[spark] var dagScheduler: DAGScheduler = _
 
   // for work around the current MIMA issue
@@ -1027,8 +1025,7 @@ class SparkContext(config: SparkConf) extends Logging {
       metadataCleaner.cancel()
       env.actorSystem.stop(heartbeatReceiver)
       cleaner.foreach(_.stop())
-      dagSchedulerStopped = true
-      dagScheduler.stop()
+      dagSchedulerCopy.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
