@@ -123,8 +123,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val builder = new ProcessBuilder(filteredCommand)
     val env = builder.environment()
 
-    // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
     if (submitLibraryPath.isEmpty && confLibraryPath.nonEmpty) {
+      // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
       val libraryPaths = confLibraryPath ++ sys.env.get(Utils.libraryPathName)
       env.put(Utils.libraryPathName, libraryPaths.mkString(sys.props("path.separator")))
     }

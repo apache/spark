@@ -76,18 +76,9 @@ private[spark] class DriverRunner(
 
           // Make sure user application jar is on the classpath
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
-          val newCommand = Command(
-            driverDesc.command.mainClass,
-            driverDesc.command.arguments.map(substituteVariables),
-            driverDesc.command.environment,
-            classPath,
-            driverDesc.command.libraryPathEntries,
-            driverDesc.command.javaOpts)
-          val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
-            sparkHome.getAbsolutePath)
-          val envVars = CommandUtils.buildEnvironment(newCommand)
-          launchDriver(command, envVars, driverDir, driverDesc.supervise)
+          val newCommand = CommandUtils.buildLocalCommand(driverDesc.command,
+            substituteVariables, Seq(s"$localJarFilename"))
+          launchDriver(newCommand, driverDir, driverDesc.supervise)
         }
         catch {
           case e: Exception => finalException = Some(e)
@@ -166,10 +157,11 @@ private[spark] class DriverRunner(
     localJarFilename
   }
 
-  private def launchDriver(command: Seq[String], envVars: Map[String, String], baseDir: File,
-                           supervise: Boolean) {
+  private def launchDriver(newCommand: Command, baseDir: File, supervise: Boolean) {
+    val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
+      sparkHome.getAbsolutePath)
     val builder = new ProcessBuilder(command: _*).directory(baseDir)
-    envVars.map{ case(k,v) => builder.environment().put(k, v) }
+    newCommand.environment.map { case (k, v) => builder.environment().put(k, v)}
 
     def initialize(process: Process) = {
       // Redirect stdout and stderr to files

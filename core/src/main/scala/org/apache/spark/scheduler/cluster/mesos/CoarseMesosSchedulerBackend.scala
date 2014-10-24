@@ -121,7 +121,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
       s"${Utils.libraryPathName}=$p${File.pathSeparator}${Utils.libraryPathScriptVar}"
@@ -151,8 +151,9 @@ private[spark] class CoarseMesosSchedulerBackend(
     if (uri == null) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
-        "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d %s".format(
-          runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores, appId))
+        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %d %s".format(
+          prefixEnv, runScript, driverUrl, offer.getSlaveId.getValue,
+          offer.getHostname, numCores, appId))
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".

@@ -27,7 +27,8 @@ class CommandUtilsSuite extends FunSuite with Matchers {
   test("set libraryPath correctly") {
     val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
     val libraryPath = Utils.libraryPathName
-    val env = CommandUtils.buildEnvironment(cmd)
+    val newCmd = CommandUtils.buildLocalCommand(cmd, t => t, Seq())
+    val env = newCmd.environment
     env.keySet should contain(libraryPath)
     assert(env(libraryPath).startsWith("libraryPathToB"))
   }

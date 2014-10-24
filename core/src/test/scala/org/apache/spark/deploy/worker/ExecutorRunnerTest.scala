@@ -32,6 +32,7 @@ class ExecutorRunnerTest extends FunSuite {
       Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl")
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321",
       new File(sparkHome), new File("ooga"), "blah", new SparkConf, ExecutorState.RUNNING)
-    assert(er.getCommandSeq.last === appId)
+    val newCommand = CommandUtils.buildLocalCommand(appDesc.command, er.substituteVariables)
+    assert(CommandUtils.buildCommandSeq(newCommand, 512, sparkHome).last === appId)
   }
 }
