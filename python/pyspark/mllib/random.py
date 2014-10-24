@@ -22,7 +22,6 @@ Python package for random data generation.
 from functools import wraps
 
 from pyspark.rdd import RDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 
 __all__ = ['RandomRDDs', ]
@@ -32,8 +31,7 @@ def serialize(f):
     @wraps(f)
     def func(sc, *a, **kw):
         jrdd = f(sc, *a, **kw)
-        return RDD(sc._jvm.SerDe.javaToPython(jrdd), sc,
-                   BatchedSerializer(PickleSerializer(), 1024))
+        return RDD(sc._jvm.SerDe.javaToPython(jrdd), sc)
     return func
 
 

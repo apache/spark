@@ -18,7 +18,7 @@
 """
 Python package for feature in MLlib.
 """
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.serializers import PickleSerializer
 from pyspark.mllib.linalg import _convert_to_vector, _to_java_object_rdd
 
 __all__ = ['Word2Vec', 'Word2VecModel']

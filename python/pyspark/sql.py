@@ -43,7 +43,8 @@ from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
 from pyspark.rdd import RDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
+    CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 
@@ -967,8 +968,8 @@ class SQLContext(object):
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
         command = (func, None,
-                   BatchedSerializer(PickleSerializer(), 1024),
-                   BatchedSerializer(PickleSerializer(), 1024))
+                   AutoBatchedSerializer(PickleSerializer()),
+                   AutoBatchedSerializer(PickleSerializer()))
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
         if len(pickled_command) > (1 << 20):  # 1M
@@ -1540,7 +1541,7 @@ class SchemaRDD(RDD):
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
         # the _jrdd is created by javaToPython(), serialized by pickle
-        self._jrdd_deserializer = BatchedSerializer(PickleSerializer())
+        self._jrdd_deserializer = AutoBatchedSerializer(PickleSerializer())
 
     @property
     def _jrdd(self):
@@ -1776,9 +1777,7 @@ def _test():
     import pyspark.sql
     from pyspark.sql import Row, SQLContext
     globs = pyspark.sql.__dict__.copy()
-    # The small batch size here ensures that we see multiple batches,
-    # even in these small test examples:
-    sc = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize(

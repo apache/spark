@@ -18,7 +18,7 @@
 from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.serializers import PickleSerializer
 from pyspark.mllib.linalg import Vector, _convert_to_vector, _to_java_object_rdd
 from pyspark.mllib.regression import LabeledPoint
 
@@ -63,7 +63,7 @@ class DecisionTreeModel(object):
                 x = x.map(_convert_to_vector)
             jPred = self._java_model.predict(_to_java_object_rdd(x)).toJavaRDD()
             jpyrdd = self._sc._jvm.SerDe.javaToPython(jPred)
-            return RDD(jpyrdd, self._sc, BatchedSerializer(ser, 1024))
+            return RDD(jpyrdd, self._sc)
 
         else:
             # Assume x is a single data point.

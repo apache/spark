@@ -116,9 +116,7 @@ class SparkContext(object):
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
-        if batchSize == 1:
-            self.serializer = self._unbatched_serializer
-        elif batchSize == 0:
+        if batchSize == 0:
             self.serializer = AutoBatchedSerializer(self._unbatched_serializer)
         else:
             self.serializer = BatchedSerializer(self._unbatched_serializer,
@@ -306,12 +304,8 @@ class SparkContext(object):
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)    # Make it a list so we can compute its length
-        batchSize = min(len(c) // numSlices, self._batchSize)
-        if batchSize > 1:
-            serializer = BatchedSerializer(self._unbatched_serializer,
-                                           batchSize)
-        else:
-            serializer = self._unbatched_serializer
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize))
+        serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
         serializer.dump_stream(c, tempFile)
         tempFile.close()
         readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
@@ -432,7 +426,7 @@ class SparkContext(object):
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         batchSize = max(1, batchSize or self._default_batch_size_for_serialized_input)
-        ser = BatchedSerializer(PickleSerializer()) if (batchSize > 1) else PickleSerializer()
+        ser = BatchedSerializer(PickleSerializer())
         jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, path, keyClass, valueClass,
                                                 keyConverter, valueConverter, minSplits, batchSize)
         return RDD(jrdd, self, ser)
@@ -837,7 +831,7 @@ def _test():
     import doctest
     import tempfile
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     globs['tempdir'] = tempfile.mkdtemp()
     atexit.register(lambda: shutil.rmtree(globs['tempdir']))
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)

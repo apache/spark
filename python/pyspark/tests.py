@@ -241,7 +241,7 @@ class PySparkTestCase(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.sc = SparkContext('local[4]', class_name, batchSize=2)
+        self.sc = SparkContext('local[4]', class_name)
 
     def tearDown(self):
         self.sc.stop()
@@ -252,7 +252,7 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.sc = SparkContext('local[4]', cls.__name__, batchSize=2)
+        cls.sc = SparkContext('local[4]', cls.__name__)
 
     @classmethod
     def tearDownClass(cls):
@@ -655,7 +655,7 @@ class ProfilerTests(PySparkTestCase):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile", "true")
-        self.sc = SparkContext('local[4]', class_name, batchSize=2, conf=conf)
+        self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_profiler(self):
 
@@ -876,7 +876,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         unbatched_clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
                                                       "org.apache.hadoop.io.Text",
                                                       "org.apache.spark.api.python.TestWritable",
-                                                      batchSize=1).collect())
+                                                      ).collect())
         self.assertEqual(unbatched_clazz[0], ec)
 
     def test_oldhadoop(self):
@@ -1196,51 +1196,6 @@ class OutputFormatTests(ReusedPySparkTestCase):
         rdd.saveAsNewAPIHadoopDataset(conf5)
         result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)
-
-    def test_unbatched_save_and_read(self):
-        basepath = self.tempdir.name
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei, len(ei)).saveAsSequenceFile(
-            basepath + "/unbatched/")
-
-        unbatched_sequence = sorted(self.sc.sequenceFile(
-            basepath + "/unbatched/",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_sequence, ei)
-
-        unbatched_hadoopFile = sorted(self.sc.hadoopFile(
-            basepath + "/unbatched/",
-            "org.apache.hadoop.mapred.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_hadoopFile, ei)
-
-        unbatched_newAPIHadoopFile = sorted(self.sc.newAPIHadoopFile(
-            basepath + "/unbatched/",
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_newAPIHadoopFile, ei)
-
-        oldconf = {"mapred.input.dir": basepath + "/unbatched/"}
-        unbatched_hadoopRDD = sorted(self.sc.hadoopRDD(
-            "org.apache.hadoop.mapred.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            conf=oldconf,
-            batchSize=1).collect())
-        self.assertEqual(unbatched_hadoopRDD, ei)
-
-        newconf = {"mapred.input.dir": basepath + "/unbatched/"}
-        unbatched_newAPIHadoopRDD = sorted(self.sc.newAPIHadoopRDD(
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            conf=newconf,
-            batchSize=1).collect())
-        self.assertEqual(unbatched_newAPIHadoopRDD, ei)
 
     def test_malformed_RDD(self):
         basepath = self.tempdir.name

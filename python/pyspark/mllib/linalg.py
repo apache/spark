@@ -29,8 +29,6 @@ import copy_reg
 
 import numpy as np
 
-from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
 
 
@@ -59,8 +57,7 @@ def _to_java_object_rdd(rdd):
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
     """
-    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
+    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._pickled()._jrdd, True)
 
 
 def _convert_to_vector(l):

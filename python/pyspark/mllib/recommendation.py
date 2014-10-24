@@ -16,7 +16,6 @@
 #
 
 from pyspark import SparkContext
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.rdd import RDD
 from pyspark.mllib.linalg import _to_java_object_rdd
 
@@ -97,22 +96,19 @@ class MatrixFactorizationModel(object):
         sc = self._context
         tuplerdd = sc._jvm.SerDe.asTupleRDD(_to_java_object_rdd(user_product).rdd())
         jresult = self._java_model.predict(tuplerdd).toJavaRDD()
-        return RDD(sc._jvm.SerDe.javaToPython(jresult), sc,
-                   AutoBatchedSerializer(PickleSerializer()))
+        return RDD(sc._jvm.SerDe.javaToPython(jresult), sc)
 
     def userFeatures(self):
         sc = self._context
         juf = self._java_model.userFeatures()
         juf = sc._jvm.SerDe.fromTuple2RDD(juf).toJavaRDD()
-        return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc,
-                   AutoBatchedSerializer(PickleSerializer()))
+        return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc)
 
     def productFeatures(self):
         sc = self._context
         jpf = self._java_model.productFeatures()
         jpf = sc._jvm.SerDe.fromTuple2RDD(jpf).toJavaRDD()
-        return RDD(sc._jvm.PythonRDD.javaToPython(jpf), sc,
-                   AutoBatchedSerializer(PickleSerializer()))
+        return RDD(sc._jvm.PythonRDD.javaToPython(jpf), sc)
 
 
 class ALS(object):
@@ -128,7 +124,7 @@ class ALS(object):
                 raise ValueError("rating should be RDD of Rating or tuple/list")
         # serialize them by AutoBatchedSerializer before cache to reduce the
         # objects overhead in JVM
-        cached = ratings._reserialize(AutoBatchedSerializer(PickleSerializer())).cache()
+        cached = ratings._pickled().cache()
         return _to_java_object_rdd(cached)
 
     @classmethod
@@ -151,7 +147,7 @@ def _test():
     import doctest
     import pyspark.mllib.recommendation
     globs = pyspark.mllib.recommendation.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
