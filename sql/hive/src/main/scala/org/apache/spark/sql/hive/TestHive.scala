@@ -438,10 +438,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
-        // At this point there is really no reason to continue, but the test framework traps exits.
-        // So instead we just pause forever so that at least the developer can see where things
-        // started to go wrong.
-        Thread.sleep(100000)
     }
   }
 }
