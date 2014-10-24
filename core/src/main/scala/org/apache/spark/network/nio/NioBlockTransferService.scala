@@ -95,16 +95,20 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     future.onSuccess { case message =>
       val bufferMessage = message.asInstanceOf[BufferMessage]
       val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-
-      for (blockMessage <- blockMessageArray) {
-        if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
-          listener.onBlockFetchFailure(
-            new SparkException(s"Unexpected message ${blockMessage.getType} received from $cmId"))
-        } else {
-          val blockId = blockMessage.getId
-          val networkSize = blockMessage.getData.limit()
-          listener.onBlockFetchSuccess(
-            blockId.toString, new NioByteBufferManagedBuffer(blockMessage.getData))
+      if (blockMessageArray.length == 0) {
+        listener.onBlockFetchFailure(
+          new SparkException(s"Not received data from $cmId"))
+      } else {
+        for (blockMessage <- blockMessageArray) {
+          val msgType = blockMessage.getType
+          if (msgType != BlockMessage.TYPE_GOT_BLOCK) {
+            listener.onBlockFetchFailure(
+              new SparkException(s"Unexpected message ${msgType} received from $cmId"))
+          } else {
+            val blockId = blockMessage.getId
+            listener.onBlockFetchSuccess(
+              blockId.toString, new NioByteBufferManagedBuffer(blockMessage.getData))
+          }
         }
       }
     }(cm.futureExecContext)
