@@ -67,7 +67,7 @@ object SynthBenchmark {
 
     options.foreach {
       case ("app", v) => app = v
-      case ("niter", v) => niter = v.toInt
+      case ("niters", v) => niter = v.toInt
       case ("nverts", v) => numVertices = v.toInt
       case ("numEPart", v) => numEPart = Some(v.toInt)
       case ("partStrategy", v) => partitionStrategy = Some(PartitionStrategy.fromString(v))
