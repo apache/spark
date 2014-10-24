@@ -54,6 +54,7 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
   def output = Seq.empty
 
   override protected lazy val sideEffectResult: Seq[Row] = {
+    if (!ifExists) { hiveContext.catalog.lookupRelation(None, tableName, None) }
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)

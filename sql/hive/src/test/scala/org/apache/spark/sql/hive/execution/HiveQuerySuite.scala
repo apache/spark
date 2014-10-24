@@ -35,6 +35,12 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  test("drop non-existent table") {
+    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+      sql("DROP TABLE notHere")
+    }
+  }
+
   createQueryTest("count distinct 0 values",
     """
       |SELECT COUNT(DISTINCT a) FROM (
