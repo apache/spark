@@ -26,6 +26,8 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
+import akka.actor.ActorSystem
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
@@ -35,12 +37,14 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
+ * In coarse-grained mode, an existing actor system is provided.
  */
 private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
     properties: Seq[(String, String)],
-    isLocal: Boolean = false)
+    isLocal: Boolean = false,
+    actorSystem: ActorSystem = null)
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -77,8 +81,9 @@ private[spark] class Executor(
   conf.set("spark.executor.id", "executor." + executorId)
   private val env = {
     if (!isLocal) {
-      val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
-        isDriver = false, isLocal = false)
+      val port = conf.getInt("spark.executor.port", 0)
+      val _env = SparkEnv.createExecutorEnv(
+        conf, executorId, slaveHostname, port, isLocal, actorSystem)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
       _env

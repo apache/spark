@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.concurrent.Await
 
-import akka.actor.{Actor, ActorSelection, Props}
+import akka.actor.{Actor, ActorSelection, ActorSystem, Props}
 import akka.pattern.Patterns
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
 
@@ -38,7 +38,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     executorId: String,
     hostPort: String,
     cores: Int,
-    sparkProperties: Seq[(String, String)])
+    sparkProperties: Seq[(String, String)],
+    actorSystem: ActorSystem)
   extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
@@ -57,8 +58,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
-      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties,
-        false)
+      val (hostname, _) = Utils.parseHostPort(hostPort)
+      executor = new Executor(executorId, hostname, sparkProperties, isLocal = false, actorSystem)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -135,7 +136,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val sparkHostPort = hostname + ":" + boundPort
       actorSystem.actorOf(
         Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, props),
+          driverUrl, executorId, sparkHostPort, cores, props, actorSystem),
         name = "Executor")
       workerUrl.foreach { url =>
         actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
