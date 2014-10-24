@@ -33,7 +33,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -72,7 +72,7 @@ private[spark] class Executor(
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
     // executor process to avoid surprising stalls.
-    Thread.setDefaultUncaughtExceptionHandler(ExecutorUncaughtExceptionHandler)
+    Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
   }
 
   val executorSource = new ExecutorSource(this, executorId)
@@ -258,7 +258,7 @@ private[spark] class Executor(
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
           if (Utils.isFatalError(t)) {
-            ExecutorUncaughtExceptionHandler.uncaughtException(t)
+            SparkUncaughtExceptionHandler.uncaughtException(t)
           }
         }
       } finally {
