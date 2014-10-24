@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.types._
 
 case class PrimitiveData(
@@ -245,11 +246,11 @@ class ScalaReflectionSuite extends FunSuite {
 
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true),
+    val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
     val dataType = schemaFor[OptionalData].dataType
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true,
-      convertToCatalyst(primitiveData, dataType))
+    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      Row(1, 1, 1, 1, 1, 1, true))
     assert(convertToCatalyst(data, dataType) === convertedData)
   }
 }
