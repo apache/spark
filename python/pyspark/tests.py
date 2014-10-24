@@ -31,7 +31,7 @@ import tempfile
 import time
 import zipfile
 import random
-from platform import python_implementation
+import threading
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -1379,6 +1379,23 @@ class WorkerTests(PySparkTestCase):
         self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
+
+    def test_reuse_worker_after_take(self):
+        rdd = self.sc.parallelize(range(100000), 1)
+        self.assertEqual(0, rdd.first())
+
+        def count():
+            try:
+                rdd.count()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=count)
+        t.daemon = True
+        t.start()
+        t.join(5)
+        self.assertTrue(not t.isAlive())
+        self.assertEqual(100000, rdd.count())
 
 
 class SparkSubmitTests(unittest.TestCase):
