@@ -50,18 +50,18 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
   private val executorsTable: UITable[ExecutorInfo] = {
     val t = new UITableBuilder[ExecutorInfo]()
     t.col("ExecutorID") { _.id.toString }
-    t.customCol("Worker") { executor =>
+    t.col("Worker") (identity) withMarkup { executor =>
       <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
     }
-    t.intCol("Cores") { _.cores }
+    t.col("Cores") { _.cores }
     t.sizeCol("Memory") { _.memory }
     t.col("State") { _.state.toString }
-    t.customCol("Logs") { executor =>
+    t.col("Logs") (identity) withMarkup { executor =>
       <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
         .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
         <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
           .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
-    }
+    } isUnsortable()
     t.build()
   }
 

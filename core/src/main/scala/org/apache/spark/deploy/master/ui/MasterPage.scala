@@ -43,27 +43,28 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   private val workerTable: UITable[WorkerInfo] = {
     val t = new UITableBuilder[WorkerInfo]()
-    t.customCol("ID") { worker =>
+    t.col("ID") (identity) withMarkup  { worker =>
       <a href={worker.webUiAddress}>{worker.id}</a>
     }
     t.col("Address") { worker => s"${worker.host}:${worker.port}"}
     t.col("State") { _.state.toString }
-    t.intCol("Cores", formatter = c => s"$c Used") { _.coresUsed }
-    t.customCol("Memory",
-      sortKey = Some({worker: WorkerInfo => s"${worker.memory}:${worker.memoryUsed}"})) { worker =>
-        Text(Utils.megabytesToString(worker.memory)) ++
-        Text(Utils.megabytesToString(worker.memoryUsed))
+    t.col("Cores") { _.coresUsed } formatWith { c: Int => s"$c Used" }
+    t.col("Memory") (identity) sortBy { worker =>
+      s"${worker.memory}:${worker.memoryUsed}"
+    } withMarkup { worker =>
+      Text(Utils.megabytesToString(worker.memory)) ++
+      Text(Utils.megabytesToString(worker.memoryUsed))
     }
     t.build()
   }
 
   private val appTable: UITable[ApplicationInfo] = {
     val t = new UITableBuilder[ApplicationInfo]()
-    t.customCol("ID") { app =>
-      <a href={"app?appId=" + app.id}>{app.id}</a>
+    t.col("ID") (_.id) withMarkup { id =>
+      <a href={"app?appId=" + id}>{id}</a>
     }
     t.col("Name") { _.id }
-    t.intCol("Cores") { _.coresGranted }
+    t.col("Cores") { _.coresGranted }
     t.sizeCol("Memory per Node") { _.desc.memoryPerSlave }
     t.dateCol("Submitted Time") { _.submitDate }
     t.col("User") { _.desc.user }
@@ -76,11 +77,11 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val t = new UITableBuilder[DriverInfo]()
     t.col("ID") { _.id }
     t.dateCol("Submitted Time") { _.submitDate }
-    t.customCol("Worker") { driver =>
+    t.col("Worker") (identity) withMarkup { driver =>
       driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse(Text("None"))
     }
     t.col("State") { _.state.toString }
-    t.intCol("Cores") { _.desc.cores }
+    t.col("Cores") { _.desc.cores }
     t.sizeCol("Memory") { _.desc.mem.toLong }
     t.col("Main Class") { _.desc.command.arguments(1) }
     t.build()

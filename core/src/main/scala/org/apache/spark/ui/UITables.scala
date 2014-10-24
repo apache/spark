@@ -29,33 +29,62 @@ import org.apache.spark.util.Utils
  * Describes how to render a column of values in a web UI table.
  *
  * @param name the name / title of this column
- * @param formatter function that formats values for display in the table
- * @param sortable if false, this column will not be sortable
- * @param sortKey optional function for sorting by a key other than `formatter(value)`
  * @param fieldExtractor function for extracting this field's value from the table's row data type
  * @tparam T the table's row data type
  * @tparam V this column's value type
  */
-private case class UITableColumn[T, V](
+case class UITableColumn[T, V](
   name: String,
-  formatter: V => String,
-  sortable: Boolean,
-  sortKey: Option[V => String],
   fieldExtractor: T => V) {
 
+  private var sortable: Boolean = true
+  private var sortKey: Option[V => String] = None
+  private var formatter: V => String = x => x.toString
+  private var cellContentsRenderer: V => Seq[Node] = (data: V) => Text(formatter(data))
+
+  /**
+   * Optional method for sorting this table by a key other than the cell's text contents.
+   */
+  def sortBy(keyFunc: V => String): UITableColumn[T, V] = {
+    sortKey = Some(keyFunc)
+    this
+  }
+
+  /**
+   * Override the default cell formatting of the extracted value.  By default, values are rendered
+   * by calling toString().
+   */
+  def formatWith(formatFunc: V => String): UITableColumn[T, V] = {
+    formatter = formatFunc
+    this
+  }
+
+  /**
+   * Make this column unsortable.  This is useful for columns that display UI elements, such
+   * as buttons to link to logs
+   */
+  def isUnsortable(): UITableColumn[T, V] = {
+    sortable = false
+    this
+  }
+
+  /**
+   * Customize the markup used to render this table cell.  The markup should only describe how to
+   * render the contents of the TD tag, not the TD tag itself.  This overrides `formatWith`.
+   */
+  def withMarkup(markupFunc: V => Seq[Node]): UITableColumn[T, V] = {
+    cellContentsRenderer = markupFunc
+    this
+  }
+
   /** Render the TD tag for this row */
-  def renderCell(row: T): Seq[Node] =  {
+  def _renderCell(row: T): Seq[Node] =  {
     val data = fieldExtractor(row)
-    val cellContents = renderCellContents(data)
+    val cellContents = cellContentsRenderer(data)
     val cls = if (sortable) None else Some(Text("sorttable_nosort"))
     <td sorttable_customkey={sortKey.map(k => Text(k(data)))} class={cls}>
       {cellContents}
     </td>
-  }
-
-  /** Render the contents of the TD tag for this row.  The contents may be a string or HTML */
-  def renderCellContents(data: V): Seq[Node] = {
-    Text(formatter(data))
   }
 }
 
@@ -94,7 +123,7 @@ private[spark] class UITable[T] (cols: Seq[UITableColumn[T, _]], fixedWidth: Boo
   }
 
   private def renderRow(row: T): Seq[Node] = {
-    val tds = cols.map(_.renderCell(row))
+    val tds = cols.map(_._renderCell(row))
     <tr>{ tds }</tr>
   }
 
@@ -138,7 +167,7 @@ private[spark] class UITable[T] (cols: Seq[UITableColumn[T, _]], fixedWidth: Boo
  *    code like
  *
  *      builder.col("Id") { _.id }
- *      builder.memCol("Memory" { _.memory }
+ *      builder.sizeCol("Memory" { _.memory }
  *
  *    Columns have additional options, such as controlling their sort keys; see the individual
  *    methods' documentation for more details.
@@ -155,84 +184,42 @@ private[spark] class UITableBuilder[T](fixedWidth: Boolean = false) {
   private val cols = mutable.Buffer[UITableColumn[T, _]]()
 
   /**
-   * Display a column with custom HTML markup.  The markup should only describe how to
-   * render the contents of the TD tag, not the TD tag itself.
+   * General builder method for table columns.  By default, this extracts a field
+   * and displays it as as a string.  You can call additional methods on the result
+   * of this method to customize this column's display.
    */
-  def customCol[V](
-      name: String,
-      sortable: Boolean = true,
-      sortKey: Option[T => String] = None)(renderer: T => Seq[Node]): UITableBuilder[T] = {
-    val customColumn = new UITableColumn[T, T](name, null, sortable, sortKey, identity) {
-      override def renderCellContents(row: T) = renderer(row)
-    }
-    cols.append(customColumn)
-    this
-  }
-
-  def col[V](
-      name: String,
-      formatter: V => String,
-      sortable: Boolean = true,
-      sortKey: Option[V => String] = None)(fieldExtractor: T => V): UITableBuilder[T] = {
-    cols.append(UITableColumn(name, formatter, sortable, sortKey, fieldExtractor))
-    this
-  }
-
-  def col(
-      name: String,
-      sortable: Boolean = true,
-      sortKey: Option[String => String] = None)(fieldExtractor: T => String): UITableBuilder[T] = {
-    col[String](name, {x: String => x}, sortable, sortKey)(fieldExtractor)
-  }
-
-  def intCol(
-      name: String,
-      formatter: Int => String = { x: Int => x.toString },
-      sortable: Boolean = true)(fieldExtractor: T => Int): UITableBuilder[T] = {
-    col[Int](name, formatter, sortable = sortable)(fieldExtractor)
+  def col[V](name: String)(fieldExtractor: T => V): UITableColumn[T, V] = {
+    val newCol = new UITableColumn[T, V](name, fieldExtractor)
+    cols.append(newCol)
+    newCol
   }
 
   /**
    * Display a column of sizes, in megabytes, as human-readable strings, such as "4.0 MB".
    */
-  def sizeCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
-    col[Long](
-      name,
-      formatter = Utils.megabytesToString,
-      sortKey = Some(x => x.toString))(fieldExtractor)
+  def sizeCol(name: String)(fieldExtractor: T => Long) {
+    col[Long](name)(fieldExtractor) sortBy (x => x.toString) formatWith Utils.megabytesToString
   }
 
   /**
    * Display a column of dates as yyyy/MM/dd HH:mm:ss format.
    */
-  def dateCol(name: String)(fieldExtractor: T => Date): UITableBuilder[T] = {
-    col[Date](name, formatter = UIUtils.formatDate)(fieldExtractor)
+  def dateCol(name: String)(fieldExtractor: T => Date) {
+    col[Date](name)(fieldExtractor) formatWith UIUtils.formatDate
   }
 
   /**
    * Display a column of dates as yyyy/MM/dd HH:mm:ss format.
    */
-  def epochDateCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
-    col[Long](name, formatter = UIUtils.formatDate)(fieldExtractor)
+  def epochDateCol(name: String)(fieldExtractor: T => Long) {
+    col[Long](name)(fieldExtractor) formatWith UIUtils.formatDate
   }
 
   /**
    * Display a column of durations, in milliseconds, as human-readable strings, such as "12 s".
    */
-  def durationCol(name: String)(fieldExtractor: T => Long): UITableBuilder[T] = {
-    col[Long](name, formatter = UIUtils.formatDuration, sortKey = Some(_.toString))(fieldExtractor)
-  }
-
-  /**
-   * Display a column of optional durations, in milliseconds, as human-readable strings,
-   * such as "12 s".  If the duration is None, then '-' will be displayed.
-   */
-  def optDurationCol(name: String)(fieldExtractor: T => Option[Long]): UITableBuilder[T] = {
-    col[Option[Long]](
-      name,
-      formatter = { _.map(UIUtils.formatDuration).getOrElse("-")},
-      sortKey = Some(_.getOrElse("-").toString)
-    )(fieldExtractor)
+  def durationCol(name: String)(fieldExtractor: T => Long) {
+    col[Long](name)(fieldExtractor) sortBy (_.toString) formatWith UIUtils.formatDuration
   }
 
   def build(): UITable[T] = {

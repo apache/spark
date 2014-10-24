@@ -30,14 +30,14 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   val rddTable: UITable[RDDInfo] = {
     val t = new UITableBuilder[RDDInfo]()
-    t.customCol("RDD Name") { rdd =>
+    t.col("RDD Name") (identity) withMarkup { rdd =>
       <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
         {rdd.name}
       </a>
     }
     t.col("Storage Level") { _.storageLevel.description }
-    t.intCol("Cached Partitions") { _.numCachedPartitions }
-    t. col("Fraction Cached") { rdd =>
+    t.col("Cached Partitions") { _.numCachedPartitions }
+    t.col("Fraction Cached") { rdd =>
       "%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)
     }
     t.sizeCol("Size in Memory") { _.memSize }

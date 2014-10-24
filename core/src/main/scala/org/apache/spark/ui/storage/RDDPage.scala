@@ -35,13 +35,13 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
       s"${status.blockManagerId.host}:${status.blockManagerId.port}"
     }
     def getMemUsed(x: (Int, StorageStatus)): String = x._2.memUsedByRdd(x._1).toString
-    t.customCol(
-      "Memory usage",
-      sortKey = Some(getMemUsed)) { case (rddId, status) =>
-        val used = Utils.bytesToString(status.memUsedByRdd(rddId))
-        val remaining = Utils.bytesToString(status.memRemaining)
-        Text(s"$used ($remaining Remaining)")
-      }
+    t.col("Memory Usage") (identity) sortBy {
+      getMemUsed
+    } withMarkup { case (rddId, status) =>
+      val used = Utils.bytesToString(status.memUsedByRdd(rddId))
+      val remaining = Utils.bytesToString(status.memRemaining)
+      Text(s"$used ($remaining Remaining)")
+    }
     t.sizeCol("Disk Usage") { case (rddId, status) => status.diskUsedByRdd(rddId) }
     t.build()
   }
@@ -52,7 +52,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     t.col("Storage Level") { case (id, block, locations) => block.storageLevel.description }
     t. sizeCol("Size in Memory") { case (id, block, locations) => block.memSize }
     t.sizeCol("Size on Disk") { case (id, block, locations) => block.diskSize }
-    t.customCol("Executors") { case (id, block, locations) =>
+    t.col("Executors") (identity) withMarkup { case (id, block, locations) =>
       locations.map(l => <span>{l}<br/></span>)
     }
     t.build()

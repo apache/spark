@@ -44,23 +44,23 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
 
   private val executorTable: UITable[ExecutorRunner] = {
     val t = new UITableBuilder[ExecutorRunner]()
-    t.intCol("Executor ID") { _.execId }
-    t.intCol("Cores") { _.cores }
+    t.col("Executor ID") { _.execId }
+    t.col("Cores") { _.cores }
     t.col("State") { _.state.toString }
     t.sizeCol("Memory") { _.memory }
-    t.customCol("Job Details", sortable = false) { executor =>
+    t.col("Job Details") (identity) withMarkup  { executor =>
       <ul class="unstyled">
         <li><strong>ID:</strong> {executor.appId}</li>
         <li><strong>Name:</strong> {executor.appDesc.name}</li>
         <li><strong>User:</strong> {executor.appDesc.user}</li>
       </ul>
-    }
-    t.customCol("Logs", sortable = false) { executor =>
+    } isUnsortable()
+    t.col("Logs") (identity) withMarkup { executor =>
       <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
         .format(executor.appId, executor.execId)}>stdout</a>
       <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
         .format(executor.appId, executor.execId)}>stderr</a>
-    }
+    } isUnsortable()
     t.build()
   }
 
@@ -69,12 +69,12 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     t.col("Driver ID") { _.driverId }
     t.col("Main Class") { _.driverDesc.command.arguments(1) }
     t.col("State") { _.finalState.getOrElse(DriverState.RUNNING).toString }
-    t.intCol("Cores") { _.driverDesc.cores }
+    t.col("Cores") { _.driverDesc.cores }
     t.sizeCol("Memory") { _.driverDesc.mem }
-    t.customCol("Logs", sortable = false) { driver =>
+    t.col("Logs") (identity) withMarkup { driver =>
       <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
       <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
-    }
+    } isUnsortable()
     t.col("Notes") { _.finalException.getOrElse("").toString }
     t.build()
   }

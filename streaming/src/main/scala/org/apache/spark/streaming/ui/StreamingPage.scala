@@ -46,15 +46,23 @@ private[ui] class StreamingPage(parent: StreamingTab)
     UIUtils.headerSparkPage("Streaming", content, parent, Some(5000))
   }
 
-  private val batchStatsTable: UITable[(String, Option[Long], Option[Seq[Double]])] = {
-    val t = new UITableBuilder[(String, Option[Long], Option[Seq[Double]])]()
+  private type BatchStatsRowType = (String, Option[Long], Option[Seq[Double]])
+  private val batchStatsTable: UITable[BatchStatsRowType] = {
+    val t = new UITableBuilder[BatchStatsRowType]()
     t.col("Metric") { _._1 }
-    t.optDurationCol("Last batch") { _._2 }
-    t.optDurationCol("Minimum") { _._3.map(_(0).toLong) }
-    t.optDurationCol("25th percentile") { _._3.map(_(1).toLong) }
-    t.optDurationCol("Median") { _._3.map(_(2).toLong) }
-    t.optDurationCol("75th percentile") { _._3.map(_(3).toLong) }
-    t.optDurationCol("Maximum") { _._3.map(_(4).toLong) }
+    t.col("Last batch") { _._2 }
+    def optDurationCol(name: String)(fieldExtractor: BatchStatsRowType => Option[Long]) {
+      t.col(name)(fieldExtractor) sortBy {
+        _.getOrElse("").toString
+      } formatWith {
+        _.map(UIUtils.formatDuration).getOrElse("-")
+      }
+    }
+    t.col("Minimum") { _._3.map(_(0).toLong) }
+    optDurationCol("25th percentile") { _._3.map(_(1).toLong) }
+    optDurationCol("Median") { _._3.map(_(2).toLong) }
+    optDurationCol("75th percentile") { _._3.map(_(3).toLong) }
+    optDurationCol("Maximum") { _._3.map(_(4).toLong) }
     t.build()
   }
 

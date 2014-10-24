@@ -29,7 +29,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   val appTable: UITable[ApplicationHistoryInfo] = {
     val t = new UITableBuilder[ApplicationHistoryInfo]()
-    t.customCol("App ID") { info =>
+    t.col("App ID") (identity) withMarkup { info =>
       val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
       <a href={uiAddress}>{info.id}</a>
     }
