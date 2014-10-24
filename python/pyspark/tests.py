@@ -31,7 +31,7 @@ import tempfile
 import time
 import zipfile
 import random
-from platform import python_implementation
+import threading
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -432,6 +432,12 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(1, filtered_data.count())
         os.unlink(tempFile.name)
         self.assertRaises(Exception, lambda: filtered_data.count())
+
+    def test_sampling_default_seed(self):
+        # Test for SPARK-3995 (default seed setting)
+        data = self.sc.parallelize(range(1000), 1)
+        subset = data.takeSample(False, 10)
+        self.assertEqual(len(subset), 10)
 
     def testAggregateByKey(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
@@ -1373,6 +1379,23 @@ class WorkerTests(PySparkTestCase):
         self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
+
+    def test_reuse_worker_after_take(self):
+        rdd = self.sc.parallelize(range(100000), 1)
+        self.assertEqual(0, rdd.first())
+
+        def count():
+            try:
+                rdd.count()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=count)
+        t.daemon = True
+        t.start()
+        t.join(5)
+        self.assertTrue(not t.isAlive())
+        self.assertEqual(100000, rdd.count())
 
 
 class SparkSubmitTests(unittest.TestCase):

@@ -62,7 +62,7 @@ private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveCo
     } catch {
       case cause: Throwable =>
         logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(-3, ExceptionUtils.getFullStackTrace(cause), null)
+        new CommandProcessorResponse(0, ExceptionUtils.getFullStackTrace(cause), null)
     }
   }
 

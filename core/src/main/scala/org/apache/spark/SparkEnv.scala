@@ -68,6 +68,7 @@ class SparkEnv (
     val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
 
+  private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
@@ -75,6 +76,7 @@ class SparkEnv (
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
   private[spark] def stop() {
+    isStopped = true
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
     Option(httpFileServer).foreach(_.stop())
     mapOutputTracker.stop()
