@@ -124,7 +124,8 @@ class DAGScheduler(
   private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
 
   /** Broadcast the serialized tasks only when they are bigger than it */
-  private val broadcastTaskMinSize = sc.getConf.getInt("spark.scheduler.broadcastTaskMinSize", 8) * 1024
+  private val broadcastTaskMinSize =
+    sc.getConf.getInt("spark.scheduler.broadcastTaskMinSize", 8) * 1024
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
