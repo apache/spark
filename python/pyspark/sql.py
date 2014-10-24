@@ -1073,8 +1073,7 @@ class SQLContext(object):
         >>> srdd2.collect()
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
 
-        >>> from datetime import datetime
-        >>> from datetime import date
+        >>> from datetime import date, datetime
         >>> rdd = sc.parallelize([(127, -128L, -32768, 32767, 2147483647L, 1.0,
         ...     date(2010, 1, 1),
         ...     datetime(2010, 1, 1, 1, 1, 1),
