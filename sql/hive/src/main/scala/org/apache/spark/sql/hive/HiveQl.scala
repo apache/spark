@@ -122,6 +122,7 @@ private[hive] object HiveQl {
   protected val noExplainCommands = Seq(
     "TOK_CREATETABLE",
     "TOK_DESCTABLE",
+    //truncate table" is a NativeCommand, does not need to explain.
     "TOK_TRUNCATETABLE"
   ) ++ nativeCommands
 
@@ -473,6 +474,7 @@ private[hive] object HiveQl {
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
 
+    //"TRUNCATE TABLE table_name COLUMNS()" is not a Hive native command for it needs to run hive mapreduce.
     case Token("TOK_TRUNCATETABLE",
           Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
