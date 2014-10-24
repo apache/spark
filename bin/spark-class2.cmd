@@ -21,7 +21,7 @@ rem Any changes to this file must be reflected in SparkSubmitDriverBootstrapper.
 
 setlocal enabledelayedexpansion
 
-set SCALA_VERSION=2.10
+set SPARK_SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
@@ -99,7 +99,7 @@ rem Attention: when changing the way the JAVA_OPTS are assembled, the change mus
 rem Test whether the user has built Spark
 if exist "%FWDIR%RELEASE" goto skip_build_test
 set FOUND_JAR=0
-for %%d in ("%FWDIR%assembly\target\scala-%SCALA_VERSION%\spark-assembly*hadoop*.jar") do (
+for %%d in ("%FWDIR%assembly\target\scala-%SPARK_SCALA_VERSION%\spark-assembly*hadoop*.jar") do (
   set FOUND_JAR=1
 )
 if "%FOUND_JAR%"=="0" (
@@ -111,7 +111,7 @@ if "%FOUND_JAR%"=="0" (
 
 set TOOLS_DIR=%FWDIR%tools
 set SPARK_TOOLS_JAR=
-for %%d in ("%TOOLS_DIR%\target\scala-%SCALA_VERSION%\spark-tools*assembly*.jar") do (
+for %%d in ("%TOOLS_DIR%\target\scala-%SPARK_SCALA_VERSION%\spark-tools*assembly*.jar") do (
   set SPARK_TOOLS_JAR=%%d
 )
 

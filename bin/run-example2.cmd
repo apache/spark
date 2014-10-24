@@ -17,7 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set SCALA_VERSION=2.10
+set SPARK_SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
@@ -46,7 +46,7 @@ if exist "%FWDIR%RELEASE" (
     set SPARK_EXAMPLES_JAR=%%d
   )
 ) else (
-  for %%d in ("%EXAMPLES_DIR%\target\scala-%SCALA_VERSION%\spark-examples*.jar") do (
+  for %%d in ("%EXAMPLES_DIR%\target\scala-%SPARK_SCALA_VERSION%\spark-examples*.jar") do (
     set SPARK_EXAMPLES_JAR=%%d
   )
 )

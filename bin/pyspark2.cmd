@@ -17,7 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set SCALA_VERSION=2.10
+set SPARK_SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
@@ -28,7 +28,7 @@ set SPARK_HOME=%FWDIR%
 rem Test whether the user has built Spark
 if exist "%FWDIR%RELEASE" goto skip_build_test
 set FOUND_JAR=0
-for %%d in ("%FWDIR%assembly\target\scala-%SCALA_VERSION%\spark-assembly*hadoop*.jar") do (
+for %%d in ("%FWDIR%assembly\target\scala-%SPARK_SCALA_VERSION%\spark-assembly*hadoop*.jar") do (
   set FOUND_JAR=1
 )
 if [%FOUND_JAR%] == [0] (
