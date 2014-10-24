@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
@@ -31,7 +32,7 @@ private[spark] class MapStatus(var location: BlockManagerId, var compressedSizes
 
   def this() = this(null, null)  // For deserialization only
 
-  def writeExternal(out: ObjectOutput) {
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     location.writeExternal(out)
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
