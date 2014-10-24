@@ -90,7 +90,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   private var numExecutorsToAdd = 1
 
   // Number of executors that have been requested but have not registered yet
-  private var numExecutorsPendingToAdd = 0
+  private var numExecutorsPending = 0
 
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
@@ -107,16 +107,6 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   // Each remove timer is started when the executor first registers or when the executor finishes
   // running a task, and canceled when the executor is scheduled to run a new task.
   private val removeTimes = new mutable.HashMap[String, Long]
-
-  // A timestamp of when all pending add requests should expire
-  private var pendingAddExpirationTime = NOT_STARTED
-
-  // A timestamp for each executor of when the pending remove request for the executor should expire
-  private val pendingRemoveExpirationTimes = new mutable.HashMap[String, Long]
-
-  // How long before expiring pending requests to add or remove executors (seconds)
-  private val pendingAddTimeoutSeconds = 300 // 5 min
-  private val pendingRemoveTimeoutSeconds = 300
 
   // Polling loop interval (ms)
   private val intervalMillis = 100
@@ -163,24 +153,6 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
                   cancelRemoveTimer(executorId)
                 }
               }
-
-              // Expire any outstanding pending add requests that have timed out
-              if (pendingAddExpirationTime != NOT_STARTED && now >= pendingAddExpirationTime) {
-                logDebug(s"Expiring all pending add requests because they have " +
-                  s"not been fulfilled after $pendingAddTimeoutSeconds seconds")
-                numExecutorsPendingToAdd = 0
-                pendingAddExpirationTime = NOT_STARTED
-              }
-
-              // Expire any outstanding pending remove requests that have timed out
-              pendingRemoveExpirationTimes.foreach { case (executorId, expirationTime) =>
-                if (now > expirationTime) {
-                  logDebug(s"Expiring pending request to remove executor $executorId because " +
-                    s"it has not been fulfilled after $pendingRemoveTimeoutSeconds seconds")
-                  executorsPendingToRemove.remove(executorId)
-                  pendingRemoveExpirationTimes.remove(executorId)
-                }
-              }
             } catch {
               case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
             }
@@ -201,7 +173,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
    */
   private def addExecutors(): Unit = synchronized {
     // Do not request more executors if we have already reached the upper bound
-    val numExistingExecutors = executorIds.size + numExecutorsPendingToAdd
+    val numExistingExecutors = executorIds.size + numExecutorsPending
     if (numExistingExecutors >= maxNumExecutors) {
       logDebug(s"Not adding executors because there are already " +
         s"$maxNumExecutors executor(s), which is the limit")
@@ -213,14 +185,15 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     val actualNumExecutorsToAdd =
       math.min(numExistingExecutors + numExecutorsToAdd, maxNumExecutors) - numExistingExecutors
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
-    logInfo(s"Pending tasks are building up! Adding $actualNumExecutorsToAdd " +
-      s"new executor(s) (new total will be $newTotalExecutors)")
-    numExecutorsToAdd *= 2
-    numExecutorsPendingToAdd += actualNumExecutorsToAdd
-    backend.requestExecutors(actualNumExecutorsToAdd)
-
-    // In case this pending add request is not fulfilled, set a timeout to expire it
-    pendingAddExpirationTime = System.currentTimeMillis + pendingAddTimeoutSeconds * 1000
+    if (backend.requestExecutors(actualNumExecutorsToAdd)) {
+      logInfo(s"Pending tasks are building up! Adding $actualNumExecutorsToAdd " +
+        s"new executor(s) (new total will be $newTotalExecutors)")
+      numExecutorsToAdd *= 2
+      numExecutorsPending += actualNumExecutorsToAdd
+    } else {
+      logWarning(s"Unable to reach the cluster manager " +
+        s"to request $actualNumExecutorsToAdd executors!")
+    }
   }
 
   /**
@@ -248,14 +221,13 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     }
 
     // Send a request to the backend to kill this executor
-    logInfo(s"Removing executor $executorId because it has been idle for " +
-      s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
-    executorsPendingToRemove.add(executorId)
-    backend.killExecutor(executorId)
-
-    // In case this pending remove request is not fulfilled, set a timeout to expire it
-    pendingRemoveExpirationTimes(executorId) =
-      System.currentTimeMillis + pendingRemoveTimeoutSeconds * 1000
+    if (backend.killExecutor(executorId)) {
+      logInfo(s"Removing executor $executorId because it has been idle for " +
+        s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
+      executorsPendingToRemove.add(executorId)
+    } else {
+      logWarning(s"Unable to reach the cluster manager to kill executor $executorId!")
+    }
   }
 
   /**
@@ -266,12 +238,9 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
       executorIds.add(executorId)
       executorIds.foreach(startRemoveTimer)
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
-      if (numExecutorsPendingToAdd > 0) {
-        numExecutorsPendingToAdd -= 1
-        logDebug(s"Decremented pending executors to add ($numExecutorsPendingToAdd left)")
-        if (numExecutorsPendingToAdd == 0) {
-          pendingAddExpirationTime = NOT_STARTED
-        }
+      if (numExecutorsPending > 0) {
+        numExecutorsPending -= 1
+        logDebug(s"Decremented pending executors to add ($numExecutorsPending left)")
       }
     }
   }
@@ -287,7 +256,6 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
         executorsPendingToRemove.remove(executorId)
         logDebug(s"Removing executor $executorId from pending executors to remove " +
           s"(${executorsPendingToRemove.size} left)")
-        pendingRemoveExpirationTimes.remove(executorId)
       }
     } else {
       logWarning(s"Unknown executor $executorId has been removed!")

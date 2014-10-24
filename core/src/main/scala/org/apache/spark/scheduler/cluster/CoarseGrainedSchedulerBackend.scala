@@ -96,6 +96,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           CoarseGrainedSchedulerBackend.this.synchronized {
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
+              logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
           makeOffers()
@@ -300,8 +301,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   /**
    * Request an additional number of executors from the cluster manager.
+   * Return whether the request successfully reaches the cluster manager.
    */
-  def requestExecutors(numAdditionalExecutors: Int): Unit = synchronized {
+  def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
     numPendingExecutors += numAdditionalExecutors
     requestPendingExecutors(numPendingExecutors)
   }
@@ -315,22 +317,25 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
    * insufficient resources to satisfy the first request. We make the assumption here that the
    * cluster manager will eventually fulfill all requests when resources free up.
    *
+   * Return whether the request successfully reaches the cluster manager.
    * In Yarn, this will be implemented in SPARK-3822.
    */
-  protected def requestPendingExecutors(numPendingExecutors: Int): Unit = { }
+  protected def requestPendingExecutors(numPendingExecutors: Int): Boolean = false
 
   /**
    * Kill the given executor through the cluster manager.
+   * Return whether the kill request successfully reaches the cluster manager.
    */
-  def killExecutor(executorId: String): Unit = {
+  def killExecutor(executorId: String): Boolean = {
     killExecutors(Seq[String](executorId))
   }
 
   /**
    * Kill the given list of executors through the cluster manager.
+   * Return whether the kill request successfully reaches the cluster manager.
    * In Yarn, this will be implemented in SPARK-3822.
    */
-  def killExecutors(executorIds: Seq[String]): Unit = { }
+  def killExecutors(executorIds: Seq[String]): Boolean = false
 
 }
 
