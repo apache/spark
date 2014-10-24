@@ -34,7 +34,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 
 import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -123,6 +122,9 @@ class DAGScheduler(
 
   /** If enabled, we may run certain actions like take() and first() locally. */
   private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
+
+  /** Broadcast the serialized tasks only when they are bigger than it */
+  private val broadcastTaskMinSize = sc.getConf.getInt("spark.scheduler.broadcastTaskMinSize", 8) * 1024
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -817,22 +819,29 @@ class DAGScheduler(
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
-    // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
+    // We serialize the task first, then broadcast it if the number of serialized bytes is
+    // larger than broadcastTaskMinSize, used to dispatch tasks to executors. Note that we broadcast
     // the serialized copy of the RDD and for each task we will deserialize it, which means each
     // task gets a different copy of the RDD. This provides stronger isolation between tasks that
     // might modify state of objects referenced in their closures. This is necessary in Hadoop
     // where the JobConf/Configuration object is not thread-safe.
-    var taskBinary: Broadcast[Array[Byte]] = null
+    var taskBinary: Array[Byte] = null
     try {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
-      val taskBinaryBytes: Array[Byte] =
+      taskBinary =
         if (stage.isShuffleMap) {
           closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
         } else {
           closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
-      taskBinary = sc.broadcast(taskBinaryBytes)
+      if (taskBinary.size > broadcastTaskMinSize) {
+        logInfo(s"Create broadcast for taskBinary: ${taskBinary.size} > $broadcastTaskMinSize")
+        val broadcasted = sc.broadcast(taskBinary)
+        // use stage to track the life cycle of broadcast
+        stage.broadcastedTaskBinary = broadcasted
+        taskBinary = closureSerializer.serialize(broadcasted: AnyRef).array()
+      }
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>

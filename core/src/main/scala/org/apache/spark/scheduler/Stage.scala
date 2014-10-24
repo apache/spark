@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashSet
 
 import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
@@ -68,6 +69,10 @@ private[spark] class Stage(
   /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
   var resultOfJob: Option[ActiveJob] = None
   var pendingTasks = new HashSet[Task[_]]
+
+  /** This is used to track the life cycle of broadcast,
+    * then it can be release by GC once the stage is released */
+  var broadcastedTaskBinary: Broadcast[Array[Byte]] = _
 
   private var nextAttemptId = 0
 

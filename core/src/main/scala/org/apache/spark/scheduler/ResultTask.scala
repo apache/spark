@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
  * See [[Task]] for more information.
  *
  * @param stageId id of the stage this task belongs to
- * @param taskBinary broadcasted version of the serialized RDD and the function to apply on each
+ * @param taskBinary serialized RDD and the function to apply on each
  *                   partition of the given RDD. Once deserialized, the type should be
  *                   (RDD[T], (TaskContext, Iterator[T]) => U).
  * @param partition partition of the RDD this task is associated with
@@ -41,7 +41,7 @@ import org.apache.spark.rdd.RDD
  */
 private[spark] class ResultTask[T, U](
     stageId: Int,
-    taskBinary: Broadcast[Array[Byte]],
+    taskBinary: Array[Byte],
     partition: Partition,
     @transient locs: Seq[TaskLocation],
     val outputId: Int)
@@ -54,8 +54,14 @@ private[spark] class ResultTask[T, U](
   override def runTask(context: TaskContext): U = {
     // Deserialize the RDD and the func using the broadcast variables.
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+    val obj = ser.deserialize[AnyRef](ByteBuffer.wrap(taskBinary),
+      Thread.currentThread.getContextClassLoader)
+    val (rdd, func) = obj match {
+      case (rdd: RDD[T], func: ((TaskContext, Iterator[T]) => U)) => (rdd, func)
+      case b: Broadcast[Array[Byte]]  =>
+        ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
+          ByteBuffer.wrap(b.value), Thread.currentThread.getContextClassLoader)
+    }
 
     metrics = Some(context.taskMetrics)
     func(context, rdd.iterator(partition, context))

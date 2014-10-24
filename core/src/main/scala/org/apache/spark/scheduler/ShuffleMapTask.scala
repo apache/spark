@@ -33,14 +33,14 @@ import org.apache.spark.shuffle.ShuffleWriter
 * See [[org.apache.spark.scheduler.Task]] for more information.
 *
  * @param stageId id of the stage this task belongs to
- * @param taskBinary broadcast version of of the RDD and the ShuffleDependency. Once deserialized,
+ * @param taskBinary serialized RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
-    taskBinary: Broadcast[Array[Byte]],
+    taskBinary: Array[Byte],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation])
   extends Task[MapStatus](stageId, partition.index) with Logging {
@@ -57,8 +57,14 @@ private[spark] class ShuffleMapTask(
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
-      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
+    val obj = ser.deserialize[AnyRef](ByteBuffer.wrap(taskBinary),
+      Thread.currentThread.getContextClassLoader)
+    val (rdd, dep) = obj match {
+      case (rdd: RDD[_], dep: ShuffleDependency[_, _, _]) => (rdd, dep)
+      case b: Broadcast[Array[Byte]] =>
+        ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
+          ByteBuffer.wrap(b.value), Thread.currentThread.getContextClassLoader)
+    }
 
     metrics = Some(context.taskMetrics)
     var writer: ShuffleWriter[Any, Any] = null
