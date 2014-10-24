@@ -98,7 +98,7 @@ private[spark] object SparkUI {
   def createLiveUI(
       sc: SparkContext,
       conf: SparkConf,
-      listenerBus: LiveListenerBus,
+      listenerBus: SparkListenerBus,
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
       appName: String): SparkUI =  {
@@ -108,7 +108,7 @@ private[spark] object SparkUI {
 
   def createHistoryUI(
       conf: SparkConf,
-      listenerBus: ReplayListenerBus,
+      listenerBus: SparkListenerBus,
       securityManager: SecurityManager,
       appName: String,
       basePath: String): SparkUI = {
