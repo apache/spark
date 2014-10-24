@@ -37,7 +37,7 @@ import WriteAheadLogManager._
  * Uses [[org.apache.spark.streaming.util.WriteAheadLogWriter]] to write
  * and [[org.apache.spark.streaming.util.WriteAheadLogReader]] to read.
  *
- *@param logDirectory Directory when rotating log files will be created.
+ * @param logDirectory Directory when rotating log files will be created.
  * @param hadoopConf Hadoop configuration for reading/writing log files.
  * @param rollingIntervalSecs The interval in seconds with which logs will be rolled over.
  *                            Default is one minute.
@@ -57,7 +57,7 @@ private[streaming] class WriteAheadLogManager(
 
   private val pastLogs = new ArrayBuffer[LogInfo]
   private val callerNameTag =
-    if (callerName != null && callerName.nonEmpty) s" for $callerName" else ""
+    if (callerName.nonEmpty) s" for $callerName" else ""
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
   implicit private val executionContext = ExecutionContext.fromExecutorService(
     Utils.newDaemonFixedThreadPool(1, threadpoolName))

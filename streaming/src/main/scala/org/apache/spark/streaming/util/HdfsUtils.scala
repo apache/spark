@@ -17,12 +17,11 @@
 package org.apache.spark.streaming.util
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{LocalFileSystem, FSDataInputStream, FSDataOutputStream, Path}
+import org.apache.hadoop.fs._
 
 private[streaming] object HdfsUtils {
 
   def getOutputStream(path: String, conf: Configuration): FSDataOutputStream = {
-    // HDFS is not thread-safe when getFileSystem is called, so synchronize on that
     val dfsPath = new Path(path)
     val dfs = getFileSystemForPath(dfsPath, conf)
     // If the file exists and we have append support, append instead of creating a new file
@@ -61,7 +60,9 @@ private[streaming] object HdfsUtils {
     blockLocs.map(_.flatMap(_.getHosts))
   }
 
-  def getFileSystemForPath(path: Path, conf: Configuration) = synchronized {
+  def getFileSystemForPath(path: Path, conf: Configuration): FileSystem = synchronized {
+    // For local file systems, return the raw loca file system, such calls to flush()
+    // actually flushes the stream.
     val fs = path.getFileSystem(conf)
     fs match {
       case localFs: LocalFileSystem => localFs.getRawFileSystem
