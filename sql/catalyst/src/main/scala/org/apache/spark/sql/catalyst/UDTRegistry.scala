@@ -20,12 +20,16 @@ package org.apache.spark.sql.catalyst
 import scala.collection.mutable
 import scala.reflect.runtime.universe._
 
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.types.UserDefinedType
 
 /**
+ * ::DeveloperApi::
  * Global registry for user-defined types (UDTs).
+ *
+ * WARNING: UDTs are currently only supported from Scala.
  */
+@DeveloperApi
 object UDTRegistry {
   /** Map: UserType --> UserDefinedType */
   val udtRegistry = new mutable.HashMap[Any, UserDefinedType[_]]()
@@ -38,6 +42,5 @@ object UDTRegistry {
   def registerType(userType: Type, udt: UserDefinedType[_]): Unit = {
     // TODO: Check to see if type is built-in.  Throw exception?
     UDTRegistry.udtRegistry(userType) = udt
-    // TODO: Else: Should we check (assert) that udt is the same as what is in the registry?
   }
 }

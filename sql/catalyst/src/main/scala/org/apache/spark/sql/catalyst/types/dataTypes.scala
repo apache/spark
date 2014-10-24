@@ -496,6 +496,7 @@ case class MapType(
 }
 
 /**
+ * ::DeveloperApi::
  * The data type for User Defined Types.
  */
 @DeveloperApi
@@ -505,8 +506,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   def sqlType: DataType
 
   /** Convert the user type to a Row object */
-  // TODO: Can we make this take obj: UserType?
-  //  The issue is in ScalaReflection.convertToCatalyst, where we need to convert Any to UserType.
+  // TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
+  //       where we need to convert Any to UserType.
   def serialize(obj: Any): Row
 
   /** Convert a Row object to the user type */

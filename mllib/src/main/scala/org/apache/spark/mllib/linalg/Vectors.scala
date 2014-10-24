@@ -86,7 +86,13 @@ sealed trait Vector extends Serializable {
  */
 object Vectors {
 
+  // Note: Explicit registration is only needed for Vector and SparseVector;
+  //       the annotation works for DenseVector.
   UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[Vector], new VectorUDT())
+  UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[DenseVector],
+    new DenseVectorUDT())
+  UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[SparseVector],
+    new SparseVectorUDT())
 
   /**
    * Creates a dense vector from its values.
