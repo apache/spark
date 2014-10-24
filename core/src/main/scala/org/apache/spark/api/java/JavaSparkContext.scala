@@ -135,7 +135,8 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Return a list of all known jobs in a particular job group.  The returned list may contain
-   * running, failed, and completed jobs, and may vary across invocations of this method.
+   * running, failed, and completed jobs, and may vary across invocations of this method.  This
+   * method does not guarantee the order of the elements in its result.
    */
   def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.getJobIdsForGroup(jobGroup)
 
