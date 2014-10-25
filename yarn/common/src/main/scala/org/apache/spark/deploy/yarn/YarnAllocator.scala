@@ -118,18 +118,21 @@ private[yarn] abstract class YarnAllocator(
    * Request a number of executors from the RM such that the total number pending for this
    * application is at least the value specified.
    */
-  def requestPendingExecutors(numPendingRequested: Int): Unit = synchronized {
-    val currentNumPending = numPendingAllocate.get()
-    if (currentNumPending < numPendingRequested) {
-      // Take into account the executors already pending
-      maxExecutors += numPendingRequested - currentNumPending
+  def requestPendingExecutors(
+      numPendingRequested: Int,
+      numExistingExecutors: Int): Unit = synchronized {
+    // Take into account the executors already pending and running
+    val requestedTotalExecutors = numPendingRequested + numExistingExecutors
+    val currentTotalExecutors = numPendingAllocate.get + numExecutorsRunning.get
+    if (requestedTotalExecutors > currentTotalExecutors) {
+      maxExecutors += (requestedTotalExecutors - currentTotalExecutors)
       // We need to call `allocateResources` here to avoid the following race condition:
       // If we request executors twice before `allocateResources` is called, then we will end up
       // double counting the number requested because `numPendingAllocate` is not updated yet.
       allocateResources()
     } else {
-      logInfo(s"Not allocating more executors because there are already " +
-        s"$currentNumPending pending (application requested $numPendingRequested)")
+      logInfo(s"Not allocating more executors because there are already $currentTotalExecutors " +
+        s"pending and running executors (application requested $requestedTotalExecutors total)")
     }
   }
 

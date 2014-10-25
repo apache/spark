@@ -92,13 +92,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
-          totalRegisteredExecutors.addAndGet(1)
+          // This must be synchronized because the variables mutated
+          // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
+            totalRegisteredExecutors.addAndGet(1)
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
-              }
             }
+          }
           makeOffers()
         }
 

@@ -51,9 +51,9 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Request the given number of executors from the ApplicationMaster.
    */
-  override def requestPendingExecutors(numPendingExecutors: Int): Boolean = {
+  override def requestPendingExecutors(numPendingExecutors: Int): Boolean = synchronized {
     AkkaUtils.askWithAck(
-      RequestPendingExecutors(numPendingExecutors),
+      RequestPendingExecutors(numPendingExecutors, totalRegisteredExecutors.get),
       yarnSchedulerActor,
       askTimeout)
   }
@@ -62,10 +62,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * Request the ApplicationMaster to kill the specified executors.
    */
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    AkkaUtils.askWithAck(
-      KillExecutors(executorIds),
-      yarnSchedulerActor,
-      askTimeout)
+    AkkaUtils.askWithAck(KillExecutors(executorIds), yarnSchedulerActor, askTimeout)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {

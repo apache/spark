@@ -73,7 +73,12 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object RegisterClusterManager extends CoarseGrainedClusterMessage
 
-  case class RequestPendingExecutors(numPendingExecutors: Int) extends CoarseGrainedClusterMessage
+  // Request as many executors as needed to meet the specified number of pending executors
+  // Additionally, convey the existing number of executors to avoid allocating too many new ones
+  case class RequestPendingExecutors(
+      numPendingExecutors: Int,
+      numExistingExecutors: Int)
+    extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 

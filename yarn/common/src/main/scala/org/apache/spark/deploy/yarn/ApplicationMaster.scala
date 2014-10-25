@@ -482,9 +482,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   /**
    * Send a request to the ResourceManager to set the number of pending executors.
    */
-  private def requestPendingExecutors(numPendingExecutors: Int): Unit = {
+  private def requestPendingExecutors(numPendingExecutors: Int, numExistingExecutors: Int): Unit = {
     Option(allocator) match {
-      case Some(a) => a.requestPendingExecutors(numPendingExecutors)
+      case Some(a) => a.requestPendingExecutors(numPendingExecutors, numExistingExecutors)
       case None => logWarning("Container allocator is not ready to request executors yet.")
     }
   }
@@ -524,9 +524,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         logInfo(s"Add WebUI Filter. $x")
         driver ! x
 
-      case RequestPendingExecutors(numPendingExecutors) =>
+      case RequestPendingExecutors(numPendingExecutors, numExistingExecutors) =>
         logInfo(s"Driver requested $numPendingExecutors executors to be pending.")
-        requestPendingExecutors(numPendingExecutors)
+        requestPendingExecutors(numPendingExecutors, numExistingExecutors)
         sender ! true
 
       case KillExecutors(executorIds) =>
