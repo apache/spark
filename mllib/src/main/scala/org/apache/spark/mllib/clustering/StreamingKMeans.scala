@@ -165,7 +165,7 @@ class StreamingKMeans(
   /** Initialize random centers, requiring only the number of dimensions. */
   def setRandomCenters(d: Int): this.type = {
     val initialCenters = (0 until k).map(_ => Vectors.dense(Array.fill(d)(nextGaussian()))).toArray
-    val clusterCounts = Array.fill(0)(d).map(_.toLong)
+    val clusterCounts = Array.fill(this.k)(0).map(_.toLong)
     this.model = new StreamingKMeansModel(initialCenters, clusterCounts)
     this
   }
