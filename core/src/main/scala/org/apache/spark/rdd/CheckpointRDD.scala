@@ -86,12 +86,12 @@ private[spark] object CheckpointRDD extends Logging {
 
   def writeToFile[T: ClassTag](
       path: String,
-      conf: Configuration,
+      conf: SerializableWritable[Configuration],
       blockSize: Int = -1
     )(ctx: TaskContext, iterator: Iterator[T]) {
     val env = SparkEnv.get
     val outputDir = new Path(path)
-    val fs = outputDir.getFileSystem(conf)
+    val fs = outputDir.getFileSystem(conf.value)
 
     val finalOutputName = splitIdToFile(ctx.partitionId)
     val finalOutputPath = new Path(outputDir, finalOutputName)
@@ -160,7 +160,7 @@ private[spark] object CheckpointRDD extends Logging {
     val conf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val fs = path.getFileSystem(conf)
     sc.runJob(rdd, CheckpointRDD.writeToFile[Int](
-      path.toString, conf, 1024) _)
+      path.toString, new SerializableWritable(conf), 1024) _)
     val cpRDD = new CheckpointRDD[Int](sc, path.toString)
     assert(cpRDD.partitions.length == rdd.partitions.length, "Number of partitions is not the same")
     assert(cpRDD.collect.toList == rdd.collect.toList, "Data of partitions not the same")
