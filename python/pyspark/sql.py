@@ -1379,26 +1379,26 @@ class LocalHiveContext(HiveContext):
     An in-process metadata data is created with data stored in ./metadata.
     Warehouse data is stored in in ./warehouse.
 
-    # >>> import os
-    # >>> hiveCtx = LocalHiveContext(sc)
-    # >>> try:
-    # ...     supress = hiveCtx.sql("DROP TABLE src")
-    # ... except Exception:
-    # ...     pass
-    # >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
-    # ...        'examples/src/main/resources/kv1.txt')
-    # >>> supress = hiveCtx.sql(
-    # ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    # >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
-    # ...        % kv1)
-    # >>> results = hiveCtx.sql("FROM src SELECT value"
-    # ...      ).map(lambda r: int(r.value.split('_')[1]))
-    # >>> num = results.count()
-    # >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    # >>> num
-    # 500
-    # >>> reduce_sum
-    # 130091
+    >>> import os
+    >>> hiveCtx = LocalHiveContext(sc)
+    >>> try:
+    ...     supress = hiveCtx.sql("DROP TABLE src")
+    ... except Exception:
+    ...     pass
+    >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
+    ...        'examples/src/main/resources/kv1.txt')
+    >>> supress = hiveCtx.sql(
+    ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
+    ...        % kv1)
+    >>> results = hiveCtx.sql("FROM src SELECT value"
+    ...      ).map(lambda r: int(r.value.split('_')[1]))
+    >>> num = results.count()
+    >>> reduce_sum = results.reduce(lambda x, y: x + y)
+    >>> num
+    500
+    >>> reduce_sum
+    130091
     """
 
     def __init__(self, sparkContext, sqlContext=None):
