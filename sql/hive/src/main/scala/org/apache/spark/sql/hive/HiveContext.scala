@@ -46,7 +46,6 @@ import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
-import org.apache.spark.sql.hive.HiveShim
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -230,7 +229,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * set() or a SET command inside sql() will be set in the SQLConf *as well as*
    * in the HiveConf.
    */
-  @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
+  @transient lazy val hiveconf = new HiveConf(classOf[SessionState])
   @transient protected[hive] lazy val sessionState = {
     val ss = new SessionState(hiveconf)
     setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
