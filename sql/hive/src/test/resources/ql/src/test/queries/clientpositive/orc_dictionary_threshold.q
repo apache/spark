@@ -19,7 +19,7 @@ SELECT * FROM test_orc;
 ALTER TABLE test_orc SET SERDEPROPERTIES ('orc.stripe.size' = '1');
 
 CREATE TABLE src_thousand(key STRING) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/kv1kv2.cogroup.txt' 
+LOAD DATA LOCAL INPATH '../../data/files/kv1kv2.cogroup.txt' 
      INTO TABLE src_thousand;
 
 set hive.exec.orc.dictionary.key.size.threshold=0.5;

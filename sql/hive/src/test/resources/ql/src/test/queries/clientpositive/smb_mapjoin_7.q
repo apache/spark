@@ -15,8 +15,8 @@ create table smb_join_results(k1 int, v1 string, k2 int, v2 string);
 create table smb_join_results_empty_bigtable(k1 int, v1 string, k2 int, v2 string);
 create table normal_join_results(k1 int, v1 string, k2 int, v2 string);
 
-load data local inpath '../data/files/empty1.txt' into table smb_bucket4_1;
-load data local inpath '../data/files/empty2.txt' into table smb_bucket4_1;
+load data local inpath '../../data/files/empty1.txt' into table smb_bucket4_1;
+load data local inpath '../../data/files/empty2.txt' into table smb_bucket4_1;
 
 insert overwrite table smb_bucket4_2
 select * from src;
