@@ -61,7 +61,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
 
           // If the task is running locally, do not persist the result
-          if (context.runningLocally) {
+          if (context.isRunningLocally) {
             return computedValues
           }
 

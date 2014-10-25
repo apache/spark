@@ -209,16 +209,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
-  // Create the Spark execution environment (cache, map output tracker, etc)
   conf.set("spark.executor.id", "driver")
-  private[spark] val env = SparkEnv.create(
-    conf,
-    "<driver>",
-    conf.get("spark.driver.host"),
-    conf.get("spark.driver.port").toInt,
-    isDriver = true,
-    isLocal = isLocal,
-    listenerBus = listenerBus)
+
+  // Create the Spark execution environment (cache, map output tracker, etc)
+  private[spark] val env = SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
@@ -238,6 +232,10 @@ class SparkContext(config: SparkConf) extends Logging {
       // For tests, do not enable the UI
       None
     }
+
+  // Bind the UI before starting the task scheduler to communicate
+  // the bound port to the cluster manager properly
+  ui.foreach(_.bind())
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
@@ -340,10 +338,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   postEnvironmentUpdate()
   postApplicationStart()
-
-  // Bind the SparkUI after starting the task scheduler
-  // because certain pages and listeners depend on it
-  ui.foreach(_.bind())
 
   private[spark] var checkpointDir: Option[String] = None
 
@@ -837,11 +831,12 @@ class SparkContext(config: SparkConf) extends Logging {
       case "local"       => "file:" + uri.getPath
       case _             => path
     }
-    addedFiles(key) = System.currentTimeMillis
+    val timestamp = System.currentTimeMillis
+    addedFiles(key) = timestamp
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-      hadoopConfiguration)
+      hadoopConfiguration, timestamp, useCache = false)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
