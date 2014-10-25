@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
 
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.scheduler._
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
