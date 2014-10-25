@@ -103,19 +103,32 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           <div class="additional-metrics collapsed">
             <ul style="list-style-type:none">
               <li>
-                <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/>
-                Scheduler Delay
+                <span data-toggle="tooltip"
+                      title={ToolTips.SCHEDULER_DELAY} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/>
+                  Scheduler Delay
+                </span>
               </li>
               <li>
-                <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/> GC Time
+                <span data-toggle="tooltip"
+                      title={ToolTips.GC_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
+                  GC Time
+                </span>
               </li>
               <li>
-                <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
-                Result Serialization Time
+                <span data-toggle="tooltip"
+                      title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
+                  Result Serialization Time
+                </span>
               </li>
               <li>
-                <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
-                Getting Result Time
+                <span data-toggle="tooltip"
+                      title={ToolTips.GETTING_RESULT_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
+                  Getting Result Time
+                </span>
               </li>
             </ul>
           </div>
@@ -168,13 +181,23 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           val gcTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.jvmGCTime.toDouble
           }
-          val gcQuantiles = <td>GC Time</td> +: getFormattedTimeQuantiles(gcTimes)
+          val gcQuantiles =
+            <td>
+              <span data-toggle="tooltip"
+                  title={ToolTips.GC_TIME} data-placement="right">GC Time
+              </span>
+            </td> +: getFormattedTimeQuantiles(gcTimes)
 
           val serializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.resultSerializationTime.toDouble
           }
           val serializationQuantiles =
-            <td>Result Serialization Time</td> +: getFormattedTimeQuantiles(serializationTimes)
+            <td>
+              <span data-toggle="tooltip"
+                    title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
+                Result Serialization Time
+              </span>
+            </td> +: getFormattedTimeQuantiles(serializationTimes)
 
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
             if (info.gettingResultTime > 0) {

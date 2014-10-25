@@ -34,5 +34,13 @@ private[spark] object ToolTips {
 
   val GETTING_RESULT_TIME =
     """Time that the driver spends fetching task results from workers. If this is large, consider
-      decreasing the amount of data returned from each task."""
+       decreasing the amount of data returned from each task."""
+
+  val RESULT_SERIALIZATION_TIME =
+    """Time spent serializing the task result on the executor before sending it back to the
+       driver."""
+
+  val GC_TIME =
+    """Time that the executor spent paused for Java garbage collection while the task was
+       running."""
 }
