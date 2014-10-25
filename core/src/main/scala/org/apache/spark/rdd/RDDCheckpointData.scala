@@ -90,8 +90,8 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     }
 
     // Save to file, and reload it as an RDD
-    val conf = new SerializableWritable(rdd.context.hadoopConfiguration)
-    rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, conf) _)
+    rdd.context.runJob(rdd,
+      CheckpointRDD.writeToFile[T](path.toString, rdd.context.hadoopConfiguration) _)
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
     if (newRDD.partitions.size != rdd.partitions.size) {
       throw new SparkException(
