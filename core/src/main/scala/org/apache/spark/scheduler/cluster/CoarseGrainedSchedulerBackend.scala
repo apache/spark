@@ -90,14 +90,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor
+
+          addressToExecutorId(sender.path.address) = executorId
+          totalCoreCount.addAndGet(cores)
+          totalRegisteredExecutors.addAndGet(1)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
             executorDataMap.put(executorId, new ExecutorData(sender, sender.path.address,
               Utils.parseHostPort(hostPort)._1, cores, cores))
-            addressToExecutorId(sender.path.address) = executorId
-            totalCoreCount.addAndGet(cores)
-            totalRegisteredExecutors.addAndGet(1)
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
@@ -193,16 +194,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
     // Remove a disconnected slave from the cluster
     def removeExecutor(executorId: String, reason: String): Unit = {
-      CoarseGrainedSchedulerBackend.this.synchronized {
-        executorDataMap.get(executorId) match {
-          case Some(executorInfo) =>
+      executorDataMap.get(executorId) match {
+        case Some(executorInfo) =>
+          // This must be synchronized because variables mutated
+          // in this block are read when requesting executors
+          CoarseGrainedSchedulerBackend.this.synchronized {
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
-            totalCoreCount.addAndGet(-executorInfo.totalCores)
-            totalRegisteredExecutors.decrementAndGet()
-            scheduler.executorLost(executorId, SlaveLost(reason))
-          case None => logError(s"Asked to remove non existant executor $executorId")
-        }
+          }
+          totalCoreCount.addAndGet(-executorInfo.totalCores)
+          scheduler.executorLost(executorId, SlaveLost(reason))
+        case None => logError(s"Asked to remove non-existent executor $executorId")
       }
     }
   }
@@ -288,6 +290,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   }
 
   /**
+   * Return the number of executors currently registered with this backend.
+   */
+  def numExistingExecutors: Int = executorDataMap.size
+
+  /**
    * Request an additional number of executors from the cluster manager.
    * Return whether the request successfully reaches the cluster manager.
    */
@@ -296,8 +303,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     logDebug(s"Number of pending executors is now $numPendingExecutors")
     numPendingExecutors += numAdditionalExecutors
     // Account for executors pending to be added or removed
-    doRequestTotalExecutors(
-      totalRegisteredExecutors.get + numPendingExecutors - executorsPendingToRemove.size)
+    val newTotal = numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+    doRequestTotalExecutors(newTotal)
   }
 
   /**
