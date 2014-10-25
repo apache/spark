@@ -62,6 +62,16 @@ import org.apache.spark.streaming.StreamingContext._
  * This decay fraction can be specified in units of 'points' or 'batches'.
  * if 'batches', behavior will be independent of the number of points per batch;
  * if 'points', the expected number of points per batch must be specified.
+ *
+ * Use a builder pattern to construct a streaming KMeans analysis
+ * in an application, like:
+ *
+ *  val model = new StreamingKMeans()
+ *    .setDecayFactor(0.5)
+ *    .setK(3)
+ *    .setRandomCenters(5)
+ *    .trainOn(DStream)
+ *
  */
 @DeveloperApi
 class StreamingKMeansModel(
