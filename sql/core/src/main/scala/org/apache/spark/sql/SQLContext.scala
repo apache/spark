@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.optimizer.{Optimizer, DefaultOptimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataType
-import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
@@ -374,13 +373,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def logical: LogicalPlan
 
     lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
-    lazy val optimizedPlan = optimizer(analyzed)
-    lazy val withCachedData = useCachedData(optimizedPlan)
+    lazy val withCachedData = useCachedData(analyzed)
+    lazy val optimizedPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(withCachedData).next()
+      planner(optimizedPlan).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
