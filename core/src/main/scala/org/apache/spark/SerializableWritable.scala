@@ -30,12 +30,12 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
   def value = t
   override def toString = t.toString
 
-  protected def writeObject(out: ObjectOutputStream) {
+  private def writeObject(out: ObjectOutputStream) {
     out.defaultWriteObject()
     new ObjectWritable(t).write(out)
   }
 
-  protected def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     val ow = new ObjectWritable()
     SparkHadoopUtil.CONFIGURATION_INSTANTIATION_LOCK.synchronized {

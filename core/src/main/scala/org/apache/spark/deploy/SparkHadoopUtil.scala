@@ -128,12 +128,12 @@ object SparkHadoopUtil {
    * Configuration's constructor is not threadsafe (see SPARK-1097 and HADOOP-10456).
    * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
    */
-  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+  private[spark] val CONFIGURATION_INSTANTIATION_LOCK = new Object()
 
   /**
    * Create a new Configuration in thread-safe way
    */
-  def newConfiguration(): Configuration = {
+  private[spark] def newConfiguration(): Configuration = {
     CONFIGURATION_INSTANTIATION_LOCK.synchronized {
       new Configuration()
     }

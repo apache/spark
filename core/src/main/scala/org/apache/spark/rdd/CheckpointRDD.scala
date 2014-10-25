@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
@@ -37,6 +38,7 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
   extends RDD[T](sc, Nil) {
 
   @transient val fs = new Path(checkpointPath).getFileSystem(sc.hadoopConfiguration)
+  private val sConf = new SerializableWritable(sc.hadoopConfiguration)
 
   override def getPartitions: Array[Partition] = {
     val cpath = new Path(checkpointPath)
@@ -68,7 +70,7 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val file = new Path(checkpointPath, CheckpointRDD.splitIdToFile(split.index))
-    CheckpointRDD.readFromFile(file, new SerializableWritable(sc.hadoopConfiguration), context)
+    CheckpointRDD.readFromFile(file, sConf.value, context)
   }
 
   override def checkpoint() {
@@ -127,11 +129,11 @@ private[spark] object CheckpointRDD extends Logging {
 
   def readFromFile[T](
       path: Path,
-      conf: SerializableWritable[Configuration],
+      conf: Configuration,
       context: TaskContext
     ): Iterator[T] = {
     val env = SparkEnv.get
-    val fs = path.getFileSystem(conf.value)
+    val fs = path.getFileSystem(conf)
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
     val fileInputStream = fs.open(path, bufferSize)
     val serializer = env.serializer.newInstance()
