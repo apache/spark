@@ -20,7 +20,6 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, HdfsUtils, WriteAheadLogRandomReader}
@@ -28,9 +27,10 @@ import org.apache.spark._
 
 private[streaming]
 class HDFSBackedBlockRDDPartition(
-  val blockId: BlockId, idx: Int, val segment: WriteAheadLogFileSegment) extends Partition {
-  val index = idx
-}
+    val blockId: BlockId,
+    val index: Int,
+    val segment: WriteAheadLogFileSegment
+  ) extends Partition
 
 private[streaming]
 class HDFSBackedBlockRDD[T: ClassTag](
@@ -42,13 +42,12 @@ class HDFSBackedBlockRDD[T: ClassTag](
     val storageLevel: StorageLevel
   ) extends BlockRDD[T](sc, blockIds) {
 
-  if (blockIds.length != segments.length) {
-    throw new IllegalStateException("Number of block ids must be the same as number of segments!")
-  }
+  require(blockIds.length == segments.length,
+    "Number of block ids must be the same as number of segments!")
 
   // Hadoop Configuration is not serializable, so broadcast it as a serializable.
   val broadcastedHadoopConf = sc.broadcast(new SerializableWritable(hadoopConfiguration))
-    .asInstanceOf[Broadcast[SerializableWritable[Configuration]]]
+
   override def getPartitions: Array[Partition] = {
     assertValid()
     (0 until blockIds.size).map { i =>
