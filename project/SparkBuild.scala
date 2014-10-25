@@ -22,6 +22,7 @@ import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.genjavadocSettings
+import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
@@ -116,6 +117,7 @@ object SparkBuild extends PomBuild {
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
+    unidocGenjavadocVersion := "0.8",
 
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
@@ -251,7 +253,11 @@ object Hive {
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
-    cleanupCommands in console := "sparkContext.stop()"
+    cleanupCommands in console := "sparkContext.stop()",
+    // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
+    // in order to generate golden files.  This is only required for developers who are adding new
+    // new query tests.
+    fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
   )
 
 }
