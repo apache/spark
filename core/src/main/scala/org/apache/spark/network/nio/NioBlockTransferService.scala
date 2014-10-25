@@ -95,7 +95,8 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     future.onSuccess { case message =>
       val bufferMessage = message.asInstanceOf[BufferMessage]
       val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-      if (blockMessageArray.length == 0) {
+      // SPARK-4064: In some cases(eg. Remote block was removed) blockMessageArray may be empty.
+      if (blockMessageArray.isEmpty) {
         listener.onBlockFetchFailure(
           new SparkException(s"Not received data from $cmId"))
       } else {
