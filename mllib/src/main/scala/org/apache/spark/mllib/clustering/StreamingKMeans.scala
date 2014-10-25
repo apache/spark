@@ -76,7 +76,7 @@ import org.apache.spark.streaming.StreamingContext._
 @DeveloperApi
 class StreamingKMeansModel(
     override val clusterCenters: Array[Vector],
-    val clusterCounts: Array[Long]) extends KMeansModel(clusterCenters) {
+    val clusterCounts: Array[Long]) extends KMeansModel(clusterCenters) with Logging {
 
   // do a sequential KMeans update on a batch of data
   def update(data: RDD[Vector], a: Double, units: String): StreamingKMeansModel = {
@@ -113,8 +113,14 @@ class StreamingKMeansModel(
       // store the new counts and centers
       counts(newP._1) = oldCount + newCount
       centers(newP._1) = Vectors.fromBreeze(updatedCentroid)
-    }
 
+      // display the updated cluster centers
+      val display = centers(newP._1).size match {
+        case x if x > 100 => centers(newP._1).toArray.take(100).mkString("[", ",", "...")
+        case _ => centers(newP._1).toArray.mkString("[", ",", "]")
+      }
+      logInfo("Cluster %d updated: %s ".format (newP._1, display))
+    }
     new StreamingKMeansModel(centers, counts)
   }
 
