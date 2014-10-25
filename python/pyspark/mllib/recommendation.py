@@ -102,13 +102,13 @@ class MatrixFactorizationModel(object):
         sc = self._context
         juf = self._java_model.userFeatures()
         juf = sc._jvm.SerDe.fromTuple2RDD(juf).toJavaRDD()
-        return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc)
+        return RDD(sc._jvm.SerDe.javaToPython(juf), sc)
 
     def productFeatures(self):
         sc = self._context
         jpf = self._java_model.productFeatures()
         jpf = sc._jvm.SerDe.fromTuple2RDD(jpf).toJavaRDD()
-        return RDD(sc._jvm.PythonRDD.javaToPython(jpf), sc)
+        return RDD(sc._jvm.SerDe.javaToPython(jpf), sc)
 
 
 class ALS(object):
