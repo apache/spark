@@ -25,16 +25,14 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[ui] class JobProgressTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
-  val live = parent.live
   val sc = parent.sc
-  val conf = if (live) sc.conf else new SparkConf
-  val killEnabled = conf.getBoolean("spark.ui.killEnabled", true)
-  val listener = new JobProgressListener(conf)
+  val conf = sc.map(_.conf).getOrElse(new SparkConf)
+  val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
+  val listener = parent.jobProgressListener
 
   attachPage(new JobProgressPage(this))
   attachPage(new StagePage(this))
   attachPage(new PoolPage(this))
-  parent.registerListener(listener)
 
   def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
@@ -43,7 +41,7 @@ private[ui] class JobProgressTab(parent: SparkUI) extends SparkUITab(parent, "st
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
       if (stageId >= 0 && killFlag && listener.activeStages.contains(stageId)) {
-        sc.cancelStage(stageId)
+        sc.get.cancelStage(stageId)
       }
       // Do a quick pause here to give Spark time to kill the stage so it shows up as
       // killed after the refresh. Note that this will block the serving thread so the
