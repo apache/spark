@@ -61,7 +61,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   val createTime = System.currentTimeMillis()
 
   // Number of executors requested from the cluster manager but not registered yet
-  // Keep track of this to determine how many pending executors to request
+  // Keep track of this to determine how many total executors to request
   private var numPendingExecutors = 0
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
