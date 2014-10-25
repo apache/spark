@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
-import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
@@ -51,6 +50,7 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
 /**
@@ -61,7 +61,7 @@ import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, Metadat
  *   this config overrides the default configs as well as system properties.
  */
 
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -224,10 +224,15 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
-  // Initialize the Spark UI, registering all associated listeners
+
+  private[spark] val jobProgressListener = new JobProgressListener(conf)
+  listenerBus.addListener(jobProgressListener)
+
+  // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
-      Some(new SparkUI(this))
+      Some(SparkUI.createLiveUI(this, conf, listenerBus, jobProgressListener,
+        env.securityManager,appName))
     } else {
       // For tests, do not enable the UI
       None
@@ -853,69 +858,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
-
-  /**
-   * Return a map from the slave to the max memory available for caching and the remaining
-   * memory available for caching.
-   */
-  def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
-    env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
-      (blockManagerId.host + ":" + blockManagerId.port, mem)
-    }
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return information about what RDDs are cached, if they are in mem or on disk, how much space
-   * they take, etc.
-   */
-  @DeveloperApi
-  def getRDDStorageInfo: Array[RDDInfo] = {
-    val rddInfos = persistentRdds.values.map(RDDInfo.fromRdd).toArray
-    StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
-    rddInfos.filter(_.isCached)
-  }
-
-  /**
-   * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
-   */
-  def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
-
-  /**
-   * :: DeveloperApi ::
-   * Return information about blocks stored in all of the slaves
-   */
-  @DeveloperApi
-  def getExecutorStorageStatus: Array[StorageStatus] = {
-    env.blockManager.master.getStorageStatus
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return pools for fair scheduler
-   */
-  @DeveloperApi
-  def getAllPools: Seq[Schedulable] = {
-    // TODO(xiajunluan): We should take nested pools into account
-    taskScheduler.rootPool.schedulableQueue.toSeq
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Return the pool associated with the given name, if one exists
-   */
-  @DeveloperApi
-  def getPoolForName(pool: String): Option[Schedulable] = {
-    Option(taskScheduler.rootPool.schedulableNameToSchedulable.get(pool))
-  }
-
-  /**
-   * Return current scheduling mode
-   */
-  def getSchedulingMode: SchedulingMode.SchedulingMode = {
-    taskScheduler.schedulingMode
-  }
 
   /**
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
