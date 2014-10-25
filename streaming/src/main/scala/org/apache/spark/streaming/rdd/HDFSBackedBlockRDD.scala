@@ -86,7 +86,8 @@ class HDFSBackedBlockRDD[T: ClassTag](
     val partition = split.asInstanceOf[HDFSBackedBlockRDDPartition]
     val locations = getBlockIdLocations()
     locations.getOrElse(partition.blockId,
-      HdfsUtils.getBlockLocations(partition.segment.path, hadoopConfiguration)
+      HdfsUtils.getBlockLocations(partition.segment.path, partition.segment.offset,
+        partition.segment.length, hadoopConfiguration)
         .getOrElse(new Array[String](0)).toSeq)
   }
 }
