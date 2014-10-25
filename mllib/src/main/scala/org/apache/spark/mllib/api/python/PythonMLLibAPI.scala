@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
+import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -27,8 +28,11 @@ import net.razorvine.pickle._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
+import org.apache.spark.mllib.feature.Word2Vec
+import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -42,8 +46,8 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
-
 
 /**
  * :: DeveloperApi ::
@@ -285,6 +289,59 @@ class PythonMLLibAPI extends Serializable {
       blocks: Int,
       alpha: Double): MatrixFactorizationModel = {
     ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha)
+  }
+
+  /**
+   * Java stub for Python mllib Word2Vec fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   * @param dataJRDD input JavaRDD
+   * @param vectorSize size of vector
+   * @param learningRate initial learning rate
+   * @param numPartitions number of partitions
+   * @param numIterations number of iterations
+   * @param seed initial seed for random generator
+   * @return A handle to java Word2VecModelWrapper instance at python side
+   */
+  def trainWord2Vec(
+      dataJRDD: JavaRDD[java.util.ArrayList[String]],
+      vectorSize: Int,
+      learningRate: Double,
+      numPartitions: Int,
+      numIterations: Int,
+      seed: Long): Word2VecModelWrapper = {
+    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
+    val word2vec = new Word2Vec()
+      .setVectorSize(vectorSize)
+      .setLearningRate(learningRate)
+      .setNumPartitions(numPartitions)
+      .setNumIterations(numIterations)
+      .setSeed(seed)
+    val model = word2vec.fit(data)
+    data.unpersist()
+    new Word2VecModelWrapper(model)
+  }
+
+  private[python] class Word2VecModelWrapper(model: Word2VecModel) {
+    def transform(word: String): Vector = {
+      model.transform(word)
+    }
+
+    def findSynonyms(word: String, num: Int): java.util.List[java.lang.Object] = {
+      val vec = transform(word)
+      findSynonyms(vec, num)
+    }
+
+    def findSynonyms(vector: Vector, num: Int): java.util.List[java.lang.Object] = {
+      val result = model.findSynonyms(vector, num)
+      val similarity = Vectors.dense(result.map(_._2))
+      val words = result.map(_._1)
+      val ret = new java.util.LinkedList[java.lang.Object]()
+      ret.add(words)
+      ret.add(similarity)
+      ret
+    }
   }
 
   /**
@@ -584,13 +641,24 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  var initialized = false
+  // This should be called before trying to serialize any above classes
+  // In cluster mode, this should be put in the closure
   def initialize(): Unit = {
-    new DenseVectorPickler().register()
-    new DenseMatrixPickler().register()
-    new SparseVectorPickler().register()
-    new LabeledPointPickler().register()
-    new RatingPickler().register()
+    SerDeUtil.initialize()
+    synchronized {
+      if (!initialized) {
+        new DenseVectorPickler().register()
+        new DenseMatrixPickler().register()
+        new SparseVectorPickler().register()
+        new LabeledPointPickler().register()
+        new RatingPickler().register()
+        initialized = true
+      }
+    }
   }
+  // will not called in Executor automatically
+  initialize()
 
   def dumps(obj: AnyRef): Array[Byte] = {
     new Pickler().dumps(obj)
@@ -603,5 +671,39 @@ private[spark] object SerDe extends Serializable {
   /* convert object into Tuple */
   def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
     rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
+  }
+
+  /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
+  def fromTuple2RDD(rdd: RDD[Tuple2[Any, Any]]): RDD[Array[Any]]  = {
+    rdd.map(x => Array(x._1, x._2))
+  }
+
+  /**
+   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      new PythonRDD.AutoBatchedPickler(iter)
+    }
+  }
+
+  /**
+   * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
+   */
+  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj.asInstanceOf[JArrayList[_]].asScala
+        } else {
+          Seq(obj)
+        }
+      }
+    }.toJavaRDD()
   }
 }

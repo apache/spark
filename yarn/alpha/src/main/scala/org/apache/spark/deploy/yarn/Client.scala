@@ -122,7 +122,7 @@ private[spark] class Client(
    * ApplicationReport#getClientToken is renamed `getClientToAMToken` in the stable API.
    */
   override def getClientToken(report: ApplicationReport): String =
-    Option(report.getClientToken).getOrElse("")
+    Option(report.getClientToken).map(_.toString).getOrElse("")
 }
 
 object Client {
@@ -137,15 +137,7 @@ object Client {
     System.setProperty("SPARK_YARN_MODE", "true")
     val sparkConf = new SparkConf
 
-    try {
-      val args = new ClientArguments(argStrings, sparkConf)
-      new Client(args, sparkConf).run()
-    } catch {
-      case e: Exception =>
-        Console.err.println(e.getMessage)
-        System.exit(1)
-    }
-
-    System.exit(0)
+    val args = new ClientArguments(argStrings, sparkConf)
+    new Client(args, sparkConf).run()
   }
 }

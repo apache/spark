@@ -52,6 +52,8 @@ object HiveTypeCoercion {
  */
 trait HiveTypeCoercion {
 
+  import HiveTypeCoercion._
+
   val typeCoercionRules =
     PropagateTypes ::
     ConvertNaNs ::
@@ -220,20 +222,39 @@ trait HiveTypeCoercion {
       case a: BinaryArithmetic if a.right.dataType == StringType =>
         a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
+      // we should cast all timestamp/date/string compare into string compare
+      case p: BinaryPredicate if p.left.dataType == StringType
+        && p.right.dataType == DateType =>
+        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
+      case p: BinaryPredicate if p.left.dataType == DateType
+        && p.right.dataType == StringType =>
+        p.makeCopy(Array(Cast(p.left, StringType), p.right))
       case p: BinaryPredicate if p.left.dataType == StringType
         && p.right.dataType == TimestampType =>
-        p.makeCopy(Array(Cast(p.left, TimestampType), p.right))
+        p.makeCopy(Array(p.left, Cast(p.right, StringType)))
       case p: BinaryPredicate if p.left.dataType == TimestampType
         && p.right.dataType == StringType =>
-        p.makeCopy(Array(p.left, Cast(p.right, TimestampType)))
+        p.makeCopy(Array(Cast(p.left, StringType), p.right))
+      case p: BinaryPredicate if p.left.dataType == TimestampType
+        && p.right.dataType == DateType =>
+        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
+      case p: BinaryPredicate if p.left.dataType == DateType
+        && p.right.dataType == TimestampType =>
+        p.makeCopy(Array(Cast(p.left, StringType), Cast(p.right, StringType)))
 
       case p: BinaryPredicate if p.left.dataType == StringType && p.right.dataType != StringType =>
         p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
       case p: BinaryPredicate if p.left.dataType != StringType && p.right.dataType == StringType =>
         p.makeCopy(Array(p.left, Cast(p.right, DoubleType)))
 
-      case i @ In(a,b) if a.dataType == TimestampType && b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(a,b.map(Cast(_,TimestampType))))
+      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == StringType) =>
+        i.makeCopy(Array(Cast(a, StringType), b))
+      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == StringType) =>
+        i.makeCopy(Array(Cast(a, StringType), b))
+      case i @ In(a, b) if a.dataType == DateType && b.forall(_.dataType == TimestampType) =>
+        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
+      case i @ In(a, b) if a.dataType == TimestampType && b.forall(_.dataType == DateType) =>
+        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
       case Sum(e) if e.dataType == StringType =>
         Sum(Cast(e, DoubleType))
@@ -283,6 +304,8 @@ trait HiveTypeCoercion {
       // Skip if the type is boolean type already. Note that this extra cast should be removed
       // by optimizer.SimplifyCasts.
       case Cast(e, BooleanType) if e.dataType == BooleanType => e
+      // DateType should be null if be cast to boolean.
+      case Cast(e, BooleanType) if e.dataType == DateType => Cast(e, BooleanType)
       // If the data type is not boolean and is being cast boolean, turn it into a comparison
       // with the numeric value, i.e. x != 0. This will coerce the type into numeric type.
       case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
@@ -319,6 +342,13 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      case a @ CreateArray(children) if !a.resolved =>
+        val commonType = a.childTypes.reduce(
+          (a,b) =>
+            findTightestCommonType(a,b).getOrElse(StringType))
+        CreateArray(
+          children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
+
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
@@ -335,6 +365,10 @@ trait HiveTypeCoercion {
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))
+
+      // Hive lets you do aggregation of timestamps... for some reason
+      case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
     }
   }
 
@@ -348,8 +382,11 @@ trait HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       // Decimal and Double remain the same
-      case d: Divide if d.dataType == DoubleType => d
-      case d: Divide if d.dataType == DecimalType => d
+      case d: Divide if d.resolved && d.dataType == DoubleType => d
+      case d: Divide if d.resolved && d.dataType == DecimalType => d
+
+      case Divide(l, r) if l.dataType == DecimalType => Divide(l, Cast(r, DecimalType))
+      case Divide(l, r) if r.dataType == DecimalType => Divide(Cast(l, DecimalType), r)
 
       case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }

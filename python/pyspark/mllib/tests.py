@@ -25,13 +25,19 @@ import array as pyarray
 from numpy import array, array_equal
 
 if sys.version_info[:2] <= (2, 6):
-    import unittest2 as unittest
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
 else:
     import unittest
 
 from pyspark.serializers import PickleSerializer
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.random import RandomRDDs
+from pyspark.mllib.stat import Statistics
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
@@ -196,6 +202,23 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
+
+
+class StatTests(PySparkTestCase):
+    # SPARK-4023
+    def test_col_with_different_rdds(self):
+        # numpy
+        data = RandomRDDs.normalVectorRDD(self.sc, 1000, 10, 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(1000, summary.count())
+        # array
+        data = self.sc.parallelize([range(10)] * 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, summary.count())
+        # array
+        data = self.sc.parallelize([pyarray.array("d", range(10))] * 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, summary.count())
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

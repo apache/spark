@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 case class BigData(s: String)
 
@@ -53,23 +53,53 @@ class CachedTableSuite extends QueryTest {
     sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
   }
 
+  test("cache temp table") {
+    testData.select('key).registerTempTable("tempTable")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
+    cacheTable("tempTable")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"))
+    uncacheTable("tempTable")
+  }
+
+  test("cache table as select") {
+    sql("CACHE TABLE tempTable AS SELECT key FROM testData")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"))
+    uncacheTable("tempTable")
+  }
+
+  test("uncaching temp table") {
+    testData.select('key).registerTempTable("tempTable1")
+    testData.select('key).registerTempTable("tempTable2")
+    cacheTable("tempTable1")
+
+    assertCached(sql("SELECT COUNT(*) FROM tempTable1"))
+    assertCached(sql("SELECT COUNT(*) FROM tempTable2"))
+
+    // Is this valid?
+    uncacheTable("tempTable2")
+
+    // Should this be cached?
+    assertCached(sql("SELECT COUNT(*) FROM tempTable1"), 0)
+  }
+
   test("too big for memory") {
     val data = "*" * 10000
-    sparkContext.parallelize(1 to 1000000, 1).map(_ => BigData(data)).registerTempTable("bigData")
-    cacheTable("bigData")
-    assert(table("bigData").count() === 1000000L)
-    uncacheTable("bigData")
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
+    table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
+    assert(table("bigData").count() === 200000L)
+    table("bigData").unpersist(blocking = true)
   }
 
   test("calling .cache() should use in-memory columnar caching") {
     table("testData").cache()
     assertCached(table("testData"))
+    table("testData").unpersist(blocking = true)
   }
 
   test("calling .unpersist() should drop in-memory columnar cache") {
     table("testData").cache()
     table("testData").count()
-    table("testData").unpersist(true)
+    table("testData").unpersist(blocking = true)
     assertCached(table("testData"), 0)
   }
 
@@ -108,6 +138,8 @@ class CachedTableSuite extends QueryTest {
         case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan) => r
       }.size
     }
+
+    uncacheTable("testData")
   }
 
   test("read from cached table and uncache") {

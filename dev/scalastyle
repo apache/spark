@@ -26,6 +26,8 @@ echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 yarn/scalasty
   >> scalastyle.txt
 
 ERRORS=$(cat scalastyle.txt | grep -e "\<error\>")
+rm scalastyle.txt
+
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
     exit 1

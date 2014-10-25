@@ -17,12 +17,15 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * Predicted value for a node
  * @param predict predicted value
  * @param prob probability of the label (classification only)
  */
-private[tree] class Predict(
+@DeveloperApi
+class Predict(
     val predict: Double,
     val prob: Double = 0.0) extends Serializable {
 

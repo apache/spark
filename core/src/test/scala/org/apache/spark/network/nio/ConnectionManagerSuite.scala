@@ -27,6 +27,7 @@ import scala.language.postfixOps
 import org.scalatest.FunSuite
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
   * Test the ConnectionManager with various security settings.
@@ -236,7 +237,7 @@ class ConnectionManagerSuite extends FunSuite {
     val manager = new ConnectionManager(0, conf, securityManager)
     val managerServer = new ConnectionManager(0, conf, securityManager)
     managerServer.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
-      throw new Exception
+      throw new Exception("Custom exception text")
     })
 
     val size = 10 * 1024 * 1024
@@ -246,9 +247,10 @@ class ConnectionManagerSuite extends FunSuite {
 
     val future = manager.sendMessageReliably(managerServer.id, bufferMessage)
 
-    intercept[IOException] {
+    val exception = intercept[IOException] {
       Await.result(future, 1 second)
     }
+    assert(Utils.exceptionString(exception).contains("Custom exception text"))
 
     manager.stop()
     managerServer.stop()
