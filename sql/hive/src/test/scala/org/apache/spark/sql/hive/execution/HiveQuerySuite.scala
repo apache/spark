@@ -508,19 +508,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a partition is a native command
     assertResult(
       Array(
-        Array("key", "int", HiveShim.getEmptyCommentsFieldValue),
-        Array("value", "string", HiveShim.getEmptyCommentsFieldValue),
-        Array("dt", "string", HiveShim.getEmptyCommentsFieldValue),
-        Array("", "", ""),
-        Array("# Partition Information", "", ""),
+        Array("key", "int"),
+        Array("value", "string"),
+        Array("dt", "string"),
+        Array(""),
+        Array("# Partition Information"),
         Array("# col_name", "data_type", "comment"),
-        Array("", "", ""),
-        Array("dt", "string", HiveShim.getEmptyCommentsFieldValue))
+        Array(""),
+        Array("dt", "string"))
     ) {
       sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
         .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
+        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
     }
 
     // Describe a registered temporary table.

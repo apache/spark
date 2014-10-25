@@ -45,7 +45,7 @@ case class DescribeHiveTableCommand(
   lazy val hiveString: Seq[String] = sideEffectResult.map {
     case Row(name: String, dataType: String, comment) =>
       Seq(name, dataType,
-        Option(comment.asInstanceOf[String]).getOrElse(HiveShim.getEmptyCommentsFieldValue))
+        Option(comment.asInstanceOf[String]).getOrElse(""))
         .map(s => String.format(s"%-20s", s))
         .mkString("\t")
   }

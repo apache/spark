@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */

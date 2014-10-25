@@ -3,6 +3,7 @@
 -- Create temp, and populate it with some values in src.
 CREATE TABLE temp(key STRING, val STRING) STORED AS TEXTFILE;
 
+set hive.stats.dbclass=fs;
 -- Build an index on temp.
 CREATE INDEX temp_index ON TABLE temp(key) as 'COMPACT' WITH DEFERRED REBUILD;
 ALTER INDEX temp_index ON temp REBUILD;

@@ -20,6 +20,9 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.session.SessionState
+
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -119,7 +122,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\.", testDataLocation)
+      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
     } else {
       cmd
     }
@@ -417,6 +420,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
+      // Some tests corrupt this value on purpose, which breaks the RESET call below.
+      hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       runSqlHive("RESET")

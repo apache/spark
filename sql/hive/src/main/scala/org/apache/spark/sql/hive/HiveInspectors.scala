@@ -26,7 +26,6 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.hive.HiveShim
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._

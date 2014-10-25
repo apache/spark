@@ -52,6 +52,8 @@ object HiveTypeCoercion {
  */
 trait HiveTypeCoercion {
 
+  import HiveTypeCoercion._
+
   val typeCoercionRules =
     PropagateTypes ::
     ConvertNaNs ::
@@ -340,6 +342,13 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      case a @ CreateArray(children) if !a.resolved =>
+        val commonType = a.childTypes.reduce(
+          (a,b) =>
+            findTightestCommonType(a,b).getOrElse(StringType))
+        CreateArray(
+          children.map(c => if (c.dataType == commonType) c else Cast(c, commonType)))
+
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
@@ -356,6 +365,10 @@ trait HiveTypeCoercion {
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))
+
+      // Hive lets you do aggregation of timestamps... for some reason
+      case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
     }
   }
 

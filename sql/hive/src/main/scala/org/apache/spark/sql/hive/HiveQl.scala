@@ -251,6 +251,8 @@ private[hive] object HiveQl {
         s"""
           |Unsupported language features in query: $sql
           |${dumpTree(getAst(sql))}
+          |$e
+          |${e.getStackTrace.head}
         """.stripMargin)
     }
   }
@@ -329,6 +331,7 @@ private[hive] object HiveQl {
     case Token("TOK_SMALLINT", Nil) => ShortType
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
+    case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
     case Token("TOK_DOUBLE", Nil) => DoubleType
     case Token("TOK_DATE", Nil) => DateType
@@ -854,9 +857,11 @@ private[hive] object HiveQl {
     HiveParser.Number,
     HiveParser.TinyintLiteral,
     HiveParser.SmallintLiteral,
-    HiveParser.BigintLiteral)
+    HiveParser.BigintLiteral,
+    HiveParser.DecimalLiteral)
 
   /* Case insensitive matches */
+  val ARRAY = "(?i)ARRAY".r
   val COUNT = "(?i)COUNT".r
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
@@ -917,7 +922,9 @@ private[hive] object HiveQl {
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)
-    case Token("TOK_FUNCTION", Token("TOK_VARCHAR", Nil) :: arg :: Nil) =>
+    case Token("TOK_FUNCTION", Token("TOK_VARCHAR", _) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), StringType)
+    case Token("TOK_FUNCTION", Token("TOK_CHAR", _) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)
     case Token("TOK_FUNCTION", Token("TOK_INT", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), IntegerType)
@@ -1009,6 +1016,8 @@ private[hive] object HiveQl {
       GetItem(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Other functions */
+    case Token("TOK_FUNCTION", Token(ARRAY(), Nil) :: children) =>
+      CreateArray(children.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
@@ -1042,10 +1051,10 @@ private[hive] object HiveQl {
         } else if (ast.getText.endsWith("Y")) {
           // Literal tinyint.
           v = Literal(ast.getText.substring(0, ast.getText.length() - 1).toByte, ByteType)
-        } else if (ast.getText.endsWith("BD")) {
+        } else if (ast.getText.endsWith("BD") || ast.getText.endsWith("D")) {
           // Literal decimal
-          val strVal = ast.getText.substring(0, ast.getText.length() - 2)
-          BigDecimal(strVal)
+          val strVal = ast.getText.stripSuffix("D").stripSuffix("B")
+          v = Literal(BigDecimal(strVal))
         } else {
           v = Literal(ast.getText.toDouble, DoubleType)
           v = Literal(ast.getText.toLong, LongType)
@@ -1056,7 +1065,7 @@ private[hive] object HiveQl {
       }
 
       if (v == null) {
-        sys.error(s"Failed to parse number ${ast.getText}")
+        sys.error(s"Failed to parse number '${ast.getText}'.")
       } else {
         v
       }

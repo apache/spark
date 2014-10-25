@@ -9,9 +9,9 @@ ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
 CREATE TABLE things (id INT, name STRING) partitioned by (ds string)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
 
-load data local inpath '../data/files/sales.txt' INTO TABLE sales;
-load data local inpath '../data/files/things.txt' INTO TABLE things partition(ds='2011-10-23');
-load data local inpath '../data/files/things2.txt' INTO TABLE things partition(ds='2011-10-24');
+load data local inpath '../../data/files/sales.txt' INTO TABLE sales;
+load data local inpath '../../data/files/things.txt' INTO TABLE things partition(ds='2011-10-23');
+load data local inpath '../../data/files/things2.txt' INTO TABLE things partition(ds='2011-10-24');
 
 SELECT name,id FROM sales ORDER BY name ASC, id ASC;
 

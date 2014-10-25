@@ -1,3 +1,5 @@
+set hive.exec.post.hooks=org.apache.hadoop.hive.ql.hooks.PostExecutePrinter,org.apache.hadoop.hive.ql.hooks.PrintCompletedTasksHook;
+
 create table smallTbl1(key string, value string);
 insert overwrite table smallTbl1 select * from src where key < 10;
 
