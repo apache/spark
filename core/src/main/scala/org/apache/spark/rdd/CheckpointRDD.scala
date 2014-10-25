@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}

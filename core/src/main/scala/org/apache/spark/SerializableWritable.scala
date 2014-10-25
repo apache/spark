@@ -19,9 +19,9 @@ package org.apache.spark
 
 import java.io._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
+import org.apache.spark.deploy.SparkHadoopUtil
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -30,16 +30,18 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
   def value = t
   override def toString = t.toString
 
-  private def writeObject(out: ObjectOutputStream) {
+  protected def writeObject(out: ObjectOutputStream) {
     out.defaultWriteObject()
     new ObjectWritable(t).write(out)
   }
 
-  private def readObject(in: ObjectInputStream) {
+  protected def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     val ow = new ObjectWritable()
-    ow.setConf(new Configuration())
-    ow.readFields(in)
+    SparkHadoopUtil.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
+      ow.setConf(SparkHadoopUtil.newConfiguration())
+      ow.readFields(in)  // not thread safe
+    }
     t = ow.get().asInstanceOf[T]
   }
 }

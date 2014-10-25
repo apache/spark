@@ -74,7 +74,6 @@ class NewHadoopRDD[K, V](
   with Logging {
 
   private val sConf = new SerializableWritable(conf)
-  // private val serializableConf = new SerializableWritable(conf)
 
   private val jobTrackerId: String = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")

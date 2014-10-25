@@ -569,7 +569,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
       this,
-      new SerializableWritable(hadoopConfiguration),
+      hadoopConfiguration,
       Some(setInputPathsFunc),
       inputFormatClass,
       keyClass,

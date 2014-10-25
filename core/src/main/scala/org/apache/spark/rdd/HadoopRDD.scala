@@ -39,7 +39,6 @@ import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
@@ -86,7 +85,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * [[org.apache.spark.SparkContext.hadoopRDD()]]
  *
  * @param sc The SparkContext to associate the RDD with.
- * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
+ * @param conf A general Hadoop Configuration, or a subclass of it. If the enclosed
  *     variabe references an instance of JobConf, then that JobConf will be used for the Hadoop job.
  *     Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
  * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf that HadoopRDD
@@ -99,13 +98,16 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 @DeveloperApi
 class HadoopRDD[K, V](
     sc: SparkContext,
-    conf: SerializableWritable[Configuration],
+    @transient conf: Configuration,
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
     minPartitions: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
+
+  // The serializable configuration
+  private val sConf = new SerializableWritable(conf)
 
   def this(
       sc: SparkContext,
@@ -116,7 +118,7 @@ class HadoopRDD[K, V](
       minPartitions: Int) = {
     this(
       sc,
-      new SerializableWritable(conf),
+      conf,
       None /* initLocalJobConfFuncOpt */,
       inputFormatClass,
       keyClass,
@@ -124,55 +126,19 @@ class HadoopRDD[K, V](
       minPartitions)
   }
 
-  protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
-
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
   // used to build JobTracker ID
   private val createTime = new Date()
 
-  private val shouldCloneJobConf = sc.conf.get("spark.hadoop.cloneConf", "false").toBoolean
-
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
-  protected def getJobConf(): JobConf = {
-    val conf: Configuration = this.conf.value
-    if (shouldCloneJobConf) {
-      // Hadoop Configuration objects are not thread-safe, which may lead to various problems if
-      // one job modifies a configuration while another reads it (SPARK-2546).  This problem occurs
-      // somewhat rarely because most jobs treat the configuration as though it's immutable.  One
-      // solution, implemented here, is to clone the Configuration object.  Unfortunately, this
-      // clone can be very expensive.  To avoid unexpected performance regressions for workloads and
-      // Hadoop versions that do not suffer from these thread-safety issues, this cloning is
-      // disabled by default.
-      HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
-        logDebug("Cloning Hadoop Configuration")
-        val newJobConf = new JobConf(conf)
-        if (!conf.isInstanceOf[JobConf]) {
-          initLocalJobConfFuncOpt.map(f => f(newJobConf))
-        }
+  protected def getJobConf(): JobConf = sConf.value match {
+    case jobConf: JobConf => jobConf
+    case c => SparkHadoopUtil.CONFIGURATION_INSTANTIATION_LOCK synchronized {
+        val newJobConf = new JobConf(c)
+        initLocalJobConfFuncOpt.map(f => f(newJobConf))
         newJobConf
       }
-    } else {
-      if (conf.isInstanceOf[JobConf]) {
-        logDebug("Re-using user-broadcasted JobConf")
-        conf.asInstanceOf[JobConf]
-      } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
-        logDebug("Re-using cached JobConf")
-        HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
-      } else {
-        // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
-        // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
-        // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
-        // Synchronize to prevent ConcurrentModificationException (SPARK-1097, HADOOP-10456).
-        HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
-          logDebug("Creating new JobConf and caching it for later re-use")
-          val newJobConf = new JobConf(conf)
-          initLocalJobConfFuncOpt.map(f => f(newJobConf))
-          HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-          newJobConf
-        }
-      }
-    }
   }
 
   protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
@@ -295,12 +261,6 @@ class HadoopRDD[K, V](
 }
 
 private[spark] object HadoopRDD extends Logging {
-  /**
-   * Configuration's constructor is not threadsafe (see SPARK-1097 and HADOOP-10456).
-   * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
-   */
-  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
-
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
    * the local process.
