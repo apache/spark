@@ -51,7 +51,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    */
-  override def requestTotalExecutors(requestedTotal: Int): Boolean = {
+  override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
     AkkaUtils.askWithReply[Boolean](
       RequestExecutors(requestedTotal), yarnSchedulerActor, askTimeout)
   }
@@ -59,7 +59,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Request the ApplicationMaster to kill the specified executors.
    */
-  override def killExecutors(executorIds: Seq[String]): Boolean = {
+  override def doKillExecutors(executorIds: Seq[String]): Boolean = {
     AkkaUtils.askWithReply[Boolean](
       KillExecutors(executorIds), yarnSchedulerActor, askTimeout)
   }
