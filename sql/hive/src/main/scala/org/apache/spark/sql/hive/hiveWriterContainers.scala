@@ -27,12 +27,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
-import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.hive.HiveShim._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.

@@ -95,6 +95,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/hive-thriftserver</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -252,7 +253,17 @@
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
-
+  <!-- 
+       This is a dummy dependency that is used along with the shading plug-in
+       to create effective poms on publishing (see SPARK-3812).
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>org.spark-project.spark</groupId>
+      <artifactId>unused</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+  </dependencies>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -336,7 +347,7 @@
       <dependency>
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
-        <version>1.1.1.3</version>
+        <version>1.1.1.5</version>
       </dependency>
       <dependency>
         <groupId>net.jpountz.lz4</groupId>
@@ -431,6 +442,11 @@
             <artifactId>protobuf-java</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.roaringbitmap</groupId>
+        <artifactId>RoaringBitmap</artifactId>
+        <version>0.4.1</version>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>
@@ -996,6 +1012,27 @@
     </pluginManagement>
 
     <plugins>
+      <!-- The shade plug-in is used here to create effective pom's (see SPARK-3812). -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>org.spark-project.spark:unused</include>
+            </includes>
+          </artifactSet>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
@@ -1281,9 +1318,6 @@
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <modules>
-        <module>sql/hive-thriftserver</module>
-      </modules>
       <properties>
         <hive.version>0.12.0-protobuf-2.5</hive.version>
         <hive.version.short>0.12.0</hive.version.short>
@@ -1295,9 +1329,6 @@
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <modules>
-        <module>sql/hive-thriftserver</module>
-      </modules>
       <properties>
         <hive.version>0.13.1</hive.version>
         <hive.version.short>0.13.1</hive.version.short>

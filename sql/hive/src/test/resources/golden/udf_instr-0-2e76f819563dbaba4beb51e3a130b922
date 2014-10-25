@@ -1,1 +1,0 @@
-instr(str, substr) - Returns the index of the first occurance of substr in str
