@@ -61,9 +61,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
 
-  // Number of executors requested from the cluster manager but not registered yet
-  private var numPendingExecutors = 0
-
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
@@ -93,12 +90,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          CoarseGrainedSchedulerBackend.this.synchronized {
-            if (numPendingExecutors > 0) {
-              numPendingExecutors -= 1
-              logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
-            }
-          }
           makeOffers()
         }
 
@@ -298,45 +289,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
   }
-
-  /**
-   * Request an additional number of executors from the cluster manager.
-   * Return whether the request successfully reaches the cluster manager.
-   */
-  def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
-    numPendingExecutors += numAdditionalExecutors
-    requestPendingExecutors(numPendingExecutors)
-  }
-
-  /**
-   * Send a request to the cluster manager to set the number of pending executors desired.
-   *
-   * The semantics here guarantee that we do not over-allocate executors for this application,
-   * since a later request overrides the value of any prior request. The alternative interface
-   * of requesting a delta of executors risks double counting new executors when there are
-   * insufficient resources to satisfy the first request. We make the assumption here that the
-   * cluster manager will eventually fulfill all requests when resources free up.
-   *
-   * Return whether the request successfully reaches the cluster manager.
-   * In Yarn, this will be implemented in SPARK-3822.
-   */
-  protected def requestPendingExecutors(numPendingExecutors: Int): Boolean = false
-
-  /**
-   * Kill the given executor through the cluster manager.
-   * Return whether the kill request successfully reaches the cluster manager.
-   */
-  def killExecutor(executorId: String): Boolean = {
-    killExecutors(Seq[String](executorId))
-  }
-
-  /**
-   * Kill the given list of executors through the cluster manager.
-   * Return whether the kill request successfully reaches the cluster manager.
-   * In Yarn, this will be implemented in SPARK-3822.
-   */
-  def killExecutors(executorIds: Seq[String]): Boolean = false
-
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

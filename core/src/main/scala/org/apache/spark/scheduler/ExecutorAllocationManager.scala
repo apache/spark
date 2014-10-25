@@ -185,7 +185,9 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     val actualNumExecutorsToAdd =
       math.min(numExistingExecutors + numExecutorsToAdd, maxNumExecutors) - numExistingExecutors
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
-    if (backend.requestExecutors(actualNumExecutorsToAdd)) {
+    // TODO: Actually request executors once SPARK-3822 goes in
+    val addRequestAcknowledged = true // backend.requestExecutors(actualNumbersToAdd)
+    if (addRequestAcknowledged) {
       logInfo(s"Pending tasks are building up! Adding $actualNumExecutorsToAdd " +
         s"new executor(s) (new total will be $newTotalExecutors)")
       numExecutorsToAdd *= 2
@@ -221,7 +223,9 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
     }
 
     // Send a request to the backend to kill this executor
-    if (backend.killExecutor(executorId)) {
+    // TODO: Actually kill the executor once SPARK-3822 goes in
+    val removeRequestAcknowledged = true // backend.killExecutor(executorId)
+    if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
