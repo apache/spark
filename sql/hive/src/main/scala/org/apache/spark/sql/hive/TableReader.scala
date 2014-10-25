@@ -63,7 +63,7 @@ class HadoopTableReader(
 
   // TODO: set aws s3 credentials.
 
-  private val conf: SerializableWritable[Configuration] = new SerializableWritable(hiveExtraConf)
+  private val conf = new SerializableWritable(hiveExtraConf)
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
