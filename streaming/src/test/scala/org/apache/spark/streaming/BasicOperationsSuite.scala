@@ -21,6 +21,7 @@ import org.apache.spark.streaming.StreamingContext._
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.SparkContext._
+import org.apache.spark.HashPartitioner
 
 import util.ManualClock
 import org.apache.spark.{SparkException, SparkConf}
@@ -347,6 +348,43 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
 
     testOperation(inputData, updateStateOperation, outputData, true)
+  }
+
+  test("updateStateByKey - with initial value RDD") {
+    val initial = Seq(("a", 1), ("c", 2))
+
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 2), ("c", 2)),
+        Seq(("a", 3), ("b", 1), ("c", 2)),
+        Seq(("a", 4), ("b", 2), ("c", 3)),
+        Seq(("a", 5), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3))
+      )
+
+    val updateStateOperation = (s: DStream[String], initialRDD : RDD[(String, Int)]) => {
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some(values.sum + state.getOrElse(0))
+      }
+      val newUpdateFunc = (iterator: Iterator[(String, Seq[Int], Option[Int])]) => {
+        iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
+      }
+      s.map(x => (x, 1)).updateStateByKey[Int](newUpdateFunc,
+        new HashPartitioner (numInputPartitions), true, initialRDD)
+    }
+
+    testOperationWithInitial(initial, inputData, updateStateOperation, outputData, true)
   }
 
   test("updateStateByKey - object lifecycle") {
