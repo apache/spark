@@ -48,7 +48,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
   override def index: Int = slice
 
   @throws(classOf[IOException])
-  private def writeObject(out: ObjectOutputStream): Unit = {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
 
     val sfactory = SparkEnv.get.serializer
 
@@ -67,7 +67,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
   }
 
   @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream): Unit = {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
 
     val sfactory = SparkEnv.get.serializer
     sfactory match {

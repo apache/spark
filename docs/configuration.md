@@ -125,11 +125,22 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.classesToRegister</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, give a comma-separated list of custom class names to register
+    with Kryo.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryo.registrator</code></td>
   <td>(none)</td>
   <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    It should be set to a class that extends
+    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
+    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
+    set to a class that extends
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
@@ -161,14 +172,6 @@ Apart from these, the following properties are also available, and may be useful
 #### Runtime Environment
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
-  <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
-</tr>
 <tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
@@ -365,7 +368,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
   <td>
-    Port for your application's dashboard, which shows memory and workload data
+    Port for your application's dashboard, which shows memory and workload data.
   </td>
 </tr>
 <tr>
@@ -628,6 +631,15 @@ Apart from these, the following properties are also available, and may be useful
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 <tr>
+    <td><code>spark.hadoop.cloneConf</code></td>
+    <td>false</td>
+    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
+    This is disabled by default in order to avoid unexpected performance regressions for jobs that
+    are not affected by these issues.</td>
+</tr>
+<tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
     <td>10000</td>
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
@@ -725,7 +737,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>600</td>
+  <td>6000</td>
   <td>
      This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
      enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
@@ -880,8 +892,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1000</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks.
-    (in milliseconds)
+    The interval length for the scheduler to revive the worker resource offers to run tasks
+    (in milliseconds).
   </td>
 </tr>
 </tr>
@@ -893,7 +905,7 @@ Apart from these, the following properties are also available, and may be useful
     to wait for before scheduling begins. Specified as a double between 0 and 1.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
-    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code> 
+    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
   </td>
 </tr>
 <tr>

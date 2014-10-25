@@ -1,7 +1,7 @@
 create table tab_string(a string);
 
 -- insert some data
-LOAD DATA LOCAL INPATH "../data/files/string.txt" INTO TABLE tab_string;
+LOAD DATA LOCAL INPATH "../../data/files/string.txt" INTO TABLE tab_string;
 
 select count(*) from tab_string;
 
