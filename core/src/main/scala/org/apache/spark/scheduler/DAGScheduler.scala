@@ -125,7 +125,7 @@ class DAGScheduler(
 
   /** Broadcast the serialized tasks only when they are bigger than it */
   private val broadcastTaskMinSize =
-    sc.getConf.getInt("spark.scheduler.broadcastTaskMinSize", 8) * 1024
+    sc.getConf.getInt("spark.scheduler.broadcastTaskMinSizeKB", 8) * 1024
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
