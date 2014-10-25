@@ -82,7 +82,7 @@ case class HiveTableScan(
     val neededColumnIDs =
       attributes.map(a =>
         relation.attributes.indexWhere(
-          _.name.toLowerCase == a.name.toLowerCase): Integer).filter(index => index >= 0)
+          _.lowerName == a.lowerName): Integer).filter(index => index >= 0)
 
     ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
     ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))

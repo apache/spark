@@ -38,6 +38,7 @@ abstract class NamedExpression extends Expression {
   self: Product =>
 
   def name: String
+  def lowerName = name.toLowerCase()
   def exprId: ExprId
   def qualifiers: Seq[String]
 
