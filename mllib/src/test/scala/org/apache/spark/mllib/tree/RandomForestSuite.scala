@@ -93,8 +93,9 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
 
-    val strategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+    val strategy = new Strategy(algo = Regression, impurity = Variance,
+      maxDepth = 2, maxBins = 10, numClassesForClassification = 2,
+      categoricalFeaturesInfo = categoricalFeaturesInfo)
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
@@ -171,6 +172,22 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     checkFeatureSubsetStrategy(numTrees = 2, "log2",
       (math.log(numFeatures) / math.log(2)).ceil.toInt)
     checkFeatureSubsetStrategy(numTrees = 2, "onethird", (numFeatures / 3.0).ceil.toInt)
+  }
+
+  test("alternating categorical and continuous features with multiclass labels to test indexing") {
+    val arr = new Array[LabeledPoint](4)
+    arr(0) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0, 3.0, 1.0))
+    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0))
+    arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0))
+    arr(3) = new LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
+    val categoricalFeaturesInfo = Map(0 -> 3, 2 -> 2, 4 -> 4)
+    val input = sc.parallelize(arr)
+
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClassesForClassification = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
+    val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
+      featureSubsetStrategy = "sqrt", seed = 12345)
+    RandomForestSuite.validateClassifier(model, arr, 1.0)
   }
 
 }

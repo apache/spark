@@ -19,14 +19,14 @@
 public classes of Spark SQL:
 
     - L{SQLContext}
-    Main entry point for SQL functionality.
+      Main entry point for SQL functionality.
     - L{SchemaRDD}
-    A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
-    addition to normal RDD operations, SchemaRDDs also support SQL.
+      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
+      addition to normal RDD operations, SchemaRDDs also support SQL.
     - L{Row}
-    A Row of data returned by a Spark SQL query.
+      A Row of data returned by a Spark SQL query.
     - L{HiveContext}
-    Main entry point for accessing data stored in Apache Hive..
+      Main entry point for accessing data stored in Apache Hive..
 """
 
 import itertools
@@ -926,6 +926,10 @@ def _create_cls(dataType):
         # create property for fast access
         locals().update(_create_properties(dataType.fields))
 
+        def asDict(self):
+            """ Return as a dict """
+            return dict(zip(self.__FIELDS__, self))
+
         def __repr__(self):
             # call collect __repr__ for nested objects
             return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
@@ -1526,6 +1530,14 @@ class Row(tuple):
 
         else:
             raise ValueError("No args or kwargs")
+
+    def asDict(self):
+        """
+        Return as an dict
+        """
+        if not hasattr(self, "__FIELDS__"):
+            raise TypeError("Cannot convert a Row class into dict")
+        return dict(zip(self.__FIELDS__, self))
 
     # let obect acs like class
     def __call__(self, *args):

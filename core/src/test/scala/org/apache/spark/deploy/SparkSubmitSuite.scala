@@ -26,7 +26,6 @@ import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
-import com.google.common.io.Files
 
 class SparkSubmitSuite extends FunSuite with Matchers {
   def beforeAll() {
@@ -332,7 +331,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
-    val tmpDir = Files.createTempDir()
+    val tmpDir = Utils.createTempDir()
 
     val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
     val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))

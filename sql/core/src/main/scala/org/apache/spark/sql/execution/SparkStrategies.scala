@@ -295,7 +295,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case e @ EvaluatePython(udf, child) =>
+      case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
       case _ => Nil
@@ -304,8 +304,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.SetCommand(key, value) =>
-        Seq(execution.SetCommand(key, value, plan.output)(context))
+      case logical.SetCommand(kv) =>
+        Seq(execution.SetCommand(kv, plan.output)(context))
       case logical.ExplainCommand(logicalPlan, extended) =>
         Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
       case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
