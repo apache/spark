@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.util.collection.OpenHashSet
@@ -35,6 +36,13 @@ private[jobs] object UIData {
     var memoryBytesSpilled : Long = 0
     var diskBytesSpilled : Long = 0
   }
+
+  class JobUIData(
+    var jobId: Int = -1,
+    var stageIds: Seq[Int] = Seq.empty,
+    var jobGroup: Option[String] = None,
+    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN
+  )
 
   class StageUIData {
     var numActiveTasks: Int = _

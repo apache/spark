@@ -375,7 +375,16 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI remembers before garbage collecting.
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedJobs</code></td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
   </td>
 </tr>
 <tr>
