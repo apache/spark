@@ -881,6 +881,13 @@ class SparkContext(config: SparkConf) extends Logging {
     }
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Request the cluster manager to kill the specified executor.
+   */
+  @DeveloperApi
+  def killExecutor(executorId: String): Unit = killExecutors(Seq(executorId))
+
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
 
