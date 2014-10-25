@@ -21,20 +21,11 @@ import scala.collection.mutable.{HashMap, SynchronizedMap, SynchronizedQueue}
 import scala.language.existentials
 
 import akka.actor._
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{SerializableWritable, Logging, SparkEnv, SparkException}
 import org.apache.spark.SparkContext._
-import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.receiver.{ReceivedBlockInfo, Receiver, ReceiverSupervisorImpl, StopReceiver}
 import org.apache.spark.util.AkkaUtils
-
-/** Information about blocks received by the receiver */
-private[streaming] case class ReceivedBlockInfo(
-    streamId: Int,
-    blockId: StreamBlockId,
-    numRecords: Long,
-    metadata: Any
-  )
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -252,6 +243,9 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
           ssc.sc.makeRDD(receivers, receivers.size)
         }
 
+      val checkpointDirOption = Option(ssc.checkpointDir)
+      val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
+
       // Function to start the receiver on the worker node
       val startReceiver = (iterator: Iterator[Receiver[_]]) => {
         if (!iterator.hasNext) {
@@ -259,9 +253,10 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
             "Could not start receiver as object not found.")
         }
         val receiver = iterator.next()
-        val executor = new ReceiverSupervisorImpl(receiver, SparkEnv.get)
-        executor.start()
-        executor.awaitTermination()
+        val supervisor = new ReceiverSupervisorImpl(
+          receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+        supervisor.start()
+        supervisor.awaitTermination()
       }
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.
