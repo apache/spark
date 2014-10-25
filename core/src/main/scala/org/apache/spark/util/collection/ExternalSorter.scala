@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockObjectWriter, BlockId}
+import org.apache.spark.network.ManagedBuffer
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -86,8 +87,6 @@ private[spark] class ExternalSorter[K, V, C](
     ordering: Option[Ordering[K]] = None,
     serializer: Option[Serializer] = None)
   extends Logging with Spillable[SizeTrackingPairCollection[(Int, K), C]] {
-
-  import ExternalSorter._
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
   private val shouldPartition = numPartitions > 1
@@ -188,6 +187,20 @@ private[spark] class ExternalSorter[K, V, C](
     serializerBatchSizes: Array[Long],
     elementsPerPartition: Array[Long])
   private val spills = new ArrayBuffer[SpilledFile]
+
+  def insertInMemoryBlock(buffer: ManagedBuffer) {
+    // try to acquire memory
+    val granted = shuffleMemoryManager.tryToAcquire(buffer.size)
+    if (granted < buffer.size) {
+      if (!spillingEnabled) {
+        throw new IllegalStateException()
+      }
+      // spill in-memory partitions
+    }
+    // maybe spill
+
+    // spilling should probably tell our background merger thread to try stuff
+  }
 
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
@@ -397,12 +410,12 @@ private[spark] class ExternalSorter[K, V, C](
       val iterators = readers.map(_.readNextPartition()) ++ Seq(inMemIterator)
       if (aggregator.isDefined) {
         // Perform partial aggregation across partitions
-        (p, mergeWithAggregation(
+        (p, MergeUtil.mergeWithAggregation(
           iterators, aggregator.get.mergeCombiners, keyComparator, ordering.isDefined))
       } else if (ordering.isDefined) {
         // No aggregator given, but we have an ordering (e.g. used by reduce tasks in sortByKey);
         // sort the elements without trying to merge them
-        (p, mergeSort(iterators, ordering.get))
+        (p, MergeUtil.mergeSort(iterators, ordering.get))
       } else {
         (p, iterators.iterator.flatten)
       }
@@ -719,120 +732,6 @@ private[spark] class ExternalSorter[K, V, C](
       }
       val elem = data.next()
       (elem._1._2, elem._2)
-    }
-  }
-}
-
-private[spark] object ExternalSorter {
-
-  /**
-   * Merge-sort a sequence of (K, C) iterators using a given a comparator for the keys.
-   */
-  def mergeSort[K, C](iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
-      : Iterator[Product2[K, C]] =
-  {
-    val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
-    type Iter = BufferedIterator[Product2[K, C]]
-    val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
-      // Use the reverse of comparator.compare because PriorityQueue dequeues the max
-      override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
-    })
-    heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
-    new Iterator[Product2[K, C]] {
-      override def hasNext: Boolean = !heap.isEmpty
-
-      override def next(): Product2[K, C] = {
-        if (!hasNext) {
-          throw new NoSuchElementException
-        }
-        val firstBuf = heap.dequeue()
-        val firstPair = firstBuf.next()
-        if (firstBuf.hasNext) {
-          heap.enqueue(firstBuf)
-        }
-        firstPair
-      }
-    }
-  }
-
-  /**
-   * Merge a sequence of (K, C) iterators by aggregating values for each key, assuming that each
-   * iterator is sorted by key with a given comparator. If the comparator is not a total ordering
-   * (e.g. when we sort objects by hash code and different keys may compare as equal although
-   * they're not), we still merge them by doing equality tests for all keys that compare as equal.
-   */
-  def mergeWithAggregation[K, C](
-      iterators: Seq[Iterator[Product2[K, C]]],
-      mergeCombiners: (C, C) => C,
-      comparator: Comparator[K],
-      totalOrder: Boolean)
-      : Iterator[Product2[K, C]] =
-  {
-    if (!totalOrder) {
-      // We only have a partial ordering, e.g. comparing the keys by hash code, which means that
-      // multiple distinct keys might be treated as equal by the ordering. To deal with this, we
-      // need to read all keys considered equal by the ordering at once and compare them.
-      new Iterator[Iterator[Product2[K, C]]] {
-        val sorted = mergeSort(iterators, comparator).buffered
-
-        // Buffers reused across elements to decrease memory allocation
-        val keys = new ArrayBuffer[K]
-        val combiners = new ArrayBuffer[C]
-
-        override def hasNext: Boolean = sorted.hasNext
-
-        override def next(): Iterator[Product2[K, C]] = {
-          if (!hasNext) {
-            throw new NoSuchElementException
-          }
-          keys.clear()
-          combiners.clear()
-          val firstPair = sorted.next()
-          keys += firstPair._1
-          combiners += firstPair._2
-          val key = firstPair._1
-          while (sorted.hasNext && comparator.compare(sorted.head._1, key) == 0) {
-            val pair = sorted.next()
-            var i = 0
-            var foundKey = false
-            while (i < keys.size && !foundKey) {
-              if (keys(i) == pair._1) {
-                combiners(i) = mergeCombiners(combiners(i), pair._2)
-                foundKey = true
-              }
-              i += 1
-            }
-            if (!foundKey) {
-              keys += pair._1
-              combiners += pair._2
-            }
-          }
-
-          // Note that we return an iterator of elements since we could've had many keys marked
-          // equal by the partial order; we flatten this below to get a flat iterator of (K, C).
-          keys.iterator.zip(combiners.iterator)
-        }
-      }.flatMap(i => i)
-    } else {
-      // We have a total ordering, so the objects with the same key are sequential.
-      new Iterator[Product2[K, C]] {
-        val sorted = mergeSort(iterators, comparator).buffered
-
-        override def hasNext: Boolean = sorted.hasNext
-
-        override def next(): Product2[K, C] = {
-          if (!hasNext) {
-            throw new NoSuchElementException
-          }
-          val elem = sorted.next()
-          val k = elem._1
-          var c = elem._2
-          while (sorted.hasNext && sorted.head._1 == k) {
-            c = mergeCombiners(c, sorted.head._2)
-          }
-          (k, c)
-        }
-      }
     }
   }
 }
