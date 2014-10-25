@@ -480,26 +480,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Send a request to the ResourceManager to set the number of pending executors.
-   */
-  private def requestPendingExecutors(numPendingExecutors: Int, numExistingExecutors: Int): Unit = {
-    Option(allocator) match {
-      case Some(a) => a.requestPendingExecutors(numPendingExecutors, numExistingExecutors)
-      case None => logWarning("Container allocator is not ready to request executors yet.")
-    }
-  }
-
-  /**
-   * Send a request to the ResourceManager to kill the containers running the specified executors.
-   */
-  private def killExecutors(executorIds: Seq[String]): Unit = {
-    Option(allocator) match {
-      case Some(a) => executorIds.foreach(a.killExecutor)
-      case None => logWarning("Container allocator is not ready to kill executors yet.")
-    }
-  }
-
-  /**
    * Actor that communicates with the driver in client deploy mode.
    */
   private class AMActor(driverUrl: String) extends Actor {
@@ -524,14 +504,20 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         logInfo(s"Add WebUI Filter. $x")
         driver ! x
 
-      case RequestPendingExecutors(numPendingExecutors, numExistingExecutors) =>
-        logInfo(s"Driver requested $numPendingExecutors executors to be pending.")
-        requestPendingExecutors(numPendingExecutors, numExistingExecutors)
+      case RequestExecutors(requestedTotal) =>
+        logInfo(s"Driver requested $requestedTotal total number of executors.")
+        Option(allocator) match {
+          case Some(a) => a.requestTotalExecutors(requestedTotal)
+          case None => logWarning("Container allocator is not ready to request executors yet.")
+        }
         sender ! true
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executors ${executorIds.mkString(", ")}.")
-        killExecutors(executorIds)
+        Option(allocator) match {
+          case Some(a) => executorIds.foreach(a.killExecutor)
+          case None => logWarning("Container allocator is not ready to kill executors yet.")
+        }
         sender ! true
     }
   }

@@ -289,11 +289,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     logInfo(s"Requesting $numAdditionalExecutors additional executors from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
     numPendingExecutors += numAdditionalExecutors
-    requestPendingExecutors(numPendingExecutors)
+    requestTotalExecutors(numPendingExecutors + totalRegisteredExecutors.get)
   }
 
   /**
-   * Send a request to the cluster manager to set the number of pending executors desired.
+   * Request executors from the cluster manager by specifying the total number desired.
    *
    * The semantics here guarantee that we do not over-allocate executors for this application,
    * since a later request overrides the value of any prior request. The alternative interface
@@ -303,7 +303,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    *
    * Return whether the request successfully reaches the cluster manager.
    */
-  protected def requestPendingExecutors(numPendingExecutors: Int): Boolean = false
+  protected def requestTotalExecutors(requestedTotal: Int): Boolean = false
 
   /**
    * Kill the given executor through the cluster manager.

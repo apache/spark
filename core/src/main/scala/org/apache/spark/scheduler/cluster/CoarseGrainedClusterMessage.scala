@@ -69,16 +69,12 @@ private[spark] object CoarseGrainedClusterMessages {
   case class AddWebUIFilter(filterName:String, filterParams: Map[String, String], proxyBase: String)
     extends CoarseGrainedClusterMessage
 
-  // Messages exchanged between the driver and the cluster manager for dynamic executor allocation
+  // Messages exchanged between the driver and the cluster manager for executor allocation
 
   case object RegisterClusterManager extends CoarseGrainedClusterMessage
 
-  // Request as many executors as needed to meet the specified number of pending executors
-  // Additionally, convey the existing number of executors to avoid allocating too many new ones
-  case class RequestPendingExecutors(
-      numPendingExecutors: Int,
-      numExistingExecutors: Int)
-    extends CoarseGrainedClusterMessage
+  // Request executors by specifying the new total number of executors desired
+  case class RequestExecutors(requestedTotal: Int) extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
