@@ -92,7 +92,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
-  val executorIdToHost = new HashMap[String, String]
+  protected val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -102,33 +102,15 @@ private[spark] class TaskSchedulerImpl(
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   var schedulableBuilder: SchedulableBuilder = null
-
   var rootPool: Pool = null
-
   // default scheduler is FIFO
   private val schedulingModeConf = conf.get("spark.scheduler.mode", "FIFO")
-
   val schedulingMode: SchedulingMode = try {
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
   } catch {
     case e: java.util.NoSuchElementException =>
       throw new SparkException(s"Unrecognized spark.scheduler.mode: $schedulingModeConf")
   }
-
-  // Manager for dynamically scaling number of executors based on workload
-  private val dynamicExecutorAllocationEnabled =
-    conf.getBoolean("spark.dynamicAllocation.enabled", false)
-  private val executorAllocationManager: Option[ExecutorAllocationManager] =
-    if (dynamicExecutorAllocationEnabled) Some(new ExecutorAllocationManager(this)) else None
-  private val executorAllocationLock = new AnyRef
-
-  // Keep track of which TaskSets have pending tasks
-  // This is used to decide when to add executors if dynamic allocation is enabled
-  private val taskSetsWithPendingTasks = new HashSet[String]
-
-  // Keep track of which TaskSets have running tasks for each executor
-  // This is used to decide when to remove executors if dynamic allocation is enabled
-  private val executorIdToRunningTaskSets = new HashMap[String, HashSet[String]]
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -238,6 +220,7 @@ private[spark] class TaskSchedulerImpl(
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
+      activeExecutorIds += o.executorId
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -246,7 +229,6 @@ private[spark] class TaskSchedulerImpl(
       for (rack <- getRackForHost(o.host)) {
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
-      executorAllocationManager.foreach(_.executorAdded(o.executorId))
     }
 
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
@@ -279,7 +261,6 @@ private[spark] class TaskSchedulerImpl(
               val tid = task.taskId
               taskIdToTaskSetId(tid) = taskSet.taskSet.id
               taskIdToExecutorId(tid) = execId
-              activeExecutorIds += execId
               executorsByHost(host) += execId
               availableCpus(i) -= CPUS_PER_TASK
               assert(availableCpus(i) >= 0)
@@ -472,7 +453,6 @@ private[spark] class TaskSchedulerImpl(
     }
     executorIdToHost -= executorId
     rootPool.executorLost(executorId, host)
-    executorAllocationManager.foreach(_.executorRemoved(executorId))
   }
 
   def executorAdded(execId: String, host: String) {
@@ -510,67 +490,6 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def applicationId(): String = backend.applicationId()
-
-  /* -------------------------------------------------------------------------------------- *
-   | Callbacks for TaskSetManagers to trigger timers used by the ExecutorAllocationManager. |
-   | These are called only if spark.dynamicAllocation.enabled is set. All accesses are      |
-   | synchronized in case multiple task sets are scheduled at the same time.                |
-   * -------------------------------------------------------------------------------------- */
-
-  /**
-   * Callback for TaskSetManagers to signal that a new pending task is added.
-   * If dynamic allocation of executors is enabled, this starts a timer to add executors.
-   */
-  def newPendingTask(taskSetId: String): Unit = executorAllocationLock.synchronized {
-    taskSetsWithPendingTasks.add(taskSetId)
-    executorAllocationManager.foreach(_.startAddTimer())
-  }
-
-  /**
-   * Callback for TaskSetMangers to signal that it no longer has any pending tasks.
-   * If dynamic allocation of executors is enabled and there are no more task sets with
-   * pending tasks, this cancels any timer would have eventually added new executors.
-   */
-  def noMorePendingTasks(taskSetId: String): Unit = executorAllocationLock.synchronized {
-    taskSetsWithPendingTasks.remove(taskSetId)
-    if (taskSetsWithPendingTasks.isEmpty) {
-      logDebug("Canceling add executor timer because there are no more pending tasks")
-      executorAllocationManager.foreach(_.cancelAddTimer())
-    }
-  }
-
-  /**
-   * Callback for TaskSetManagers to signal that the given executor is running a new task.
-   * If dynamic allocation of executors is enabled, this cancels any timer that would have
-   * eventually removed the executor.
-   */
-  def newRunningTaskForExecutor(executorId: String, taskSetId: String): Unit = {
-    executorAllocationLock.synchronized {
-      executorIdToRunningTaskSets.getOrElseUpdate(executorId, new HashSet[String]) += taskSetId
-      logDebug(s"Canceling idle timer for executor $executorId " +
-        s"because a new task is scheduled on the executor")
-      executorAllocationManager.foreach(_.cancelRemoveTimer(executorId))
-    }
-  }
-
-  /**
-   * Callback for TaskSetManagers to signal that the given executor is no longer running tasks.
-   * If dynamic allocation of executors is enabled and this executor is no longer running
-   * tasks in any task set, this starts an idle timer to remove this executor.
-   */
-  def noMoreRunningTasksForExecutor(executorId: String, taskSetId: String): Unit = {
-    executorAllocationLock.synchronized {
-      executorIdToRunningTaskSets.get(executorId).foreach(_.remove(taskSetId))
-      val contains = executorIdToRunningTaskSets.contains(executorId)
-      if (!contains || executorIdToRunningTaskSets(executorId).isEmpty) {
-        executorIdToRunningTaskSets.remove(executorId)
-        executorAllocationManager.foreach(_.startRemoveTimer(executorId))
-      }
-      if (!contains) {
-        logWarning(s"Unknown executor $executorId has no more running tasks in task set $taskSetId")
-      }
-    }
-  }
 
 }
 

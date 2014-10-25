@@ -19,8 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -66,10 +65,10 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  * request to add or remove executors. The mechanism to actually do this will be added separately,
  * e.g. in SPARK-3822 for Yarn.
  */
-private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl) extends Logging {
+private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging {
   import ExecutorAllocationManager._
 
-  private val conf = scheduler.conf
+  private val conf = sc.conf
 
   // Lower and upper bounds on the number of executors. These are required.
   private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
@@ -95,7 +94,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
 
-  // Keep track of all executors here to decouple us from the logic in TaskSchedulerImpl
+  // All known executors
   private val executorIds = new mutable.HashSet[String]
 
   // A timestamp of when the add timer should be triggered, or NOT_STARTED if the timer is not
@@ -111,27 +110,21 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   // Polling loop interval (ms)
   private val intervalMillis = 100
 
-  // Scheduler backend through which requests to add/remove executors are made
-  // Note that this assumes the backend has already initialized when this is first used
-  // Otherwise, an appropriate exception is thrown
-  private lazy val backend = scheduler.backend match {
-    case b: CoarseGrainedSchedulerBackend => b
-    case null =>
-      throw new SparkException("Scheduler backend not initialized yet!")
-    case _ =>
-      throw new SparkException(
-        "Dynamic allocation of executors is not applicable to fine-grained schedulers. " +
-        "Please set spark.dynamicAllocation.enabled to false.")
+  /**
+   * Register for scheduler callbacks to decide when to add and remove executors.
+   */
+  def start(): Unit = {
+    val listener = new ExecutorAllocationListener(this)
+    sc.addSparkListener(listener)
+    startPolling()
   }
-
-  initialize()
 
   /**
    * Start the main polling thread that keeps track of when to add and remove executors.
    * During each loop interval, this thread checks if any of the timers have timed out, and,
    * if so, triggers the relevant timer actions.
    */
-  def initialize(): Unit = {
+  private def startPolling(): Unit = {
     val thread = new Thread {
       override def run(): Unit = {
         while (true) {
@@ -167,7 +160,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   /**
-   * Request a number of executors from the scheduler backend.
+   * Request a number of executors from the cluster manager.
    * If the cap on the number of executors is reached, give up and reset the
    * number of executors to add next round instead of continuing to double it.
    */
@@ -186,7 +179,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
       math.min(numExistingExecutors + numExecutorsToAdd, maxNumExecutors) - numExistingExecutors
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
     // TODO: Actually request executors once SPARK-3822 goes in
-    val addRequestAcknowledged = true // backend.requestExecutors(actualNumbersToAdd)
+    val addRequestAcknowledged = true // sc.requestExecutors(actualNumbersToAdd)
     if (addRequestAcknowledged) {
       logInfo(s"Pending tasks are building up! Adding $actualNumExecutorsToAdd " +
         s"new executor(s) (new total will be $newTotalExecutors)")
@@ -199,7 +192,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   /**
-   * Request the scheduler backend to decommission the given executor.
+   * Request the cluster manager to decommission the given executor.
    */
   private def removeExecutor(executorId: String): Unit = synchronized {
     // Do not kill the executor if we are not aware of it (should never happen)
@@ -224,7 +217,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
 
     // Send a request to the backend to kill this executor
     // TODO: Actually kill the executor once SPARK-3822 goes in
-    val removeRequestAcknowledged = true // backend.killExecutor(executorId)
+    val removeRequestAcknowledged = true // sc.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
@@ -235,7 +228,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   /**
-   * Callback for the scheduler to signal that the given executor has been added.
+   * Callback invoked when the specified executor has been added.
    */
   def executorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
@@ -250,7 +243,7 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
   }
 
   /**
-   * Callback for the scheduler to signal that the given executor has been removed.
+   * Callback invoked when the specified executor has been removed.
    */
   def executorRemoved(executorId: String): Unit = synchronized {
     if (executorIds.contains(executorId)) {
@@ -314,4 +307,72 @@ private[scheduler] class ExecutorAllocationManager(scheduler: TaskSchedulerImpl)
 
 private object ExecutorAllocationManager {
   private val NOT_STARTED = -1L
+}
+
+/**
+ * A listener that notifies the given allocation manager of when to add and remove executors.
+ */
+private class ExecutorAllocationListener(allocationManager: ExecutorAllocationManager)
+  extends SparkListener {
+
+  private val stageIdToPendingTaskIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
+  private val executorIdToTaskId = new mutable.HashMap[String, mutable.HashSet[Long]]
+
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
+    val stageId = stageSubmitted.stageInfo.stageId
+    val numTasks = stageSubmitted.stageInfo.numTasks
+    // Start the add timer because there are new pending tasks
+    stageIdToPendingTaskIndex.getOrElseUpdate(
+      stageId, new mutable.HashSet[Int]) ++= (0 to numTasks - 1)
+    allocationManager.startAddTimer()
+  }
+
+  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
+    val stageId = taskStart.stageId
+    val taskId = taskStart.taskInfo.taskId
+    val taskIndex = taskStart.taskInfo.index
+    val executorId = taskStart.taskInfo.executorId
+
+    // If there are no more pending tasks, cancel the add timer
+    if (stageIdToPendingTaskIndex.contains(stageId)) {
+      stageIdToPendingTaskIndex(stageId) -= taskIndex
+      if (stageIdToPendingTaskIndex(stageId).isEmpty) {
+        stageIdToPendingTaskIndex -= stageId
+      }
+    }
+    if (stageIdToPendingTaskIndex.isEmpty) {
+      allocationManager.cancelAddTimer()
+    }
+
+    // Cancel the remove timer because the executor is now running a task
+    executorIdToTaskId.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
+    allocationManager.cancelRemoveTimer(executorId)
+  }
+
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+    val executorId = taskEnd.taskInfo.executorId
+    val taskId = taskEnd.taskInfo.taskId
+    if (executorIdToTaskId.contains(executorId)) {
+      executorIdToTaskId(executorId) -= taskId
+      if (executorIdToTaskId(executorId).isEmpty) {
+        executorIdToTaskId -= executorId
+      }
+    }
+    // If there are no more tasks running on this executor, start the remove timer
+    if (!executorIdToTaskId.contains(executorId)) {
+      allocationManager.startRemoveTimer(executorId)
+    }
+  }
+
+  override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
+    val executorId = blockManagerAdded.blockManagerId.executorId
+    if (executorId != "<driver>") {
+      allocationManager.executorAdded(executorId)
+    }
+  }
+
+  override def onBlockManagerRemoved(
+      blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
+    allocationManager.executorRemoved(blockManagerRemoved.blockManagerId.executorId)
+  }
 }

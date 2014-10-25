@@ -330,6 +330,15 @@ class SparkContext(config: SparkConf) extends Logging {
     } else None
   }
 
+  // Optionally scale number of executors dynamically based on workload
+  private val executorAllocationManager: Option[ExecutorAllocationManager] =
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      Some(new ExecutorAllocationManager(this))
+    } else {
+      None
+    }
+  executorAllocationManager.foreach(_.start())
+
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
 

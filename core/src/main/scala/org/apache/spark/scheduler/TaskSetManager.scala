@@ -101,7 +101,7 @@ private[spark] class TaskSetManager(
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   var isZombie = false
 
-  // List of pending tasks for each executor. These collections are actually
+  // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
   // ArrayBuffer and removed from the end. This makes it faster to detect
   // tasks that repeatedly fail because whenever a task failed, it is put
@@ -110,25 +110,18 @@ private[spark] class TaskSetManager(
   // the one that it was launched from, but gets removed from them later.
   private val pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
 
-  // List of pending tasks for each host. Similar to pendingTasksForExecutor,
+  // Set of pending tasks for each host. Similar to pendingTasksForExecutor,
   // but at host level.
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
-  // List of pending tasks for each rack -- similar to the above.
+  // Set of pending tasks for each rack -- similar to the above.
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
-  // List of pending tasks with no locality preferences.
+  // Set containing pending tasks with no locality preferences.
   var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
 
-  // List of all pending tasks (also used as a stack, as above).
+  // Set containing all pending tasks (also used as a stack, as above).
   val allPendingTasks = new ArrayBuffer[Int]
-
-  // Set of pending tasks used to keep track of whether more executors are needed
-  private val pendingTasks = new HashSet[Int]
-
-  // Set of running tasks for each executor
-  // This is used to keep track of whether an executor is idle in this task set
-  private val runningTasksForExecutor = new HashMap[String, HashSet[Int]]
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet.
@@ -219,10 +212,6 @@ private[spark] class TaskSetManager(
 
     if (!readding) {
       allPendingTasks += index  // No point scanning this whole list to find the old task there
-      pendingTasks += index
-
-      // Notify the scheduler that this task set has a new pending task
-      sched.newPendingTask(taskSet.id)
     }
   }
 
@@ -476,16 +465,6 @@ private[spark] class TaskSetManager(
           }
           addRunningTask(taskId)
 
-          // If this task set has no more pending tasks, notify the scheduler
-          pendingTasks.remove(index)
-          if (pendingTasks.isEmpty) {
-            sched.noMorePendingTasks(taskSet.id)
-          }
-
-          // Notify the scheduler that this executor is now running a task
-          runningTasksForExecutor.getOrElseUpdate(execId, new HashSet[Int]) += index
-          sched.newRunningTaskForExecutor(execId, taskSet.id)
-
           // We used to log the time it takes to serialize the task, but task size is already
           // a good proxy to task serialization time.
           // val timeTaken = clock.getTime() - startTime
@@ -565,7 +544,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    handleFinishTask(info.executorId, index)
     failedExecutors.remove(index)
     maybeFinishTaskSet()
   }
@@ -643,7 +621,6 @@ private[spark] class TaskSetManager(
       put(info.executorId, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
-    handleFinishTask(info.executorId, index)
     if (!isZombie && state != TaskState.KILLED) {
       assert (null != failureReason)
       numFailures(index) += 1
@@ -658,32 +635,10 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  // If the given executor is no longer running a task in this task set, notify the scheduler
-  private def handleFinishTask(executorId: String, taskIndex: Int): Unit = {
-    runningTasksForExecutor.get(executorId).foreach(_.remove(taskIndex))
-    val contains = runningTasksForExecutor.contains(executorId)
-    if (!contains || runningTasksForExecutor(executorId).isEmpty) {
-      runningTasksForExecutor.remove(executorId)
-      sched.noMoreRunningTasksForExecutor(executorId, taskSet.id)
-    }
-    if (!contains) {
-      logWarning(s"Handling finished task for unknown executor $executorId")
-    }
-  }
-
   def abort(message: String) {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message)
     isZombie = true
-
-    // Notify the scheduler that this task set no longer has any running or pending tasks
-    sched.noMorePendingTasks(taskSet.id)
-    runningTasksForExecutor.foreach { case (executorId, _) =>
-      sched.noMoreRunningTasksForExecutor(executorId, taskSet.id)
-    }
-    pendingTasks.clear()
-    runningTasksForExecutor.clear()
-
     maybeFinishTaskSet()
   }
 
