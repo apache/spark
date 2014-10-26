@@ -23,6 +23,7 @@ import java.util.{List => JList}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaRDDLike}
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3, _}
 import org.apache.spark.rdd.RDD
@@ -36,6 +37,7 @@ import org.apache.spark.streaming.dstream.DStream
  * Due to SI-8905, methods should NOT be implemented here; implement them in AbstractJavaDStream
  * instead.
  */
+@DeveloperApi
 trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]]
     extends Serializable {
   implicit val classTag: ClassTag[T]
