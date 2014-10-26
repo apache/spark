@@ -405,7 +405,10 @@ object GradientBoosting extends Logging {
 
     // Cache input
     input.persist(StorageLevel.MEMORY_AND_DISK)
+    // Dataset reference for keeping track of last cached dataset in memory.
     var lastCachedData = input
+    // Dataset reference for noting dataset marked for unpersisting.
+    var unpersistData = lastCachedData
 
     timer.stop("init")
 
@@ -426,7 +429,6 @@ object GradientBoosting extends Logging {
     data = data.map(point => LabeledPoint(loss.lossGradient(firstModel, point,
       learningRate), point.features))
 
-
     var m = 1
     while (m <= numEstimators) {
       timer.start(s"building tree $m")
@@ -441,11 +443,15 @@ object GradientBoosting extends Logging {
       // Update data with pseudo-residuals
       data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
         point.features))
+      // Unpersist last cached dataset since a newer one has been cached in the previous iteration.
       if (m % checkpointingPeriod == 1 && m != 1) {
-        lastCachedData.unpersist()
+        logDebug(s"Unpersisting old cached dataset in iteration $m.")
+        unpersistData.unpersist()
       }
       // Checkpoint
       if (m % checkpointingPeriod == 0) {
+        logDebug(s"Persisting new dataset in iteration $m.")
+        unpersistData = lastCachedData
         data = data.persist(StorageLevel.MEMORY_AND_DISK)
         lastCachedData = data
       }
