@@ -20,16 +20,15 @@ package org.apache.spark.mllib.tree.model
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.rdd.RDD
 
 @Experimental
-class GradientBoostingModel(
+class WeightedEnsembleModel(
     baseLearners: Array[DecisionTreeModel],
     baseLearnerWeights: Array[Double],
-    strategy: BoostingStrategy) extends Serializable {
+    algo: Algo) extends Serializable {
 
-  require(numTrees > 0, s"GradientBoostingModel cannot be created with empty trees collection.")
+  require(numTrees > 0, s"WeightedEnsembleModel cannot be created with empty trees collection.")
 
   /**
    * Predict values for a single data point using the model trained.
@@ -38,14 +37,14 @@ class GradientBoostingModel(
    * @return predicted category from the trained model
    */
   private def predictRaw(features: Vector): Double = {
-    val treePredictions = baseLearners.map(tree => tree.predict(features))
+    val treePredictions = baseLearners.map(learner => learner.predict(features))
     if (numTrees == 1){
       treePredictions(0)
     } else {
       var prediction = treePredictions(0)
       var index = 1
       while (index < numTrees) {
-        prediction += strategy.learningRate * treePredictions(index)
+        prediction += baseLearnerWeights(index) * treePredictions(index)
         index += 1
       }
       prediction
@@ -59,12 +58,11 @@ class GradientBoostingModel(
    * @return predicted category from the trained model
    */
   def predict(features: Vector): Double = {
-    val algo = strategy.algo
     algo match {
       case Regression => predictRaw(features)
       case Classification => if (predictRaw(features) > 0 ) 1.0 else 0.0
       case _ => throw new IllegalArgumentException(
-        s"GradientBoostingModel given unknown algo parameter: $algo.")
+        s"WeightedEnsembleModel given unknown algo parameter: $algo.")
     }
   }
 
@@ -85,17 +83,16 @@ class GradientBoostingModel(
    * Print full model.
    */
   override def toString: String = {
-    val algo = strategy.algo
     val header = algo match {
       case Classification =>
-        s"GradientBoostingModel classifier with $numTrees trees\n"
+        s"WeightedEnsembleModel classifier with $numTrees trees\n"
       case Regression =>
-        s"GradientBoostingModel regressor with $numTrees trees\n"
+        s"WeightedEnsembleModel regressor with $numTrees trees\n"
       case _ => throw new IllegalArgumentException(
-        s"GradientBoostingModel given unknown algo parameter: $algo.")
+        s"WeightedEnsembleModel given unknown algo parameter: $algo.")
     }
-    header + baseLearners.zipWithIndex.map { case (tree, treeIndex) =>
-      s"  Tree $treeIndex:\n" + tree.topNode.subtreeToString(4)
+    header + baseLearners.zipWithIndex.map { case (learner, treeIndex) =>
+      s"  Tree $treeIndex:\n" + learner.topNode.subtreeToString(4)
     }.fold("")(_ + _)
   }
 

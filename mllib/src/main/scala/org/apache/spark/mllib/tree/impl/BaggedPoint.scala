@@ -63,12 +63,12 @@ private[tree] object BaggedPoint {
       withReplacement: Boolean,
       seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
     if (withReplacement) {
-      convertToBaggedRDDSamplingWithReplacement(input, subsample, numSubsamples)
+      convertToBaggedRDDSamplingWithReplacement(input, subsample, numSubsamples, seed)
     } else {
       if (numSubsamples == 1 && subsample == 1.0) {
         convertToBaggedRDDWithoutSampling(input)
       } else {
-        convertToBaggedRDDSamplingWithoutReplacement(input, subsample, numSubsamples)
+        convertToBaggedRDDSamplingWithoutReplacement(input, subsample, numSubsamples, seed)
       }
     }
   }
@@ -76,8 +76,8 @@ private[tree] object BaggedPoint {
   private[tree] def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
       input: RDD[Datum],
       subsample: Double,
-      numSubsamples: Int): RDD[BaggedPoint[Datum]] = {
-    val seed = Utils.random.nextLong()
+      numSubsamples: Int,
+      seed: Int): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val rng = new XORShiftRandom
@@ -100,8 +100,8 @@ private[tree] object BaggedPoint {
   private[tree] def convertToBaggedRDDSamplingWithReplacement[Datum] (
       input: RDD[Datum],
       subsample: Double,
-      numSubsamples: Int): RDD[BaggedPoint[Datum]] = {
-    val seed = Utils.random.nextInt()
+      numSubsamples: Int,
+      seed: Int): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val poisson = new Poisson(subsample, new DRand(seed + partitionIndex + 1))

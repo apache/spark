@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.impurity.Impurities
 import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.{GradientBoostingModel, DecisionTreeModel}
+import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.storage.StorageLevel
 
@@ -46,7 +46,7 @@ class GradientBoosting (
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return GradientBoostingModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): GradientBoostingModel = {
+  def train(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
     val algo = boostingStrategy.algo
     algo match {
       case Regression => GradientBoosting.boost(input, boostingStrategy)
@@ -79,7 +79,7 @@ object GradientBoosting extends Logging {
    */
   def train(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -118,7 +118,7 @@ object GradientBoosting extends Logging {
       learningRate: Double,
       subsample: Double,
       checkpointPeriod: Int,
-      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
+      categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -167,7 +167,7 @@ object GradientBoosting extends Logging {
       subsample: Double,
       checkpointPeriod: Int,
       numClassesForClassification: Int,
-      categoricalFeaturesInfo: Map[Int, Int]): GradientBoostingModel = {
+      categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -212,7 +212,7 @@ object GradientBoosting extends Logging {
       subsample: Double,
       checkpointPeriod: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
-      : GradientBoostingModel = {
+      : WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -262,7 +262,7 @@ object GradientBoosting extends Logging {
       checkpointPeriod: Int,
       numClassesForClassification: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
-      : GradientBoostingModel = {
+      : WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -299,7 +299,7 @@ object GradientBoosting extends Logging {
       impurity: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double): GradientBoostingModel = {
+      subsample: Double): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -334,7 +334,7 @@ object GradientBoosting extends Logging {
       impurity: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double): GradientBoostingModel = {
+      subsample: Double): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
@@ -353,7 +353,7 @@ object GradientBoosting extends Logging {
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
     val algo = boostingStrategy.algo
     require(algo == Regression, s"Only Regression algo supported. Provided algo is $algo.")
     new GradientBoosting(boostingStrategy).train(input)
@@ -370,7 +370,7 @@ object GradientBoosting extends Logging {
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
     val algo = boostingStrategy.algo
     require(algo == Classification, s"Only Classification algo supported. Provided algo is $algo.")
     new GradientBoosting(boostingStrategy).train(input)
@@ -384,7 +384,7 @@ object GradientBoosting extends Logging {
    */
   private def boost(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): GradientBoostingModel = {
+      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
 
     val timer = new TimeTracker()
 
@@ -458,7 +458,7 @@ object GradientBoosting extends Logging {
 
 
     // 3. Output classifier
-    new GradientBoostingModel(baseLearners, baseLearnerWeights, boostingStrategy)
+    new WeightedEnsembleModel(baseLearners, baseLearnerWeights, strategy.algo)
 
   }
 
