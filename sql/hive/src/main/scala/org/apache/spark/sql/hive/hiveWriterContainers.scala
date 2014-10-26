@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
+import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
@@ -47,6 +48,13 @@ private[hive] class SparkHiveWriterContainer(
   with Serializable {
 
   private val now = new Date()
+  private val tableDesc: TableDesc = fileSinkConf.getTableInfo
+  // Add table properties from storage handler to jobConf, so any custom storage
+  // handler settings can be set to jobConf
+  if (tableDesc != null) {
+    PlanUtils.configureOutputJobPropertiesForStorageHandler(tableDesc)
+    Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
+  }
   protected val conf = new SerializableWritable(jobConf)
 
   private var jobID = 0
