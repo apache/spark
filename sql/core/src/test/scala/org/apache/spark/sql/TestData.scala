@@ -99,7 +99,7 @@ object TestData {
       ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
   arrayData.registerTempTable("arrayData")
 
-  case class MapData(data: Map[Int, String])
+  case class MapData(data: scala.collection.Map[Int, String])
   val mapData =
     TestSQLContext.sparkContext.parallelize(
       MapData(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
