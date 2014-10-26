@@ -154,7 +154,7 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_${scala.binary.version}</artifactId>
-      <version>0.1.11</version>
+      <version>0.8.1</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
