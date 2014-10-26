@@ -24,7 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -81,11 +81,13 @@ case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
  * Periodic updates from executors.
  * @param execId executor id
  * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
+ * @param threadDump stack traces from all threads
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
+    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)],
+    threadDump: Array[ThreadStackTrace])
   extends SparkListenerEvent
 
 @DeveloperApi

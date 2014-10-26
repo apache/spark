@@ -21,7 +21,7 @@ import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
@@ -64,6 +64,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
 
   val executorIdToBlockManagerId = HashMap[String, BlockManagerId]()
+
+  /** Map entries are (last update timestamp, thread dump) pairs */
+  val executorIdToLastThreadDump = HashMap[String, (Long, Array[ThreadStackTrace])]()
 
   var schedulingMode: Option[SchedulingMode] = None
 
@@ -266,6 +269,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   }
 
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
+    val timeAndThreadDump = (System.currentTimeMillis(), executorMetricsUpdate.threadDump)
+    executorIdToLastThreadDump.put(executorMetricsUpdate.execId, timeAndThreadDump)
     for ((taskId, sid, sAttempt, taskMetrics) <- executorMetricsUpdate.taskMetrics) {
       val stageData = stageIdToData.getOrElseUpdate((sid, sAttempt), {
         logWarning("Metrics update for task in unknown stage " + sid)

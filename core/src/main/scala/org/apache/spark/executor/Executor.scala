@@ -360,7 +360,6 @@ private[spark] class Executor(
       override def run() {
         // Sleep a random interval so the heartbeats don't end up in sync
         Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
-
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
@@ -380,8 +379,13 @@ private[spark] class Executor(
               }
             }
           }
-
-          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+          val threadDump = Thread.getAllStackTraces.toArray.sortBy(_._1.getId).map {
+            case (thread, stackElements) =>
+              val stackTrace = stackElements.map(_.toString).mkString("\n")
+              ThreadStackTrace(thread.getId, thread.getName, thread.getState.toString, stackTrace)
+          }
+          val message = Heartbeat(executorId, threadDump, tasksMetrics.toArray,
+            env.blockManager.blockManagerId)
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
               retryAttempts, retryIntervalMs, timeout)

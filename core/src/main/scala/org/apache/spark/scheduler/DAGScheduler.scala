@@ -35,7 +35,7 @@ import akka.util.Timeout
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
@@ -164,9 +164,10 @@ class DAGScheduler(
    */
   def executorHeartbeatReceived(
       execId: String,
+      threadDump: Array[ThreadStackTrace],
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
-    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
+    listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics, threadDump))
     implicit val timeout = Timeout(600 seconds)
 
     Await.result(

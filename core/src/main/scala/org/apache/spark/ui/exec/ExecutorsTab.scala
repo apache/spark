@@ -26,9 +26,11 @@ import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
-  val listener = parent.executorsListener
+  val executorsListener = parent.executorsListener
+  val jobProgressListener = parent.jobProgressListener
 
   attachPage(new ExecutorsPage(this))
+  attachPage(new ThreadDumpPage(this))
 }
 
 /**

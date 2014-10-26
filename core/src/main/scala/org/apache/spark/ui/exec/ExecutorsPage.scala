@@ -42,7 +42,7 @@ private case class ExecutorSummaryInfo(
     maxMemory: Long)
 
 private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
-  private val listener = parent.listener
+  private val listener = parent.executorsListener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
@@ -75,6 +75,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
               Shuffle Write
             </span>
           </th>
+          <th class="sorttable_nosort">Thread Dump</th>
         </thead>
         <tbody>
           {execInfoSorted.map(execRow)}
@@ -132,6 +133,9 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       </td>
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
+      </td>
+      <td>
+        <a href={s"threadDump/?executorId=${info.id}"}>Thread Dump</a>
       </td>
     </tr>
   }
