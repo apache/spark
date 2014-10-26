@@ -215,7 +215,10 @@ class JavaSparkContext(val sc: SparkContext)
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
+   * Do
+   * {{{
+   *   JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")
+   * }}}
    *
    * <p> then `rdd` contains
    * {{{

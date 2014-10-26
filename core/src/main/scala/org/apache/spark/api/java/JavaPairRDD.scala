@@ -392,7 +392,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return an RDD with the elements from `this` that are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be &lt;= us.
    */
   def subtract(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     fromRDD(rdd.subtract(other))
@@ -413,7 +413,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return an RDD with the pairs from `this` whose keys are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be &lt;= us.
    */
   def subtractByKey[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, V] = {
     implicit val ctag: ClassTag[W] = fakeClassTag

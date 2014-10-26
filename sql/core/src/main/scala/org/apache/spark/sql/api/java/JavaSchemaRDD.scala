@@ -193,7 +193,7 @@ class JavaSchemaRDD(
    * Return an RDD with the elements from `this` that are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be &lt;= us.
    */
   def subtract(other: JavaSchemaRDD): JavaSchemaRDD =
     this.baseSchemaRDD.subtract(other.baseSchemaRDD).toJavaSchemaRDD
