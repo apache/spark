@@ -208,7 +208,7 @@ class JsonSuite extends QueryTest {
   }
 
   test("Complex field and type inferring") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType)
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType1)
 
     val expectedSchema = StructType(
       StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
@@ -305,7 +305,7 @@ class JsonSuite extends QueryTest {
   }
 
   ignore("Complex field and type inferring (Ignored)") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType)
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType1)
     jsonSchemaRDD.registerTempTable("jsonTable")
 
     // Right now, "field1" and "field2" are treated as aliases. We should fix it.
@@ -706,5 +706,36 @@ class JsonSuite extends QueryTest {
     )
 
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
+  }
+
+  test("SPARK-4068: nulls in arrays") {
+    val jsonSchemaRDD = jsonRDD(nullsInArrays)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    val schema = StructType(
+      StructField("field1",
+        ArrayType(ArrayType(ArrayType(ArrayType(StringType, false), false), true), false), true) ::
+      StructField("field2",
+        ArrayType(ArrayType(
+          StructType(StructField("Test", IntegerType, true) :: Nil), false), true), true) ::
+      StructField("field3",
+        ArrayType(ArrayType(
+          StructType(StructField("Test", StringType, true) :: Nil), true), false), true) ::
+      StructField("field4",
+        ArrayType(ArrayType(ArrayType(IntegerType, false), true), false), true) :: Nil)
+
+    assert(schema === jsonSchemaRDD.schema)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT field1, field2, field3, field4
+          |FROM jsonTable
+        """.stripMargin),
+      Seq(Seq(Seq(null), Seq(Seq(Seq("Test")))), null, null, null) ::
+      Seq(null, Seq(null, Seq(Seq(1))), null, null) ::
+      Seq(null, null, Seq(Seq(null), Seq(Seq("2"))), null) ::
+      Seq(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil
+    )
   }
 }
