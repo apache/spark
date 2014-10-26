@@ -73,7 +73,7 @@ private[tree] object BaggedPoint {
     }
   }
 
-  private[tree] def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
+  private def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
       input: RDD[Datum],
       subsample: Double,
       numSubsamples: Int,
@@ -97,7 +97,7 @@ private[tree] object BaggedPoint {
     }
   }
 
-  private[tree] def convertToBaggedRDDSamplingWithReplacement[Datum] (
+  private def convertToBaggedRDDSamplingWithReplacement[Datum] (
       input: RDD[Datum],
       subsample: Double,
       numSubsamples: Int,
@@ -117,7 +117,7 @@ private[tree] object BaggedPoint {
     }
   }
 
-  private[tree] def convertToBaggedRDDWithoutSampling[Datum] (
+  private def convertToBaggedRDDWithoutSampling[Datum] (
       input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
     input.map(datum => new BaggedPoint(datum, Array(1.0)))
   }

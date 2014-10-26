@@ -36,30 +36,6 @@ import org.apache.spark.util.StatCounter
  */
 class RandomForestSuite extends FunSuite with LocalSparkContext {
 
-  test("BaggedPoint RDD: without subsampling") {
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 1)
-    val rdd = sc.parallelize(arr)
-    val baggedRDD = BaggedPoint.convertToBaggedRDDWithoutSampling(rdd)
-    baggedRDD.collect().foreach { baggedPoint =>
-      assert(baggedPoint.subsampleWeights.size == 1 && baggedPoint.subsampleWeights(0) == 1)
-    }
-  }
-
-  test("BaggedPoint RDD: with subsampling") {
-    val numSubsamples = 100
-    val (expectedMean, expectedStddev) = (1.0, 1.0)
-
-    val seeds = Array(123, 5354, 230, 349867, 23987)
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 1)
-    val rdd = sc.parallelize(arr)
-    seeds.foreach { seed =>
-      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, true)
-      val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
-        expectedStddev, epsilon = 0.01)
-    }
-  }
-
   test("Binary classification with continuous features:" +
       " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
 
