@@ -748,4 +748,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         """.stripMargin),
       (1 to 100).map(i => Seq(i, i, i)))
   }
+
+  test("SPARK-3483 Special chars in column names") {
+    val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
+    jsonRDD(data).registerTempTable("records")
+    sql("SELECT `key?number1` FROM records")
+  }
 }
