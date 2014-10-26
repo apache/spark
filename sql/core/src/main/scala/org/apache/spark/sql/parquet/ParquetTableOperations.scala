@@ -113,8 +113,10 @@ case class ParquetTableScan(
       
       // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
       val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
-      val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
-      ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
+      if (filter!= null){
+        val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
+        ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
+      }
     }
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
