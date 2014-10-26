@@ -303,33 +303,73 @@ class SqlParser extends AbstractSparkSQLParser {
     CAST ~ "(" ~> expression ~ (AS ~> dataType) <~ ")" ^^ { case exp ~ t => Cast(exp, t) }
 
   protected lazy val literal: Parser[Literal] =
-    ( numericLit ^^ {
-        case i if i.toLong > Int.MaxValue => Literal(i.toLong)
-        case i => Literal(i.toInt)
-      }
-    | NULL ^^^ Literal(null, NullType)
-    | floatLit ^^ {case f => Literal(f.toDouble) }
+    ( numericLiteral
+    | booleanLiteral
     | stringLit ^^ {case s => Literal(s, StringType) }
+    | NULL ^^^ Literal(null, NullType)
     )
 
-  protected lazy val floatLit: Parser[String] =
-    elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
+  protected lazy val booleanLiteral: Parser[Literal] =
+    ( TRUE ^^^ Literal(true, BooleanType)
+    | FALSE ^^^ Literal(false, BooleanType)
+    )
 
-  protected lazy val baseExpression: PackratParser[Expression] =
-    ( expression ~ ("[" ~> expression <~ "]") ^^
+  protected lazy val numericLiteral: Parser[Literal] =
+    signedNumericLiteral | unsignedNumericLiteral
+
+  protected lazy val sign: Parser[String] =
+    "+" | "-"
+
+  protected lazy val signedNumericLiteral: Parser[Literal] =
+    ( sign ~ numericLit  ^^ { case s ~ l => Literal(toNarrowestIntegerType(s + l)) }
+    | sign ~ floatLit ^^ { case s ~ f => Literal((s + f).toDouble) }
+    )
+
+  protected lazy val unsignedNumericLiteral: Parser[Literal] =
+    ( numericLit ^^ { n => Literal(toNarrowestIntegerType(n)) }
+    | floatLit ^^ { f => Literal(f.toDouble) }
+    )
+
+  private val longMax = BigDecimal(s"${Long.MaxValue}")
+  private val longMin = BigDecimal(s"${Long.MinValue}")
+  private val intMax = BigDecimal(s"${Int.MaxValue}")
+  private val intMin = BigDecimal(s"${Int.MinValue}")
+
+  private def toNarrowestIntegerType(value: String) = {
+    val bigIntValue = BigDecimal(value)
+
+    bigIntValue match {
+      case v if v < longMin || v > longMax => v
+      case v if v < intMin || v > intMax => v.toLong
+      case v => v.toInt
+    }
+  }
+
+  protected lazy val floatLit: Parser[String] =
+    ( "." ~> unsignedNumericLiteral ^^ { u => "0." + u }
+    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
+    )
+
+  protected lazy val baseExpression: Parser[Expression] =
+    ( "*" ^^^ Star(None)
+    | primary
+    )
+
+  protected lazy val signedPrimary: Parser[Expression] =
+    sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e}
+
+  protected lazy val primary: PackratParser[Expression] =
+    ( literal
+    | expression ~ ("[" ~> expression <~ "]") ^^
       { case base ~ ordinal => GetItem(base, ordinal) }
     | (expression <~ ".") ~ ident ^^
       { case base ~ fieldName => GetField(base, fieldName) }
-    | TRUE  ^^^ Literal(true, BooleanType)
-    | FALSE ^^^ Literal(false, BooleanType)
     | cast
     | "(" ~> expression <~ ")"
     | function
-    | "-" ~> literal ^^ UnaryMinus
     | dotExpressionHeader
     | ident ^^ UnresolvedAttribute
-    | "*" ^^^ Star(None)
-    | literal
+    | signedPrimary
     )
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
