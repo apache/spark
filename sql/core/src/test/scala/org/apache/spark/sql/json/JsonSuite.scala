@@ -380,6 +380,12 @@ class JsonSuite extends QueryTest {
       92233720368547758071.2
     )
 
+    // Number and String conflict: resolve the type as number in this query.
+    checkAnswer(
+      sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
+      BigDecimal("92233720368547758061.2").toDouble
+    )
+
     // String and Boolean conflict: resolve the type as string.
     checkAnswer(
       sql("select * from jsonTable where str_bool = 'str1'"),
@@ -413,13 +419,6 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select str_bool from jsonTable where str_bool"),
       false
-    )
-
-    // Right now, we have a parsing error.
-    // Number and String conflict: resolve the type as number in this query.
-    checkAnswer(
-      sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
-      BigDecimal("92233720368547758061.2")
     )
 
     // The plan of the following DSL is
