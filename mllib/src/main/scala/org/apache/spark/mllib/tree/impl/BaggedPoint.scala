@@ -49,17 +49,19 @@ private[tree] object BaggedPoint {
    * choosing subsample counts for each instance.
    * Each subsample has the same number of instances as the original dataset,
    * and is created by subsampling without replacement.
-   * @param input     Input dataset.
+   * @param input Input dataset.
    * @param subsample Fraction of the training data used for learning decision tree.
-   * @param numSubsamples  Number of subsamples of this RDD to take.
+   * @param numSubsamples Number of subsamples of this RDD to take.
    * @param withReplacement Sampling with/without replacement.
-   * @return  BaggedPoint dataset representation
+   * @param seed Random seed.
+   * @return BaggedPoint dataset representation.
    */
   def convertToBaggedRDD[Datum] (
       input: RDD[Datum],
       subsample: Double,
       numSubsamples: Int,
-      withReplacement: Boolean): RDD[BaggedPoint[Datum]] = {
+      withReplacement: Boolean,
+      seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsample, numSubsamples)
     } else {

@@ -59,7 +59,7 @@ import org.apache.spark.util.Utils
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
  *                                  to "onethird" for regression.
- * @param seed  Random seed for bootstrapping and choosing feature subsets.
+ * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 @Experimental
 private class RandomForest (
@@ -123,7 +123,7 @@ private class RandomForest (
     }
 
     val baggedInput
-      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement)
+      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
         .persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
