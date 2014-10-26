@@ -30,6 +30,7 @@ import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
