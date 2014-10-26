@@ -68,5 +68,37 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
     }
   }
 
+  test("BaggedPoint RDD: with subsampling without replacement (fraction = 1.0)") {
+    val numSubsamples = 100
+    val (expectedMean, expectedStddev) = (1.0, 0)
+
+    val seeds = Array(123, 5354, 230, 349867, 23987)
+    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val rdd = sc.parallelize(arr)
+    seeds.foreach { seed =>
+      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, false)
+      val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
+      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+        expectedStddev, epsilon = 0.01)
+    }
+  }
+
+  test("BaggedPoint RDD: with subsampling without replacement (fraction = 0.5)") {
+    val numSubsamples = 100
+    val subsample = 0.5
+    val (expectedMean, expectedStddev) = (subsample, math.sqrt(subsample * (1 - subsample)))
+
+    val seeds = Array(123, 5354, 230, 349867, 23987)
+    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val rdd = sc.parallelize(arr)
+    seeds.foreach { seed =>
+      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, false)
+      val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
+      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+        expectedStddev, epsilon = 0.01)
+    }
+  }
+
+
 
 }
