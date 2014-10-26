@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION length;
 DESCRIBE FUNCTION EXTENDED length;
 
@@ -9,6 +11,6 @@ DROP TABLE dest1;
 
 -- Test with non-ascii characters. 
 CREATE TABLE dest1(name STRING) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/kv4.txt' INTO TABLE dest1;
+LOAD DATA LOCAL INPATH '../../data/files/kv4.txt' INTO TABLE dest1;
 EXPLAIN SELECT length(dest1.name) FROM dest1;
 SELECT length(dest1.name) FROM dest1;

@@ -92,6 +92,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
+      val fs = FileSystem.get(yarnConf)
       val cleanupHook = new Runnable {
         override def run() {
           // If the SparkContext is still registered, shut it down as a best case effort in case
@@ -115,7 +116,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
             // we only want to unregister if we don't want the RM to retry
             if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
               unregister(finalStatus, finalMsg)
-              cleanupStagingDir()
+              cleanupStagingDir(fs)
             }
           }
         }
@@ -303,8 +304,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   /**
    * Clean up the staging directory.
    */
-  private def cleanupStagingDir() {
-    val fs = FileSystem.get(yarnConf)
+  private def cleanupStagingDir(fs: FileSystem) {
     var stagingDirPath: Path = null
     try {
       val preserveFiles = sparkConf.get("spark.yarn.preserve.staging.files", "false").toBoolean
