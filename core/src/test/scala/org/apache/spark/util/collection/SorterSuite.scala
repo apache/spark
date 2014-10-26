@@ -143,24 +143,24 @@ class SorterSuite extends FunSuite {
 
 abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array[Int]] {
 
-  override protected def swap(data: Array[Int], pos0: Int, pos1: Int): Unit = {
+  override def swap(data: Array[Int], pos0: Int, pos1: Int): Unit = {
     val tmp = data(pos0)
     data(pos0) = data(pos1)
     data(pos1) = tmp
   }
 
-  override protected def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int) {
+  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int) {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
-  override protected def copyRange(src: Array[Int], srcPos: Int,
+  override def copyRange(src: Array[Int], srcPos: Int,
                                    dst: Array[Int], dstPos: Int, length: Int) {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 
   /** Allocates a new structure that can hold up to 'length' elements. */
-  override protected def allocate(length: Int): Array[Int] = {
+  override def allocate(length: Int): Array[Int] = {
     new Array[Int](length)
   }
 }
@@ -183,11 +183,11 @@ class IntWrapper(var key: Int = 0) extends Ordered[IntWrapper] {
 /** SortDataFormat for Array[Int] with reused keys. */
 class KeyReuseIntArraySortDataFormat extends AbstractIntArraySortDataFormat[IntWrapper] {
 
-  override protected def newKey(): IntWrapper = {
+  override def newKey(): IntWrapper = {
     new IntWrapper()
   }
 
-  override protected def getKey(data: Array[Int], pos: Int, reuse: IntWrapper): IntWrapper = {
+  override def getKey(data: Array[Int], pos: Int, reuse: IntWrapper): IntWrapper = {
     if (reuse == null) {
       new IntWrapper(data(pos))
     } else {
