@@ -110,8 +110,8 @@ case class ParquetTableScan(
     // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
     if (columnPruningPred.length > 0 &&
       sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-      //ParquetFilters.serializeFilterExpressions(columnPruningPred, conf)
-      //Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
+      
+      // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
       val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
       val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
       ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
@@ -376,8 +376,6 @@ private[parquet] class FilteringParquetRowInputFormat
 
     val readSupport: ReadSupport[Row] = new RowReadSupport()
 
-    //val filterExpressions =
-    //ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
     val filter = ParquetInputFormat.getFilter(ContextUtil.getConfiguration(taskAttemptContext))
     if (!filter.isInstanceOf[NoOpFilter]) {
       new ParquetRecordReader[Row](
@@ -469,7 +467,7 @@ private[parquet] class FilteringParquetRowInputFormat
     var rowGroupsDropped :Long = 0
     var totalRowGroups :Long  = 0
 
-    //Ugly hack, stuck with it until mentioned PR is resolved
+    // Ugly hack, stuck with it until mentioned PR is resolved
     val generateSplits =
       Class.forName("parquet.hadoop.ClientSideMetadataSplitStrategy")
        .getDeclaredMethods.find(_.getName == "generateSplits").get
