@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.export
 
 import java.io.OutputStream
+import java.io.FileOutputStream
+import java.io.File
 
 trait ModelExport {
 
@@ -25,5 +27,12 @@ trait ModelExport {
   * Write the exported model to the output stream specified 
   */
   def save(outputStream: OutputStream): Unit
+  
+   /**
+  * Write the exported model to the local file specified 
+  */
+  def saveLocalFile(path: String): Unit = {
+    save(new FileOutputStream(new File(path)));
+  }
 
 }
