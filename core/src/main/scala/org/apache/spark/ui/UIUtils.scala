@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.Node
+import scala.xml.{Text, Node}
 
 import org.apache.spark.Logging
 
@@ -239,7 +239,8 @@ private[spark] object UIUtils extends Logging {
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
       data: Iterable[T],
-      fixedWidth: Boolean = false): Seq[Node] = {
+      fixedWidth: Boolean = false,
+      id: Option[String] = None): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
     if (fixedWidth) {
@@ -263,7 +264,7 @@ private[spark] object UIUtils extends Logging {
         }
       }
     }
-    <table class={listingTableClass}>
+    <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}
