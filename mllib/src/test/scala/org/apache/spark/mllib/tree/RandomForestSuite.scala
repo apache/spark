@@ -39,7 +39,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
   test("Binary classification with continuous features:" +
       " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
 
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50)
+    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
@@ -64,7 +64,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
   test("Regression with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
 
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50)
+    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
@@ -89,7 +89,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
   test("Binary classification with continuous features: subsampling features") {
     val numFeatures = 50
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures)
+    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures, 1000)
     val rdd = sc.parallelize(arr)
     val categoricalFeaturesInfo = Map.empty[Int, Int]
 
@@ -217,8 +217,7 @@ object RandomForestSuite {
     assert(mse <= requiredMSE, s"validateRegressor calculated MSE $mse but required $requiredMSE.")
   }
 
-  def generateOrderedLabeledPoints(numFeatures: Int): Array[LabeledPoint] = {
-    val numInstances = 1000
+  def generateOrderedLabeledPoints(numFeatures: Int, numInstances: Int): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](numInstances)
     for (i <- 0 until numInstances) {
       val label = if (i < numInstances / 10) {
