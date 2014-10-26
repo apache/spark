@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 
 /* Implicits */
@@ -72,5 +73,22 @@ class InsertIntoHiveTableSuite extends QueryTest {
   test("Double create does not fail when allowExisting = true") {
     createTable[TestData]("createAndInsertTest")
     createTable[TestData]("createAndInsertTest")
+  }
+
+  test("SPARK-4052: scala.collection.Map as value type of MapType") {
+    val schema = StructType(StructField("m", MapType(StringType, StringType), true) :: Nil)
+    val rowRDD = TestHive.sparkContext.parallelize(
+      (1 to 100).map(i => Row(scala.collection.mutable.HashMap(s"key$i" -> s"value$i"))))
+    val schemaRDD = applySchema(rowRDD, schema)
+    schemaRDD.registerTempTable("tableWithMapValue")
+    sql("CREATE TABLE hiveTableWithMapValue(m MAP <STRING, STRING>)")
+    sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
+
+    checkAnswer(
+      sql("SELECT * FROM hiveTableWithMapValue"),
+      rowRDD.collect().toSeq
+    )
+
+    sql("DROP TABLE hiveTableWithMapValue")
   }
 }
