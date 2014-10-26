@@ -5,6 +5,7 @@ import inspect
 import jinja2
 import logging
 import os
+import sys
 import pickle
 import re
 from time import sleep
@@ -58,6 +59,7 @@ class DagBag(object):
             m = imp.load_source(mod_name, filepath)
         except:
             logging.error("Failed to import: " + filepath)
+            logging.error("Exception: " + str(sys.exc_info()))
         else:
             for dag in m.__dict__.values():
                 if type(dag) == DAG:

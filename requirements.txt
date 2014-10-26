@@ -1,3 +1,4 @@
+celery
 chartkick
 flake8
 flask

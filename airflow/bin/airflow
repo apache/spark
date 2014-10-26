@@ -68,6 +68,7 @@ def run(args):
         dag = dag_pickle.get_object()
         task = dag.get_task(task_id=args.task_id)
 
+    # TODO: add run_local and fire it with the right executor from run
     ti = TaskInstance(task, args.execution_date)
 
     # This is enough to fail the task instance
