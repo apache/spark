@@ -32,7 +32,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 import org.apache.spark.util.Utils
 
-class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, JavaDoubleRDD] {
+class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends AbstractJavaRDD[JDouble, JavaDoubleRDD] {
 
   override val classTag: ClassTag[JDouble] = implicitly[ClassTag[JDouble]]
 
@@ -66,9 +66,6 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * @param blocking Whether to block until all blocks are deleted.
    */
   def unpersist(blocking: Boolean): JavaDoubleRDD = fromRDD(srdd.unpersist(blocking))
-
-  // first() has to be overriden here in order for its return type to be Double instead of Object.
-  override def first(): JDouble = srdd.first()
 
   // Transformations (return a new RDD)
 

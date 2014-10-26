@@ -20,7 +20,7 @@ package org.apache.spark.sql.api.java
 import java.util.{List => JList}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
+import org.apache.spark.api.java.{AbstractJavaRDD, JavaRDD}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
@@ -42,7 +42,7 @@ import org.apache.spark.storage.StorageLevel
 class JavaSchemaRDD(
      @transient val sqlContext: SQLContext,
      @transient val baseLogicalPlan: LogicalPlan)
-  extends JavaRDDLike[Row, JavaRDD[Row]]
+  extends AbstractJavaRDD[Row, JavaRDD[Row]]
   with SchemaRDDLike {
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
