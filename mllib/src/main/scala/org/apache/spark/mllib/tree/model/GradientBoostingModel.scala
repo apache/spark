@@ -24,8 +24,10 @@ import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.rdd.RDD
 
 @Experimental
-class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingStrategy)
-  extends Serializable {
+class GradientBoostingModel(
+    baseLearners: Array[DecisionTreeModel],
+    baseLearnerWeights: Array[Double],
+    strategy: BoostingStrategy) extends Serializable {
 
   require(numTrees > 0, s"GradientBoostingModel cannot be created with empty trees collection.")
 
@@ -36,7 +38,7 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingS
    * @return predicted category from the trained model
    */
   private def predictRaw(features: Vector): Double = {
-    val treePredictions = trees.map(tree => tree.predict(features))
+    val treePredictions = baseLearners.map(tree => tree.predict(features))
     if (numTrees == 1){
       treePredictions(0)
     } else {
@@ -77,7 +79,7 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingS
   /**
    * Get number of trees in forest.
    */
-  def numTrees: Int = trees.size
+  def numTrees: Int = baseLearners.size
 
   /**
    * Print full model.
@@ -92,7 +94,7 @@ class GradientBoostingModel(trees: Array[DecisionTreeModel], strategy: BoostingS
       case _ => throw new IllegalArgumentException(
         s"GradientBoostingModel given unknown algo parameter: $algo.")
     }
-    header + trees.zipWithIndex.map { case (tree, treeIndex) =>
+    header + baseLearners.zipWithIndex.map { case (tree, treeIndex) =>
       s"  Tree $treeIndex:\n" + tree.topNode.subtreeToString(4)
     }.fold("")(_ + _)
   }

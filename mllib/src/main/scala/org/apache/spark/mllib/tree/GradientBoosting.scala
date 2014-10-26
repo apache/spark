@@ -394,7 +394,8 @@ object GradientBoosting extends Logging {
 
     // Initialize gradient boosting parameters
     val numEstimators = boostingStrategy.numEstimators
-    val trees = new Array[DecisionTreeModel](numEstimators + 1)
+    val baseLearners = new Array[DecisionTreeModel](numEstimators + 1)
+    val baseLearnerWeights = new Array[Double](numEstimators + 1)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
     val subsample = boostingStrategy.subsample
@@ -416,7 +417,8 @@ object GradientBoosting extends Logging {
     timer.start("building tree 0")
     val firstModel = new DecisionTree(strategy).train(data)
     timer.stop("building tree 0")
-    trees(0) = firstModel
+    baseLearners(0) = firstModel
+    baseLearnerWeights(0) = 1.0
     logDebug("error of tree = " + loss.computeError(firstModel, data))
 
     // psuedo-residual for second iteration
@@ -432,7 +434,8 @@ object GradientBoosting extends Logging {
       logDebug("###################################################")
       val model = new DecisionTree(strategy).train(data)
       timer.stop(s"building tree $m")
-      trees(m) = model
+      baseLearners(m) = model
+      baseLearnerWeights(m) = learningRate
       logDebug("error of tree = " + loss.computeError(model, data))
       // Update data with pseudo-residuals
       data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
@@ -455,7 +458,7 @@ object GradientBoosting extends Logging {
 
 
     // 3. Output classifier
-    new GradientBoostingModel(trees, boostingStrategy)
+    new GradientBoostingModel(baseLearners, baseLearnerWeights, boostingStrategy)
 
   }
 
