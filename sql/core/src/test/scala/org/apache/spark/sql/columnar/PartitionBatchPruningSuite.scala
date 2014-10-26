@@ -22,8 +22,6 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
 
-case class IntegerData(i: Int)
-
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
   val originalColumnBatchSize = columnBatchSize
   val originalInMemoryPartitionPruning = inMemoryPartitionPruning
@@ -31,8 +29,12 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     setConf(SQLConf.COLUMN_BATCH_SIZE, "10")
-    val rawData = sparkContext.makeRDD(1 to 100, 5).map(IntegerData)
-    rawData.registerTempTable("intData")
+
+    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
+      val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
+      TestData(key, string)
+    }, 5)
+    pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning
     setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, "true")
@@ -44,48 +46,64 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
   }
 
   before {
-    cacheTable("intData")
+    cacheTable("pruningData")
   }
 
   after {
-    uncacheTable("intData")
+    uncacheTable("pruningData")
   }
 
   // Comparisons
-  checkBatchPruning("i = 1", Seq(1), 1, 1)
-  checkBatchPruning("1 = i", Seq(1), 1, 1)
-  checkBatchPruning("i < 12", 1 to 11, 1, 2)
-  checkBatchPruning("i <= 11", 1 to 11, 1, 2)
-  checkBatchPruning("i > 88", 89 to 100, 1, 2)
-  checkBatchPruning("i >= 89", 89 to 100, 1, 2)
-  checkBatchPruning("12 > i", 1 to 11, 1, 2)
-  checkBatchPruning("11 >= i", 1 to 11, 1, 2)
-  checkBatchPruning("88 < i", 89 to 100, 1, 2)
-  checkBatchPruning("89 <= i", 89 to 100, 1, 2)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key = 1", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE 1 = key", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key < 12", 1, 2)(1 to 11)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key <= 11", 1, 2)(1 to 11)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key > 88", 1, 2)(89 to 100)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key >= 89", 1, 2)(89 to 100)
+  checkBatchPruning("SELECT key FROM pruningData WHERE 12 > key", 1, 2)(1 to 11)
+  checkBatchPruning("SELECT key FROM pruningData WHERE 11 >= key", 1, 2)(1 to 11)
+  checkBatchPruning("SELECT key FROM pruningData WHERE 88 < key", 1, 2)(89 to 100)
+  checkBatchPruning("SELECT key FROM pruningData WHERE 89 <= key", 1, 2)(89 to 100)
+
+  // IS NULL
+  checkBatchPruning("SELECT key FROM pruningData WHERE value IS NULL", 5, 5) {
+    (1 to 10) ++ (21 to 30) ++ (41 to 50) ++ (61 to 70) ++ (81 to 90)
+  }
+
+  // IS NOT NULL
+  checkBatchPruning("SELECT key FROM pruningData WHERE value IS NOT NULL", 5, 5) {
+    (11 to 20) ++ (31 to 40) ++ (51 to 60) ++ (71 to 80) ++ (91 to 100)
+  }
 
   // Conjunction and disjunction
-  checkBatchPruning("i > 8 AND i <= 21", 9 to 21, 2, 3)
-  checkBatchPruning("i < 2 OR i > 99", Seq(1, 100), 2, 2)
-  checkBatchPruning("i < 2 OR (i > 78 AND i < 92)", Seq(1) ++ (79 to 91), 3, 4)
-  checkBatchPruning("NOT (i < 88)", 88 to 100, 1, 2)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key > 8 AND key <= 21", 2, 3)(9 to 21)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key < 2 OR key > 99", 2, 2)(Seq(1, 100))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key < 2 OR (key > 78 AND key < 92)", 3, 4) {
+    Seq(1) ++ (79 to 91)
+  }
 
   // With unsupported predicate
-  checkBatchPruning("i < 12 AND i IS NOT NULL", 1 to 11, 1, 2)
-  checkBatchPruning(s"NOT (i in (${(1 to 30).mkString(",")}))", 31 to 100, 5, 10)
+  checkBatchPruning("SELECT key FROM pruningData WHERE NOT (key < 88)", 1, 2)(88 to 100)
+  checkBatchPruning("SELECT key FROM pruningData WHERE key < 12 AND key IS NOT NULL", 1, 2)(1 to 11)
+
+  {
+    val seq = (1 to 30).mkString(", ")
+    checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq))", 5, 10)(31 to 100)
+  }
 
   def checkBatchPruning(
-      filter: String,
-      expectedQueryResult: Seq[Int],
+      query: String,
       expectedReadPartitions: Int,
-      expectedReadBatches: Int): Unit = {
+      expectedReadBatches: Int)(
+      expectedQueryResult: => Seq[Int]): Unit = {
 
-    test(filter) {
-      val query = sql(s"SELECT * FROM intData WHERE $filter")
+    test(query) {
+      val schemaRdd = sql(query)
       assertResult(expectedQueryResult.toArray, "Wrong query result") {
-        query.collect().map(_.head).toArray
+        schemaRdd.collect().map(_.head).toArray
       }
 
-      val (readPartitions, readBatches) = query.queryExecution.executedPlan.collect {
+      val (readPartitions, readBatches) = schemaRdd.queryExecution.executedPlan.collect {
         case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
       }.head
 

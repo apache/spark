@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
@@ -233,5 +233,14 @@ class CachedTableSuite extends QueryTest {
 
     uncacheTable("testData")
     assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+  }
+
+  test("InMemoryRelation statistics") {
+    sql("CACHE TABLE testData")
+    table("testData").queryExecution.withCachedData.collect {
+      case cached: InMemoryRelation =>
+        val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
+        assert(cached.statistics.sizeInBytes === actualSizeInBytes)
+    }
   }
 }

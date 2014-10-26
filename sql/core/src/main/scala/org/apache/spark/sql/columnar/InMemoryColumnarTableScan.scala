@@ -19,13 +19,15 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 import org.apache.spark.storage.StorageLevel
 
@@ -45,14 +47,50 @@ private[sql] case class InMemoryRelation(
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
-    child: SparkPlan)
-    (private var _cachedColumnBuffers: RDD[CachedBatch] = null)
+    child: SparkPlan)(
+    private var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    private var _statistics: Statistics = null)
   extends LogicalPlan with MultiInstanceRelation {
 
-  override lazy val statistics =
-    Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
+  private val batchStats =
+    child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[Row])
 
   val partitionStatistics = new PartitionStatistics(output)
+
+  private def computeSizeInBytes = {
+    val sizeOfRow: Expression =
+      BindReferences.bindReference(
+        output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
+        partitionStatistics.schema)
+
+    batchStats.value.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
+  }
+
+  // Statistics propagation contracts:
+  // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
+  // 2. Only propagate statistics when `_statistics` is non-null
+  private def statisticsToBePropagated = if (_statistics == null) {
+    val updatedStats = statistics
+    if (_statistics == null) null else updatedStats
+  } else {
+    _statistics
+  }
+
+  override def statistics = if (_statistics == null) {
+    if (batchStats.value.isEmpty) {
+      // Underlying columnar RDD hasn't been materialized, no useful statistics information
+      // available, return the default statistics.
+      Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
+    } else {
+      // Underlying columnar RDD has been materialized, required information has also been collected
+      // via the `batchStats` accumulator, compute the final statistics, and update `_statistics`.
+      _statistics = Statistics(sizeInBytes = computeSizeInBytes)
+      _statistics
+    }
+  } else {
+    // Pre-computed statistics
+    _statistics
+  }
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
@@ -91,6 +129,7 @@ private[sql] case class InMemoryRelation(
           val stats = Row.fromSeq(
             columnBuilders.map(_.columnStats.collectedStatistics).foldLeft(Seq.empty[Any])(_ ++ _))
 
+          batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)
         }
 
@@ -104,7 +143,8 @@ private[sql] case class InMemoryRelation(
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
-      newOutput, useCompression, batchSize, storageLevel, child)(_cachedColumnBuffers)
+      newOutput, useCompression, batchSize, storageLevel, child)(
+      _cachedColumnBuffers, statisticsToBePropagated)
   }
 
   override def children = Seq.empty
@@ -116,7 +156,8 @@ private[sql] case class InMemoryRelation(
       batchSize,
       storageLevel,
       child)(
-      _cachedColumnBuffers).asInstanceOf[this.type]
+      _cachedColumnBuffers,
+      statisticsToBePropagated).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers = _cachedColumnBuffers
@@ -132,6 +173,8 @@ private[sql] case class InMemoryColumnarTableScan(
 
   override def output: Seq[Attribute] = attributes
 
+  private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
+
   // Returned filter predicate should return false iff it is impossible for the input expression
   // to evaluate to `true' based on statistics collected about this partition batch.
   val buildFilter: PartialFunction[Expression, Expression] = {
@@ -144,44 +187,24 @@ private[sql] case class InMemoryColumnarTableScan(
       buildFilter(lhs) || buildFilter(rhs)
 
     case EqualTo(a: AttributeReference, l: Literal) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      aStats.lowerBound <= l && l <= aStats.upperBound
-
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
     case EqualTo(l: Literal, a: AttributeReference) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      aStats.lowerBound <= l && l <= aStats.upperBound
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
-    case LessThan(a: AttributeReference, l: Literal) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      aStats.lowerBound < l
+    case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
+    case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
 
-    case LessThan(l: Literal, a: AttributeReference) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      l < aStats.upperBound
+    case LessThanOrEqual(a: AttributeReference, l: Literal) => statsFor(a).lowerBound <= l
+    case LessThanOrEqual(l: Literal, a: AttributeReference) => l <= statsFor(a).upperBound
 
-    case LessThanOrEqual(a: AttributeReference, l: Literal) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      aStats.lowerBound <= l
+    case GreaterThan(a: AttributeReference, l: Literal) => l < statsFor(a).upperBound
+    case GreaterThan(l: Literal, a: AttributeReference) => statsFor(a).lowerBound < l
 
-    case LessThanOrEqual(l: Literal, a: AttributeReference) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      l <= aStats.upperBound
+    case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
+    case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
 
-    case GreaterThan(a: AttributeReference, l: Literal) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      l < aStats.upperBound
-
-    case GreaterThan(l: Literal, a: AttributeReference) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      aStats.lowerBound < l
-
-    case GreaterThanOrEqual(a: AttributeReference, l: Literal) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      l <= aStats.upperBound
-
-    case GreaterThanOrEqual(l: Literal, a: AttributeReference) =>
-      val aStats = relation.partitionStatistics.forAttribute(a)
-      aStats.lowerBound <= l
+    case IsNull(a: Attribute)    => statsFor(a).nullCount > 0
+    case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
   }
 
   val partitionFilters = {

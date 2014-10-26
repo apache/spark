@@ -28,40 +28,40 @@ import org.apache.spark.sql.test.TestSQLContext._
 case class TestData(key: Int, value: String)
 
 object TestData {
-  val testData: SchemaRDD = TestSQLContext.sparkContext.parallelize(
-    (1 to 100).map(i => TestData(i, i.toString)))
+  val testData = TestSQLContext.sparkContext.parallelize(
+    (1 to 100).map(i => TestData(i, i.toString))).toSchemaRDD
   testData.registerTempTable("testData")
 
   case class LargeAndSmallInts(a: Int, b: Int)
-  val largeAndSmallInts: SchemaRDD =
+  val largeAndSmallInts =
     TestSQLContext.sparkContext.parallelize(
       LargeAndSmallInts(2147483644, 1) ::
       LargeAndSmallInts(1, 2) ::
       LargeAndSmallInts(2147483645, 1) ::
       LargeAndSmallInts(2, 2) ::
       LargeAndSmallInts(2147483646, 1) ::
-      LargeAndSmallInts(3, 2) :: Nil)
+      LargeAndSmallInts(3, 2) :: Nil).toSchemaRDD
   largeAndSmallInts.registerTempTable("largeAndSmallInts")
 
   case class TestData2(a: Int, b: Int)
-  val testData2: SchemaRDD =
+  val testData2 =
     TestSQLContext.sparkContext.parallelize(
       TestData2(1, 1) ::
       TestData2(1, 2) ::
       TestData2(2, 1) ::
       TestData2(2, 2) ::
       TestData2(3, 1) ::
-      TestData2(3, 2) :: Nil)
+      TestData2(3, 2) :: Nil).toSchemaRDD
   testData2.registerTempTable("testData2")
 
   case class BinaryData(a: Array[Byte], b: Int)
-  val binaryData: SchemaRDD =
+  val binaryData =
     TestSQLContext.sparkContext.parallelize(
       BinaryData("12".getBytes(), 1) ::
       BinaryData("22".getBytes(), 5) ::
       BinaryData("122".getBytes(), 3) ::
       BinaryData("121".getBytes(), 2) ::
-      BinaryData("123".getBytes(), 4) :: Nil)
+      BinaryData("123".getBytes(), 4) :: Nil).toSchemaRDD
   binaryData.registerTempTable("binaryData")
 
   // TODO: There is no way to express null primitives as case classes currently...
