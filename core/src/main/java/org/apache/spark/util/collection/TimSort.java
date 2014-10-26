@@ -20,11 +20,13 @@ package org.apache.spark.util.collection;
 import java.util.Comparator;
 
 /**
- * A port of the Android Timsort class, which utilizes a "stable, adaptive, iterative mergesort."
+ * A port of the Android TimSort class, which utilizes a "stable, adaptive, iterative mergesort."
  * See the method comment on sort() for more details.
  *
  * This has been kept in Java with the original style in order to match very closely with the
- * Android source code, and thus be easy to verify correctness.
+ * Android source code, and thus be easy to verify correctness. The class is package private. We put
+ * a simple Scala wrapper {@link org.apache.spark.util.collection.Sorter}, which is available to
+ * package org.apache.spark.
  *
  * The purpose of the port is to generalize the interface to the sort to accept input data formats
  * besides simple arrays where every element is sorted individually. For instance, the AppendOnlyMap
@@ -34,8 +36,9 @@ import java.util.Comparator;
  * We allow key reuse to prevent creating many key objects -- see SortDataFormat.
  *
  * @see org.apache.spark.util.collection.SortDataFormat
+ * @see org.apache.spark.util.collection.Sorter
  */
-class Sorter<K, Buffer> {
+class TimSort<K, Buffer> {
 
   /**
    * This is the minimum sized sequence that will be merged.  Shorter
@@ -58,7 +61,7 @@ class Sorter<K, Buffer> {
 
   private final SortDataFormat<K, Buffer> s;
 
-  public Sorter(SortDataFormat<K, Buffer> sortDataFormat) {
+  public TimSort(SortDataFormat<K, Buffer> sortDataFormat) {
     this.s = sortDataFormat;
   }
 
@@ -95,7 +98,7 @@ class Sorter<K, Buffer> {
    *
    * @author Josh Bloch
    */
-  void sort(Buffer a, int lo, int hi, Comparator<? super K> c) {
+  public void sort(Buffer a, int lo, int hi, Comparator<? super K> c) {
     assert c != null;
 
     int nRemaining  = hi - lo;
@@ -242,16 +245,16 @@ class Sorter<K, Buffer> {
     if (runHi == hi)
       return 1;
 
+    K key0 = s.newKey();
     K key1 = s.newKey();
-    K key2 = s.newKey();
 
     // Find end of run, and reverse range if descending
-    if (c.compare(s.getKey(a, runHi++, key1), s.getKey(a, lo, key2)) < 0) { // Descending
-      while (runHi < hi && c.compare(s.getKey(a, runHi, key1), s.getKey(a, runHi - 1, key2)) < 0)
+    if (c.compare(s.getKey(a, runHi++, key0), s.getKey(a, lo, key1)) < 0) { // Descending
+      while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) < 0)
         runHi++;
       reverseRange(a, lo, runHi);
     } else {                              // Ascending
-      while (runHi < hi && c.compare(s.getKey(a, runHi, key1), s.getKey(a, runHi - 1, key2)) >= 0)
+      while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) >= 0)
         runHi++;
     }
 

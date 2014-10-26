@@ -33,9 +33,13 @@ import scala.reflect.ClassTag
  * @tparam Buffer Internal data structure used by a particular format (e.g., Array[Int]).
  */
 // TODO: Making Buffer a real trait would be a better abstraction, but adds some complexity.
-private[spark] trait SortDataFormat[K, Buffer] extends Any {
+private[spark]
+trait SortDataFormat[K, Buffer] extends Any {
 
-  /** Creates a new mutable key for reuse. */
+  /**
+   * Creates a new mutable key for reuse. This should be implemented if you want to override
+   * [[getKey(Buffer, Int, K)]].
+   */
   protected def newKey(): K = null.asInstanceOf[K]
 
   /** Return the sort key for the element at the given index. */
@@ -43,6 +47,8 @@ private[spark] trait SortDataFormat[K, Buffer] extends Any {
 
   /**
    * Returns the sort key for the element at the given index and reuse the input key if possible.
+   * The default implementation ignores the reuse parameter and invokes [[getKey(Buffer, Int]].
+   * If you want to override this method, you must implement [[newKey()]].
    */
   protected def getKey(data: Buffer, pos: Int, reuse: K): K = {
     getKey(data, pos)
