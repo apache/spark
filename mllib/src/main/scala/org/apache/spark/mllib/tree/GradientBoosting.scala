@@ -31,6 +31,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Sum
 
 /**
  * :: Experimental ::
@@ -458,7 +459,7 @@ object GradientBoosting extends Logging {
 
 
     // 3. Output classifier
-    new WeightedEnsembleModel(baseLearners, baseLearnerWeights, strategy.algo)
+    new WeightedEnsembleModel(baseLearners, baseLearnerWeights, strategy.algo, Sum)
 
   }
 

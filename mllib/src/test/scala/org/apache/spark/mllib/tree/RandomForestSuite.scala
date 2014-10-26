@@ -27,7 +27,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata}
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
-import org.apache.spark.mllib.tree.model.{Node, RandomForestModel}
+import org.apache.spark.mllib.tree.model.{Node, WeightedEnsembleModel}
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.util.StatCounter
 
@@ -73,8 +73,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val rf = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
-    assert(rf.trees.size === 1)
-    val rfTree = rf.trees(0)
+    assert(rf.baseLearners.size === 1)
+    val rfTree = rf.baseLearners(0)
 
     val dt = DecisionTree.train(rdd, strategy)
 
@@ -99,8 +99,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
-    assert(rf.trees.size === 1)
-    val rfTree = rf.trees(0)
+    assert(rf.baseLearners.size === 1)
+    val rfTree = rf.baseLearners(0)
 
     val dt = DecisionTree.train(rdd, strategy)
 
@@ -216,7 +216,7 @@ object RandomForestSuite {
   }
 
   def validateClassifier(
-      model: RandomForestModel,
+      model: WeightedEnsembleModel,
       input: Seq[LabeledPoint],
       requiredAccuracy: Double) {
     val predictions = input.map(x => model.predict(x.features))
@@ -229,7 +229,7 @@ object RandomForestSuite {
   }
 
   def validateRegressor(
-      model: RandomForestModel,
+      model: WeightedEnsembleModel,
       input: Seq[LabeledPoint],
       requiredMSE: Double) {
     val predictions = input.map(x => model.predict(x.features))
