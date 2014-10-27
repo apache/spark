@@ -32,6 +32,65 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("CTAS with serde") {
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
+    sql(
+      """CREATE TABLE ctas2
+        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+        | STORED AS RCFile
+        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+        | AS
+        |   SELECT key, value
+        |   FROM src
+        |   ORDER BY key, value""".stripMargin).collect
+    sql(
+      """CREATE TABLE ctas3
+        | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
+        | STORED AS textfile AS
+        |   SELECT key, value
+        |   FROM src
+        |   ORDER BY key, value""".stripMargin).collect
+
+    // the table schema may like (key: integer, value: string)
+    sql(
+      """CREATE TABLE IF NOT EXISTS ctas4 AS
+        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect
+    // expect the string => integer for field key cause the table ctas4 already existed.
+    sql(
+      """CREATE TABLE IF NOT EXISTS ctas4 AS
+        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+
+    checkAnswer(
+      sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
+      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+    checkAnswer(
+      sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+      sql(
+        """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value""").collect().toSeq)
+    checkAnswer(
+      sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+      sql(
+        """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value""").collect().toSeq)
+    checkAnswer(
+      sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
+      sql("SELECT CAST(key AS int) k, value FROM src ORDER BY k, value").collect().toSeq)
+
+    checkExistence(sql("DESC EXTENDED ctas2"), true,
+      "name:key", "type:string", "name:value", "ctas2",
+      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
+      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
+      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
+      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
+    )
+  }
+
   test("ordering not in select") {
     checkAnswer(
       sql("SELECT key FROM src ORDER BY value"),
