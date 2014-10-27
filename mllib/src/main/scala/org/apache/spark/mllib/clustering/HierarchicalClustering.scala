@@ -141,7 +141,9 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
         if (isMerged == false && isSingleCluster == false) {
           var subNodes = split(node.get).map(subNode => statsUpdater(subNode))
           // it seems that there is no splittable node
-          if (subNodes.size == 1) isSingleCluster = false
+          if (subNodes.size == 1) {
+            isSingleCluster = false
+          }
           // add the sub nodes in to the tree
           // if the sum of variance of sub nodes is greater than that of pre-splitted node
           if (node.get.getVariance().get > subNodes.map(_.getVariance().get).sum) {
