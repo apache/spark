@@ -739,11 +739,15 @@ private[spark] object Utils extends Logging {
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
-    val files = file.listFiles()
-    if (files == null) {
-      throw new IOException("Failed to list files for dir: " + file)
+    if (file.exists()) {
+      val files = file.listFiles()
+      if (files == null) {
+        throw new IOException("Failed to list files for dir: " + file)
+      }
+      files
+    } else {
+      List()
     }
-    files
   }
 
   /**
@@ -988,7 +992,8 @@ private[spark] object Utils extends Logging {
   private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
     // finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SPARK_CORE_CLASS_REGEX =
+      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
     val SCALA_CLASS_REGEX = """^scala""".r
     val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
@@ -1666,6 +1671,17 @@ private[spark] object Utils extends Logging {
     pro.put("log4j.appender.console.layout.ConversionPattern",
       "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
     PropertyConfigurator.configure(pro)
+  }
+
+  def invoke(
+      clazz: Class[_],
+      obj: AnyRef,
+      methodName: String,
+      args: (Class[_], AnyRef)*): AnyRef = {
+    val (types, values) = args.unzip
+    val method = clazz.getDeclaredMethod(methodName, types: _*)
+    method.setAccessible(true)
+    method.invoke(obj, values.toSeq: _*)
   }
 
 }

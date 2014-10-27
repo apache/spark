@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.tree.impl
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -104,12 +103,13 @@ private[tree] object BaggedPoint {
       seed: Int): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
-      val poisson = new Poisson(subsample, new DRand(seed + partitionIndex + 1))
+      val poisson = new PoissonDistribution(subsample)
+      poisson.reseedRandomGenerator(seed + partitionIndex + 1)
       instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)
         var subsampleIndex = 0
         while (subsampleIndex < numSubsamples) {
-          subsampleWeights(subsampleIndex) = poisson.nextInt()
+          subsampleWeights(subsampleIndex) = poisson.sample()
           subsampleIndex += 1
         }
         new BaggedPoint(instance, subsampleWeights)
