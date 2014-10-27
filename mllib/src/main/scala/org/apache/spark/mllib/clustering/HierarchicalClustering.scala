@@ -43,6 +43,13 @@ class HierarchicalClusteringConf(
 
   def this() = this(20, 20, 5, 10E-6, 1, 0.1)
 
+  override def toString(): String = {
+    Array(
+      s"numClusters:${numClusters}", s"subIterations:${subIterations}", s"numRetries:${numRetries}",
+      s"epsilon:${epsilon}", s"randomSeed:${randomSeed}", s"randomRange:${randomRange}"
+    ).mkString(", ")
+  }
+
   def setNumClusters(numClusters: Int): this.type = {
     this.numClusters = numClusters
     this
@@ -106,7 +113,7 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
    */
   def run(data: RDD[Vector]): HierarchicalClusteringModel = {
     validateData(data)
-    logInfo(s"Run with ${conf.toString}")
+    logInfo(s"Run with ${conf}")
 
     val startTime = System.currentTimeMillis() // to measure the execution time
     val clusterTree = ClusterTree.fromRDD(data) // make the root node
