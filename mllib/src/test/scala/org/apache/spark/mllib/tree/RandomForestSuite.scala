@@ -25,11 +25,10 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata}
+import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
-import org.apache.spark.mllib.tree.model.{Node, WeightedEnsembleModel}
+import org.apache.spark.mllib.tree.model.Node
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.util.StatCounter
 
 /**
  * Test suite for [[RandomForest]].
@@ -39,7 +38,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
   test("Binary classification with continuous features:" +
       " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
 
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
@@ -54,7 +53,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val dt = DecisionTree.train(rdd, strategy)
 
-    RandomForestSuite.validateClassifier(rf, arr, 0.9)
+    EnsembleTestHelper.validateClassifier(rf, arr, 0.9)
     DecisionTreeSuite.validateClassifier(dt, arr, 0.9)
 
     // Make sure trees are the same.
@@ -64,7 +63,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
   test("Regression with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
 
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val numTrees = 1
@@ -80,7 +79,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val dt = DecisionTree.train(rdd, strategy)
 
-    RandomForestSuite.validateRegressor(rf, arr, 0.01)
+    EnsembleTestHelper.validateRegressor(rf, arr, 0.01)
     DecisionTreeSuite.validateRegressor(dt, arr, 0.01)
 
     // Make sure trees are the same.
@@ -89,7 +88,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
   test("Binary classification with continuous features: subsampling features") {
     val numFeatures = 50
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(numFeatures, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures, 1000)
     val rdd = sc.parallelize(arr)
     val categoricalFeaturesInfo = Map.empty[Int, Int]
 
@@ -163,76 +162,9 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
       numClassesForClassification = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
     val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
       featureSubsetStrategy = "sqrt", seed = 12345)
-    RandomForestSuite.validateClassifier(model, arr, 1.0)
+    EnsembleTestHelper.validateClassifier(model, arr, 1.0)
   }
 
 }
 
-object RandomForestSuite {
 
-  /**
-   * Aggregates all values in data, and tests whether the empirical mean and stddev are within
-   * epsilon of the expected values.
-   * @param data  Every element of the data should be an i.i.d. sample from some distribution.
-   */
-  def testRandomArrays(
-      data: Array[Array[Double]],
-      numCols: Int,
-      expectedMean: Double,
-      expectedStddev: Double,
-      epsilon: Double) {
-    val values = new mutable.ArrayBuffer[Double]()
-    data.foreach { row =>
-      assert(row.size == numCols)
-      values ++= row
-    }
-    val stats = new StatCounter(values)
-    assert(math.abs(stats.mean - expectedMean) < epsilon)
-    assert(math.abs(stats.stdev - expectedStddev) < epsilon)
-  }
-
-  def validateClassifier(
-      model: WeightedEnsembleModel,
-      input: Seq[LabeledPoint],
-      requiredAccuracy: Double) {
-    val predictions = input.map(x => model.predict(x.features))
-    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
-      prediction != expected.label
-    }
-    val accuracy = (input.length - numOffPredictions).toDouble / input.length
-    assert(accuracy >= requiredAccuracy,
-      s"validateClassifier calculated accuracy $accuracy but required $requiredAccuracy.")
-  }
-
-  def validateRegressor(
-      model: WeightedEnsembleModel,
-      input: Seq[LabeledPoint],
-      requiredMSE: Double) {
-    val predictions = input.map(x => model.predict(x.features))
-    val squaredError = predictions.zip(input).map { case (prediction, expected) =>
-      val err = prediction - expected.label
-      err * err
-    }.sum
-    val mse = squaredError / input.length
-    assert(mse <= requiredMSE, s"validateRegressor calculated MSE $mse but required $requiredMSE.")
-  }
-
-  def generateOrderedLabeledPoints(numFeatures: Int, numInstances: Int): Array[LabeledPoint] = {
-    val arr = new Array[LabeledPoint](numInstances)
-    for (i <- 0 until numInstances) {
-      val label = if (i < numInstances / 10) {
-        0.0
-      } else if (i < numInstances / 2) {
-        1.0
-      } else if (i < numInstances * 0.9) {
-        0.0
-      } else {
-        1.0
-      }
-      val features = Array.fill[Double](numFeatures)(i.toDouble)
-      arr(i) = new LabeledPoint(label, Vectors.dense(features))
-    }
-    arr
-  }
-
-}

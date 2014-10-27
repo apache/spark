@@ -19,8 +19,7 @@ package org.apache.spark.mllib.tree.impl
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.tree.RandomForestSuite
-
+import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.util.LocalSparkContext
 
 /**
@@ -29,7 +28,7 @@ import org.apache.spark.mllib.util.LocalSparkContext
 class BaggedPointSuite extends FunSuite with LocalSparkContext  {
 
   test("BaggedPoint RDD: without subsampling") {
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
     val rdd = sc.parallelize(arr)
     val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, 1, false)
     baggedRDD.collect().foreach { baggedPoint =>
@@ -42,12 +41,12 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
     val (expectedMean, expectedStddev) = (1.0, 1.0)
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
     val rdd = sc.parallelize(arr)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, true)
       val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+      EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
     }
   }
@@ -58,12 +57,12 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
     val (expectedMean, expectedStddev) = (subsample, math.sqrt(subsample))
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
     val rdd = sc.parallelize(arr)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, true)
       val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+      EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
     }
   }
@@ -73,12 +72,12 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
     val (expectedMean, expectedStddev) = (1.0, 0)
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
     val rdd = sc.parallelize(arr)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, 1.0, numSubsamples, false)
       val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+      EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
     }
   }
@@ -89,12 +88,12 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
     val (expectedMean, expectedStddev) = (subsample, math.sqrt(subsample * (1 - subsample)))
 
     val seeds = Array(123, 5354, 230, 349867, 23987)
-    val arr = RandomForestSuite.generateOrderedLabeledPoints(1, 1000)
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
     val rdd = sc.parallelize(arr)
     seeds.foreach { seed =>
       val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, false)
       val subsampleCounts: Array[Array[Double]] = baggedRDD.map(_.subsampleWeights).collect()
-      RandomForestSuite.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+      EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
     }
   }
