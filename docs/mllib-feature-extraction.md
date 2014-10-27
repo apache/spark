@@ -164,6 +164,11 @@ for((synonym, cosineSimilarity) <- synonyms) {
 </div>
 <div data-lang="python">
 {% highlight python %}
+# example uses text8 file from http://mattmahoney.net/dc/text8.zip                                                                                                                        
+# the file was unziped and split into multiple lines using                                                                                                                                
+# grep -o '[^ ]\+' text8 > text8_lines                                                                                                                                                    
+# this was done so that the example can be run in local mode
+
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
 
