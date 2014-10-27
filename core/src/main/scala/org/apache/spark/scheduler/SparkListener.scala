@@ -77,17 +77,21 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerExecutorThreadDump(
+    execId: String,
+    threadStackTraces: Array[ThreadStackTrace])
+  extends SparkListenerEvent
+
 /**
  * Periodic updates from executors.
  * @param execId executor id
  * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
- * @param threadDump stack traces from all threads
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)],
-    threadDump: Array[ThreadStackTrace])
+    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
   extends SparkListenerEvent
 
 @DeveloperApi
@@ -173,6 +177,11 @@ trait SparkListener {
    * Called when the application ends
    */
   def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) { }
+
+  /**
+   * Called when the driver receives thread dumps from an executor in a heartbeat.
+   */
+  def onExecutorThreadDump(executorThreadDump: SparkListenerExecutorThreadDump) {}
 
   /**
    * Called when the driver receives task metrics from an executor in a heartbeat.

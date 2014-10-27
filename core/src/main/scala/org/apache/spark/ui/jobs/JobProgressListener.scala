@@ -268,9 +268,12 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     stageData.executorRunTime += timeDelta
   }
 
+  override def onExecutorThreadDump(executorThreadDump: SparkListenerExecutorThreadDump) {
+    val timeAndThreadDump = (System.currentTimeMillis(), executorThreadDump.threadStackTraces)
+    executorIdToLastThreadDump.put(executorThreadDump.execId, timeAndThreadDump)
+  }
+
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
-    val timeAndThreadDump = (System.currentTimeMillis(), executorMetricsUpdate.threadDump)
-    executorIdToLastThreadDump.put(executorMetricsUpdate.execId, timeAndThreadDump)
     for ((taskId, sid, sAttempt, taskMetrics) <- executorMetricsUpdate.taskMetrics) {
       val stageData = stageIdToData.getOrElseUpdate((sid, sAttempt), {
         logWarning("Metrics update for task in unknown stage " + sid)
