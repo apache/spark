@@ -248,7 +248,7 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
 
       val normSum = centers.map(v => breezeNorm(v, 2.0)).sum
       val newNormSum = newCenters.map(v => breezeNorm(v, 2.0)).sum
-      error = Math.abs((normSum - newNormSum) / normSum)
+      error = math.abs((normSum - newNormSum) / normSum)
       centers = newCenters.toArray
       numIter += 1
       finder = ClusterTree.findClosestCenter(metric)(centers) _
