@@ -143,7 +143,7 @@ private[hive] trait HiveInspectors {
         val row = a.asInstanceOf[Seq[_]]
         val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
         var i = 0
-        while(i < fieldRefs.length) {
+        while (i < fieldRefs.length) {
           result.add(wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
           i += 1
         }
@@ -172,7 +172,7 @@ private[hive] trait HiveInspectors {
       inspectors: Seq[ObjectInspector],
       cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
-    while(i < inspectors.length) {
+    while (i < inspectors.length) {
       cache(i) = wrap(row(i), inspectors(i))
       i += 1
     }
