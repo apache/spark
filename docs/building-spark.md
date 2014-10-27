@@ -67,10 +67,12 @@ For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN
     <tr><th>YARN version</th><th>Profile required</th></tr>
   </thead>
   <tbody>
-    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha</td></tr>
+    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha (Deprecated.)</td></tr>
     <tr><td>2.2.x and later</td><td>yarn</td></tr>
   </tbody>
 </table>
+
+Note: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445).
 
 Examples:
 

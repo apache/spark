@@ -37,7 +37,7 @@ import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
 
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 
-
+@deprecated("use yarn/stable", "1.2.0")
 class ExecutorRunnable(
     container: Container,
     conf: Configuration,

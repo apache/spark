@@ -35,6 +35,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 /**
  * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's alpha API.
  */
+@deprecated("use yarn/stable", "1.2.0")
 private[spark] class Client(
     val args: ClientArguments,
     val hadoopConf: Configuration,
@@ -131,6 +132,7 @@ object Client {
       println("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
     }
+    println("WARNING: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445)")
 
     // Set an env variable indicating we are running in YARN mode.
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes

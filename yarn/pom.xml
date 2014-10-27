@@ -73,6 +73,28 @@
   <profiles>
     <profile>
       <id>yarn-alpha</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>validate</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <tasks>
+                    <echo>*******************************************************************************************</echo>
+                    <echo>***WARNING***: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445).*</echo>
+                    <echo>*******************************************************************************************</echo>
+                  </tasks>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
       <modules>
         <module>alpha</module>
       </modules>
