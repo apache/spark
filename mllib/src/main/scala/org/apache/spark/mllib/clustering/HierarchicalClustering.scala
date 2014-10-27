@@ -177,11 +177,7 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
    * validate the given data to train
    */
   private def validateData(data: RDD[Vector]) {
-    conf match {
-      case conf if conf.getNumClusters() > data.count() =>
-        throw new IllegalArgumentException("# clusters must be less than # input data records")
-      case _ =>
-    }
+    require(conf.getNumClusters() <= data.count(), "# clusters must be less than # data rows")
   }
 
   /**
