@@ -323,7 +323,7 @@ package object testPackage extends Assertions {
   def runCallSiteTest(sc: SparkContext) {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val broadcast = sc.broadcast(rdd)
-    broadcast.destroy(blocking = true)
+    broadcast.destroy()
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))
   }
