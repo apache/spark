@@ -1238,8 +1238,9 @@ private[spark] object Utils extends Logging {
    * Timing method based on iterations that permit JVM JIT optimization.
    * @param numIters number of iterations
    * @param f function to be executed
+   * @param prepare function to be executed before each call to f. Its running time doesn't count.
    */
-  def timeIt(numIters: Int)(f: => Unit, prepare: => Unit = ()): Long = {
+  def timeIt(numIters: Int)(f: => Unit, prepare: => Unit = {}): Long = {
     var i = 0
     var sum = 0L
     while (i < numIters) {

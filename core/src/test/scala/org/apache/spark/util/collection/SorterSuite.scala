@@ -81,7 +81,12 @@ class SorterSuite extends FunSuite {
   ignore("Sorter benchmark") {
 
     /** Runs an experiment several times. */
-    def runExperiment(name: String)(f: => Unit, prepare: => Unit): Unit = {
+    def runExperiment(name: String, skip: Boolean = true)(f: => Unit, prepare: => Unit): Unit = {
+      if (skip) {
+        println(s"Skiped test $name.")
+        return
+      }
+
       val firstTry = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
       System.gc()
 
@@ -100,53 +105,56 @@ class SorterSuite extends FunSuite {
     val numElements = 25000000 // 25 mil
     val rand = new XORShiftRandom(123)
 
-    val keys = Array.tabulate[JFloat](numElements) { i =>
-      new JFloat(rand.nextFloat())
+    // Test our key-value pairs where each element is a Tuple2[Float, Integer)
+    val kvTuples = Array.tabulate(numElements) { i =>
+      (rand.nextFloat(), i)
     }
 
-    // Test our key-value pairs where each element is a Tuple2[Float, Integer)
     val kvTupleArray = new Array[AnyRef](numElements)
     val prepareKvTupleArray = () => {
-      var i = 0
-      while (i < numElements) {
-        kvTupleArray(i) = (keys(i): Float, i: Int)
-        i += 1
-      }
+      System.arraycopy(kvTuples, 0, kvTupleArray, 0, numElements)
     }
     runExperiment("Tuple-sort using Arrays.sort()")({
       Arrays.sort(kvTupleArray, new Comparator[AnyRef] {
         override def compare(x: AnyRef, y: AnyRef): Int =
           Ordering.Float.compare(x.asInstanceOf[(Float, _)]._1, y.asInstanceOf[(Float, _)]._1)
       })
-    }, prepareKvTupleArray)
+    }, prepareKvTupleArray())
 
     // Test our Sorter where each element alternates between Float and Integer, non-primitive
-    val keyValueArray = new Array[AnyRef](numElements * 2)
-    val prepareKeyValueArray = () => {
+
+    val keyValues = {
+      val data = new Array[AnyRef](numElements * 2)
       var i = 0
-      while(i < numElements) {
-        keyValueArray(2 * i) = keys(i)
-        keyValueArray(2 * i + 1) = new Integer(i)
+      while (i < numElements) {
+        data(2 * i) = new JFloat(kvTuples(i)._1)
+        data(2 * i + 1) = new JInteger(kvTuples(i)._2)
         i += 1
       }
+      data
+    }
+
+    val keyValueArray = new Array[AnyRef](numElements * 2)
+    val prepareKeyValueArray = () => {
+      System.arraycopy(keyValues, 0, keyValueArray, 0, numElements * 2)
     }
 
     val sorter = new Sorter(new KVArraySortDataFormat[JFloat, AnyRef])
     runExperiment("KV-sort using Sorter")({
-      sorter.sort(keyValueArray, 0, keys.length, new Comparator[JFloat] {
+      sorter.sort(keyValueArray, 0, numElements, new Comparator[JFloat] {
         override def compare(x: JFloat, y: JFloat): Int = Ordering.Float.compare(x, y)
       })
-    }, prepareKeyValueArray)
+    }, prepareKeyValueArray())
 
     // Test primitive and non-primitive sort on int array
 
-    val intArray = Array.fill(numElements)(rand.nextInt())
+    val ints = Array.fill(numElements)(rand.nextInt())
 
     val intObjectArray = new Array[JInteger](numElements)
     val prepareIntObjectArray = () => {
       var i = 0
       while (i < numElements) {
-        intObjectArray(i) = intArray(i)
+        intObjectArray(i) = ints(i)
         i += 1
       }
     }
@@ -155,26 +163,26 @@ class SorterSuite extends FunSuite {
       Arrays.sort(intObjectArray, new Comparator[JInteger] {
         override def compare(x: JInteger, y: JInteger): Int = x.compareTo(y)
       })
-    }, prepareIntObjectArray)
+    }, prepareIntObjectArray())
 
     val intPrimitiveArray = new Array[Int](numElements)
-    val prepareIntPrimitiveArray = () = {
-      System.arraycopy(intArray, 0, intPrimitiveArray, 0, numElements)
+    val prepareIntPrimitiveArray = () => {
+      System.arraycopy(ints, 0, intPrimitiveArray, 0, numElements)
     }
 
     runExperiment("Java Arrays.sort() on primitive int array")({
       Arrays.sort(intPrimitiveArray)
-    }, prepareIntPrimitiveArray)
+    }, prepareIntPrimitiveArray())
 
     val sorterWithoutKeyReuse = new Sorter(new IntArraySortDataFormat)
-    runExperiment("Sorter without key reuse on primitive int array ")({
+    runExperiment("Sorter without key reuse on primitive int array")({
       sorterWithoutKeyReuse.sort(intPrimitiveArray, 0, numElements, Ordering[Int])
-    }, prepareIntPrimitiveArray)
+    }, prepareIntPrimitiveArray())
 
     val sorterWithKeyReuse = new Sorter(new KeyReuseIntArraySortDataFormat)
-    runExperiment("Sorter without key resue on primitive int array")({
+    runExperiment("Sorter with key reuse on primitive int array")({
       sorterWithKeyReuse.sort(intPrimitiveArray, 0, numElements, Ordering[IntWrapper])
-    }, prepareIntPrimitiveArray)
+    }, prepareIntPrimitiveArray())
   }
 }
 
@@ -213,7 +221,7 @@ class IntArraySortDataFormat extends AbstractIntArraySortDataFormat[Int] {
 /** Wrapper of Int for key reuse. */
 class IntWrapper(var key: Int = 0) extends Ordered[IntWrapper] {
   override def compare(that: IntWrapper): Int = {
-    key.compareTo(that.key)
+    Ordering.Int.compare(key, that.key)
   }
 }
 
