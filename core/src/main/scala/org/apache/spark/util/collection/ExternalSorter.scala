@@ -33,14 +33,16 @@ import org.apache.spark.storage.{BlockObjectWriter, BlockId}
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
  * pairs of type (K, C). Uses a Partitioner to first group the keys into partitions, and then
- * optionally sorts keys within each partition using a custom Comparator. Can output a single
- * partitioned file with a different byte range for each partition, suitable for shuffle fetches.
+ * optionally sorts key-combiner pairs within each partition using a custom Comparator. Can output
+ * a single partitioned file with a different byte range for each partition, suitable for shuffle 
+ * fetches.
  *
  * If combining is disabled, the type C must equal V -- we'll cast the objects at the end.
  *
  * @param aggregator optional Aggregator with combine functions to use for merging data
  * @param partitioner optional Partitioner; if given, sort by partition ID and then key
- * @param ordering optional Ordering to sort keys within each partition; should be a total ordering
+ * @param ordering optional Ordering to sort key-combiner pairs within each partition; should be a
+ * total ordering by key
  * @param serializer serializer to use when spilling to disk
  *
  * Note that if an Ordering is given, we'll always sort using it, so only provide it if you really
@@ -78,7 +80,7 @@ import org.apache.spark.storage.{BlockObjectWriter, BlockId}
 private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
-    ordering: Option[Ordering[K]] = None,
+    ordering: Option[Ordering[Product2[K, C]]] = None,
     serializer: Option[Serializer] = None)
   extends Logging with Spillable[SizeTrackingPairCollection[(Int, K), C]] {
 
@@ -136,37 +138,40 @@ private[spark] class ExternalSorter[K, V, C](
   // Array of file writers for each partition, used if bypassMergeSort is true and we've spilled
   private var partitionWriters: Array[BlockObjectWriter] = null
 
-  // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
-  // Can be a partial ordering by hash code if a total ordering is not provided through by the
-  // user. (A partial ordering means that equal keys have comparator.compare(k, k) = 0, but some
-  // non-equal keys also have this, so we need to do a later pass to find truly equal keys).
+  // A comparator for key-combiner pairs (K, C) that orders them within a partition to allow
+  // aggregation or sorting. Can be a partial ordering by hash code if a total ordering is not 
+  // provided through by the user. (A partial ordering means that equal keys have 
+  // comparator.compare(k, k) = 0, but some non-equal keys also have this, so we need to do a
+  // later pass to find truly equal keys).
   // Note that we ignore this if no aggregator and no ordering are given.
-  private val keyComparator: Comparator[K] = ordering.getOrElse(new Comparator[K] {
-    override def compare(a: K, b: K): Int = {
-      val h1 = if (a == null) 0 else a.hashCode()
-      val h2 = if (b == null) 0 else b.hashCode()
-      if (h1 < h2) -1 else if (h1 == h2) 0 else 1
-    }
-  })
+  private val keyCombinerComparator: Comparator[Product2[K, C]] = ordering.getOrElse(
+    new Comparator[Product2[K, C]] {
+      override def compare(a: Product2[K, C], b: Product2[K, C]): Int = {
+        val h1 = if (a == null || a._1 == null) 0 else a._1.hashCode()
+        val h2 = if (b == null || b._1 == null) 0 else b._1.hashCode()
+        if (h1 < h2) -1 else if (h1 == h2) 0 else 1
+      }
+    })
 
-  // A comparator for (Int, K) pairs that orders them by only their partition ID
-  private val partitionComparator: Comparator[(Int, K)] = new Comparator[(Int, K)] {
-    override def compare(a: (Int, K), b: (Int, K)): Int = {
-      a._1 - b._1
+  // A comparator for ((Int, K), C) pairs that orders them by only their partition ID
+  private val partitionComparator: Comparator[((Int, K), C)] = new Comparator[((Int, K), C)] {
+    override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
+      a._1._1 - b._1._1
     }
   }
 
-  // A comparator that orders (Int, K) pairs by partition ID and then possibly by key
-  private val partitionKeyComparator: Comparator[(Int, K)] = {
+  // A comparator that orders ((Int, K), C) pairs by partition ID and then possibly by key-combiner
+  // pair
+  private val partitionKeyCombinerComparator: Comparator[((Int, K), C)] = {
     if (ordering.isDefined || aggregator.isDefined) {
       // Sort by partition ID then key comparator
-      new Comparator[(Int, K)] {
-        override def compare(a: (Int, K), b: (Int, K)): Int = {
-          val partitionDiff = a._1 - b._1
+      new Comparator[((Int, K), C)] {
+        override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
+          val partitionDiff = a._1._1 - b._1._1
           if (partitionDiff != 0) {
             partitionDiff
           } else {
-            keyComparator.compare(a._2, b._2)
+            keyCombinerComparator.compare((a._1._2, a._2), (b._1._2, b._2))
           }
         }
       }
@@ -283,7 +288,7 @@ private[spark] class ExternalSorter[K, V, C](
 
     var success = false
     try {
-      val it = collection.destructiveSortedIterator(partitionKeyComparator)
+      val it = collection.destructiveSortedIterator(partitionKeyCombinerComparator)
       while (it.hasNext) {
         val elem = it.next()
         val partitionId = elem._1._1
@@ -373,7 +378,7 @@ private[spark] class ExternalSorter[K, V, C](
       if (aggregator.isDefined) {
         // Perform partial aggregation across partitions
         (p, mergeWithAggregation(
-          iterators, aggregator.get.mergeCombiners, keyComparator, ordering.isDefined))
+          iterators, aggregator.get.mergeCombiners, keyCombinerComparator, ordering.isDefined))
       } else if (ordering.isDefined) {
         // No aggregator given, but we have an ordering (e.g. used by reduce tasks in sortByKey);
         // sort the elements without trying to merge them
@@ -385,16 +390,16 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * Merge-sort a sequence of (K, C) iterators using a given a comparator for the keys.
+   * Merge-sort a sequence of (K, C) iterators using a given a comparator.
    */
-  private def mergeSort(iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
-      : Iterator[Product2[K, C]] =
-  {
+  private def mergeSort(
+    iterators: Seq[Iterator[Product2[K, C]]],
+    comparator: Comparator[Product2[K, C]]) : Iterator[Product2[K, C]] = {
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
     val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
       // Use the reverse of comparator.compare because PriorityQueue dequeues the max
-      override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
+      override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head, y.head)
     })
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
@@ -423,7 +428,7 @@ private[spark] class ExternalSorter[K, V, C](
   private def mergeWithAggregation(
       iterators: Seq[Iterator[Product2[K, C]]],
       mergeCombiners: (C, C) => C,
-      comparator: Comparator[K],
+      comparator: Comparator[Product2[K, C]],
       totalOrder: Boolean)
       : Iterator[Product2[K, C]] =
   {
@@ -449,8 +454,7 @@ private[spark] class ExternalSorter[K, V, C](
           val firstPair = sorted.next()
           keys += firstPair._1
           combiners += firstPair._2
-          val key = firstPair._1
-          while (sorted.hasNext && comparator.compare(sorted.head._1, key) == 0) {
+          while (sorted.hasNext && comparator.compare(sorted.head, firstPair) == 0) {
             val pair = sorted.next()
             var i = 0
             var foundKey = false
@@ -661,7 +665,7 @@ private[spark] class ExternalSorter[K, V, C](
         groupByPartition(collection.destructiveSortedIterator(partitionComparator))
       } else {
         // We do need to sort by both partition ID and key
-        groupByPartition(collection.destructiveSortedIterator(partitionKeyComparator))
+        groupByPartition(collection.destructiveSortedIterator(partitionKeyCombinerComparator))
       }
     } else if (bypassMergeSort) {
       // Read data from each partition file and merge it together with the data in memory;
@@ -672,7 +676,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     } else {
       // Merge spilled and in-memory data
-      merge(spills, collection.destructiveSortedIterator(partitionKeyComparator))
+      merge(spills, collection.destructiveSortedIterator(partitionKeyCombinerComparator))
     }
   }
 

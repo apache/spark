@@ -254,7 +254,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
    * Return an iterator of the map in sorted order. This provides a way to sort the map without
    * using additional memory, at the expense of destroying the validity of the map.
    */
-  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)] = {
+  def destructiveSortedIterator(keyValueComparator: Comparator[(K, V)]): Iterator[(K, V)] = {
     destroyed = true
     // Pack KV pairs into the front of the underlying array
     var keyIndex, newIndex = 0
@@ -268,7 +268,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     }
     assert(curSize == newIndex + (if (haveNullValue) 1 else 0))
 
-    new Sorter(new KVArraySortDataFormat[K, AnyRef]).sort(data, 0, newIndex, keyComparator)
+    new Sorter(new KVArraySortDataFormat[(K, V), AnyRef])
+      .sort(data, 0, newIndex, keyValueComparator)
 
     new Iterator[(K, V)] {
       var i = 0

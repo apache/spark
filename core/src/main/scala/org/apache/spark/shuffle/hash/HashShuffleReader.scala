@@ -53,11 +53,13 @@ private[spark] class HashShuffleReader[K, C](
     }
 
     // Sort the output if there is a sort ordering defined.
-    dep.keyOrdering match {
-      case Some(keyOrd: Ordering[K]) =>
+    dep.keyCombinerOrdering match {
+      case Some(keyCombinerOrd: Ordering[Product2[K, C]]) =>
         // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
         // the ExternalSorter won't spill to disk.
-        val sorter = new ExternalSorter[K, C, C](ordering = Some(keyOrd), serializer = Some(ser))
+        val sorter = new ExternalSorter[K, C, C](
+          ordering = Some(keyCombinerOrd),
+          serializer = Some(ser))
         sorter.insertAll(aggregatedIter)
         context.taskMetrics.memoryBytesSpilled += sorter.memoryBytesSpilled
         context.taskMetrics.diskBytesSpilled += sorter.diskBytesSpilled

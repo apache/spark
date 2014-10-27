@@ -79,8 +79,9 @@ private[spark] class SizeTrackingPairBuffer[K, V](initialCapacity: Int = 64)
   }
 
   /** Iterate through the data in a given order. For this class this is not really destructive. */
-  override def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)] = {
-    new Sorter(new KVArraySortDataFormat[K, AnyRef]).sort(data, 0, curSize, keyComparator)
+  override def destructiveSortedIterator(keyValueComparator: Comparator[(K, V)]): Iterator[(K, V)] =
+  {
+    new Sorter(new KVArraySortDataFormat[(K, V), AnyRef]).sort(data, 0, curSize, keyValueComparator)
     iterator
   }
 }

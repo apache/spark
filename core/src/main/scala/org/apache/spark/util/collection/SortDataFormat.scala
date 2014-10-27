@@ -67,7 +67,8 @@ private[spark] trait SortDataFormat[K, Buffer] extends Any {
 private[spark]
 class KVArraySortDataFormat[K, T <: AnyRef : ClassTag] extends SortDataFormat[K, Array[T]] {
 
-  override protected def getKey(data: Array[T], pos: Int): K = data(2 * pos).asInstanceOf[K]
+  override protected def getKey(data: Array[T], pos: Int): K = 
+    (data(2 * pos), data(2 * pos + 1)).asInstanceOf[K]
 
   override protected def swap(data: Array[T], pos0: Int, pos1: Int) {
     val tmpKey = data(2 * pos0)

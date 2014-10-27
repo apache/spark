@@ -552,6 +552,12 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
   }
 
+  test("foldLeftByKey") {
+    val pairs = sc.parallelize(Array((5, (2, 0.5)), (1, (1, 1.2)), (5, (1, 1.0)), (1, (2, 2.0)), (1, (3, 3.0))))
+    val emas = pairs.foldLeftByKey(Ordering.by[(Int, Double), Int](_._1), 0.0){ case (acc, (time, value)) => 0.8 * acc + 0.2 * value }
+    assert(emas.collect.toSet === Set((1,1.0736), (5,0.26)))
+  }
+
   private object StratifiedAuxiliary {
     def stratifier (fractionPositive: Double) = {
       (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
