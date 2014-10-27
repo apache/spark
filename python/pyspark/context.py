@@ -770,6 +770,30 @@ class SparkContext(object):
         """
         self._jsc.sc().cancelAllJobs()
 
+    def getJobIdsForGroup(self, jobGroup):
+        """
+        Return a list of all known jobs in a particular job group.
+
+        The returned list may contain running, failed, and completed jobs, and may
+        vary across invocations of this method. This method does not guarantee the
+        order of the elements in its result.
+        """
+        return list(self._jsc.getJobIdsForGroup(jobGroup))
+
+    def getJobInfo(self, jobId):
+        """
+        Returns job information, or `None` if the job info could not be found
+        or was garbage collected.
+        """
+        return self._jsc.getJobInfo(jobId)
+
+    def getStageInfo(self, stageId):
+        """
+        Returns stage information, or `None` if the stage info could not be found or was
+        garbage collected.
+        """
+        return self._jsc.getStageInfo(stageId)
+
     def runJob(self, rdd, partitionFunc, partitions=None, allowLocal=False):
         """
         Executes the given partitionFunc on the specified set of partitions,
