@@ -1220,6 +1220,8 @@ abstract class RDD[T: ClassTag](
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new RDDCheckpointData(this))
       checkpointData.get.markForCheckpoint()
+      // There is supposed to be doCheckpoint in the following, reset doCheckpointCalled first
+      doCheckpointCalled = false
     }
   }
 
@@ -1287,7 +1289,7 @@ abstract class RDD[T: ClassTag](
    * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled) {
+    if (!doCheckpointCalled && !isCheckpointed) {
       doCheckpointCalled = true
       if (checkpointData.isDefined) {
         checkpointData.get.doCheckpoint()

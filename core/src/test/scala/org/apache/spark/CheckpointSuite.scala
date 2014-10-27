@@ -238,6 +238,17 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     assert(rdd.isCheckpointed === true)
     assert(rdd.partitions.size === 0)
   }
+  
+  test("CheckpointRDD after action") {
+    val rdd = sc.makeRDD(1 to 4, 2)filter(_>1)
+    val size = rdd.count()
+    assert(size === 3)
+    assert(rdd.isCheckpointed === false)
+    rdd.checkpoint()
+    assert(rdd.isCheckpointed === false)
+    rdd.collect()
+    assert(rdd.isCheckpointed === true)
+  }
 
   def defaultCollectFunc[T](rdd: RDD[T]): Any = rdd.collect()
 
