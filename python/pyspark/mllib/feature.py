@@ -20,6 +20,7 @@ Python package for feature in MLlib.
 """
 import warnings
 
+import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
 
@@ -30,6 +31,25 @@ from pyspark.mllib.linalg import Vectors, _to_java_object_rdd
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashTF', 'IDFModel', 'IDF',
            'Word2Vec', 'Word2VecModel']
+
+
+# Hack for support float('inf') in Py4j
+old_smart_decode = py4j.protocol.smart_decode
+
+float_str_mapping = {
+    u'nan': u'NaN',
+    u'inf': u'Infinity',
+    u'-inf': u'-Infinity',
+}
+
+
+def new_smart_decode(obj):
+    if isinstance(obj, float):
+        s = unicode(obj)
+        return float_str_mapping.get(s, s)
+    return old_smart_decode(obj)
+
+py4j.protocol.smart_decode = new_smart_decode
 
 
 # TODO: move these helper functions into utils
@@ -103,11 +123,10 @@ class Normalizer(VectorTransformer):
     :: Experimental ::
     Normalizes samples individually to unit L^p^ norm
 
-    For any 1 <= p < Double.PositiveInfinity, normalizes samples using
+    For any 1 <= p <= float('inf'), normalizes samples using
     sum(abs(vector).^p^)^(1/p)^ as norm.
 
-    For p = Double.PositiveInfinity, max(abs(vector)) will be used as
-    norm for normalization.
+    For p = float('inf'), max(abs(vector)) will be used as norm for normalization.
 
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
@@ -117,6 +136,10 @@ class Normalizer(VectorTransformer):
     >>> rdd = sc.parallelize([v])
     >>> nor.transform(rdd).collect()
     [DenseVector([0.0, 0.3333, 0.6667])]
+
+    >>> nor2 = Normalizer(float("inf"))
+    >>> nor2.transform(v)
+    DenseVector([0.0, 0.5, 1.0])
     """
     def __init__(self, p=2):
         """

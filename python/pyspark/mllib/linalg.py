@@ -112,7 +112,7 @@ def _vector_size(v):
 
 
 def _format_float(f, digits=4):
-    s = str(round(f, 4))
+    s = str(round(f, digits))
     if '.' in s:
         s = s[:s.index('.') + 1 + digits]
     return s
@@ -423,7 +423,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(self.indices.size):
+        for i in xrange(len(self.indices)):
             arr[self.indices[i]] = self.values[i]
         return arr
 

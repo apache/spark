@@ -365,13 +365,12 @@ class PythonMLLibAPI extends Serializable {
     }
 
     /**
-     * TODO: model is not serializable
      * Transforms an RDD of words to its vector representation
      * @param rdd an RDD of words
      * @return an RDD of vector representations of words
      */
     def transform(rdd: JavaRDD[String]): JavaRDD[Vector] = {
-      rdd.rdd.map(model.transform(_))
+      rdd.rdd.map(model.transform)
     }
 
     def findSynonyms(word: String, num: Int): java.util.List[java.lang.Object] = {
