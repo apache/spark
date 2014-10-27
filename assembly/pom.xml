@@ -43,10 +43,30 @@
   </properties>
 
   <dependencies>
-    <!-- Promote Guava to compile scope in this module so it's included while shading. -->
+    <!-- Promote Guava and jetty to compile scope in this module so it's included while shading. -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-plus</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-security</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -145,6 +165,13 @@
                     <exclude>com/google/common/base/Optional*</exclude>
                     <exclude>com/google/common/base/Present*</exclude>
                   </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>org.eclipse.jetty</pattern>
+                  <shadedPattern>org.spark-project.jetty</shadedPattern>
+                  <includes>
+                    <include>org.eclipse.jetty.**</include>
+                  </includes>
                 </relocation>
               </relocations>
               <transformers>

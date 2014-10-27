@@ -40,10 +40,20 @@
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+
+    <!--
+      Jetty is shaded, so must scope to compile.
+    --> 
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
+      <scope>compile</scope>
     </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-plus</artifactId>
+        <scope>compile</scope>
+      </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
@@ -102,6 +112,56 @@
             <goals>
               <goal>test-jar</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <artifactSet>
+                <includes>
+                  <include>org.eclipse.jetty:jetty-plus</include>
+                  <include>org.eclipse.jetty:jetty-security</include>
+                  <include>org.eclipse.jetty:jetty-util</include>
+                  <include>org.eclipse.jetty:jetty-server</include>
+                </includes>
+              </artifactSet>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+        Copy jetty to the build directory. This is needed to make the SPARK_PREPEND_CLASSES
+        option work in compute-classpath.sh, since it would put the non-shaded Spark classes in
+        the runtime classpath.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+              <useSubDirectoryPerType>true</useSubDirectoryPerType>
+              <includeArtifactIds>jetty-plus,jetty-security,jetty-util,jetty-server</includeArtifactIds>
+              <silent>true</silent>
+            </configuration>
           </execution>
         </executions>
       </plugin>

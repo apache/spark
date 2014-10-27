@@ -52,21 +52,30 @@
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-recipes</artifactId>
     </dependency>
+    <!--
+      Anything that is shaded must be promoted to "compile". Guava was the first example of
+      maven shading introduced in this project, so all shaded dependencies for Jetty will
+      follow that model.
+    --> 
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-plus</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-security</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-util</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
+      <scope>compile</scope>
     </dependency>
     <!--
       Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
@@ -351,6 +360,10 @@
               <artifactSet>
                 <includes>
                   <include>com.google.guava:guava</include>
+                  <include>org.eclipse.jetty:jetty-plus</include>
+                  <include>org.eclipse.jetty:jetty-security</include>
+                  <include>org.eclipse.jetty:jetty-util</include>
+                  <include>org.eclipse.jetty:jetty-server</include>
                 </includes>
               </artifactSet>
               <filters>
@@ -389,7 +402,7 @@
               <overWriteSnapshots>false</overWriteSnapshots>
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
-              <includeArtifactIds>guava</includeArtifactIds>
+              <includeArtifactIds>guava,jetty-plus,jetty-security,jetty-util,jetty-server</includeArtifactIds>
               <silent>true</silent>
             </configuration>
           </execution>
