@@ -29,14 +29,14 @@ class HierarichicalClusteringConfSuite extends FunSuite {
 
   test("constract a new instance without parameters") {
     val conf = new HierarchicalClusteringConf()
-    assert(conf.getNumClusters === 100)
+    assert(conf.getNumClusters === 20)
     assert(conf.getSubIterations === 20)
     assert(conf.getEpsilon === 10E-6)
   }
 
   test("can replace numClusters") {
     val conf = new HierarchicalClusteringConf()
-    assert(conf.getNumClusters === 100)
+    assert(conf.getNumClusters === 20)
     conf.setNumClusters(50)
     assert(conf.getNumClusters === 50)
   }

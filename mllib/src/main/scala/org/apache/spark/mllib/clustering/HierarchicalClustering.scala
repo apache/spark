@@ -41,7 +41,7 @@ class HierarchicalClusteringConf(
   private var randomSeed: Int,
   private[mllib] var randomRange: Double) extends Serializable {
 
-  def this() = this(20, 5, 20, 10E-6, 1, 0.1)
+  def this() = this(20, 20, 5, 10E-6, 1, 0.1)
 
   def setNumClusters(numClusters: Int): this.type = {
     this.numClusters = numClusters
