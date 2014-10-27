@@ -319,7 +319,8 @@ object HierarchicalClustering {
  * @param children the sub node(s) of the cluster
  * @param parent the parent node of the cluster
  */
-class ClusterTree(
+private[mllib]
+class ClusterTree private (
   val center: Vector,
   private[mllib] val data: RDD[BV[Double]],
   private[mllib] var height: Option[Double],
