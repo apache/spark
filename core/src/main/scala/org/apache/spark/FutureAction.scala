@@ -210,7 +210,9 @@ class ComplexFutureAction[T] extends FutureAction[T] {
       } catch {
         case e: Exception => p.failure(e)
       } finally {
-        thread = null
+        ComplexFutureAction.this.synchronized {
+          thread = null
+        }
       }
     }
     this
