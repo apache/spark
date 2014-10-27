@@ -254,13 +254,24 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib HierarchicalClustering.train()
+   * Java stub for Python MLlib HierarchicalClustering.train()
    */
   def trainHierarchicalClusteringModel(
     data: JavaRDD[Vector],
-    k: Int
-  ): HierarchicalClusteringModel = {
-    new HierarchicalClustering().setNumClusters(k).run(data)
+    k: Int,
+    subIterations: Int,
+    numRetries: Int,
+    epsilon: Double,
+    randomSeed: Int,
+    randomRange: Double): HierarchicalClusteringModel = {
+    val algo = new HierarchicalClustering()
+        .setNumClusters(k)
+        .setSubIterations(subIterations)
+        .setNumRetries(numRetries)
+        .setEpsilon(epsilon)
+        .setRandomSeed(randomSeed)
+        .setRandomRange(randomRange)
+    algo.run(data)
   }
 
   /**
