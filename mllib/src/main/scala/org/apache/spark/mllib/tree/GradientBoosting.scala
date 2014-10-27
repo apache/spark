@@ -24,7 +24,6 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.impl.TimeTracker
-import org.apache.spark.mllib.tree.impurity.Impurities
 import org.apache.spark.mllib.tree.loss.Losses
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -93,10 +92,6 @@ object GradientBoosting extends Logging {
    * @param numEstimators Number of estimators used in boosting stages. In other words,
    *                      number of boosting iterations performed.
    * @param loss Loss function used for minimization during gradient boosting.
-   * @param impurity Criterion used for information gain calculation.
-   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
-   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
-   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -114,16 +109,14 @@ object GradientBoosting extends Logging {
       input: RDD[LabeledPoint],
       numEstimators: Int,
       loss: String,
-      impurity: String,
       maxDepth: Int,
       learningRate: Double,
       subsample: Double,
       checkpointPeriod: Int,
       categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
-    val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2,
+      maxDepth, learningRate, subsample, checkpointPeriod, 2,
       categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
@@ -138,10 +131,6 @@ object GradientBoosting extends Logging {
    * @param numEstimators Number of estimators used in boosting stages. In other words,
    *                      number of boosting iterations performed.
    * @param loss Loss function used for minimization during gradient boosting.
-   * @param impurity Criterion used for information gain calculation.
-   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
-   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
-   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -162,7 +151,6 @@ object GradientBoosting extends Logging {
       input: RDD[LabeledPoint],
       numEstimators: Int,
       loss: String,
-      impurity: String,
       maxDepth: Int,
       learningRate: Double,
       subsample: Double,
@@ -170,10 +158,9 @@ object GradientBoosting extends Logging {
       numClassesForClassification: Int,
       categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
-    val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
-      numClassesForClassification, categoricalFeaturesInfo = categoricalFeaturesInfo)
+      maxDepth, learningRate, subsample, checkpointPeriod, numClassesForClassification,
+      categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -186,10 +173,6 @@ object GradientBoosting extends Logging {
    * @param numEstimators Number of estimators used in boosting stages. In other words,
    *                      number of boosting iterations performed.
    * @param loss Loss function used for minimization during gradient boosting.
-   * @param impurity Criterion used for information gain calculation.
-   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
-   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
-   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -207,7 +190,6 @@ object GradientBoosting extends Logging {
       input: JavaRDD[LabeledPoint],
       numEstimators: Int,
       loss: String,
-      impurity: String,
       maxDepth: Int,
       learningRate: Double,
       subsample: Double,
@@ -215,11 +197,9 @@ object GradientBoosting extends Logging {
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
       : WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
-    val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample, checkpointPeriod, 2,
-      categoricalFeaturesInfo = categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int,
-        Int]].asScala.toMap)
+      maxDepth, learningRate, subsample, checkpointPeriod, 2, categoricalFeaturesInfo =
+        categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -232,10 +212,6 @@ object GradientBoosting extends Logging {
    * @param numEstimators Number of estimators used in boosting stages. In other words,
    *                      number of boosting iterations performed.
    * @param loss Loss function used for minimization during gradient boosting.
-   * @param impurity Criterion used for information gain calculation.
-   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
-   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
-   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -256,7 +232,6 @@ object GradientBoosting extends Logging {
       input: JavaRDD[LabeledPoint],
       numEstimators: Int,
       loss: String,
-      impurity: String,
       maxDepth: Int,
       learningRate: Double,
       subsample: Double,
@@ -265,9 +240,8 @@ object GradientBoosting extends Logging {
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
       : WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
-    val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample, checkpointPeriod,
+      maxDepth, learningRate, subsample, checkpointPeriod,
       numClassesForClassification, categoricalFeaturesInfo =
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
@@ -282,10 +256,6 @@ object GradientBoosting extends Logging {
    * @param numEstimators Number of estimators used in boosting stages. In other words,
    *                      number of boosting iterations performed.
    * @param loss Loss function used for minimization during gradient boosting.
-   * @param impurity Criterion used for information gain calculation.
-   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
-   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
-   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -297,14 +267,12 @@ object GradientBoosting extends Logging {
       input: RDD[LabeledPoint],
       numEstimators: Int,
       loss: String,
-      impurity: String,
       maxDepth: Int,
       learningRate: Double,
       subsample: Double): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
-    val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample)
+      maxDepth, learningRate, subsample)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -317,10 +285,6 @@ object GradientBoosting extends Logging {
    * @param numEstimators Number of estimators used in boosting stages. In other words,
    *                      number of boosting iterations performed.
    * @param loss Loss function used for minimization during gradient boosting.
-   * @param impurity Criterion used for information gain calculation.
-   *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
-   *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
-   *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -332,14 +296,12 @@ object GradientBoosting extends Logging {
       input: RDD[LabeledPoint],
       numEstimators: Int,
       loss: String,
-      impurity: String,
       maxDepth: Int,
       learningRate: Double,
       subsample: Double): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
-    val impurityType = Impurities.fromString(impurity)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      impurityType, maxDepth, learningRate, subsample)
+      maxDepth, learningRate, subsample)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -395,11 +357,10 @@ object GradientBoosting extends Logging {
 
     // Initialize gradient boosting parameters
     val numEstimators = boostingStrategy.numEstimators
-    val baseLearners = new Array[DecisionTreeModel](numEstimators + 1)
-    val baseLearnerWeights = new Array[Double](numEstimators + 1)
+    val baseLearners = new Array[DecisionTreeModel](numEstimators)
+    val baseLearnerWeights = new Array[Double](numEstimators)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
-    val subsample = boostingStrategy.subsample
     val checkpointingPeriod = boostingStrategy.checkpointPeriod
     val strategy = boostingStrategy.strategy
 
@@ -430,7 +391,7 @@ object GradientBoosting extends Logging {
       learningRate), point.features))
 
     var m = 1
-    while (m <= numEstimators) {
+    while (m < numEstimators) {
       timer.start(s"building tree $m")
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
@@ -465,7 +426,7 @@ object GradientBoosting extends Logging {
 
 
     // 3. Output classifier
-    new WeightedEnsembleModel(baseLearners, baseLearnerWeights, strategy.algo, Sum)
+    new WeightedEnsembleModel(baseLearners, baseLearnerWeights, boostingStrategy.algo, Sum)
 
   }
 

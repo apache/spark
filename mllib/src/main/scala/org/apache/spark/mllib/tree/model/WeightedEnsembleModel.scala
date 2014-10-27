@@ -28,9 +28,9 @@ import scala.collection.mutable
 @Experimental
 class WeightedEnsembleModel(
     val baseLearners: Array[DecisionTreeModel],
-    baseLearnerWeights: Array[Double],
-    algo: Algo,
-    combiningStrategy: EnsembleCombiningStrategy) extends Serializable {
+    val baseLearnerWeights: Array[Double],
+    val algo: Algo,
+    val combiningStrategy: EnsembleCombiningStrategy) extends Serializable {
 
   require(numTrees > 0, s"WeightedEnsembleModel cannot be created without base learners. Number " +
     s"of baselearners = $baseLearners")
@@ -79,7 +79,10 @@ class WeightedEnsembleModel(
     }
     algo match {
       case Regression => predictRaw(features)
-      case Classification => if (predictRaw(features) > 0 ) 1.0 else 0.0
+      case Classification => {
+        // TODO: predicted labels are +1 or -1 for GBT. Need a better way to store this info.
+        if (predictRaw(features) > 0 ) 1.0 else 0.0
+      }
       case _ => throw new IllegalArgumentException(
         s"WeightedEnsembleModel given unknown algo parameter: $algo.")
     }

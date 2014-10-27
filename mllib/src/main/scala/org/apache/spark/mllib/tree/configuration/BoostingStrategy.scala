@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.configuration
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.impurity.{Variance, Impurity}
 import org.apache.spark.mllib.tree.loss.{SquaredError, Loss}
 
 /**
@@ -32,10 +32,6 @@ import org.apache.spark.mllib.tree.loss.{SquaredError, Loss}
  * @param numEstimators Number of estimators used in boosting stages. In other words,
  *                      number of boosting iterations performed.
  * @param loss Loss function used for minimization during gradient boosting.
- * @param impurity Criterion used for information gain calculation.
- *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
- *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
- *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
@@ -72,7 +68,6 @@ case class BoostingStrategy(
     numEstimators: Int,
     loss: Loss,
     // Required tree parameters
-    impurity: Impurity,
     maxDepth: Int,
     // Optional boosting parameters
     learningRate: Double = 0.1,
@@ -87,9 +82,14 @@ case class BoostingStrategy(
     minInfoGain: Double = 0.0,
     maxMemoryInMB: Int = 256) extends Serializable {
 
-  val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
+  // Note: Regression tree used even for classification for GBT.
+  val strategy = new Strategy(Regression, Variance, maxDepth, numClassesForClassification, maxBins,
     quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
     maxMemoryInMB, subsample)
 
-  // TODO: Add require for learning rate
+  require(learningRate <= 1, "Learning rate should be <= 1. Provided learning rate is " +
+    s"$learningRate.")
+  require(learningRate > 0, "Learning rate should be > 0. Provided learning rate is " +
+    s"$learningRate.")
+
 }
