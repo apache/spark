@@ -152,7 +152,7 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
             // calculate the local dendrogram height
             val dist = breezeNorm(subNodes(0).center.toBreeze - subNodes(1).center.toBreeze, 2)
             node.get.height = Some(dist)
-            // cached data is unnecessary because its children nodes are cached
+            // unpersist unnecessary cache because its children nodes are cached
             node.get.data.unpersist()
             isMerged = true
             logInfo(s"the number of cluster is ${model.clusterTree.getTreeSize()} at step ${step}")
@@ -211,11 +211,12 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
   private def split(clusterTree: ClusterTree): Array[ClusterTree] = {
     val startTime = System.currentTimeMillis()
     val data = clusterTree.data
+    val sc = data.sparkContext
     var centers = takeInitCenters(clusterTree.center)
 
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    var finder = ClusterTree.findClosestCenter(metric)(centers) _
+    sc.broadcast(metric)
 
     // If the following conditions are satisfied, the iteration is stopped
     //   1. the relative error is less than that of configuration
@@ -229,12 +230,12 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
 
       val startTimeOfIter = System.currentTimeMillis()
       // finds the closest center of each point
-      data.sparkContext.broadcast(finder)
+      sc.broadcast(centers)
       val newCenters = data.mapPartitions { iter =>
         // calculate the accumulation of the all point in a partition and count the rows
         val map = scala.collection.mutable.Map.empty[Int, (BV[Double], Int)]
         iter.foreach { point =>
-          val idx = finder(point)
+          val idx = ClusterTree.findClosestCenter(metric)(centers)(point)
           val (sumBV, n) = map.get(idx).getOrElse((BV.zeros[Double](point.size), 0))
           map(idx) = (sumBV + point, n + 1)
         }
@@ -251,7 +252,6 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
       error = math.abs((normSum - newNormSum) / normSum)
       centers = newCenters.toArray
       numIter += 1
-      finder = ClusterTree.findClosestCenter(metric)(centers) _
 
       logInfo(s"${numIter} iterations is finished" +
           s" for ${System.currentTimeMillis() - startTimeOfIter}" +
@@ -262,7 +262,7 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
     val nodes = centers.size match {
       case 1 => Array(new ClusterTree(vectors(0), data))
       case 2 => {
-        val closest = data.map(point => (finder(point), point))
+        val closest = data.map(p => (ClusterTree.findClosestCenter(metric)(centers)(p), p))
         centers.zipWithIndex.map { case (center, i) =>
           val subData = closest.filter(_._1 == i).map(_._2)
           subData.cache
