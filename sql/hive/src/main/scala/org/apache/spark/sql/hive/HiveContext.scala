@@ -230,13 +230,21 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * in the HiveConf.
    */
   @transient lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient protected[hive] lazy val sessionState = {
-    val ss = new SessionState(hiveconf)
-    setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
-    SessionState.start(ss)
-    ss.err = new PrintStream(outputBuffer, true, "UTF-8")
-    ss.out = new PrintStream(outputBuffer, true, "UTF-8")
 
+  /**
+   * If the thread local sessionstate is not set, start a new SessionState
+   * SessionState.start will put ss to thread local
+   * @return
+   */
+  def getSessionState() = {
+    var ss = SessionState.get
+    if (ss == null) {
+      ss = new SessionState(hiveconf)
+      setConf(hiveconf.getAllProperties) // Have SQLConf pick up the initial set of HiveConf.
+      SessionState.start(ss)
+      ss.err = new PrintStream(outputBuffer, true, "UTF-8")
+      ss.out = new PrintStream(outputBuffer, true, "UTF-8")
+    }
     ss
   }
 
@@ -283,6 +291,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     try {
+      // invoke getSessionState to initialize session state if not already done
+      val sessionState = getSessionState()
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
