@@ -17,7 +17,6 @@
 
 package org.apache.spark.network;
 
-import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalChannel;
 import org.junit.Test;
 
@@ -29,19 +28,19 @@ import static org.mockito.Mockito.*;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.SluiceResponseHandler;
+import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.response.ChunkFetchFailure;
 import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.response.RpcFailure;
 import org.apache.spark.network.protocol.response.RpcResponse;
 
-public class SluiceResponseHandlerSuite {
+public class TransportResponseHandlerSuite {
   @Test
   public void handleSuccessfulFetch() {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
 
-    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(streamChunkId, callback);
     assertEquals(1, handler.numOutstandingRequests());
@@ -54,7 +53,7 @@ public class SluiceResponseHandlerSuite {
   @Test
   public void handleFailedFetch() {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
-    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(streamChunkId, callback);
     assertEquals(1, handler.numOutstandingRequests());
@@ -66,7 +65,7 @@ public class SluiceResponseHandlerSuite {
 
   @Test
   public void clearAllOutstandingRequests() {
-    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(new StreamChunkId(1, 0), callback);
     handler.addFetchRequest(new StreamChunkId(1, 1), callback);
@@ -85,7 +84,7 @@ public class SluiceResponseHandlerSuite {
 
   @Test
   public void handleSuccessfulRPC() {
-    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
     handler.addRpcRequest(12345, callback);
     assertEquals(1, handler.numOutstandingRequests());
@@ -101,7 +100,7 @@ public class SluiceResponseHandlerSuite {
 
   @Test
   public void handleFailedRPC() {
-    SluiceResponseHandler handler = new SluiceResponseHandler(new LocalChannel());
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
     handler.addRpcRequest(12345, callback);
     assertEquals(1, handler.numOutstandingRequests());

@@ -20,7 +20,7 @@ package org.apache.spark.network.util;
 import java.util.NoSuchElementException;
 
 /** Uses System properties to obtain config values. */
-public class DefaultConfigProvider extends ConfigProvider {
+public class SystemPropertyConfigProvider extends ConfigProvider {
   @Override
   public String get(String name) {
     String value = System.getProperty(name);

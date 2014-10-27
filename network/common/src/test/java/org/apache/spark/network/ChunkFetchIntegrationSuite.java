@@ -41,20 +41,20 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
-import org.apache.spark.network.client.SluiceClient;
-import org.apache.spark.network.client.SluiceClientFactory;
-import org.apache.spark.network.server.SluiceServer;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.DefaultConfigProvider;
-import org.apache.spark.network.util.SluiceConfig;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 
 public class ChunkFetchIntegrationSuite {
   static final long STREAM_ID = 1;
   static final int BUFFER_CHUNK_INDEX = 0;
   static final int FILE_CHUNK_INDEX = 1;
 
-  static SluiceServer server;
-  static SluiceClientFactory clientFactory;
+  static TransportServer server;
+  static TransportClientFactory clientFactory;
   static StreamManager streamManager;
   static File testFile;
 
@@ -80,7 +80,7 @@ public class ChunkFetchIntegrationSuite {
     fp.close();
     fileChunk = new FileSegmentManagedBuffer(testFile, 10, testFile.length() - 25);
 
-    SluiceConfig conf = new SluiceConfig(new DefaultConfigProvider());
+    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
     streamManager = new StreamManager() {
       @Override
       public ManagedBuffer getChunk(long streamId, int chunkIndex) {
@@ -94,7 +94,7 @@ public class ChunkFetchIntegrationSuite {
         }
       }
     };
-    SluiceContext context = new SluiceContext(conf, streamManager, new NoOpRpcHandler());
+    TransportContext context = new TransportContext(conf, streamManager, new NoOpRpcHandler());
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }
@@ -119,7 +119,7 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
-    SluiceClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
 
     final FetchResult res = new FetchResult();

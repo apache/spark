@@ -20,17 +20,17 @@ package org.apache.spark.network.util;
 /**
  * A central location that tracks all the settings we expose to users.
  */
-public class SluiceConfig {
+public class TransportConf {
   private final ConfigProvider conf;
 
-  public SluiceConfig(ConfigProvider conf) {
+  public TransportConf(ConfigProvider conf) {
     this.conf = conf;
   }
 
   /** Port the server listens on. Default to a random port. */
   public int serverPort() { return conf.getInt("spark.shuffle.io.port", 0); }
 
-  /** IO mode: nio, epoll, or auto (try epoll first and then nio). */
+  /** IO mode: nio or epoll */
   public String ioMode() { return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase(); }
 
   /** Connect timeout in secs. Default 120 secs. */

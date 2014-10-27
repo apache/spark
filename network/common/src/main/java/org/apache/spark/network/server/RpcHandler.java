@@ -18,10 +18,10 @@
 package org.apache.spark.network.server;
 
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.SluiceClient;
+import org.apache.spark.network.client.TransportClient;
 
 /**
- * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.SluiceClient}s.
+ * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.TransportClient}s.
  */
 public interface RpcHandler {
   /**
@@ -34,5 +34,5 @@ public interface RpcHandler {
    * @param callback Callback which should be invoked exactly once upon success or failure of the
    *                 RPC.
    */
-  void receive(SluiceClient client, byte[] message, RpcResponseCallback callback);
+  void receive(TransportClient client, byte[] message, RpcResponseCallback callback);
 }

@@ -26,28 +26,28 @@ import org.junit.Test;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import org.apache.spark.network.client.SluiceClient;
-import org.apache.spark.network.client.SluiceClientFactory;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.DefaultStreamManager;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.SluiceServer;
+import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.DefaultConfigProvider;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.SluiceConfig;
+import org.apache.spark.network.util.TransportConf;
 
-public class SluiceClientFactorySuite {
-  private SluiceConfig conf;
-  private SluiceContext context;
-  private SluiceServer server1;
-  private SluiceServer server2;
+public class TransportClientFactorySuite {
+  private TransportConf conf;
+  private TransportContext context;
+  private TransportServer server1;
+  private TransportServer server2;
 
   @Before
   public void setUp() {
-    conf = new SluiceConfig(new DefaultConfigProvider());
+    conf = new TransportConf(new SystemPropertyConfigProvider());
     StreamManager streamManager = new DefaultStreamManager();
     RpcHandler rpcHandler = new NoOpRpcHandler();
-    context = new SluiceContext(conf, streamManager, rpcHandler);
+    context = new TransportContext(conf, streamManager, rpcHandler);
     server1 = context.createServer();
     server2 = context.createServer();
   }
@@ -60,10 +60,10 @@ public class SluiceClientFactorySuite {
 
   @Test
   public void createAndReuseBlockClients() throws TimeoutException {
-    SluiceClientFactory factory = context.createClientFactory();
-    SluiceClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    SluiceClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    SluiceClient c3 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
+    TransportClientFactory factory = context.createClientFactory();
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClient c3 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
     assertTrue(c1.isActive());
     assertTrue(c3.isActive());
     assertTrue(c1 == c2);
@@ -73,8 +73,8 @@ public class SluiceClientFactorySuite {
 
   @Test
   public void neverReturnInactiveClients() throws Exception {
-    SluiceClientFactory factory = context.createClientFactory();
-    SluiceClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClientFactory factory = context.createClientFactory();
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     c1.close();
 
     long start = System.currentTimeMillis();
@@ -83,7 +83,7 @@ public class SluiceClientFactorySuite {
     }
     assertFalse(c1.isActive());
 
-    SluiceClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     assertFalse(c1 == c2);
     assertTrue(c2.isActive());
     factory.close();
@@ -91,9 +91,9 @@ public class SluiceClientFactorySuite {
 
   @Test
   public void closeBlockClientsWithFactory() throws TimeoutException {
-    SluiceClientFactory factory = context.createClientFactory();
-    SluiceClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    SluiceClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
+    TransportClientFactory factory = context.createClientFactory();
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
     assertTrue(c1.isActive());
     assertTrue(c2.isActive());
     factory.close();

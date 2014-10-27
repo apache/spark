@@ -31,25 +31,25 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.SluiceContext;
+import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.SluiceConfig;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Server for the efficient, low-level streaming service.
  */
-public class SluiceServer implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(SluiceServer.class);
+public class TransportServer implements Closeable {
+  private final Logger logger = LoggerFactory.getLogger(TransportServer.class);
 
-  private final SluiceContext context;
-  private final SluiceConfig conf;
+  private final TransportContext context;
+  private final TransportConf conf;
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port;
 
-  public SluiceServer(SluiceContext context) {
+  public TransportServer(TransportContext context) {
     this.context = context;
     this.conf = context.getConf();
 

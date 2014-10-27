@@ -21,11 +21,11 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
  * The StreamManager is used to fetch individual chunks from a stream. This is used in
- * {@link SluiceRequestHandler} in order to respond to fetchChunk() requests. Creation of the
- * stream is outside the scope of Sluice, but a given stream is guaranteed to be read by only one
- * client connection, meaning that getChunk() for a particular stream will be called serially and
- * that once the connection associated with the stream is closed, that stream will never be used
- * again.
+ * {@link TransportRequestHandler} in order to respond to fetchChunk() requests. Creation of the
+ * stream is outside the scope of the transport layer, but a given stream is guaranteed to be read
+ * by only one client connection, meaning that getChunk() for a particular stream will be called
+ * serially and that once the connection associated with the stream is closed, that stream will
+ * never be used again.
  */
 public abstract class StreamManager {
   /**

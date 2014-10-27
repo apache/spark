@@ -33,25 +33,25 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.SluiceClient;
-import org.apache.spark.network.client.SluiceClientFactory;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.DefaultStreamManager;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.SluiceServer;
-import org.apache.spark.network.util.DefaultConfigProvider;
-import org.apache.spark.network.util.SluiceConfig;
+import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 
 public class RpcIntegrationSuite {
-  static SluiceServer server;
-  static SluiceClientFactory clientFactory;
+  static TransportServer server;
+  static TransportClientFactory clientFactory;
   static RpcHandler rpcHandler;
 
   @BeforeClass
   public static void setUp() throws Exception {
-    SluiceConfig conf = new SluiceConfig(new DefaultConfigProvider());
+    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
     rpcHandler = new RpcHandler() {
       @Override
-      public void receive(SluiceClient client, byte[] message, RpcResponseCallback callback) {
+      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
         String msg = new String(message, Charsets.UTF_8);
         String[] parts = msg.split("/");
         if (parts[0].equals("hello")) {
@@ -63,7 +63,7 @@ public class RpcIntegrationSuite {
         }
       }
     };
-    SluiceContext context = new SluiceContext(conf, new DefaultStreamManager(), rpcHandler);
+    TransportContext context = new TransportContext(conf, new DefaultStreamManager(), rpcHandler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }
@@ -80,7 +80,7 @@ public class RpcIntegrationSuite {
   }
 
   private RpcResult sendRPC(String ... commands) throws Exception {
-    SluiceClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
 
     final RpcResult res = new RpcResult();

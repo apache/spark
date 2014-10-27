@@ -16,13 +16,13 @@ package org.apache.spark.network;/*
  */
 
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.client.SluiceClient;
 
 /** Test RpcHandler which always returns a zero-sized success. */
 public class NoOpRpcHandler implements RpcHandler {
   @Override
-  public void receive(SluiceClient client, byte[] message, RpcResponseCallback callback) {
+  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
     callback.onSuccess(new byte[0]);
   }
 }

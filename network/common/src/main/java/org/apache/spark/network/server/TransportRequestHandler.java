@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.SluiceClient;
+import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.request.RequestMessage;
 import org.apache.spark.network.protocol.request.ChunkFetchRequest;
@@ -45,16 +45,16 @@ import org.apache.spark.network.util.NettyUtils;
  * attached to a single Netty channel, and keeps track of which streams have been fetched via this
  * channel, in order to clean them up if the channel is terminated (see #channelUnregistered).
  *
- * The messages should have been processed by the pipeline setup by {@link SluiceServer}.
+ * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
-public class SluiceRequestHandler extends MessageHandler<RequestMessage> {
-  private final Logger logger = LoggerFactory.getLogger(SluiceRequestHandler.class);
+public class TransportRequestHandler extends MessageHandler<RequestMessage> {
+  private final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;
 
   /** Client on the same channel allowing us to talk back to the requester. */
-  private final SluiceClient reverseClient;
+  private final TransportClient reverseClient;
 
   /** Returns each chunk part of a stream. */
   private final StreamManager streamManager;
@@ -65,11 +65,11 @@ public class SluiceRequestHandler extends MessageHandler<RequestMessage> {
   /** List of all stream ids that have been read on this handler, used for cleanup. */
   private final Set<Long> streamIds;
 
-  public SluiceRequestHandler(
-      Channel channel,
-      SluiceClient reverseClient,
-      StreamManager streamManager,
-      RpcHandler rpcHandler) {
+  public TransportRequestHandler(
+    Channel channel,
+    TransportClient reverseClient,
+    StreamManager streamManager,
+    RpcHandler rpcHandler) {
     this.channel = channel;
     this.reverseClient = reverseClient;
     this.streamManager = streamManager;

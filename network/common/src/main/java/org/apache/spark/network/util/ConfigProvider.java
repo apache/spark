@@ -20,7 +20,7 @@ package org.apache.spark.network.util;
 import java.util.NoSuchElementException;
 
 /**
- * Provides a mechanism for constructing a {@link SluiceConfig} using some sort of configuration.
+ * Provides a mechanism for constructing a {@link TransportConf} using some sort of configuration.
  */
 public abstract class ConfigProvider {
   /** Obtains the value of the given config, throws NoSuchElementException if it doesn't exist. */

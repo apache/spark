@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.network.buffer.{NioManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.client.{SluiceClient, RpcResponseCallback}
+import org.apache.spark.network.client.{TransportClient, RpcResponseCallback}
 import org.apache.spark.network.server.{DefaultStreamManager, RpcHandler}
 import org.apache.spark.storage.{StorageLevel, BlockId}
 
@@ -53,7 +53,7 @@ class NettyBlockRpcServer(
   import NettyMessages._
 
   override def receive(
-      client: SluiceClient,
+      client: TransportClient,
       messageBytes: Array[Byte],
       responseContext: RpcResponseCallback): Unit = {
     val ser = serializer.newInstance()

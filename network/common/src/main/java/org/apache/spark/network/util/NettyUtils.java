@@ -39,9 +39,6 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 public class NettyUtils {
   /** Creates a Netty EventLoopGroup based on the IOMode. */
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
-    if (mode == IOMode.AUTO) {
-      mode = autoselectMode();
-    }
 
     ThreadFactory threadFactory = new ThreadFactoryBuilder()
       .setDaemon(true)
@@ -60,9 +57,6 @@ public class NettyUtils {
 
   /** Returns the correct (client) SocketChannel class based on IOMode. */
   public static Class<? extends Channel> getClientChannelClass(IOMode mode) {
-    if (mode == IOMode.AUTO) {
-      mode = autoselectMode();
-    }
     switch (mode) {
       case NIO:
         return NioSocketChannel.class;
@@ -75,9 +69,6 @@ public class NettyUtils {
 
   /** Returns the correct ServerSocketChannel class based on IOMode. */
   public static Class<? extends ServerChannel> getServerChannelClass(IOMode mode) {
-    if (mode == IOMode.AUTO) {
-      mode = autoselectMode();
-    }
     switch (mode) {
       case NIO:
         return NioServerSocketChannel.class;
@@ -107,10 +98,5 @@ public class NettyUtils {
       return channel.remoteAddress().toString();
     }
     return "<unknown remote>";
-  }
-
-  /** Returns EPOLL if it's available on this system, NIO otherwise. */
-  private static IOMode autoselectMode() {
-    return Epoll.isAvailable() ? IOMode.EPOLL : IOMode.NIO;
   }
 }

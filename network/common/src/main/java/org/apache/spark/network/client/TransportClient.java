@@ -39,9 +39,9 @@ import org.apache.spark.network.util.NettyUtils;
  * hundreds of KB to a few MB.
  *
  * Note that while this client deals with the fetching of chunks from a stream (i.e., data plane),
- * the actual setup of the streams is done outside the scope of Sluice. The convenience method
- * "sendRPC" is provided to enable control plane communication between the client and server to
- * perform this setup.
+ * the actual setup of the streams is done outside the scope of the transport layer. The convenience
+ * method "sendRPC" is provided to enable control plane communication between the client and server
+ * to perform this setup.
  *
  * For example, a typical workflow might be:
  * client.sendRPC(new OpenFile("/foo")) --> returns StreamId = 100
@@ -50,22 +50,22 @@ import org.apache.spark.network.util.NettyUtils;
  * ...
  * client.sendRPC(new CloseStream(100))
  *
- * Construct an instance of SluiceClient using {@link SluiceClientFactory}. A single SluiceClient
- * may be used for multiple streams, but any given stream must be restricted to a single client,
- * in order to avoid out-of-order responses.
+ * Construct an instance of TransportClient using {@link TransportClientFactory}. A single
+ * TransportClient may be used for multiple streams, but any given stream must be restricted to a
+ * single client, in order to avoid out-of-order responses.
  *
- * NB: This class is used to make requests to the server, while {@link SluiceResponseHandler} is
+ * NB: This class is used to make requests to the server, while {@link TransportResponseHandler} is
  * responsible for handling responses from the server.
  *
  * Concurrency: thread safe and can be called from multiple threads.
  */
-public class SluiceClient implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(SluiceClient.class);
+public class TransportClient implements Closeable {
+  private final Logger logger = LoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
-  private final SluiceResponseHandler handler;
+  private final TransportResponseHandler handler;
 
-  public SluiceClient(Channel channel, SluiceResponseHandler handler) {
+  public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
     this.handler = Preconditions.checkNotNull(handler);
   }
@@ -81,8 +81,8 @@ public class SluiceClient implements Closeable {
    * some streams may not support this.
    *
    * Multiple fetchChunk requests may be outstanding simultaneously, and the chunks are guaranteed
-   * to be returned in the same order that they were requested, assuming only a single SluiceClient
-   * is used to fetch the chunks.
+   * to be returned in the same order that they were requested, assuming only a single
+   * TransportClient is used to fetch the chunks.
    *
    * @param streamId Identifier that refers to a stream in the remote StreamManager. This should
    *                 be agreed upon by client and server beforehand.

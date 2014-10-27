@@ -36,35 +36,33 @@ import io.netty.util.internal.PlatformDependent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.SluiceContext;
-import org.apache.spark.network.protocol.response.MessageDecoder;
-import org.apache.spark.network.protocol.response.MessageEncoder;
-import org.apache.spark.network.server.SluiceChannelHandler;
+import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.server.TransportClientHandler;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.SluiceConfig;
+import org.apache.spark.network.util.TransportConf;
 
 /**
- * Factory for creating {@link SluiceClient}s by using createClient.
+ * Factory for creating {@link TransportClient}s by using createClient.
  *
  * The factory maintains a connection pool to other hosts and should return the same
- * {@link SluiceClient} for the same remote host. It also shares a single worker thread pool for
- * all {@link SluiceClient}s.
+ * {@link TransportClient} for the same remote host. It also shares a single worker thread pool for
+ * all {@link TransportClient}s.
  */
-public class SluiceClientFactory implements Closeable {
-  private final Logger logger = LoggerFactory.getLogger(SluiceClientFactory.class);
+public class TransportClientFactory implements Closeable {
+  private final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
 
-  private final SluiceContext context;
-  private final SluiceConfig conf;
-  private final ConcurrentHashMap<SocketAddress, SluiceClient> connectionPool;
+  private final TransportContext context;
+  private final TransportConf conf;
+  private final ConcurrentHashMap<SocketAddress, TransportClient> connectionPool;
 
   private final Class<? extends Channel> socketChannelClass;
   private final EventLoopGroup workerGroup;
 
-  public SluiceClientFactory(SluiceContext context) {
+  public TransportClientFactory(TransportContext context) {
     this.context = context;
     this.conf = context.getConf();
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, SluiceClient>();
+    this.connectionPool = new ConcurrentHashMap<SocketAddress, TransportClient>();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
@@ -78,11 +76,11 @@ public class SluiceClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public SluiceClient createClient(String remoteHost, int remotePort) throws TimeoutException {
+  public TransportClient createClient(String remoteHost, int remotePort) throws TimeoutException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
-    SluiceClient cachedClient = connectionPool.get(address);
+    TransportClient cachedClient = connectionPool.get(address);
     if (cachedClient != null && cachedClient.isActive()) {
       return cachedClient;
     } else if (cachedClient != null) {
@@ -105,8 +103,8 @@ public class SluiceClientFactory implements Closeable {
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
-        SluiceChannelHandler channelHandler = context.initializePipeline(ch);
-        SluiceClient oldClient = connectionPool.putIfAbsent(address, channelHandler.getClient());
+        TransportClientHandler channelHandler = context.initializePipeline(ch);
+        TransportClient oldClient = connectionPool.putIfAbsent(address, channelHandler.getClient());
         if (oldClient != null) {
           logger.debug("Two clients were created concurrently, second one will be disposed.");
           ch.close();
@@ -123,7 +121,7 @@ public class SluiceClientFactory implements Closeable {
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     }
 
-    SluiceClient client = connectionPool.get(address);
+    TransportClient client = connectionPool.get(address);
     if (client == null) {
       // The only way we should be able to reach here is if the client we created started out
       // in the "inactive" state, and someone else simultaneously tried to create another client to
@@ -136,7 +134,7 @@ public class SluiceClientFactory implements Closeable {
   /** Close all connections in the connection pool, and shutdown the worker thread pool. */
   @Override
   public void close() {
-    for (SluiceClient client : connectionPool.values()) {
+    for (TransportClient client : connectionPool.values()) {
       client.close();
     }
     connectionPool.clear();

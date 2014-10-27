@@ -22,10 +22,10 @@ import scala.concurrent.{Promise, Future}
 import org.apache.spark.SparkConf
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.client.{RpcResponseCallback, SluiceClient, SluiceClientFactory}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, TransportClientFactory}
 import org.apache.spark.network.netty.NettyMessages.UploadBlock
 import org.apache.spark.network.server._
-import org.apache.spark.network.util.{ConfigProvider, SluiceConfig}
+import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
@@ -37,20 +37,20 @@ class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   val serializer = new JavaSerializer(conf)
 
-  // Create a SluiceConfig using SparkConf.
-  private[this] val sluiceConf = new SluiceConfig(
+  // Create a TransportConfig using SparkConf.
+  private[this] val transportConf = new TransportConf(
     new ConfigProvider { override def get(name: String) = conf.get(name) })
 
-  private[this] var sluiceContext: SluiceContext = _
-  private[this] var server: SluiceServer = _
-  private[this] var clientFactory: SluiceClientFactory = _
+  private[this] var transportContext: TransportContext = _
+  private[this] var server: TransportServer = _
+  private[this] var clientFactory: TransportClientFactory = _
 
   override def init(blockDataManager: BlockDataManager): Unit = {
     val streamManager = new DefaultStreamManager
     val rpcHandler = new NettyBlockRpcServer(serializer, streamManager, blockDataManager)
-    sluiceContext = new SluiceContext(sluiceConf, streamManager, rpcHandler)
-    clientFactory = sluiceContext.createClientFactory()
-    server = sluiceContext.createServer()
+    transportContext = new TransportContext(transportConf, streamManager, rpcHandler)
+    clientFactory = transportContext.createClientFactory()
+    server = transportContext.createServer()
   }
 
   override def fetchBlocks(
@@ -59,7 +59,7 @@ class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
       blockIds: Seq[String],
       listener: BlockFetchingListener): Unit = {
     val client = clientFactory.createClient(hostname, port)
-    new NettyBlockFetcher(serializer, client, blockIds, listener)
+    new NettyBlockFetcher(serializer, client, blockIds, listener).start()
   }
 
   override def hostName: String = Utils.localHostName()

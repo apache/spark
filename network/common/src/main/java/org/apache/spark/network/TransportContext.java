@@ -22,38 +22,38 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.client.SluiceClient;
-import org.apache.spark.network.client.SluiceClientFactory;
-import org.apache.spark.network.client.SluiceResponseHandler;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.response.MessageDecoder;
 import org.apache.spark.network.protocol.response.MessageEncoder;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.SluiceChannelHandler;
-import org.apache.spark.network.server.SluiceRequestHandler;
-import org.apache.spark.network.server.SluiceServer;
+import org.apache.spark.network.server.TransportClientHandler;
+import org.apache.spark.network.server.TransportRequestHandler;
+import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.SluiceConfig;
+import org.apache.spark.network.util.TransportConf;
 
 /**
- * Contains the context to create a {@link SluiceServer}, {@link SluiceClientFactory}, and to setup
- * Netty Channel pipelines with a {@link SluiceChannelHandler}.
+ * Contains the context to create a {@link TransportServer}, {@link TransportClientFactory}, and to
+ * setup Netty Channel pipelines with a {@link TransportClientHandler}.
  *
- * The SluiceServer and SluiceClientFactory both create a SluiceChannelHandler for each channel.
- * As each SluiceChannelHandler contains a SluiceClient, this enables server processes to send
- * messages back to the client on an existing channel.
+ * The TransportServer and TransportClientFactory both create a TransportChannelHandler for each
+ * channel. As each TransportChannelHandler contains a TransportClient, this enables server
+ * processes to send messages back to the client on an existing channel.
  */
-public class SluiceContext {
-  private final Logger logger = LoggerFactory.getLogger(SluiceContext.class);
+public class TransportContext {
+  private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
-  private final SluiceConfig conf;
+  private final TransportConf conf;
   private final StreamManager streamManager;
   private final RpcHandler rpcHandler;
 
   private final MessageEncoder encoder;
   private final MessageDecoder decoder;
 
-  public SluiceContext(SluiceConfig conf, StreamManager streamManager, RpcHandler rpcHandler) {
+  public TransportContext(TransportConf conf, StreamManager streamManager, RpcHandler rpcHandler) {
     this.conf = conf;
     this.streamManager = streamManager;
     this.rpcHandler = rpcHandler;
@@ -61,25 +61,26 @@ public class SluiceContext {
     this.decoder = new MessageDecoder();
   }
 
-  public SluiceClientFactory createClientFactory() {
-    return new SluiceClientFactory(this);
+  public TransportClientFactory createClientFactory() {
+    return new TransportClientFactory(this);
   }
 
-  public SluiceServer createServer() {
-    return new SluiceServer(this);
+  public TransportServer createServer() {
+    return new TransportServer(this);
   }
 
   /**
    * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
-   * has a {@link SluiceChannelHandler} to handle request or response messages.
+   * has a {@link org.apache.spark.network.server.TransportClientHandler} to handle request or
+   * response messages.
    *
-   * @return Returns the created SluiceChannelHandler, which includes a SluiceClient that can be
-   * used to communicate on this channel. The SluiceClient is directly associated with a
-   * ChannelHandler to ensure all users of the same channel get the same SluiceClient object.
+   * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
+   * be used to communicate on this channel. The TransportClient is directly associated with a
+   * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
    */
-  public SluiceChannelHandler initializePipeline(SocketChannel channel) {
+  public TransportClientHandler initializePipeline(SocketChannel channel) {
     try {
-      SluiceChannelHandler channelHandler = createChannelHandler(channel);
+      TransportClientHandler channelHandler = createChannelHandler(channel);
       channel.pipeline()
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
@@ -99,13 +100,13 @@ public class SluiceContext {
    * ResponseMessages. The channel is expected to have been successfully created, though certain
    * properties (such as the remoteAddress()) may not be available yet.
    */
-  private SluiceChannelHandler createChannelHandler(Channel channel) {
-    SluiceResponseHandler responseHandler = new SluiceResponseHandler(channel);
-    SluiceClient client = new SluiceClient(channel, responseHandler);
-    SluiceRequestHandler requestHandler = new SluiceRequestHandler(channel, client, streamManager,
+  private TransportClientHandler createChannelHandler(Channel channel) {
+    TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
+    TransportClient client = new TransportClient(channel, responseHandler);
+    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client, streamManager,
       rpcHandler);
-    return new SluiceChannelHandler(client, responseHandler, requestHandler);
+    return new TransportClientHandler(client, responseHandler, requestHandler);
   }
 
-  public SluiceConfig getConf() { return conf; }
+  public TransportConf getConf() { return conf; }
 }

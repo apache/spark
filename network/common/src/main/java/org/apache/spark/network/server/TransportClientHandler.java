@@ -22,8 +22,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.client.SluiceClient;
-import org.apache.spark.network.client.SluiceResponseHandler;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.request.RequestMessage;
 import org.apache.spark.network.protocol.response.ResponseMessage;
@@ -31,33 +31,34 @@ import org.apache.spark.network.util.NettyUtils;
 
 /**
  * A handler which is used for delegating requests to the
- * {@link org.apache.spark.network.server.SluiceRequestHandler} and responses to the
- * {@link org.apache.spark.network.client.SluiceResponseHandler}.
+ * {@link TransportRequestHandler} and responses to the
+ * {@link org.apache.spark.network.client.TransportResponseHandler}.
  *
- * All channels created in Sluice are bidirectional. When the Client initiates a Netty Channel
- * with a RequestMessage (which gets handled by the Server's RequestHandler), the Server will
- * produce a ResponseMessage (handled by the Client's ResponseHandler). However, the Server also
- * gets a handle on the same Channel, so it may then begin to send RequestMessages to the Client.
+ * All channels created in the transport layer are bidirectional. When the Client initiates a Netty
+ * Channel with a RequestMessage (which gets handled by the Server's RequestHandler), the Server
+ * will produce a ResponseMessage (handled by the Client's ResponseHandler). However, the Server
+ * also gets a handle on the same Channel, so it may then begin to send RequestMessages to the
+ * Client.
  * This means that the Client also needs a RequestHandler and the Server needs a ResponseHandler,
  * for the Client's responses to the Server's requests.
  */
-public class SluiceChannelHandler extends SimpleChannelInboundHandler<Message> {
-  private final Logger logger = LoggerFactory.getLogger(SluiceChannelHandler.class);
+public class TransportClientHandler extends SimpleChannelInboundHandler<Message> {
+  private final Logger logger = LoggerFactory.getLogger(TransportClientHandler.class);
 
-  private final SluiceClient client;
-  private final SluiceResponseHandler responseHandler;
-  private final SluiceRequestHandler requestHandler;
+  private final TransportClient client;
+  private final TransportResponseHandler responseHandler;
+  private final TransportRequestHandler requestHandler;
 
-  public SluiceChannelHandler(
-      SluiceClient client,
-      SluiceResponseHandler responseHandler,
-      SluiceRequestHandler requestHandler) {
+  public TransportClientHandler(
+      TransportClient client,
+      TransportResponseHandler responseHandler,
+      TransportRequestHandler requestHandler) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
   }
 
-  public SluiceClient getClient() {
+  public TransportClient getClient() {
     return client;
   }
 

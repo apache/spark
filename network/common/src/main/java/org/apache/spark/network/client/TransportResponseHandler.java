@@ -35,13 +35,13 @@ import org.apache.spark.network.server.MessageHandler;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
- * Handler that processes server responses, in response to requests issued from a [[SluiceClient]].
- * It works by tracking the list of outstanding requests (and their callbacks).
+ * Handler that processes server responses, in response to requests issued from a
+ * [[TransportClient]]. It works by tracking the list of outstanding requests (and their callbacks).
  *
  * Concurrency: thread safe and can be called from multiple threads.
  */
-public class SluiceResponseHandler extends MessageHandler<ResponseMessage> {
-  private final Logger logger = LoggerFactory.getLogger(SluiceResponseHandler.class);
+public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
+  private final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
 
   private final Channel channel;
 
@@ -49,7 +49,7 @@ public class SluiceResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
-  public SluiceResponseHandler(Channel channel) {
+  public TransportResponseHandler(Channel channel) {
     this.channel = channel;
     this.outstandingFetches = new ConcurrentHashMap<StreamChunkId, ChunkReceivedCallback>();
     this.outstandingRpcs = new ConcurrentHashMap<Long, RpcResponseCallback>();

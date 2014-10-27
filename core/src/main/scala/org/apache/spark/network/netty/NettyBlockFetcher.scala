@@ -25,7 +25,7 @@ import org.apache.spark.network.BlockFetchingListener
 import org.apache.spark.network.netty.NettyMessages._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.client.{RpcResponseCallback, ChunkReceivedCallback, SluiceClient}
+import org.apache.spark.network.client.{RpcResponseCallback, ChunkReceivedCallback, TransportClient}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
 
@@ -39,18 +39,18 @@ import org.apache.spark.util.Utils
  */
 class NettyBlockFetcher(
     serializer: Serializer,
-    client: SluiceClient,
+    client: TransportClient,
     blockIds: Seq[String],
     listener: BlockFetchingListener)
   extends Logging {
 
   require(blockIds.nonEmpty)
 
-  val ser = serializer.newInstance()
+  private val ser = serializer.newInstance()
 
-  var streamHandle: ShuffleStreamHandle = _
+  private var streamHandle: ShuffleStreamHandle = _
 
-  val chunkCallback = new ChunkReceivedCallback {
+  private val chunkCallback = new ChunkReceivedCallback {
     // On receipt of a chunk, pass it upwards as a block.
     def onSuccess(chunkIndex: Int, buffer: ManagedBuffer): Unit = Utils.logUncaughtExceptions {
       listener.onBlockFetchSuccess(blockIds(chunkIndex), buffer)
@@ -64,29 +64,32 @@ class NettyBlockFetcher(
     }
   }
 
-  // Send the RPC to open the given set of blocks. This will return a ShuffleStreamHandle.
-  client.sendRpc(ser.serialize(OpenBlocks(blockIds.map(BlockId.apply))).array(),
-    new RpcResponseCallback {
-      override def onSuccess(response: Array[Byte]): Unit = {
-        try {
-          streamHandle = ser.deserialize[ShuffleStreamHandle](ByteBuffer.wrap(response))
-          logTrace(s"Successfully opened block set: $streamHandle! Preparing to fetch chunks.")
+  /** Begins the fetching process, calling the listener with every block fetched. */
+  def start(): Unit = {
+    // Send the RPC to open the given set of blocks. This will return a ShuffleStreamHandle.
+    client.sendRpc(ser.serialize(OpenBlocks(blockIds.map(BlockId.apply))).array(),
+      new RpcResponseCallback {
+        override def onSuccess(response: Array[Byte]): Unit = {
+          try {
+            streamHandle = ser.deserialize[ShuffleStreamHandle](ByteBuffer.wrap(response))
+            logTrace(s"Successfully opened block set: $streamHandle! Preparing to fetch chunks.")
 
-          // Immediately request all chunks -- we expect that the total size of the request is
-          // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
-          for (i <- 0 until streamHandle.numChunks) {
-            client.fetchChunk(streamHandle.streamId, i, chunkCallback)
+            // Immediately request all chunks -- we expect that the total size of the request is
+            // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
+            for (i <- 0 until streamHandle.numChunks) {
+              client.fetchChunk(streamHandle.streamId, i, chunkCallback)
+            }
+          } catch {
+            case e: Exception =>
+              logError("Failed while starting block fetches", e)
+              blockIds.foreach(blockId => Utils.tryLog(listener.onBlockFetchFailure(blockId, e)))
           }
-        } catch {
-          case e: Exception =>
-            logError("Failed while starting block fetches", e)
-            blockIds.foreach(listener.onBlockFetchFailure(_, e))
         }
-      }
 
-      override def onFailure(e: Throwable): Unit = {
-        logError("Failed while starting block fetches")
-        blockIds.foreach(listener.onBlockFetchFailure(_, e))
-      }
-    })
+        override def onFailure(e: Throwable): Unit = {
+          logError("Failed while starting block fetches")
+          blockIds.foreach(blockId => Utils.tryLog(listener.onBlockFetchFailure(blockId, e)))
+        }
+      })
+  }
 }
