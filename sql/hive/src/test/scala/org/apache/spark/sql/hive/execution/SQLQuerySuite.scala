@@ -75,4 +75,28 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT a.key FROM (SELECT key FROM src) `a`"),
       sql("SELECT `key` FROM src").collect().toSeq)
   }
+
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(
+      sql("SELECT case when 1&1=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(
+      sql("SELECT case when 1|0=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(
+      sql("SELECT case when 1^0=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(
+      sql("SELECT case when ~1=-2 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
 }
