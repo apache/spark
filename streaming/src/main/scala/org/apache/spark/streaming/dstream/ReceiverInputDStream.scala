@@ -24,7 +24,7 @@ import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.receiver.ReceivedBlockInfo
+import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]

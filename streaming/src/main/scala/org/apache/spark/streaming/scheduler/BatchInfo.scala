@@ -19,7 +19,6 @@ package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.receiver.ReceivedBlockInfo
 
 /**
  * :: DeveloperApi ::

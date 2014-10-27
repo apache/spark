@@ -24,7 +24,7 @@ import akka.actor._
 import org.apache.spark.{SerializableWritable, Logging, SparkEnv, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.receiver.{ReceivedBlockInfo, Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
 import org.apache.spark.util.AkkaUtils
 
 /**
