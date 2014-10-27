@@ -397,7 +397,7 @@ class ClusterTree(
   /**
    * Gets the dendrogram height of the cluster at the cluster tree
    *
-   * @return the dedrogram height
+   * @return the dendrogram height
    */
   def getHeight(): Double = {
     this.children.size match {
@@ -478,7 +478,7 @@ object ClusterTree {
    */
   def fromRDD(data: RDD[Vector]): ClusterTree = {
     val breezeData = data.map(_.toBreeze).cache
-    // calculates its center
+    // calculates the cluster center
     val pointStat = breezeData.mapPartitions { iter =>
       iter match {
         case iter if iter.isEmpty => Iterator.empty
@@ -539,8 +539,8 @@ class ClusterTreeStatsUpdater private (private var dimension: Option[Int])
       case ((nA, sumA, sumOfSquareA), (nB, sumB, sumOfSquareB)) =>
         val nAB = nA + nB
         val sumAB = sumA + sumB
-        val sumbOfSquareAB = sumOfSquareA + sumOfSquareB
-        (nAB, sumAB, sumbOfSquareAB)
+        val sumOfSquareAB = sumOfSquareA + sumOfSquareB
+        (nAB, sumAB, sumOfSquareAB)
     }
     // set the number of rows
     clusterTree.dataSize = Some(n.toLong)
