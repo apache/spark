@@ -4,7 +4,7 @@ from datetime import datetime
 
 default_args = {
     'owner': 'mistercrunch',
-    'start_date': datetime(2014, 9, 1),
+    'start_date': datetime(2014, 10, 1),
 }
 
 dag = DAG(dag_id='example_2')

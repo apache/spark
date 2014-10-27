@@ -1,8 +1,10 @@
+celery
 chartkick
 flake8
 flask
 flask-admin
 flask-bootstrap
+hive-thrift-py
 ipython[all]
 jinja2
 markdown

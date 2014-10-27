@@ -49,4 +49,6 @@ class PrestoHook(BaseHook):
         else:
             raise PrestoException(self.client.getlasterrormessage())
 
-
+    def run(self, hql, schema="default"):
+        if not self.client.runquery(hql, schema):
+            raise PrestoException(self.client.getlasterrormessage())
