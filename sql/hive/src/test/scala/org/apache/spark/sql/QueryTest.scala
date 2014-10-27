@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util._
  * It is hard to have maven allow one subproject depend on another subprojects test code.
  * So, we duplicate this code here.
  */
-class QueryTest extends FunSuite {
+class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
@@ -75,31 +75,5 @@ class QueryTest extends FunSuite {
               prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
-  }
-
-  // The following copy is copied from org.apache.spark.sql.catalyst.plans.PlanTest
-  /**
-   * Since attribute references are given globally unique ids during analysis,
-   * we must normalize them to check if two different queries are identical.
-   */
-  protected def normalizeExprIds(plan: LogicalPlan) = {
-    val list = plan.flatMap(_.expressions.flatMap(_.references).map(_.exprId.id))
-    val minId = if (list.isEmpty) 0 else list.min
-    plan transformAllExpressions {
-      case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(a.exprId.id - minId))
-    }
-  }
-
-  /** Fails the test if the two plans do not match */
-  protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
-    val normalized1 = normalizeExprIds(plan1)
-    val normalized2 = normalizeExprIds(plan2)
-    if (normalized1 != normalized2)
-      fail(
-        s"""
-          |== FAIL: Plans do not match ===
-          |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-        """.stripMargin)
   }
 }
