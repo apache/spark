@@ -305,7 +305,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>3.3</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.google.code.findbugs</groupId>
@@ -430,11 +429,6 @@
         <groupId>${akka.group}</groupId>
         <artifactId>akka-testkit_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>colt</groupId>
-        <artifactId>colt</artifactId>
-        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.apache.mesos</groupId>
