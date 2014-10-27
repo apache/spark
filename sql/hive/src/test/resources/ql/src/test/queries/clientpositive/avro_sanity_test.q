@@ -30,7 +30,7 @@ TBLPROPERTIES ('avro.schema.literal'='{
 
 DESCRIBE doctors;
 
-LOAD DATA LOCAL INPATH '../data/files/doctors.avro' INTO TABLE doctors;
+LOAD DATA LOCAL INPATH '../../data/files/doctors.avro' INTO TABLE doctors;
 
 SELECT * FROM doctors ORDER BY number;
 

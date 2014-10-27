@@ -1,4 +1,0 @@
-cos(x) - returns the cosine of x (x is in radians)
-Example:
-   > SELECT cos(0) FROM src LIMIT 1;
-  1

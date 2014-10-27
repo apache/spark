@@ -62,8 +62,7 @@ def worker(sock):
         exit_code = compute_real_exit_code(exc.code)
     finally:
         outfile.flush()
-        if exit_code:
-            os._exit(exit_code)
+    return exit_code
 
 
 # Cleanup zombie children
@@ -160,10 +159,13 @@ def manager():
                         outfile.flush()
                         outfile.close()
                         while True:
-                            worker(sock)
-                            if not reuse:
+                            code = worker(sock)
+                            if not reuse or code:
                                 # wait for closing
-                                while sock.recv(1024):
+                                try:
+                                    while sock.recv(1024):
+                                        pass
+                                except Exception:
                                     pass
                                 break
                             gc.collect()
