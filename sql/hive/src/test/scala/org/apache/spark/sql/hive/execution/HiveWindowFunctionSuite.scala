@@ -41,6 +41,8 @@ class HiveWindowFunctionSuit extends HiveComparisonTest {
         |)
       """.stripMargin).collect()
 
+    //remove duplicate data in part_tiny.txt for hive bug
+    // https://issues.apache.org/jira/browse/HIVE-8569
     sql("LOAD DATA LOCAL INPATH '../data/files/part_tiny_without_duplicate.txt' OVERWRITE INTO TABLE part").collect()
   }
 
@@ -302,7 +304,7 @@ class HiveWindowFunctionSuit extends HiveComparisonTest {
 
   createQueryTest("ntile",
     """
-      |SELECT p_name, ntile(4) OVER (PARTITION BY p_mfgr ORDER BY p_name) FROM part
+      |SELECT p_name, ntile(4) OVER (PARTITION BY p_mfgr ORDER BY p_size) FROM part
     """.stripMargin, false)
 
 
