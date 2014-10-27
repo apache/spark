@@ -28,24 +28,24 @@ import org.scalatest.{BeforeAndAfterEach, FunSuite}
 class HierarichicalClusteringConfSuite extends FunSuite {
 
   test("constract a new instance without parameters") {
-    val conf = new HierarchicalClusteringConf()
-    assert(conf.getNumClusters === 20)
-    assert(conf.getSubIterations === 20)
-    assert(conf.getEpsilon === 10E-6)
+    val algo = new HierarchicalClustering()
+    assert(algo.getNumClusters === 20)
+    assert(algo.getSubIterations === 20)
+    assert(algo.getEpsilon === 10E-6)
   }
 
   test("can replace numClusters") {
-    val conf = new HierarchicalClusteringConf()
-    assert(conf.getNumClusters === 20)
-    conf.setNumClusters(50)
-    assert(conf.getNumClusters === 50)
+    val algo = new HierarchicalClustering()
+    assert(algo.getNumClusters === 20)
+    algo.setNumClusters(50)
+    assert(algo.getNumClusters === 50)
   }
 
   test("can replace subIterations") {
-    val conf = new HierarchicalClusteringConf()
-    assert(conf.getSubIterations === 20)
-    conf.setSubIterations(50)
-    assert(conf.getSubIterations === 50)
+    val algo = new HierarchicalClustering()
+    assert(algo.getSubIterations === 20)
+    algo.setSubIterations(50)
+    assert(algo.getSubIterations === 50)
   }
 }
 
@@ -75,8 +75,7 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
   }
 
   test("train") {
-    val conf = new HierarchicalClusteringConf().setNumClusters(7)
-    val app = new HierarchicalClustering(conf)
+    val app = new HierarchicalClustering().setNumClusters(7)
     val model = app.run(data)
     assert(model.clusterTree.toSeq().filter(_.isLeaf()).size === 7)
     model.clusterTree.toSeq().foreach { tree: ClusterTree => assert(tree.getVariance() != None)}
@@ -86,8 +85,7 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
   test("train with a random dataset") {
     val data = sc.parallelize((1 to 99)
         .map(i => Vectors.dense(i + Math.random, i + Math.random)), 2)
-    val conf = new HierarchicalClusteringConf().setNumClusters(10)
-    val app = new HierarchicalClustering(conf)
+    val app = new HierarchicalClustering().setNumClusters(10)
     val model = app.run(data)
     assert(model.clusterTree.getTreeSize() === 10)
     model.clusterTree.toSeq().foreach { tree: ClusterTree => assert(tree.getVariance() != None)}
@@ -98,8 +96,7 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
     val data = sc.parallelize((1 to 99)
         .map(i => Vectors.dense((i % 5).toDouble, (i % 5).toDouble)), 2)
     // but the number of given clusters is 10
-    val conf = new HierarchicalClusteringConf().setNumClusters(10)
-    val app = new HierarchicalClustering(conf)
+    val app = new HierarchicalClustering().setNumClusters(10)
     val model = app.run(data)
     assert(model.clusterTree.getTreeSize() === 5)
     model.clusterTree.toSeq().foreach { tree: ClusterTree => assert(tree.getVariance() != None)}
@@ -107,8 +104,7 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
 
   test("should stop if there is no splittable cluster") {
     val data = sc.parallelize((1 to 100).map(i => Vectors.dense(0.0, 0.0)), 1)
-    val conf = new HierarchicalClusteringConf().setNumClusters(5)
-    val app = new HierarchicalClustering(conf)
+    val app = new HierarchicalClustering().setNumClusters(5)
     val model = app.run(data)
     assert(model.clusterTree.getTreeSize() === 1)
   }
@@ -116,8 +112,7 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
   test("parameter validation") {
     val data = sc.parallelize((1 to 100).map(i => Vectors.dense(0.0, 0.0)), 1)
     intercept[IllegalArgumentException] {
-      val conf = new HierarchicalClusteringConf().setNumClusters(101)
-      val app = new HierarchicalClustering(conf)
+      val app = new HierarchicalClustering().setNumClusters(101)
       app.run(data)
     }
   }
@@ -129,8 +124,8 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
       Vectors.dense(3.0, 6.0, 9.0)
     )
     val tree = ClusterTree.fromRDD(sc.parallelize(data, 2))
-    val conf = new HierarchicalClusteringConf().setRandomRange(0.1)
-    val initVectors = new HierarchicalClustering(conf).takeInitCenters(tree.center)
+    val algo = new HierarchicalClustering().setRandomRange(0.1)
+    val initVectors = algo.takeInitCenters(tree.center)
     val relativeError1 = (data(1).toBreeze - initVectors(0)).:/(data(1).toBreeze)
     val relativeError2 = (initVectors(1) - data(1).toBreeze).:/(data(1).toBreeze)
     assert(initVectors.size === 2)

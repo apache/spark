@@ -25,30 +25,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * the configuration for a hierarchical clustering algorithm
- *
- * @param numClusters the number of clusters you want
- * @param subIterations the number of iterations at digging
- * @param epsilon the threshold to stop the sub-iterations
- * @param randomSeed uses in sampling data for initializing centers in each sub iterations
- * @param randomRange the range coefficient to generate random points in each clustering step
+ * This trait is used for the configuration of the hierarchical clustering
  */
-class HierarchicalClusteringConf(
-  private var numClusters: Int,
-  private var subIterations: Int,
-  private var numRetries: Int,
-  private var epsilon: Double,
-  private var randomSeed: Int,
-  private[mllib] var randomRange: Double) extends Serializable {
-
-  def this() = this(20, 20, 5, 10E-6, 1, 0.1)
-
-  override def toString(): String = {
-    Array(
-      s"numClusters:${numClusters}", s"subIterations:${subIterations}", s"numRetries:${numRetries}",
-      s"epsilon:${epsilon}", s"randomSeed:${randomSeed}", s"randomRange:${randomRange}"
-    ).mkString(", ")
-  }
+sealed
+trait HierarchicalClusteringConf extends Serializable {
+  this: HierarchicalClustering =>
 
   def setNumClusters(numClusters: Int): this.type = {
     this.numClusters = numClusters
@@ -57,17 +38,17 @@ class HierarchicalClusteringConf(
 
   def getNumClusters(): Int = this.numClusters
 
-  def setSubIterations(iterations: Int): this.type = {
-    this.subIterations = iterations
-    this
-  }
-
   def setNumRetries(numRetries: Int): this.type = {
     this.numRetries = numRetries
     this
   }
 
   def getNumRetries(): Int = this.numRetries
+
+  def setSubIterations(subIterations: Int): this.type = {
+    this.subIterations = subIterations
+    this
+  }
 
   def getSubIterations(): Int = this.subIterations
 
@@ -100,15 +81,37 @@ class HierarchicalClusteringConf(
  * M. Steinbach, G. Karypis and V. Kumar. Workshop on Text Mining, KDD, 2000.
  * http://cs.fit.edu/~pkc/classes/ml-internet/papers/steinbach00tr.pdf
  *
- * @param conf the configuration class for the hierarchical clustering
+ * @param numClusters the number of clusters you want
+ * @param subIterations the number of iterations at digging
+ * @param epsilon the threshold to stop the sub-iterations
+ * @param randomSeed uses in sampling data for initializing centers in each sub iterations
+ * @param randomRange the range coefficient to generate random points in each clustering step
  */
-class HierarchicalClustering(val conf: HierarchicalClusteringConf)
-    extends Serializable with Logging {
+class HierarchicalClustering(
+  private[mllib] var numClusters: Int,
+  private[mllib] var subIterations: Int,
+  private[mllib] var numRetries: Int,
+  private[mllib] var epsilon: Double,
+  private[mllib] var randomSeed: Int,
+  private[mllib] var randomRange: Double)
+    extends Serializable with Logging with HierarchicalClusteringConf {
 
   /**
    * Constructs with the default configuration
    */
-  def this() = this(new HierarchicalClusteringConf())
+  def this() = this(20, 20, 5, 10E-6, 1, 0.1)
+
+  /** Shows the parameters */
+  override def toString(): String = {
+    Array(
+      s"numClusters:${numClusters}",
+      s"subIterations:${subIterations}",
+      s"numRetries:${numRetries}",
+      s"epsilon:${epsilon}",
+      s"randomSeed:${randomSeed}",
+      s"randomRange:${randomRange}"
+    ).mkString(", ")
+  }
 
   /**
    * Trains a hierarchical clustering model with the given configuration
@@ -118,7 +121,7 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
    */
   def run(data: RDD[Vector]): HierarchicalClusteringModel = {
     validateData(data)
-    logInfo(s"Run with ${conf}")
+    logInfo(s"Run with ${this}")
 
     val startTime = System.currentTimeMillis() // to measure the execution time
     val clusterTree = ClusterTree.fromRDD(data) // make the root node
@@ -136,13 +139,13 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
     var newTotalVariance = model.clusterTree.getVariance().get
     var step = 1
     while (node != None
-        && model.clusterTree.getTreeSize() < this.conf.getNumClusters
+        && model.clusterTree.getTreeSize() < this.numClusters
         && totalVariance >= newTotalVariance) {
 
       // split some times in order not to be wrong clustering result
       var isMerged = false
       var isSingleCluster = false
-      for (retry <- 1 to this.conf.getNumRetries()) {
+      for (retry <- 1 to this.numClusters) {
         if (isMerged == false && isSingleCluster == false) {
           var subNodes = split(node.get).map(subNode => statsUpdater(subNode))
           // it seems that there is no splittable node
@@ -182,14 +185,14 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
    * validate the given data to train
    */
   private def validateData(data: RDD[Vector]) {
-    require(conf.getNumClusters() <= data.count(), "# clusters must be less than # data rows")
+    require(this.numClusters <= data.count(), "# clusters must be less than # data rows")
   }
 
   /**
    * Selects the next node to split
    */
   private[clustering] def nextNode(clusterTree: ClusterTree): Option[ClusterTree] = {
-    // select the max variance of clusters which are leafs of a tree
+    // select the max variance of clusters which are leaves of a tree
     clusterTree.toSeq().filter(tree => tree.isSplittable() && !tree.isVisited) match {
       case list if list.isEmpty => None
       case list => Some(list.maxBy(_.getVariance()))
@@ -202,8 +205,8 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
   private[clustering] def takeInitCenters(centers: Vector): Array[BV[Double]] = {
     val random = new XORShiftRandom()
     Array(
-      centers.toBreeze.map(elm => elm - random.nextDouble() * elm * this.conf.randomRange),
-      centers.toBreeze.map(elm => elm + random.nextDouble() * elm * this.conf.randomRange)
+      centers.toBreeze.map(elm => elm - random.nextDouble() * elm * this.randomRange),
+      centers.toBreeze.map(elm => elm + random.nextDouble() * elm * this.randomRange)
     )
   }
 
@@ -226,15 +229,14 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
     // If the following conditions are satisfied, the iteration is stopped
     //   1. the relative error is less than that of configuration
     //   2. the number of executed iteration is greater than that of configuration
-    //   3. the number of centers is greater then 1. if 1 means that the cluster is not splittable
+    //   3. the number of centers is equal to one. if one means that the cluster is not splittable
     var numIter = 0
     var error = Double.MaxValue
-    while (error > conf.getEpsilon()
-        && numIter < conf.getSubIterations()
+    while (error > this.epsilon
+        && numIter < this.subIterations
         && centers.size > 1) {
-
       val startTimeOfIter = System.currentTimeMillis()
-      // finds the closest center of each point
+
       sc.broadcast(centers)
       val newCenters = data.mapPartitions { iter =>
         // calculate the accumulation of the all point in a partition and count the rows
@@ -289,22 +291,45 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
 object HierarchicalClustering {
 
   /**
-   * Trains a hierarchical clustering model with the given data and the number of clusters
-   *
-   * NOTE: If there is no splittable cluster, however the number of clusters is
-   * less than the given that, the clustering is stopped
+   * Trains a hierarchical clustering model with the given data
    *
    * @param data trained data
    * @param numClusters the maximum number of clusters you want
    * @return a hierarchical clustering model
-   *
-   *         TODO: The other parameters for the hierarchical clustering will be applied
    */
   def train(data: RDD[Vector], numClusters: Int): HierarchicalClusteringModel = {
-    val conf = new HierarchicalClusteringConf()
-        .setNumClusters(numClusters)
-    val app = new HierarchicalClustering(conf)
+    val app = new HierarchicalClustering().setNumClusters(numClusters)
     app.run(data)
+  }
+
+  /**
+   * Trains a hierarchical clustering model with the given data
+   *
+   * @param data trained data
+   * @param numClusters the maximum number of clusters you want
+   * @param subIterations the iteration of
+   * @param numRetries the number of retries when the clustering can't be succeeded
+   * @param epsilon the relative error that bisecting is satisfied
+   * @param randomSeed the randomseed to generate the initial vectors for each bisecting
+   * @param randomRange the range of error to genrate the initial vectors for each bisecting
+   * @return a hierarchical clustering model
+   */
+  def train(
+    data: RDD[Vector],
+    numClusters: Int,
+    subIterations: Int,
+    numRetries: Int,
+    epsilon: Double,
+    randomSeed: Int,
+    randomRange: Double): HierarchicalClusteringModel = {
+    val algo = new HierarchicalClustering()
+        .setNumClusters(numClusters)
+        .setSubIterations(subIterations)
+        .setNumRetries(numRetries)
+        .setEpsilon(epsilon)
+        .setRandomSeed(randomSeed)
+        .setRandomRange(randomRange)
+    algo.run(data)
   }
 }
 

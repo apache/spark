@@ -38,9 +38,7 @@ class HierarchicalClusteringModelSuite
       (label, vector)
     }
     data = sc.parallelize(seed.map(_._2))
-
-    val conf = new HierarchicalClusteringConf().setNumClusters(10).setRandomSeed(1)
-    app = new HierarchicalClustering(conf)
+    app = new HierarchicalClustering().setNumClusters(10).setRandomSeed(1)
     model = app.run(data)
   }
 

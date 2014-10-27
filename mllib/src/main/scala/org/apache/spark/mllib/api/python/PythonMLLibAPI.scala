@@ -260,8 +260,7 @@ class PythonMLLibAPI extends Serializable {
     data: JavaRDD[Vector],
     k: Int
   ): HierarchicalClusteringModel = {
-    val conf = new HierarchicalClusteringConf().setNumClusters(k)
-    new HierarchicalClustering(conf).run(data)
+    new HierarchicalClustering().setNumClusters(k).run(data)
   }
 
   /**

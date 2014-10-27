@@ -68,8 +68,7 @@ public class JavaHierarchicalClusteringSuite implements Serializable {
         Vectors.dense(1.0, 4.0, 6.0)
     );
     JavaRDD<Vector> data = sc.parallelize(points, 2);
-    HierarchicalClusteringConf conf = new HierarchicalClusteringConf().setNumClusters(1);
-    HierarchicalClustering algo = new HierarchicalClustering(conf);
+    HierarchicalClustering algo = new HierarchicalClustering().setNumClusters(1);
     HierarchicalClusteringModel model = algo.run(data.rdd());
     JavaRDD<Integer> predictions = model.predict(data);
     // Should be able to get the first prediction.
