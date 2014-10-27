@@ -76,6 +76,10 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   if (minNumExecutors < 0 || maxNumExecutors < 0) {
     throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
   }
+  if (minNumExecutors > maxNumExecutors) {
+    throw new SparkException("spark.dynamicAllocation.minExecutors must " +
+      "be less than or equal to spark.dynamicAllocation.maxExecutors!")
+  }
 
   // How frequently to add and remove executors (seconds)
   private val addThresholdSeconds =
@@ -163,56 +167,65 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * Request a number of executors from the cluster manager.
    * If the cap on the number of executors is reached, give up and reset the
    * number of executors to add next round instead of continuing to double it.
+   * Return the number of executors actually requested. Exposed for testing.
    */
-  private def addExecutors(): Unit = synchronized {
+  def addExecutors(): Int = synchronized {
     // Do not request more executors if we have already reached the upper bound
     val numExistingExecutors = executorIds.size + numExecutorsPending
     if (numExistingExecutors >= maxNumExecutors) {
       logDebug(s"Not adding executors because there are already " +
         s"$maxNumExecutors executor(s), which is the limit")
       numExecutorsToAdd = 1
-      return
+      return 0
     }
 
     // Request executors with respect to the upper bound
     val actualNumExecutorsToAdd =
-      math.min(numExistingExecutors + numExecutorsToAdd, maxNumExecutors) - numExistingExecutors
+      if (numExistingExecutors + numExecutorsToAdd <= maxNumExecutors) {
+        numExecutorsToAdd
+      } else {
+        maxNumExecutors - numExistingExecutors
+      }
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
     // TODO: Actually request executors once SPARK-3822 goes in
     val addRequestAcknowledged = true // sc.requestExecutors(actualNumbersToAdd)
     if (addRequestAcknowledged) {
       logInfo(s"Pending tasks are building up! Adding $actualNumExecutorsToAdd " +
         s"new executor(s) (new total will be $newTotalExecutors)")
-      numExecutorsToAdd *= 2
+      numExecutorsToAdd =
+        if (actualNumExecutorsToAdd == numExecutorsToAdd) numExecutorsToAdd * 2 else 1
       numExecutorsPending += actualNumExecutorsToAdd
+      actualNumExecutorsToAdd
     } else {
       logWarning(s"Unable to reach the cluster manager " +
         s"to request $actualNumExecutorsToAdd executors!")
+      0
     }
   }
 
   /**
    * Request the cluster manager to decommission the given executor.
+   * Return whether the executor is actually requested to be removed. Exposed for testing.
    */
-  private def removeExecutor(executorId: String): Unit = synchronized {
+  def removeExecutor(executorId: String): Boolean = synchronized {
     // Do not kill the executor if we are not aware of it (should never happen)
     if (!executorIds.contains(executorId)) {
       logWarning(s"Attempted to remove unknown executor $executorId")
-      return
+      return false
     }
 
     // Do not kill the executor again if it is already pending to be killed (should never happen)
     if (executorsPendingToRemove.contains(executorId)) {
       logWarning(s"Executor $executorId is already pending to be removed!")
-      return
+      return false
     }
 
     // Do not kill the executor if we have already reached the lower bound
     val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
     if (numExistingExecutors - 1 < minNumExecutors) {
-      logInfo(s"Not removing idle executor $executorId because there are " +
-        s"only $minNumExecutors executor(s) left, which is the limit")
-      return
+      logInfo(s"Not removing idle executor $executorId because there are only " +
+        s"$numExistingExecutors executor(s) left, which is less than the limit $minNumExecutors")
+      return false
     }
 
     // Send a request to the backend to kill this executor
@@ -222,13 +235,15 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
+      true
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor $executorId!")
+      false
     }
   }
 
   /**
-   * Callback invoked when the specified executor has been added.
+   * Callback invoked when the specified executor has been added. Exposed for testing.
    */
   def executorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
@@ -243,11 +258,12 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   }
 
   /**
-   * Callback invoked when the specified executor has been removed.
+   * Callback invoked when the specified executor has been removed. Exposed for testing.
    */
   def executorRemoved(executorId: String): Unit = synchronized {
     if (executorIds.contains(executorId)) {
       executorIds.remove(executorId)
+      removeTimes.remove(executorId)
       logInfo(s"Existing executor $executorId has been removed (new total is ${executorIds.size})")
       if (executorsPendingToRemove.contains(executorId)) {
         executorsPendingToRemove.remove(executorId)
@@ -260,33 +276,37 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   }
 
   /**
-   * Start a timer to add executors if it is not already started. This timer is to be triggered
-   * in `addThresholdSeconds` in the first round, and `addIntervalSeconds` in every round
-   * thereafter. This is called when the scheduler receives new pending tasks.
+   * Start a timer to add executors if it is not already started. This timer is to be
+   * triggered in `addThresholdSeconds` in the first round, and `addIntervalSeconds` in
+   * every round thereafter. This is called when the scheduler receives new pending tasks.
+   * Return the value of the add timer. Exposed for testing.
    */
-  def startAddTimer(): Unit = synchronized {
+  def startAddTimer(): Long = synchronized {
     if (addTime == NOT_STARTED) {
       logDebug(s"Starting add executor timer because pending tasks " +
         s"are building up (to be triggered in $addThresholdSeconds seconds)")
       addTime = System.currentTimeMillis + addThresholdSeconds * 1000
     }
+    addTime
   }
 
   /**
    * Start a timer to remove the given executor in `removeThresholdSeconds` if the timer is
    * not already started. This is called when an executor registers or finishes running a task.
+   * Return the value of the remove timer. Exposed for testing.
    */
-  def startRemoveTimer(executorId: String): Unit = synchronized {
+  def startRemoveTimer(executorId: String): Long = synchronized {
     if (!removeTimes.contains(executorId)) {
       logDebug(s"Starting remove timer for $executorId because there are no tasks " +
         s"scheduled to run on the executor (to be triggered in $removeThresholdSeconds seconds)")
       removeTimes(executorId) = System.currentTimeMillis + removeThresholdSeconds * 1000
     }
+    removeTimes(executorId)
   }
 
   /**
    * Cancel any existing add timer.
-   * This is called when there are no longer pending tasks left.
+   * This is called when there are no longer pending tasks left. Exposed for testing.
    */
   def cancelAddTimer(): Unit = synchronized {
     logDebug(s"Canceling add executor timer")
@@ -296,17 +316,28 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
   /**
    * Cancel any existing remove timer for the given executor.
-   * This is called when this executor is scheduled a new task.
+   * This is called when this executor is scheduled a new task. Exposed for testing.
    */
   def cancelRemoveTimer(executorId: String): Unit = synchronized {
     logDebug(s"Canceling remove executor timer for $executorId")
     removeTimes.remove(executorId)
   }
 
+  /* ----------------------------*
+   | Getters exposed for testing |
+   * ----------------------------*/
+
+  def getNumExecutorsToAdd: Int = numExecutorsToAdd
+  def getNumExecutorsPending: Int = numExecutorsPending
+  def getExecutorsPendingToRemove: collection.Set[String] = executorsPendingToRemove
+  def getExecutorIds: collection.Set[String] = executorIds
+  def getAddTime: Long = addTime
+  def getRemoveTimes: collection.Map[String, Long] = removeTimes
+
 }
 
 private object ExecutorAllocationManager {
-  private val NOT_STARTED = -1L
+  private[spark] val NOT_STARTED = -1L
 }
 
 /**
