@@ -136,7 +136,7 @@ can be used by passing the `minDocFreq` value to the IDF constructor.
 {% highlight python %}
 # ... continue from the previous example
 tf.cache()
-idf = IDF().fit(tf)
+idf = IDF(minDocFreq=2).fit(tf)
 tfidf = idf.transform(tf)
 {% endhighlight %}
 </div>

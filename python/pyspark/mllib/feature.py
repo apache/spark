@@ -18,6 +18,7 @@
 """
 Python package for feature in MLlib.
 """
+import sys
 import warnings
 
 import py4j.protocol
@@ -394,7 +395,7 @@ class Word2Vec(object):
     [u'b', u'c']
     """
     def __init__(self, vectorSize=100, learningRate=0.025, numPartitions=1,
-                 numIterations=1, seed=42L):
+                 numIterations=1, seed=None):
         """
         Construct Word2Vec instance
 
@@ -404,12 +405,15 @@ class Word2Vec(object):
                               a small number for accuracy.
         :param numIterations: number of iterations (default: 1), which should
                               be smaller than or equal to number of partitions.
+        :param seed: the seed used for randomness
         """
+        import random  # this can't be on the top because of mllib.random
+
         self.vectorSize = vectorSize
         self.learningRate = learningRate
         self.numPartitions = numPartitions
         self.numIterations = numIterations
-        self.seed = seed
+        self.seed = random.randint(0, sys.maxint) if seed is None else seed
 
     def fit(self, data):
         """
@@ -436,4 +440,8 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
+    # remove current path from list of search paths to avoid importing mllib.random
+    # for C{import random}, which is done in an external dependency of pyspark during doctests.
+    import sys
+    sys.path.pop(0)
     _test()
