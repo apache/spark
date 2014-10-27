@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 
 import scala.collection.JavaConversions._
@@ -292,6 +293,10 @@ private[spark] trait ClientBase extends Logging {
       }
     }
 
+    sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
+      env(ENV_DIST_CLASSPATH) = dcp
+    }
+
     env
   }
 
@@ -555,6 +560,9 @@ private[spark] object ClientBase extends Logging {
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
 
+  // Distribution-defined classpath to add to processes
+  val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
+
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("700", 8).toShort)
@@ -595,7 +603,8 @@ private[spark] object ClientBase extends Logging {
    * classpath specified through the Hadoop and Yarn configurations.
    */
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]): Unit = {
-    val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
+    val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf) ++
+      getDistributionClasspath()
     for (c <- classPathElementsToAdd.flatten) {
       YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, c.trim)
     }
@@ -612,6 +621,13 @@ private[spark] object ClientBase extends Logging {
       case Some(s) => Some(s.toSeq)
       case None => getDefaultMRApplicationClasspath
     }
+
+  /**
+   * Propagate the distribution's classpath to containers too, since they may contain libraries
+   * that are not part of the Yarn/MR application classpaths handled above.
+   */
+  private def getDistributionClasspath(): Option[Seq[String]] =
+    sys.env.get(ENV_DIST_CLASSPATH).map(_.split(File.pathSeparator).toSeq)
 
   def getDefaultYarnApplicationClasspath: Option[Seq[String]] = {
     val triedDefault = Try[Seq[String]] {
