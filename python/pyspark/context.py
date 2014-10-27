@@ -43,7 +43,6 @@ __all__ = ['SparkContext']
 # These are special default configs for PySpark, they will overwrite
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS = {
-    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
 }

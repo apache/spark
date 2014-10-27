@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.UnionRDD
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.util.TimeStampedHashMap
+import org.apache.spark.util.{TimeStampedHashMap, Utils}
 
 
 private[streaming]
@@ -151,7 +151,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new HashMap[Time, RDD[(K,V)]] ()

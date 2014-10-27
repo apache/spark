@@ -1,2 +1,2 @@
-dfs -cat ../data/files/kv1.txt;
+dfs -cat ../../data/files/kv1.txt;
 

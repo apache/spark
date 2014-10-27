@@ -60,6 +60,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
+      TrimAliases ::
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
@@ -86,6 +87,23 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
           throw new TreeNodeException(p, "Unresolved plan in tree")
         case p => p
       }
+    }
+  }
+
+  /**
+   * Removes no-op Alias expressions from the plan.
+   */
+  object TrimAliases extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Aggregate(groups, aggs, child) =>
+        Aggregate(
+          groups.map {
+            _ transform {
+              case Alias(c, _) => c
+            }
+          },
+          aggs,
+          child)
     }
   }
 

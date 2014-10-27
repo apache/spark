@@ -1,4 +1,4 @@
-a                   	array<int>          	None                
-b                   	double              	None                
-c                   	map<double,int>     	None                
-x                   	double              	None                
+a                   	array<int>          	                    
+b                   	double              	                    
+c                   	map<double,int>     	                    
+x                   	double              	                    

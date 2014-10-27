@@ -3,6 +3,7 @@ drop table ba_test;
 -- Everything in ba_table1.q + columnar serde in RCFILE.
 
 create table ba_test (ba_key binary, ba_val binary) stored as rcfile;
+alter table ba_test set serde 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe';
 
 describe extended ba_test;
 
