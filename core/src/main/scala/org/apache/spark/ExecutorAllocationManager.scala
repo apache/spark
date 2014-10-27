@@ -323,9 +323,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     removeTimes.remove(executorId)
   }
 
-  /* ----------------------------*
+  /* --------------------------- *
    | Getters exposed for testing |
-   * ----------------------------*/
+   * --------------------------- */
 
   def getNumExecutorsToAdd: Int = numExecutorsToAdd
   def getNumExecutorsPending: Int = numExecutorsPending
