@@ -1041,17 +1041,16 @@ class SQLContext(object):
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
 
-        If `samplingRatio` is presented, it infer schema by all of the sampled
-        dataset.
+        When samplingRatio is specified, the schema is inferred by looking
+        at the types of each row in the sampled dataset. Otherwise, the
+        first 100 rows of the RDD are inspected. Nested collections are
+        supported, which can include array, dict, list, Row, tuple,
+        namedtuple, or object.
 
-        Otherwise, it peeks first few rows of the RDD to determine the fields'
-        names and types. Nested collections are supported, which include array,
-        dict, list, Row, tuple, namedtuple, or object.
+        Each row could be L{pyspark.sql.Row} object or namedtuple or objects.
+        Using top level dicts is deprecated, as dict is used to represent Maps.
 
-        Each row could be L{pyspark.sql.Row} object or namedtuple or objects,
-        using dict is deprecated.
-
-        If some of rows has different types with inferred types, it may cause
+        If a single column has multiple distinct inferred types, it may cause
         runtime exceptions.
 
         >>> rdd = sc.parallelize(
