@@ -84,7 +84,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |                       Mutliple invocations are possible, each will be passed in order.
       |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
-      |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --executor-memory MEM  Memory per executor in MB (Default: 1024)
       """.stripMargin)
     System.exit(exitCode)
   }
