@@ -73,20 +73,16 @@ def main(infile, outfile):
             value = ser._read_with_length(infile)
             _broadcastRegistry[bid] = Broadcast(bid, value)
 
-        try:
-            command = pickleSer._read_with_length(infile)
-        except ImportError:
-            pprint.pprint(sys.modules)
-            pprint.pprint(sys.path)
-            raise
+        command = pickleSer._read_with_length(infile)
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
         serializer.dump_stream(func(split_index, iterator), outfile)
     except Exception:
         try:
+            output = traceback.format_exc() + "\nsys.modules: {}\n sys.path: {}".format(pprint.pformat(sys.modules), pprint.pformat(sys.path))
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc(), outfile)
+            write_with_length(output, outfile)
             outfile.flush()
         except IOError:
             # JVM close the socket
@@ -94,7 +90,7 @@ def main(infile, outfile):
         except Exception:
             # Write the error to stderr if it happened while serializing
             print >> sys.stderr, "PySpark worker failed with exception:"
-            print >> sys.stderr, traceback.format_exc()
+            print >> sys.stderr, output
         exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
