@@ -38,6 +38,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import parquet.hadoop._
 import parquet.hadoop.api.{InitContext, ReadSupport}
 import parquet.hadoop.metadata.GlobalMetaData
+import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.hadoop.util.ContextUtil
 import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
@@ -435,13 +436,8 @@ private[parquet] class FilteringParquetRowInputFormat
       configuration: Configuration,
       footers: JList[Footer]): JList[ParquetInputSplit] = {
 
-    import FilteringParquetRowInputFormat.blockLocationCache
-    import parquet.filter2.compat.FilterCompat;
-    import parquet.filter2.compat.FilterCompat.Filter;
-    import parquet.filter2.compat.RowGroupFilter;
-
-    val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, false)
-
+    // Use task side strategy by default
+    val taskSideMetaData = configuration.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
     val maxSplitSize: JLong = configuration.getLong("mapred.max.split.size", Long.MaxValue)
     val minSplitSize: JLong =
       Math.max(getFormatMinSplitSize(), configuration.getLong("mapred.min.split.size", 0L))
@@ -450,26 +446,63 @@ private[parquet] class FilteringParquetRowInputFormat
         s"maxSplitSize or minSplitSie should not be negative: maxSplitSize = $maxSplitSize;" +
           s" minSplitSize = $minSplitSize")
     }
-    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
+    
+    // Uses strict type checking by default
     val getGlobalMetaData =
       classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
     getGlobalMetaData.setAccessible(true)
     val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
-    // if parquet file is empty, return empty splits.
-    if (globalMetaData == null) {
-      return splits
-    }
 
+    if (globalMetaData == null){
+     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
+     return splits
+    }   
+ 
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,
         globalMetaData.getKeyValueMetaData(),
         globalMetaData.getSchema()))
+    
+    if (taskSideMetaData){
+      logInfo("Using Task Side Metadata Split Strategy")
+      return getTaskSideSplits(configuration,
+        footers,
+        maxSplitSize,
+        minSplitSize,
+        readContext)
+    } else {
+      logInfo("Using Client Side Metadata Split Strategy")
+      return getClientSideSplits(configuration,
+        footers,
+        maxSplitSize,
+        minSplitSize,
+        readContext)
+    }
+    
+  }
 
+  def getClientSideSplits(
+    configuration: Configuration,
+    footers: JList[Footer],
+    maxSplitSize: JLong,
+    minSplitSize: JLong,
+    readContext: ReadContext): JList[ParquetInputSplit] = {
+    
+    import FilteringParquetRowInputFormat.blockLocationCache
+    import parquet.filter2.compat.FilterCompat;
+    import parquet.filter2.compat.FilterCompat.Filter;
+    import parquet.filter2.compat.RowGroupFilter;
+   
+    val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, false)
+
+    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val filter: Filter = ParquetInputFormat.getFilter(configuration)
     var rowGroupsDropped :Long = 0
     var totalRowGroups :Long  = 0
 
-    // Ugly hack, stuck with it until mentioned PR is resolved
+    // Ugly hack, stuck with it until PR:
+    // https://github.com/apache/incubator-parquet-mr/pull/17 
+    // is resolved
     val generateSplits =
       Class.forName("parquet.hadoop.ClientSideMetadataSplitStrategy")
        .getDeclaredMethods.find(_.getName == "generateSplits").get
@@ -519,7 +552,45 @@ private[parquet] class FilteringParquetRowInputFormat
       logInfo("There were no row groups that could be dropped due to filter predicates")
     }
     splits
+
   }
+
+  def getTaskSideSplits(
+    configuration: Configuration,
+    footers: JList[Footer],
+    maxSplitSize: JLong,
+    minSplitSize: JLong,
+    readContext: ReadContext): JList[ParquetInputSplit] = {
+
+    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
+    
+    // Ugly hack, stuck with it until PR:
+    // https://github.com/apache/incubator-parquet-mr/pull/17
+    // is resolved
+    val generateSplits =
+      Class.forName("parquet.hadoop.TaskSideMetadataSplitStrategy")
+       .getDeclaredMethods.find(_.getName == "generateTaskSideMDSplits").get
+    generateSplits.setAccessible(true)
+ 
+    for (footer <- footers) {
+      val file = footer.getFile
+      val fs = file.getFileSystem(configuration)
+      val status = fileStatuses.getOrElse(file, fs.getFileStatus(file))
+      val blockLocations = fs.getFileBlockLocations(status, 0, status.getLen)
+      splits.addAll(
+        generateSplits.invoke(
+         null,
+         blockLocations,
+         status,
+         readContext.getRequestedSchema.toString,
+         readContext.getReadSupportMetadata,
+         minSplitSize,
+         maxSplitSize).asInstanceOf[JList[ParquetInputSplit]])
+    }
+
+    splits
+  } 
+
 }
 
 private[parquet] object FilteringParquetRowInputFormat {
