@@ -23,7 +23,7 @@ import scala.collection.immutable.HashSet
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
-import org.scalautils.TripleEqualsSupport.Spread
+import org.scalactic.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -191,6 +191,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like "a%", true)
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
+    checkEvaluation("a\nb" like "a_b", true)
+    checkEvaluation("ab" like "a%b", true)
+    checkEvaluation("a\nb" like "a%b", true)
   }
 
   test("LIKE Non-literal Regular Expression") {
@@ -207,6 +210,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a_b")))
+    checkEvaluation("ab" like regEx, true, new GenericRow(Array[Any]("a%b")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a%b")))
 
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }

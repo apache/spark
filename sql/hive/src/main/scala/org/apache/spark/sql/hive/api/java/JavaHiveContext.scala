@@ -19,15 +19,15 @@ package org.apache.spark.sql.hive.api.java
 
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.api.java.{JavaSQLContext, JavaSchemaRDD}
-import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.{HiveContext, HiveQl}
 
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaHiveContext(sparkContext: JavaSparkContext) extends JavaSQLContext(sparkContext) {
+class JavaHiveContext(sqlContext: SQLContext) extends JavaSQLContext(sqlContext) {
 
-  override val sqlContext = new HiveContext(sparkContext)
+  def this(sparkContext: JavaSparkContext) = this(new HiveContext(sparkContext))
 
   override def sql(sqlText: String): JavaSchemaRDD = {
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
