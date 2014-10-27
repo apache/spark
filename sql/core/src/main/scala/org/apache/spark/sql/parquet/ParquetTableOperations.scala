@@ -114,7 +114,7 @@ case class ParquetTableScan(
       
       // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
       val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
-      if (filter!= null){
+      if (filter != null){
         val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
         ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
       }
@@ -497,15 +497,16 @@ private[parquet] class FilteringParquetRowInputFormat
 
     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
     val filter: Filter = ParquetInputFormat.getFilter(configuration)
-    var rowGroupsDropped :Long = 0
-    var totalRowGroups :Long  = 0
+    var rowGroupsDropped: Long = 0
+    var totalRowGroups: Long  = 0
 
     // Ugly hack, stuck with it until PR:
     // https://github.com/apache/incubator-parquet-mr/pull/17 
     // is resolved
     val generateSplits =
       Class.forName("parquet.hadoop.ClientSideMetadataSplitStrategy")
-       .getDeclaredMethods.find(_.getName == "generateSplits").get
+       .getDeclaredMethods.find(_.getName == "generateSplits").getOrElse(
+         sys.error(s"Failed to reflectively invoke ClientSideMetadataSplitStrategy.generateSplits"))
     generateSplits.setAccessible(true)
 
     for (footer <- footers) {
@@ -521,7 +522,7 @@ private[parquet] class FilteringParquetRowInputFormat
         parquetMetaData.getFileMetaData.getSchema)
       rowGroupsDropped = rowGroupsDropped + (blocks.size - filteredBlocks.size)
       
-      if(!filteredBlocks.isEmpty){
+      if (!filteredBlocks.isEmpty){
           var blockLocations: Array[BlockLocation] = null
           if (!cacheMetadata) {
             blockLocations = fs.getFileBlockLocations(status, 0, status.getLen)
@@ -543,10 +544,10 @@ private[parquet] class FilteringParquetRowInputFormat
         }
     }
 
-    if(rowGroupsDropped > 0 && totalRowGroups > 0){
+    if (rowGroupsDropped > 0 && totalRowGroups > 0){
       val percentDropped = ((rowGroupsDropped/totalRowGroups.toDouble) * 100).toInt
-      logInfo("Dropping " + rowGroupsDropped + " row groups that do not pass filter predicate! ("
-        + percentDropped + "%)") 
+      logInfo(s"Dropping $rowGroupsDropped row groups that do not pass filter predicate "
+        + s"($percentDropped %) !")
     }
     else {
       logInfo("There were no row groups that could be dropped due to filter predicates")
@@ -569,7 +570,9 @@ private[parquet] class FilteringParquetRowInputFormat
     // is resolved
     val generateSplits =
       Class.forName("parquet.hadoop.TaskSideMetadataSplitStrategy")
-       .getDeclaredMethods.find(_.getName == "generateTaskSideMDSplits").get
+       .getDeclaredMethods.find(_.getName == "generateTaskSideMDSplits").getOrElse(
+         sys.error(
+           s"Failed to reflectively invoke TaskSideMetadataSplitStrategy.generateTaskSideMDSplits"))
     generateSplits.setAccessible(true)
  
     for (footer <- footers) {
