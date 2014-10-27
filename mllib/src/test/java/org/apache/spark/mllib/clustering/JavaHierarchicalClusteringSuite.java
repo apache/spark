@@ -32,47 +32,47 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 
 public class JavaHierarchicalClusteringSuite implements Serializable {
-    private transient JavaSparkContext sc;
+  private transient JavaSparkContext sc;
 
-    @Before
-    public void setUp() {
-        sc = new JavaSparkContext("local", "JavaHierarchicalClustering");
-    }
+  @Before
+  public void setUp() {
+    sc = new JavaSparkContext("local", "JavaHierarchicalClustering");
+  }
 
-    @After
-    public void tearDown() {
-        sc.stop();
-        sc = null;
-    }
+  @After
+  public void tearDown() {
+    sc.stop();
+    sc = null;
+  }
 
-    @Test
-    public void runHierarchicalClusteringConstructor() {
-        List<Vector> points = Lists.newArrayList(
-                Vectors.dense(1.0, 2.0, 6.0),
-                Vectors.dense(1.0, 3.0, 0.0),
-                Vectors.dense(1.0, 4.0, 6.0)
-        );
-        Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
+  @Test
+  public void runHierarchicalClusteringConstructor() {
+    List<Vector> points = Lists.newArrayList(
+        Vectors.dense(1.0, 2.0, 6.0),
+        Vectors.dense(1.0, 3.0, 0.0),
+        Vectors.dense(1.0, 4.0, 6.0)
+    );
+    Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
 
-        JavaRDD<Vector> data = sc.parallelize(points, 2);
-        HierarchicalClusteringModel model = HierarchicalClustering.train(data.rdd(), 1);
-        assertEquals(1, model.getCenters().length);
-        assertEquals(expectedCenter, model.getCenters()[0]);
-    }
+    JavaRDD<Vector> data = sc.parallelize(points, 2);
+    HierarchicalClusteringModel model = HierarchicalClustering.train(data.rdd(), 1);
+    assertEquals(1, model.getCenters().length);
+    assertEquals(expectedCenter, model.getCenters()[0]);
+  }
 
-    @Test
-    public void predictJavaRDD() {
-        List<Vector> points = Lists.newArrayList(
-                Vectors.dense(1.0, 2.0, 6.0),
-                Vectors.dense(1.0, 3.0, 0.0),
-                Vectors.dense(1.0, 4.0, 6.0)
-        );
-        JavaRDD<Vector> data = sc.parallelize(points, 2);
-        HierarchicalClusteringConf conf = new HierarchicalClusteringConf().setNumClusters(1);
-        HierarchicalClustering algo = new HierarchicalClustering(conf);
-        HierarchicalClusteringModel model = algo.run(data.rdd());
-        JavaRDD<Integer> predictions = model.predict(data);
-        // Should be able to get the first prediction.
-        predictions.first();
-    }
+  @Test
+  public void predictJavaRDD() {
+    List<Vector> points = Lists.newArrayList(
+        Vectors.dense(1.0, 2.0, 6.0),
+        Vectors.dense(1.0, 3.0, 0.0),
+        Vectors.dense(1.0, 4.0, 6.0)
+    );
+    JavaRDD<Vector> data = sc.parallelize(points, 2);
+    HierarchicalClusteringConf conf = new HierarchicalClusteringConf().setNumClusters(1);
+    HierarchicalClustering algo = new HierarchicalClustering(conf);
+    HierarchicalClusteringModel model = algo.run(data.rdd());
+    JavaRDD<Integer> predictions = model.predict(data);
+    // Should be able to get the first prediction.
+    predictions.first();
+  }
 }
