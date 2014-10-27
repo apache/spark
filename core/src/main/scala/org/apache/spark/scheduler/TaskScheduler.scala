@@ -66,7 +66,7 @@ private[spark] trait TaskScheduler {
    */
   def executorHeartbeatReceived(
       execId: String,
-      threadDump: Array[ThreadStackTrace],
+      threadStackTraces: Array[ThreadStackTrace],
       taskMetrics: Array[(Long, TaskMetrics)],
       blockManagerId: BlockManagerId
     ): Boolean
