@@ -169,7 +169,6 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
   var bytesRead: Long = 0L
 }
 
-
 /**
  * :: DeveloperApi ::
  * Metrics pertaining to shuffle data read in a given task.
