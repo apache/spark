@@ -27,22 +27,24 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite}
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.storage.{BlockId, StorageLevel, StreamBlockId}
+import org.apache.spark.storage.{BlockManager, BlockId, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, WriteAheadLogWriter}
 
 class HDFSBackedBlockRDDSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName(this.getClass.getSimpleName)
-  val sparkContext = new SparkContext(conf)
   val hadoopConf = new Configuration()
-  val blockManager = sparkContext.env.blockManager
   // Since the same BM is reused in all tests, use an atomic int to generate ids
   val idGenerator = new AtomicInteger(0)
+  
+  var sparkContext: SparkContext = null
+  var blockManager: BlockManager = null
   var file: File = null
   var dir: File = null
 
   before {
+    blockManager = sparkContext.env.blockManager
     dir = Files.createTempDir()
     file = new File(dir, "BlockManagerWrite")
   }
@@ -50,6 +52,10 @@ class HDFSBackedBlockRDDSuite extends FunSuite with BeforeAndAfter with BeforeAn
   after {
     file.delete()
     dir.delete()
+  }
+
+  override def beforeAll(): Unit = {
+    sparkContext = new SparkContext(conf)
   }
 
   override def afterAll(): Unit = {
@@ -60,19 +66,19 @@ class HDFSBackedBlockRDDSuite extends FunSuite with BeforeAndAfter with BeforeAn
   }
 
   test("Data available in BM and HDFS") {
-    doTestHDFSBackedRDD(5, 5, 20, 5)
+    testHDFSBackedRDD(5, 5, 20, 5)
   }
 
   test("Data available in in BM but not in HDFS") {
-    doTestHDFSBackedRDD(5, 0, 20, 5)
+    testHDFSBackedRDD(5, 0, 20, 5)
   }
 
   test("Data available in in HDFS and not in BM") {
-    doTestHDFSBackedRDD(0, 5, 20, 5)
+    testHDFSBackedRDD(0, 5, 20, 5)
   }
 
   test("Data partially available in BM, and the rest in HDFS") {
-    doTestHDFSBackedRDD(3, 2, 20, 5)
+    testHDFSBackedRDD(3, 2, 20, 5)
   }
 
   /**
@@ -82,7 +88,7 @@ class HDFSBackedBlockRDDSuite extends FunSuite with BeforeAndAfter with BeforeAn
    * @param blockCount Number of blocks to write (therefore, total # of events per block =
    *                   total/blockCount
    */
-  private def doTestHDFSBackedRDD(
+  private def testHDFSBackedRDD(
       writeToBMCount: Int,
       writeToHDFSCount: Int,
       total: Int,
@@ -152,8 +158,6 @@ class HDFSBackedBlockRDDSuite extends FunSuite with BeforeAndAfter with BeforeAn
   }
 
   private def generateFakeSegments(count: Int): Seq[WriteAheadLogFileSegment] = {
-    (0 until count).map {
-      _ => new WriteAheadLogFileSegment("random", 0l, 0)
-    }
+    (0 until count).map { _ => new WriteAheadLogFileSegment("random", 0l, 0) }
   }
 }
