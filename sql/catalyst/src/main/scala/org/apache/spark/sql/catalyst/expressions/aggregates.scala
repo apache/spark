@@ -34,10 +34,9 @@ abstract class AggregateExpression extends Expression with Serializable {
    */
   def newInstance(): AggregateFunction
 
-  override def equals(other: Any): Boolean = {
-    if (super.equals(other)) {
-      this.windowRange == other.asInstanceOf[AggregateExpression].windowRange
-    } else false
+  override def canEqual(other: Any): Boolean = other match {
+    case that: AggregateExpression => this.windowRange == that.windowRange
+    case _ => false
   }
 
   /**
