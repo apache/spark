@@ -186,7 +186,7 @@ In the following example after loading and parsing data,
 we use the hierarchical clustering object to cluster the sample data into three clusters. 
 The number of desired clusters is passed to the algorithm. 
 Hoerver, even though the number of clusters is less than *k* in the middle of the clustering,
-the clustering is stopped if they can not be splitted any more.
+the clustering is stopped if they can not be split any more.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.HierarchicalClustering
