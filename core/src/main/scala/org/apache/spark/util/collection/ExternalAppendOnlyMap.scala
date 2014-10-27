@@ -153,7 +153,7 @@ class ExternalAppendOnlyMap[K, V, C](
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
   override protected[this] def spill(collection: SizeTracker): Unit = {
-    val (blockId, file) = diskBlockManager.createTempBlock()
+    val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
       curWriteMetrics)

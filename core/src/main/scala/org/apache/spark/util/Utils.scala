@@ -43,7 +43,7 @@ import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
-import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
+import org.apache.spark.util.SparkUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -347,15 +347,84 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared 
+   * across executors running the same application. `useCache` is used mainly for 
+   * the executors, and not in local mode.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
+   */
+  def fetchFile(
+      url: String,
+      targetDir: File,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration,
+      timestamp: Long,
+      useCache: Boolean) {
+    val fileName = url.split("/").last
+    val targetFile = new File(targetDir, fileName)
+    if (useCache) {
+      val cachedFileName = s"${url.hashCode}${timestamp}_cache"
+      val lockFileName = s"${url.hashCode}${timestamp}_lock"
+      val localDir = new File(getLocalDir(conf))
+      val lockFile = new File(localDir, lockFileName)
+      val raf = new RandomAccessFile(lockFile, "rw")
+      // Only one executor entry.
+      // The FileLock is only used to control synchronization for executors download file,
+      // it's always safe regardless of lock type (mandatory or advisory).
+      val lock = raf.getChannel().lock()
+      val cachedFile = new File(localDir, cachedFileName)
+      try {
+        if (!cachedFile.exists()) {
+          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+        }
+      } finally {
+        lock.release()
+      }
+      if (targetFile.exists && !Files.equal(cachedFile, targetFile)) {
+        if (conf.getBoolean("spark.files.overwrite", false)) {
+          targetFile.delete()
+          logInfo((s"File $targetFile exists and does not match contents of $url, " +
+            s"replacing it with $url"))
+        } else {
+          throw new SparkException(s"File $targetFile exists and does not match contents of $url")
+        }
+      }
+      Files.copy(cachedFile, targetFile)
+    } else {
+      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+    }
+    
+    // Decompress the file if it's a .tar or .tar.gz
+    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+      logInfo("Untarring " + fileName)
+      Utils.execute(Seq("tar", "-xzf", fileName), targetDir)
+    } else if (fileName.endsWith(".tar")) {
+      logInfo("Untarring " + fileName)
+      Utils.execute(Seq("tar", "-xf", fileName), targetDir)
+    }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+  }
+
+  /**
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
-    hadoopConf: Configuration) {
-    val filename = url.split("/").last
+  private def doFetchFile(
+      url: String,
+      targetDir: File,
+      filename: String,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration) {
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
@@ -443,16 +512,6 @@ private[spark] object Utils extends Logging {
         }
         Files.move(tempFile, targetFile)
     }
-    // Decompress the file if it's a .tar or .tar.gz
-    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
-    } else if (filename.endsWith(".tar")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xf", filename), targetDir)
-    }
-    // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
@@ -680,11 +739,15 @@ private[spark] object Utils extends Logging {
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
-    val files = file.listFiles()
-    if (files == null) {
-      throw new IOException("Failed to list files for dir: " + file)
+    if (file.exists()) {
+      val files = file.listFiles()
+      if (files == null) {
+        throw new IOException("Failed to list files for dir: " + file)
+      }
+      files
+    } else {
+      List()
     }
-    files
   }
 
   /**
@@ -906,7 +969,22 @@ private[spark] object Utils extends Logging {
       block
     } catch {
       case e: ControlThrowable => throw e
-      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+      case t: Throwable => SparkUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code that evaluates to Unit, re-throwing any non-fatal uncaught
+   * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException(block: => Unit) {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
     }
   }
 
@@ -914,7 +992,8 @@ private[spark] object Utils extends Logging {
   private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
     // finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SPARK_CORE_CLASS_REGEX =
+      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
     val SCALA_CLASS_REGEX = """^scala""".r
     val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined

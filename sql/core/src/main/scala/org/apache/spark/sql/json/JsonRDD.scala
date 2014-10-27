@@ -242,14 +242,14 @@ private[sql] object JsonRDD extends Logging {
         def buildKeyPathForInnerStructs(v: Any, t: DataType): Seq[(String, DataType)] = t match {
           case ArrayType(StructType(Nil), containsNull) => {
             // The elements of this arrays are structs.
-            v.asInstanceOf[Seq[Map[String, Any]]].flatMap {
+            v.asInstanceOf[Seq[Map[String, Any]]].flatMap(Option(_)).flatMap {
               element => allKeysWithValueTypes(element)
             }.map {
               case (k, t) => (s"$key.$k", t)
             }
           }
           case ArrayType(t1, containsNull) =>
-            v.asInstanceOf[Seq[Any]].flatMap {
+            v.asInstanceOf[Seq[Any]].flatMap(Option(_)).flatMap {
               element => buildKeyPathForInnerStructs(element, t1)
             }
           case other => Nil
