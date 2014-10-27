@@ -19,7 +19,7 @@ package org.apache.spark.broadcast
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
+import org.scalatest.{Assertions, FunSuite}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
 import org.apache.spark.io.SnappyCompressionCodec
@@ -136,6 +136,12 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
   test("Unpersisting TorrentBroadcast on executors and driver in distributed mode") {
     testUnpersistTorrentBroadcast(distributed = true, removeFromDriver = true)
   }
+
+  test("Using broadcast after destroy prints callsite") {
+    sc = new SparkContext("local", "test")
+    testPackage.runCallSiteTest(sc)
+  }
+
   /**
    * Verify the persistence of state associated with an HttpBroadcast in either local mode or
    * local-cluster mode (when distributed = true).
@@ -310,4 +316,16 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.broadcast.factory", "org.apache.spark.broadcast.%s".format(factoryName))
     conf
   }
+}
+
+package object testPackage extends Assertions {
+
+  def runCallSiteTest(sc: SparkContext) {
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val broadcast = sc.broadcast(rdd)
+    broadcast.destroy()
+    val thrown = intercept[SparkException] { broadcast.value }
+    assert(thrown.getMessage.contains("BroadcastSuite.scala"))
+  }
+
 }
