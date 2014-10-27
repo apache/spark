@@ -95,6 +95,11 @@ class HierarchicalClusteringConf(
 /**
  * This is a divisive hierarchical clustering algorithm based on bi-sect k-means algorithm.
  *
+ * The main idea of this algorithm is derived from:
+ * "A comparison of document clustering techniques",
+ * M. Steinbach, G. Karypis and V. Kumar. Workshop on Text Mining, KDD, 2000.
+ * http://cs.fit.edu/~pkc/classes/ml-internet/papers/steinbach00tr.pdf
+ *
  * @param conf the configuration class for the hierarchical clustering
  */
 class HierarchicalClustering(val conf: HierarchicalClusteringConf)
