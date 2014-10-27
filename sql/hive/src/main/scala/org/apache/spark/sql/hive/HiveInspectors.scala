@@ -113,10 +113,10 @@ private[hive] trait HiveInspectors {
   /**
    * Converts native catalyst types to the types expected by Hive
    * @param a the value to be wrapped
-   * @param oi wrapped object used by this ObjectInspector, which supposed to be
-   *           the ObjectInspector enumerated in functions:
-   *           def toInspector(dataType: DataType)
-   *           def toInspector(expr: Expression)
+   * @param oi This ObjectInspector associated with the value returned by this function, and
+   *           the ObjectInspector should also be consistent with those returned from
+   *           toInspector: DataType => ObjectInspector and
+   *           toInspector: Expression => ObjectInspector
    */
   def wrap(a: Any, oi: ObjectInspector): AnyRef = if (a == null) {
     null
@@ -124,7 +124,7 @@ private[hive] trait HiveInspectors {
     oi match {
       case x: ConstantObjectInspector => x.getWritableConstantValue
       case x: PrimitiveObjectInspector => a match {
-        // TODO what if x.preferWritable() == true?
+        // TODO what if x.preferWritable() == true? reuse the writable?
         case s: String => s: java.lang.String
         case i: Int => i: java.lang.Integer
         case b: Boolean => b: java.lang.Boolean
@@ -138,7 +138,7 @@ private[hive] trait HiveInspectors {
         case d: java.sql.Date => d 
         case t: java.sql.Timestamp => t
       }
-      case x: StructObjectInspector => {
+      case x: StructObjectInspector =>
         val fieldRefs = x.getAllStructFieldRefs
         val row = a.asInstanceOf[Seq[_]]
         val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
@@ -149,7 +149,6 @@ private[hive] trait HiveInspectors {
         }
 
         result
-      }
       case x: ListObjectInspector =>
         val list = new java.util.ArrayList[Object]
         a.asInstanceOf[Seq[_]].foreach {
@@ -168,8 +167,10 @@ private[hive] trait HiveInspectors {
     }
   }
 
-  def wrap(row: Seq[Any], inspectors: Seq[ObjectInspector], cache: Array[AnyRef])
-  : Array[AnyRef] = {
+  def wrap(
+      row: Seq[Any],
+      inspectors: Seq[ObjectInspector],
+      cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
     while(i < inspectors.length) {
       cache(i) = wrap(row(i), inspectors(i))
