@@ -152,6 +152,8 @@ class HierarchicalClustering(val conf: HierarchicalClusteringConf)
             // calculate the local dendrogram height
             val dist = breezeNorm(subNodes(0).center.toBreeze - subNodes(1).center.toBreeze, 2)
             node.get.height = Some(dist)
+            // cached data is unnecessary because its children nodes are cached
+            node.get.data.unpersist()
             isMerged = true
             logInfo(s"the number of cluster is ${model.clusterTree.getTreeSize()} at step ${step}")
           }
