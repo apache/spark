@@ -94,6 +94,7 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
+    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -1317,7 +1318,6 @@
         <activeByDefault>false</activeByDefault>
       </activation>
       <modules>
-        <module>sql/hive</module>
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
