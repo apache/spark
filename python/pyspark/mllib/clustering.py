@@ -135,15 +135,15 @@ class HierarchicalClusteringModel(ClusteringModel):
 class HierarchicalClustering(object):
 
     @classmethod
-    def train(cls, rdd, k, 
-            subIterations=20, numRetries=5, epsilon=1.0e-6, randomSeed=1, randomRange=0.1):
+    def train(cls, rdd, k,
+              subIterations=20, numRetries=5, epsilon=1.0e-6, randomSeed=1, randomRange=0.1):
         """Train a hierarchical clustering model."""
         sc = rdd.context
         ser = PickleSerializer()
         # cache serialized data to avoid objects over head in JVM
         cached = rdd.map(_convert_to_vector)._reserialize(AutoBatchedSerializer(ser)).cache()
         model = sc._jvm.PythonMLLibAPI().trainHierarchicalClusteringModel(
-            _to_java_object_rdd(cached), k, 
+            _to_java_object_rdd(cached), k,
             subIterations, numRetries, epsilon, randomSeed, randomRange)
         bytes = sc._jvm.SerDe.dumps(model.getCenters())
         centers = ser.loads(str(bytes))
