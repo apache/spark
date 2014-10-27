@@ -71,7 +71,6 @@ class ReliableKafkaReceiver[
         val kafkaMetadata = metadata.asInstanceOf[(TopicAndPartition, Long)]
         topicPartitionOffsetMap.put(kafkaMetadata._1, kafkaMetadata._2)
       }
-      println(s"offset map: ${topicPartitionOffsetMap.mkString(":")}")
     }
 
     override def onGenerateBlock(blockId: StreamBlockId): Unit = {
@@ -80,7 +79,6 @@ class ReliableKafkaReceiver[
       val offsetSnapshot = topicPartitionOffsetMap.toMap
       blockOffsetMap.put(blockId, offsetSnapshot)
       topicPartitionOffsetMap.clear()
-      println(s"block generated: $blockId, offset snapshot: ${offsetSnapshot.mkString(":")}")
     }
 
     override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
@@ -101,8 +99,7 @@ class ReliableKafkaReceiver[
 
   /** Manage the BlockGenerator in receiver itself for better managing block store and offset
     * commit */
-  @volatile private lazy val blockGenerator =
-    new BlockGenerator(blockGeneratorListener, streamId, env.conf)
+  private lazy val blockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
 
   override def onStop(): Unit = {
     if (consumerConnector != null) {
@@ -134,6 +131,9 @@ class ReliableKafkaReceiver[
     props.setProperty(AUTO_OFFSET_COMMIT, "false")
 
     val consumerConfig = new ConsumerConfig(props)
+
+    assert(consumerConfig.autoCommitEnable == false)
+
     logInfo(s"Connecting to Zookeeper: ${consumerConfig.zkConnect}")
     consumerConnector = Consumer.create(consumerConfig)
     logInfo(s"Connected to Zookeeper: ${consumerConfig.zkConnect}")
@@ -204,7 +204,7 @@ class ReliableKafkaReceiver[
           s"${topicAndPart.topic}, partition ${topicAndPart.partition}", t)
       }
 
-      println(s"Committed offset ${offset} for topic ${topicAndPart.topic}, " +
+      logInfo(s"Committed offset ${offset} for topic ${topicAndPart.topic}, " +
         s"partition ${topicAndPart.partition}")
     }
   }

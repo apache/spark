@@ -93,12 +93,27 @@ class KafkaStreamSuite extends TestSuiteBase {
   }
 
   override def afterFunction() {
-    producer.close()
-    server.shutdown()
+    if (producer != null) {
+      producer.close()
+      producer = null
+    }
+
+    if (server != null) {
+      server.shutdown()
+      server = null
+    }
+
     brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
 
-    zkClient.close()
-    zookeeper.shutdown()
+    if (zkClient != null) {
+      zkClient.close()
+      zkClient = null
+    }
+
+    if (zookeeper != null) {
+      zookeeper.shutdown()
+      zookeeper = null
+    }
 
     super.afterFunction()
   }
@@ -155,7 +170,9 @@ class KafkaStreamSuite extends TestSuiteBase {
 
   def produceAndSendMessage(topic: String, sent: Map[String, Int]) {
     val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
-    producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
+    if (producer == null) {
+      producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
+    }
     producer.send(createTestMessage(topic, sent): _*)
     logInfo("==================== 6 ====================")
   }

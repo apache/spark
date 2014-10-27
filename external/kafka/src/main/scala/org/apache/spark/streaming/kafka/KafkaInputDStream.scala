@@ -47,12 +47,12 @@ class KafkaInputDStream[
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
-    reliableStoreEnabled: Boolean,
+    reliableReceiveEnabled: Boolean,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
-    if (!reliableStoreEnabled) {
+    if (!reliableReceiveEnabled) {
       new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
         .asInstanceOf[Receiver[(K, V)]]
     } else {
