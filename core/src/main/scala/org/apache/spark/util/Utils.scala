@@ -1239,10 +1239,17 @@ private[spark] object Utils extends Logging {
    * @param numIters number of iterations
    * @param f function to be executed
    */
-  def timeIt(numIters: Int)(f: => Unit): Long = {
-    val start = System.currentTimeMillis
-    times(numIters)(f)
-    System.currentTimeMillis - start
+  def timeIt(numIters: Int)(f: => Unit, prepare: => Unit = ()): Long = {
+    var i = 0
+    var sum = 0L
+    while (i < numIters) {
+      prepare
+      val start = System.currentTimeMillis
+      f
+      sum += System.currentTimeMillis - start
+      i += 1
+    }
+    sum
   }
 
   /**
