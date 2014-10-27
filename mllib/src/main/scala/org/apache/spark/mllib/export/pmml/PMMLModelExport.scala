@@ -23,6 +23,11 @@ import org.jpmml.model.JAXBUtil
 import org.dmg.pmml.PMML
 import javax.xml.transform.stream.StreamResult
 import scala.beans.BeanProperty
+import org.dmg.pmml.Application
+import org.dmg.pmml.Timestamp
+import org.dmg.pmml.Header
+import java.text.SimpleDateFormat
+import java.util.Date
 
 trait PMMLModelExport extends ModelExport{
   
@@ -31,7 +36,19 @@ trait PMMLModelExport extends ModelExport{
    */
   @BeanProperty
   var pmml: PMML = new PMML();
-  //TODO: set here header app copyright and timestamp
+
+  setHeader(pmml);
+  
+  private def setHeader(pmml : PMML): Unit = {
+    var version = getClass().getPackage().getImplementationVersion()
+	var app = new Application().withName("Apache Spark MLlib").withVersion(version)
+	var timestamp = new Timestamp().withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
+	var header = new Header()
+    	.withCopyright("www.dmg.org")
+        .withApplication(app)
+        .withTimestamp(timestamp);
+	pmml.setHeader(header);
+  } 
   
   /**
    * Write the exported model (in PMML XML) to the output stream specified 

@@ -18,6 +18,24 @@
 package org.apache.spark.mllib.export.pmml
 
 import org.apache.spark.mllib.clustering.KMeansModel
+import org.dmg.pmml.DataDictionary
+import org.dmg.pmml.FieldName
+import org.dmg.pmml.DataField
+import org.dmg.pmml.OpType
+import org.dmg.pmml.DataType
+import org.dmg.pmml.MiningSchema
+import org.dmg.pmml.MiningField
+import org.dmg.pmml.FieldUsageType
+import org.dmg.pmml.ComparisonMeasure
+import org.dmg.pmml.ComparisonMeasure.Kind
+import org.dmg.pmml.SquaredEuclidean
+import org.dmg.pmml.ClusteringModel
+import org.dmg.pmml.MiningFunctionType
+import org.dmg.pmml.ClusteringModel.ModelClass
+import org.dmg.pmml.ClusteringField
+import org.dmg.pmml.CompareFunctionType
+import org.dmg.pmml.Cluster
+import org.dmg.pmml.Array.Type
 
 /**
  * PMML Model Export for KMeansModel class
@@ -30,9 +48,48 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
   populateKMeansPMML(model);
   
   private def populateKMeansPMML(model : KMeansModel): Unit = {
-     //TODO: set here header description 
-     pmml.setVersion("testing... kmeans..."); 
-     //TODO: generate the model...
+    
+     pmml.getHeader().setDescription("k-means clustering"); 
+     
+     if(model.clusterCenters.length > 0){
+       
+       val clusterCenter = model.clusterCenters(0)
+       
+       var fields = new Array[FieldName](clusterCenter.size)
+       
+       var dataDictionary = new DataDictionary()
+       
+       var miningSchema = new MiningSchema()
+       
+       for ( i <- 0 to (clusterCenter.size - 1)) {
+         fields(i) = FieldName.create("field_"+i)
+         dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+         miningSchema.withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
+       }
+       
+       var comparisonMeasure = new ComparisonMeasure()
+       	.withKind(Kind.DISTANCE)
+        .withMeasure(new SquaredEuclidean()
+       );
+       
+       dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size());
+              
+       pmml.setDataDictionary(dataDictionary);
+       
+       var clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
+       	.withModelName("k-means");
+       
+       for ( i <- 0 to (clusterCenter.size - 1)) {
+    	   clusteringModel.withClusteringFields(new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF))
+    	   var cluster = new Cluster().withName("cluster_"+i).withArray(new org.dmg.pmml.Array().withType(Type.REAL).withN(clusterCenter.size).withValue(model.clusterCenters(i).toArray.mkString(" ")))
+    	   //cluster.withSize(value) //we don't have the size of the single cluster but only the centroids (withValue)
+    	   clusteringModel.withClusters(cluster)
+       }
+
+       pmml.withModels(clusteringModel);
+       
+     }
+ 
   }
   
 }

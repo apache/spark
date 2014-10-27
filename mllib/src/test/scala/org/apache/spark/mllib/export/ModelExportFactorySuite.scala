@@ -40,7 +40,7 @@ class ModelExportFactorySuite extends FunSuite{
    
    }
    
-   test("ModelExportFactory generate IllegalArgumentException when passing an unsupported model") {
+   test("ModelExportFactory throws IllegalArgumentException when passing an unsupported model") {
     
     val invalidModel = new Object;
     
