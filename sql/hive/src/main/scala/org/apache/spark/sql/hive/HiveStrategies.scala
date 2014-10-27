@@ -68,7 +68,7 @@ private[hive] trait HiveStrategies {
       def fakeOutput(newOutput: Seq[Attribute]) =
         OutputFaker(
           originalPlan.output.map(a =>
-            newOutput.find(a.lowerName == _.lowerName)
+            newOutput.find(a.name.toLowerCase == _.name.toLowerCase)
               .getOrElse(
                 sys.error(s"Can't find attribute $a to fake in set ${newOutput.mkString(",")}"))),
           originalPlan)
