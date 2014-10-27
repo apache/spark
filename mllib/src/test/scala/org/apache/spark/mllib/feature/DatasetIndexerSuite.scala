@@ -81,8 +81,8 @@ class DatasetIndexerSuite extends FunSuite with LocalSparkContext {
   test("Same result with dense and sparse vectors") {
 
     def testDenseSparse(densePoints: Seq[Vector], sparsePoints: Seq[Vector]): Unit = {
-      assert(densePoints.zip(sparsePoints).forall { case (dv, sv) => dv.toArray == sv.toArray },
-        "typo in unit test")
+      assert(densePoints.zip(sparsePoints).forall { case (dv, sv) => dv.toArray === sv.toArray },
+        s"typo in unit test")
       val denseRDD = sc.parallelize(densePoints)
       val sparseRDD = sc.parallelize(sparsePoints)
 
