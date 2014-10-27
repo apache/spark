@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 
 import scala.collection.JavaConversions._
@@ -30,6 +31,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Utils
 
 trait ExecutorRunnableUtil extends Logging {
 
@@ -57,6 +59,10 @@ trait ExecutorRunnableUtil extends Logging {
     }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
       javaOpts += opts
+    }
+    sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
+      val libraryPath = Seq(p, Utils.libraryPathScriptVar).mkString(File.pathSeparator)
+      javaOpts += s"-Djava.library.path=$libraryPath"
     }
 
     javaOpts += "-Djava.io.tmpdir=" +

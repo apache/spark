@@ -1352,6 +1352,11 @@ private[spark] object Utils extends Logging {
   val isWindows = SystemUtils.IS_OS_WINDOWS
 
   /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  val isMac = SystemUtils.IS_OS_MAC_OSX
+
+  /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
    */
   val windowsDrive = "([a-zA-Z])".r
@@ -1671,6 +1676,25 @@ private[spark] object Utils extends Logging {
     pro.put("log4j.appender.console.layout.ConversionPattern",
       "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
     PropertyConfigurator.configure(pro)
+  }
+
+  /**
+   * Return the current system LD_LIBRARY_PATH environment
+   */
+  def libraryPath: String = if (isWindows) {
+    "PATH"
+  } else if (isMac) {
+    "DYLD_LIBRARY_PATH"
+  } else {
+    "LD_LIBRARY_PATH"
+  }
+
+  def libraryPathScriptVar: String = {
+    if (Utils.isWindows) {
+      s"%${Utils.libraryPath}%"
+    } else {
+      "$" + Utils.libraryPath
+    }
   }
 
 }

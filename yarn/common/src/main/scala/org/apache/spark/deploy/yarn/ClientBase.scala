@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 
 import scala.collection.JavaConversions._
@@ -39,6 +40,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN.
@@ -307,8 +309,6 @@ private[spark] trait ClientBase extends Logging {
     val localResources = prepareLocalResources(appStagingDir)
     val launchEnv = setupLaunchEnv(appStagingDir)
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
-    amContainer.setLocalResources(localResources)
-    amContainer.setEnvironment(launchEnv)
 
     val javaOpts = ListBuffer[String]()
 
@@ -349,8 +349,12 @@ private[spark] trait ClientBase extends Logging {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
-      sparkConf.getOption("spark.driver.libraryPath")
-        .foreach(p => javaOpts += s"-Djava.library.path=$p")
+      var libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
+        sys.props.get("spark.driver.libraryPath")).flatten
+      if (libraryPaths.nonEmpty) {
+        libraryPaths = libraryPaths :+ Utils.libraryPathScriptVar
+        javaOpts += s"-Djava.library.path=${libraryPaths.mkString(File.pathSeparator)}"
+      }
     }
 
     // For log4j configuration to reference
@@ -394,6 +398,8 @@ private[spark] trait ClientBase extends Logging {
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
     amContainer.setCommands(printableCommands)
+    amContainer.setLocalResources(localResources)
+    amContainer.setEnvironment(launchEnv)
 
     logDebug("===============================================================================")
     logDebug("Yarn AM launch context:")

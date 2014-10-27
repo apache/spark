@@ -31,6 +31,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTas
 import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.Utils
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -123,7 +124,9 @@ private[spark] class CoarseMesosSchedulerBackend(
     val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
 
     val libraryPathOption = "spark.executor.extraLibraryPath"
-    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
+    val extraLibraryPath = conf.getOption(libraryPathOption).map { p =>
+      s"-Djava.library.path=$p${File.pathSeparator}${Utils.libraryPathScriptVar}"
+    }
     val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
 
     environment.addVariables(
