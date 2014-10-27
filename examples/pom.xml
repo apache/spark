@@ -157,6 +157,10 @@
       <version>0.1.11</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-math3</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -267,6 +271,10 @@
                   <excludes>
                     <exclude>com.google.common.base.Optional**</exclude>
                   </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.math3</pattern>
+                  <shadedPattern>org.spark-project.commons.math3</shadedPattern>
                 </relocation>
               </relocations>
               <transformers>

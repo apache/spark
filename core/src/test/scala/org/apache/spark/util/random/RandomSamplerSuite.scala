@@ -19,7 +19,8 @@ package org.apache.spark.util.random
 
 import java.util.Random
 
-import cern.jet.random.Poisson
+import org.apache.commons.math3.distribution.PoissonDistribution
+
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
@@ -28,11 +29,11 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
   val a = List(1, 2, 3, 4, 5, 6, 7, 8, 9)
 
   var random: Random = _
-  var poisson: Poisson = _
+  var poisson: PoissonDistribution = _
 
   before {
     random = mock[Random]
-    poisson = mock[Poisson]
+    poisson = mock[PoissonDistribution]
   }
 
   test("BernoulliSamplerWithRange") {
@@ -101,7 +102,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
   test("PoissonSampler") {
     expecting {
       for(x <- Seq(0, 1, 2, 0, 1, 1, 0, 0, 0)) {
-        poisson.nextInt().andReturn(x)
+        poisson.sample().andReturn(x)
       }
     }
     whenExecuting(poisson) {

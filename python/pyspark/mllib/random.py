@@ -107,7 +107,7 @@ class RandomRDDs(object):
         distribution with the input mean.
 
         >>> mean = 100.0
-        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=1L)
+        >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=2L)
         >>> stats = x.stats()
         >>> stats.count()
         1000L

@@ -187,7 +187,7 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
       numClassesForClassification = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
     val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
       featureSubsetStrategy = "sqrt", seed = 12345)
-    RandomForestSuite.validateClassifier(model, arr, 1.0)
+    RandomForestSuite.validateClassifier(model, arr, 0.0)
   }
 
 }

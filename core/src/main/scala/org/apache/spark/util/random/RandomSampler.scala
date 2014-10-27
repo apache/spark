@@ -19,8 +19,7 @@ package org.apache.spark.util.random
 
 import java.util.Random
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -87,15 +86,16 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
 @DeveloperApi
 class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
 
-  private[random] var rng = new Poisson(mean, new DRand)
+  private[random] var rng = new PoissonDistribution(mean)
 
   override def setSeed(seed: Long) {
-    rng = new Poisson(mean, new DRand(seed.toInt))
+    rng = new PoissonDistribution(mean)
+    rng.reseedRandomGenerator(seed)
   }
 
   override def sample(items: Iterator[T]): Iterator[T] = {
     items.flatMap { item =>
-      val count = rng.nextInt()
+      val count = rng.sample()
       if (count == 0) {
         Iterator.empty
       } else {
