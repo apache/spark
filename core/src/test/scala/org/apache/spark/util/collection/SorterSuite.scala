@@ -65,6 +65,28 @@ class SorterSuite extends FunSuite {
     }
   }
 
+  /** Runs an experiment several times. */
+  def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: => Unit): Unit = {
+    if (skip) {
+      println(s"Skipped experiment $name.")
+      return
+    }
+
+    val firstTry = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
+    System.gc()
+
+    var i = 0
+    var next10: Long = 0
+    while (i < 10) {
+      val time = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
+      next10 += time
+      println(s"$name: Took $time ms")
+      i += 1
+    }
+
+    println(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
+  }
+
   /**
    * This provides a simple benchmark for comparing the Sorter with Java internal sorting.
    * Ideally these would be executed one at a time, each in their own JVM, so their listing
@@ -76,38 +98,16 @@ class SorterSuite extends FunSuite {
    * those, while the Sorter approach can work directly on the input data format.
    *
    * Note that the Java implementation varies tremendously between Java 6 and Java 7, when
-   * the Java sort changed from merge sort to Timsort.
+   * the Java sort changed from merge sort to TimSort.
    */
-  ignore("Sorter benchmark") {
-
-    /** Runs an experiment several times. */
-    def runExperiment(name: String, skip: Boolean = true)(f: => Unit, prepare: => Unit): Unit = {
-      if (skip) {
-        println(s"Skiped test $name.")
-        return
-      }
-
-      val firstTry = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
-      System.gc()
-
-      var i = 0
-      var next10: Long = 0
-      while (i < 10) {
-        val time = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
-        next10 += time
-        println(s"$name: Took $time ms")
-        i += 1
-      }
-
-      println(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
-    }
-
+  ignore("Sorter benchmark for key-value pairs") {
     val numElements = 25000000 // 25 mil
     val rand = new XORShiftRandom(123)
 
-    // Test our key-value pairs where each element is a Tuple2[Float, Integer)
+    // Test our key-value pairs where each element is a Tuple2[Float, Integer].
+
     val kvTuples = Array.tabulate(numElements) { i =>
-      (rand.nextFloat(), i)
+      (new JFloat(rand.nextFloat()), new JInteger(i))
     }
 
     val kvTupleArray = new Array[AnyRef](numElements)
@@ -117,7 +117,7 @@ class SorterSuite extends FunSuite {
     runExperiment("Tuple-sort using Arrays.sort()")({
       Arrays.sort(kvTupleArray, new Comparator[AnyRef] {
         override def compare(x: AnyRef, y: AnyRef): Int =
-          Ordering.Float.compare(x.asInstanceOf[(Float, _)]._1, y.asInstanceOf[(Float, _)]._1)
+          x.asInstanceOf[(JFloat, _)]._1.compareTo(y.asInstanceOf[(JFloat, _)]._1)
       })
     }, prepareKvTupleArray())
 
@@ -127,8 +127,8 @@ class SorterSuite extends FunSuite {
       val data = new Array[AnyRef](numElements * 2)
       var i = 0
       while (i < numElements) {
-        data(2 * i) = new JFloat(kvTuples(i)._1)
-        data(2 * i + 1) = new JInteger(kvTuples(i)._2)
+        data(2 * i) = kvTuples(i)._1
+        data(2 * i + 1) = kvTuples(i)._2
         i += 1
       }
       data
@@ -142,21 +142,34 @@ class SorterSuite extends FunSuite {
     val sorter = new Sorter(new KVArraySortDataFormat[JFloat, AnyRef])
     runExperiment("KV-sort using Sorter")({
       sorter.sort(keyValueArray, 0, numElements, new Comparator[JFloat] {
-        override def compare(x: JFloat, y: JFloat): Int = Ordering.Float.compare(x, y)
+        override def compare(x: JFloat, y: JFloat): Int = x.compareTo(y)
       })
     }, prepareKeyValueArray())
+  }
 
-    // Test primitive and non-primitive sort on int array
+  /**
+   * Tests for sorting with primitive keys with/without key reuse. Java's Arrays.sort is used as
+   * reference, which is expected to be faster but it can only sort a single array. Sorter can be
+   * used to sort parallel arrays.
+   */
+  ignore("Sorter benchmark for primitive int array") {
+    val numElements = 25000000 // 25 mil
+    val rand = new XORShiftRandom(123)
 
     val ints = Array.fill(numElements)(rand.nextInt())
+    val intObjects = {
+      val data = new Array[JInteger](numElements)
+      var i = 0
+      while (i < numElements) {
+        data(i) = new JInteger(ints(i))
+        i += 1
+      }
+      data
+    }
 
     val intObjectArray = new Array[JInteger](numElements)
     val prepareIntObjectArray = () => {
-      var i = 0
-      while (i < numElements) {
-        intObjectArray(i) = ints(i)
-        i += 1
-      }
+      System.arraycopy(intObjects, 0, intObjectArray, 0, numElements)
     }
 
     runExperiment("Java Arrays.sort() on non-primitive int array")({
@@ -199,8 +212,7 @@ abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
-  override def copyRange(src: Array[Int], srcPos: Int,
-                                   dst: Array[Int], dstPos: Int, length: Int) {
+  override def copyRange(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int, length: Int) {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 
@@ -220,6 +232,7 @@ class IntArraySortDataFormat extends AbstractIntArraySortDataFormat[Int] {
 
 /** Wrapper of Int for key reuse. */
 class IntWrapper(var key: Int = 0) extends Ordered[IntWrapper] {
+
   override def compare(that: IntWrapper): Int = {
     Ordering.Int.compare(key, that.key)
   }
