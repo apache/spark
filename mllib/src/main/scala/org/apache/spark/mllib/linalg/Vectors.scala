@@ -285,15 +285,18 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     row
   }
 
-  override def deserialize(row: Row): Vector = {
-    require(row.length == 3,
-      s"VectorUDT.deserialize given row with length ${row.length} but requires length == 3")
-    val vectorType = row.getByte(0)
-    vectorType match {
-      case 0 =>
-        new DenseVectorUDT().deserialize(row.getAs[Row](1))
-      case 1 =>
-        new SparseVectorUDT().deserialize(row.getAs[Row](2))
+  override def deserialize(datum: Any): Vector = {
+    datum match {
+      case row: Row =>
+        require(row.length == 3,
+          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 3")
+        val vectorType = row.getByte(0)
+        vectorType match {
+          case 0 =>
+            new DenseVectorUDT().deserialize(row.getAs[Row](1))
+          case 1 =>
+            new SparseVectorUDT().deserialize(row.getAs[Row](2))
+        }
     }
   }
 }
@@ -304,19 +307,20 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
  */
 private[spark] class DenseVectorUDT extends UserDefinedType[DenseVector] {
 
-  override def sqlType: StructType = StructType(Seq(
-    StructField("values", ArrayType(DoubleType, containsNull = false), nullable = false)))
+  override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-  override def serialize(obj: Any): Row = obj match {
-    case v: DenseVector =>
-      val row: GenericMutableRow = new GenericMutableRow(1)
-      row.update(0, v.values.toSeq)
-      row
+  override def serialize(obj: Any): Seq[Double] = {
+    obj match {
+      case v: DenseVector =>
+        v.values.toSeq
+    }
   }
 
-  override def deserialize(row: Row): DenseVector = {
-    val values = row.getAs[Seq[Double]](0).toArray
-    new DenseVector(values)
+  override def deserialize(datum: Any): DenseVector = {
+    datum match {
+      case values: Seq[_] =>
+        new DenseVector(values.asInstanceOf[Seq[Double]].toArray)
+    }
   }
 }
 
@@ -340,12 +344,15 @@ private[spark] class SparseVectorUDT extends UserDefinedType[SparseVector] {
       row
   }
 
-  override def deserialize(row: Row): SparseVector = {
-    require(row.length >= 1,
-      s"SparseVectorUDT.deserialize given row with length ${row.length} but requires length >= 1")
-    val vSize = row.getInt(0)
-    val indices = row.getAs[Seq[Int]](1).toArray
-    val values = row.getAs[Seq[Double]](2).toArray
-    new SparseVector(vSize, indices, values)
+  override def deserialize(datum: Any): SparseVector = {
+    datum match {
+      case row: Row =>
+        require(row.length == 3,
+          s"SparseVectorUDT.deserialize given row with length ${row.length} but expect 3.")
+        val vSize = row.getInt(0)
+        val indices = row.getAs[Seq[Int]](1).toArray
+        val values = row.getAs[Seq[Double]](2).toArray
+        new SparseVector(vSize, indices, values)
+    }
   }
 }

@@ -65,7 +65,7 @@ object ScalaReflection {
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (d: Decimal, _: DecimalType) => d.toBigDecimal
-    case (r: Row, udt: UserDefinedType[_]) => udt.deserialize(r)
+    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
     case (other, _) => other
   }
 
