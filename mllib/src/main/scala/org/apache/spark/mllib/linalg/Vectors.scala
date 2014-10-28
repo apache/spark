@@ -202,7 +202,7 @@ object Vectors {
 /**
  * A dense vector represented by a value array.
  */
-@SQLUserDefinedType(serdes = classOf[DenseVectorUDT])
+@SQLUserDefinedType(udt = classOf[DenseVectorUDT])
 class DenseVector(val values: Array[Double]) extends Vector {
 
   override def size: Int = values.length
@@ -259,7 +259,7 @@ class SparseVector(
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.SchemaRDD]].
  */
-private[spark] class VectorUDT extends UserDefinedTypeSerDes[Vector] {
+private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   /**
    * vectorType: 0 = dense, 1 = sparse.
@@ -267,8 +267,8 @@ private[spark] class VectorUDT extends UserDefinedTypeSerDes[Vector] {
    */
   override def sqlType: StructType = StructType(Seq(
     StructField("vectorType", ByteType, nullable = false),
-    StructField("dense", new UserDefinedType(new DenseVectorUDT), nullable = true),
-    StructField("sparse", new UserDefinedType(new SparseVectorUDT), nullable = true)))
+    StructField("dense", new DenseVectorUDT, nullable = true),
+    StructField("sparse", new SparseVectorUDT, nullable = true)))
 
   override def serialize(obj: Any): Row = {
     val row = new GenericMutableRow(3)
@@ -297,16 +297,17 @@ private[spark] class VectorUDT extends UserDefinedTypeSerDes[Vector] {
     }
   }
 
-  override def userType: Class[Vector] = classOf[Vector]
+  // override def userType: Class[Vector] = classOf[Vector]
 }
 
 /**
  * User-defined type for [[DenseVector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.SchemaRDD]].
  */
-private[spark] class DenseVectorUDT extends UserDefinedTypeSerDes[DenseVector] {
+private[spark] class DenseVectorUDT extends UserDefinedType[DenseVector] {
 
-  override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
+  override def sqlType: StructType = StructType(Seq(
+    StructField("values", ArrayType(DoubleType, containsNull = false), nullable = false)))
 
   override def serialize(obj: Any): Row = obj match {
     case v: DenseVector =>
@@ -320,14 +321,14 @@ private[spark] class DenseVectorUDT extends UserDefinedTypeSerDes[DenseVector] {
     new DenseVector(values)
   }
 
-  override def userType: Class[DenseVector] = classOf[DenseVector]
+  // override def userType: Class[DenseVector] = classOf[DenseVector]
 }
 
 /**
  * User-defined type for [[SparseVector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.SchemaRDD]].
  */
-private[spark] class SparseVectorUDT extends UserDefinedTypeSerDes[SparseVector] {
+private[spark] class SparseVectorUDT extends UserDefinedType[SparseVector] {
 
   override def sqlType: StructType = StructType(Seq(
     StructField("size", IntegerType, nullable = false),
@@ -341,8 +342,6 @@ private[spark] class SparseVectorUDT extends UserDefinedTypeSerDes[SparseVector]
       row.update(1, v.indices.toSeq)
       row.update(2, v.values.toSeq)
       row
-    case row: Row =>
-      row
   }
 
   override def deserialize(row: Row): SparseVector = {
@@ -354,5 +353,5 @@ private[spark] class SparseVectorUDT extends UserDefinedTypeSerDes[SparseVector]
     new SparseVector(vSize, indices, values)
   }
 
-  override def userType: Class[SparseVector] = classOf[SparseVector]
+  // override def userType: Class[SparseVector] = classOf[SparseVector]
 }

@@ -99,8 +99,8 @@ private[sql] object CatalystConverter {
           fieldIndex,
           parent)
       }
-      case UserDefinedType(serdes) => {
-        createConverter(field.copy(dataType = serdes.sqlType), fieldIndex, parent)
+      case udt: UserDefinedType[_] => {
+        createConverter(field.copy(dataType = udt.sqlType), fieldIndex, parent)
       }
       // Strings, Shorts and Bytes do not have a corresponding type in Parquet
       // so we need to treat them separately

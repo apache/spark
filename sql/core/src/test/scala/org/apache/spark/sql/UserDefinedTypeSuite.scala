@@ -18,13 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.UDTRegistry
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.UserDefinedTypeSerDes
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
-@SQLUserDefinedType(serdes = classOf[MyDenseVectorUDT])
+@SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
@@ -35,31 +34,21 @@ class MyDenseVector(val data: Array[Double]) extends Serializable {
 
 case class MyLabeledPoint(label: Double, features: MyDenseVector)
 
-class MyDenseVectorUDT extends UserDefinedTypeSerDes[MyDenseVector] {
+class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
-  override def userType: Class[MyDenseVector] = classOf[MyDenseVector]
-
-  override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
+  override def sqlType: StructType = StructType(Seq(
+    StructField("data", ArrayType(DoubleType, containsNull = false), nullable = false)))
 
   override def serialize(obj: Any): Row = obj match {
     case features: MyDenseVector =>
-      val row: GenericMutableRow = new GenericMutableRow(features.data.length)
-      var i = 0
-      while (i < features.data.length) {
-        row.setDouble(i, features.data(i))
-        i += 1
-      }
+      val row: GenericMutableRow = new GenericMutableRow(1)
+      row.update(0, features.data.toSeq)
       row
   }
 
   override def deserialize(row: Row): MyDenseVector = {
-    val features = new MyDenseVector(new Array[Double](row.length))
-    var i = 0
-    while (i < row.length) {
-      features.data(i) = row.getDouble(i)
-      i += 1
-    }
-    features
+    val features = row.getAs[Seq[Double]](0).toArray
+    new MyDenseVector(features)
   }
 }
 

@@ -54,7 +54,7 @@ object ScalaReflection {
           convertToCatalyst(elem, field.dataType)
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
-    case (udt, udtType: UserDefinedTypeSerDes[_]) => udtType.serialize(udt)
+    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (other, _) => other
   }
 
@@ -65,7 +65,7 @@ object ScalaReflection {
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (d: Decimal, _: DecimalType) => d.toBigDecimal
-    case (r: Row, udt: UserDefinedType[_]) => udt.serdes.deserialize(r)
+    case (r: Row, udt: UserDefinedType[_]) => udt.deserialize(r)
     case (other, _) => other
   }
 
@@ -94,12 +94,12 @@ object ScalaReflection {
         //       whereas className is from Scala reflection.  This can make it hard to find classes
         //       in some cases, such as when a class is enclosed in an object (in which case
         //       Java appends a '$' to the object name but Scala does not).
-        val serdes = Utils.classForName(className)
-          .getAnnotation(classOf[SQLUserDefinedType]).serdes().newInstance()
-        UDTRegistry.registerType(t, serdes)
-        Schema(new UserDefinedType(serdes), nullable = true)
+        val udt = Utils.classForName(className)
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        UDTRegistry.registerType(t, udt)
+        Schema(udt, nullable = true)
       case t if UDTRegistry.udtRegistry.contains(t) =>
-        Schema(new UserDefinedType(UDTRegistry.udtRegistry(t)), nullable = true)
+        Schema(UDTRegistry.udtRegistry(t), nullable = true)
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)

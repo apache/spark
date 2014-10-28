@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.types.UserDefinedTypeSerDes
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 
 /**
  * ::DeveloperApi::
@@ -32,14 +32,14 @@ import org.apache.spark.sql.catalyst.types.UserDefinedTypeSerDes
 @DeveloperApi
 object UDTRegistry {
   /** Map: UserType --> UserDefinedType */
-  val udtRegistry = new mutable.HashMap[Any, UserDefinedTypeSerDes[_]]()
+  val udtRegistry = new mutable.HashMap[Any, UserDefinedType[_]]()
 
   /**
    * Register a user-defined type and its serializer, to allow automatic conversion between
    * RDDs of user types and SchemaRDDs.
    * If this type has already been registered, this does nothing.
    */
-  def registerType(userType: Type, udt: UserDefinedTypeSerDes[_]): Unit = {
+  def registerType(userType: Type, udt: UserDefinedType[_]): Unit = {
     // TODO: Check to see if type is built-in.  Throw exception?
     UDTRegistry.udtRegistry(userType) = udt
   }
