@@ -168,6 +168,9 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
 
+  /** Return the number of CPU cores in this block manager. */
+  def numCoresUsed: Int = Runtime.getRuntime.availableProcessors();
+
   /** Return the memory remaining in this block manager. */
   def memRemaining: Long = maxMem - memUsed
 

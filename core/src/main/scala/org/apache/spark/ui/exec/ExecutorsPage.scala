@@ -39,7 +39,8 @@ private case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    maxMemory: Long)
+    maxMemory: Long,
+    numCores:Integer)
 
 private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
   private val listener = parent.listener
@@ -56,6 +57,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       <table class={UIUtils.TABLE_CLASS}>
         <thead>
           <th>Executor ID</th>
+          <th>Number of CPU Cores</th>
           <th>Address</th>
           <th>RDD Blocks</th>
           <th>Memory Used</th>
@@ -108,6 +110,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val diskUsed = info.diskUsed
     <tr>
       <td>{info.id}</td>
+      <td>{info.numCores}</td>
       <td>{info.hostPort}</td>
       <td>{info.rddBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
@@ -145,6 +148,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val numCores=status.numCoresUsed
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
@@ -168,7 +172,8 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      maxMem
+      maxMem,
+      numCores
     )
   }
 }
