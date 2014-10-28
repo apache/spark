@@ -1237,32 +1237,27 @@ private[spark] object Utils extends Logging {
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
    * @param numIters number of iterations
-   * @param f function to be executed
-   */
-  def timeIt(numIters: Int)(f: => Unit): Long = {
-    val start = System.currentTimeMillis
-    times(numIters)(f)
-    System.currentTimeMillis - start
-  }
-
-  /**
-   * Timing method based on iterations that permit JVM JIT optimization.
-   * @param numIters number of iterations
-   * @param f function to be executed. For accurate timing, the execution time for each run must be
-   *          an order of magnitude longer than one millisecond.
+   * @param f function to be executed. If prepare is not None, the running time of each call to f
+   *          must be an order of magnitude longer than one millisecond for accurate timing.
    * @param prepare function to be executed before each call to f. Its running time doesn't count.
    */
-  def timeIt(numIters: Int)(f: => Unit, prepare: => Unit): Long = {
-    var i = 0
-    var sum = 0L
-    while (i < numIters) {
-      prepare
+  def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
+    if (prepare.isEmpty) {
       val start = System.currentTimeMillis
-      f
-      sum += System.currentTimeMillis - start
-      i += 1
+      times(numIters)(f)
+      System.currentTimeMillis - start
+    } else {
+      var i = 0
+      var sum = 0L
+      while (i < numIters) {
+        prepare.get.apply()
+        val start = System.currentTimeMillis
+        f
+        sum += System.currentTimeMillis - start
+        i += 1
+      }
+      sum
     }
-    sum
   }
 
   /**

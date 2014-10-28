@@ -66,19 +66,19 @@ class SorterSuite extends FunSuite {
   }
 
   /** Runs an experiment several times. */
-  def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: => Unit): Unit = {
+  def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
     if (skip) {
       println(s"Skipped experiment $name.")
       return
     }
 
-    val firstTry = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
+    val firstTry = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
     System.gc()
 
     var i = 0
     var next10: Long = 0
     while (i < 10) {
-      val time = org.apache.spark.util.Utils.timeIt(1)(f, prepare)
+      val time = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
       next10 += time
       println(s"$name: Took $time ms")
       i += 1
@@ -120,7 +120,7 @@ class SorterSuite extends FunSuite {
         override def compare(x: AnyRef, y: AnyRef): Int =
           x.asInstanceOf[(JFloat, _)]._1.compareTo(y.asInstanceOf[(JFloat, _)]._1)
       })
-    }, prepareKvTupleArray())
+    }, prepareKvTupleArray)
 
     // Test our Sorter where each element alternates between Float and Integer, non-primitive
 
@@ -145,7 +145,7 @@ class SorterSuite extends FunSuite {
       sorter.sort(keyValueArray, 0, numElements, new Comparator[JFloat] {
         override def compare(x: JFloat, y: JFloat): Int = x.compareTo(y)
       })
-    }, prepareKeyValueArray())
+    }, prepareKeyValueArray)
   }
 
   /**
@@ -157,7 +157,7 @@ class SorterSuite extends FunSuite {
    * here is mainly to have the code. Running multiple tests within the same JVM session would
    * prevent JIT inlining overridden methods and hence hurt the performance.
    */
-  ignore("Sorter benchmark for primitive int array") {
+  test("Sorter benchmark for primitive int array") {
     val numElements = 25000000 // 25 mil
     val rand = new XORShiftRandom(123)
 
@@ -181,7 +181,7 @@ class SorterSuite extends FunSuite {
       Arrays.sort(intObjectArray, new Comparator[JInteger] {
         override def compare(x: JInteger, y: JInteger): Int = x.compareTo(y)
       })
-    }, prepareIntObjectArray())
+    }, prepareIntObjectArray)
 
     val intPrimitiveArray = new Array[Int](numElements)
     val prepareIntPrimitiveArray = () => {
@@ -190,17 +190,17 @@ class SorterSuite extends FunSuite {
 
     runExperiment("Java Arrays.sort() on primitive int array")({
       Arrays.sort(intPrimitiveArray)
-    }, prepareIntPrimitiveArray())
+    }, prepareIntPrimitiveArray)
 
     val sorterWithoutKeyReuse = new Sorter(new IntArraySortDataFormat)
     runExperiment("Sorter without key reuse on primitive int array")({
       sorterWithoutKeyReuse.sort(intPrimitiveArray, 0, numElements, Ordering[Int])
-    }, prepareIntPrimitiveArray())
+    }, prepareIntPrimitiveArray)
 
     val sorterWithKeyReuse = new Sorter(new KeyReuseIntArraySortDataFormat)
     runExperiment("Sorter with key reuse on primitive int array")({
       sorterWithKeyReuse.sort(intPrimitiveArray, 0, numElements, Ordering[IntWrapper])
-    }, prepareIntPrimitiveArray())
+    }, prepareIntPrimitiveArray)
   }
 }
 

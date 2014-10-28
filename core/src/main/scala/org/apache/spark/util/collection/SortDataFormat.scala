@@ -35,7 +35,7 @@ import scala.reflect.ClassTag
  */
 // TODO: Making Buffer a real trait would be a better abstraction, but adds some complexity.
 private[spark]
-abstract class SortDataFormat[K, Buffer] extends Any {
+abstract class SortDataFormat[K, Buffer] {
 
   /**
    * Creates a new mutable key for reuse. This should be implemented if you want to override
