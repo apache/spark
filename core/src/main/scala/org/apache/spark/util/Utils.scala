@@ -33,7 +33,7 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -988,6 +988,21 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
+   * exceptions as IOException. This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
+    }
+  }
+
   /** Default filtering function for finding call sites using `getCallSite`. */
   private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
@@ -1062,8 +1077,8 @@ private[spark] object Utils extends Logging {
     val stream = new FileInputStream(file)
 
     try {
-      stream.skip(effectiveStart)
-      stream.read(buff)
+      ByteStreams.skipFully(stream, effectiveStart)
+      ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()
     }
@@ -1671,6 +1686,17 @@ private[spark] object Utils extends Logging {
     pro.put("log4j.appender.console.layout.ConversionPattern",
       "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
     PropertyConfigurator.configure(pro)
+  }
+
+  def invoke(
+      clazz: Class[_],
+      obj: AnyRef,
+      methodName: String,
+      args: (Class[_], AnyRef)*): AnyRef = {
+    val (types, values) = args.unzip
+    val method = clazz.getDeclaredMethod(methodName, types: _*)
+    method.setAccessible(true)
+    method.invoke(obj, values.toSeq: _*)
   }
 
 }
