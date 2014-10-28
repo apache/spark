@@ -20,7 +20,7 @@ package org.apache.spark.sql.json
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 import scala.math.BigDecimal
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -372,13 +372,20 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
+  private def toDate(value: Any): Date = {
+    value match {
+      // only support string as date
+      case value: java.lang.String => Date.valueOf(value)
+    }
+  }
+
   private def toTimestamp(value: Any): Timestamp = {
     value match {
-        case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
-        case value: java.lang.Long => new Timestamp(value)
-        case value: java.lang.String => Timestamp.valueOf(value)
-      }
-    }  
+      case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
+      case value: java.lang.Long => new Timestamp(value)
+      case value: java.lang.String => Timestamp.valueOf(value)
+    }
+  }
 
   private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
     if (value == null) {
@@ -396,6 +403,7 @@ private[sql] object JsonRDD extends Logging {
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
+        case DateType => toDate(value)
         case TimestampType => toTimestamp(value)
       }
     }

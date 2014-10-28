@@ -91,6 +91,7 @@ object DataType {
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
       | "DecimalType" ^^^ DecimalType
+      | "DateType" ^^^ DateType
       | "TimestampType" ^^^ TimestampType
       )
 
@@ -198,7 +199,8 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private[sql] val all = Seq(DecimalType, TimestampType, BinaryType) ++ NativeType.all
+  private[sql] val all = Seq(DecimalType, DateType, TimestampType, BinaryType) ++
+    NativeType.all
 
   private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
 }

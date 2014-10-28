@@ -444,6 +444,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case ByteType => true
       case ShortType => true
       case FloatType => true
+      case DateType => true
       case TimestampType => true
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
@@ -452,9 +453,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     // Converts value to the type specified by the data type.
-    // Because Python does not have data types for TimestampType, FloatType, ShortType, and
-    // ByteType, we need to explicitly convert values in columns of these data types to the desired
-    // JVM data types.
+    // Because Python does not have data types for DateType, TimestampType, FloatType, ShortType,
+    // and ByteType, we need to explicitly convert values in columns of these data types to the
+    // desired JVM data types.
     def convert(obj: Any, dataType: DataType): Any = (obj, dataType) match {
       // TODO: We should check nullable
       case (null, _) => null
@@ -473,6 +474,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
         new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
           case (e, f) => convert(e, f.dataType)
         }): Row
+
+      case (c: java.util.Calendar, DateType) =>
+        new java.sql.Date(c.getTime().getTime())
 
       case (c: java.util.Calendar, TimestampType) =>
         new java.sql.Timestamp(c.getTime().getTime())

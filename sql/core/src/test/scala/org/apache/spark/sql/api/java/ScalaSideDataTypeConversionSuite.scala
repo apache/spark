@@ -38,6 +38,7 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
     checkDataType(org.apache.spark.sql.StringType)
     checkDataType(org.apache.spark.sql.BinaryType)
     checkDataType(org.apache.spark.sql.BooleanType)
+    checkDataType(org.apache.spark.sql.DateType)
     checkDataType(org.apache.spark.sql.TimestampType)
     checkDataType(org.apache.spark.sql.DecimalType)
     checkDataType(org.apache.spark.sql.DoubleType)

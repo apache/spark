@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
 
@@ -43,6 +43,7 @@ case class NullableData(
     booleanField: java.lang.Boolean,
     stringField: String,
     decimalField: BigDecimal,
+    dateField: Date,
     timestampField: Timestamp,
     binaryField: Array[Byte])
 
@@ -96,6 +97,7 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
         StructField("decimalField", DecimalType, nullable = true),
+        StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
       nullable = true))
@@ -199,8 +201,11 @@ class ScalaReflectionSuite extends FunSuite {
     // DecimalType
     assert(DecimalType === typeOfObject(BigDecimal("1.7976931348623157E318")))
 
+    // DateType
+    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
+
     // TimestampType
-    assert(TimestampType === typeOfObject(java.sql.Timestamp.valueOf("2014-07-25 10:26:00")))
+    assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))
 
     // NullType
     assert(NullType === typeOfObject(null))
