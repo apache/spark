@@ -351,4 +351,15 @@ class UtilsSuite extends FunSuite {
       outFile.delete()
     }
   }
+
+  test("timeIt with prepare") {
+    var cnt = 0
+    val prepare = () => {
+      cnt += 1
+      Thread.sleep(1000)
+    }
+    val time = Utils.timeIt(2)({}, Some(prepare))
+    require(cnt === 2, "prepare should be called twice")
+    require(time < 500, "preparation time should not count")
+  }
 }
