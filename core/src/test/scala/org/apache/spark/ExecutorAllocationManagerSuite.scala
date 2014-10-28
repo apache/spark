@@ -75,7 +75,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(sc1.executorAllocationManager.isDefined)
     sc1.stop()
 
-    // Both min and max, and min > max
+    // Both min and max, and min < max
     val sc2 = createSparkContext(1, 2)
     assert(sc2.executorAllocationManager.isDefined)
     sc2.stop()
@@ -87,7 +87,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.getNumExecutorsPending === 0)
     assert(manager.getExecutorsPendingToRemove.isEmpty)
     assert(manager.getExecutorIds.isEmpty)
-    assert(manager.getAddTime === ExecutorAllocationManager.NOT_STARTED)
+    assert(manager.getAddTime === ExecutorAllocationManager.NOT_SET)
     assert(manager.getRemoveTimes.isEmpty)
     sc.stop()
   }
@@ -116,14 +116,14 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.getNumExecutorsToAdd === 1)
 
     // Register previously requested executors
-    manager.executorAdded("first")
+    manager.onExecutorAdded("first")
     assert(manager.getNumExecutorsPending === 9)
-    manager.executorAdded("second")
-    manager.executorAdded("third")
-    manager.executorAdded("fourth")
+    manager.onExecutorAdded("second")
+    manager.onExecutorAdded("third")
+    manager.onExecutorAdded("fourth")
     assert(manager.getNumExecutorsPending === 6)
-    manager.executorAdded("first") // duplicates should not count
-    manager.executorAdded("second")
+    manager.onExecutorAdded("first") // duplicates should not count
+    manager.onExecutorAdded("second")
     assert(manager.getNumExecutorsPending === 6)
 
     // Try adding again
@@ -140,7 +140,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   test("remove executors") {
     val sc = createSparkContext(5, 10)
     val manager = sc.executorAllocationManager.get
-    (1 to 10).map(_.toString).foreach(manager.executorAdded)
+    (1 to 10).map(_.toString).foreach(manager.onExecutorAdded)
 
     // Keep removing until the limit is reached
     assert(manager.getExecutorsPendingToRemove.isEmpty)
@@ -164,19 +164,19 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(!manager.getExecutorsPendingToRemove.contains("6"))
 
     // Kill executors previously requested to remove
-    manager.executorRemoved("1")
+    manager.onExecutorRemoved("1")
     assert(manager.getExecutorsPendingToRemove.size === 4)
     assert(!manager.getExecutorsPendingToRemove.contains("1"))
-    manager.executorRemoved("2")
-    manager.executorRemoved("3")
+    manager.onExecutorRemoved("2")
+    manager.onExecutorRemoved("3")
     assert(manager.getExecutorsPendingToRemove.size === 2)
     assert(!manager.getExecutorsPendingToRemove.contains("2"))
     assert(!manager.getExecutorsPendingToRemove.contains("3"))
-    manager.executorRemoved("2") // duplicates should not count
-    manager.executorRemoved("3")
+    manager.onExecutorRemoved("2") // duplicates should not count
+    manager.onExecutorRemoved("3")
     assert(manager.getExecutorsPendingToRemove.size === 2)
-    manager.executorRemoved("4")
-    manager.executorRemoved("5")
+    manager.onExecutorRemoved("4")
+    manager.onExecutorRemoved("5")
     assert(manager.getExecutorsPendingToRemove.isEmpty)
 
     // Try removing again
@@ -196,13 +196,13 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.addExecutors() === 1)
     assert(manager.addExecutors() === 2)
     assert(manager.addExecutors() === 4)
-    manager.executorAdded("1")
-    manager.executorAdded("2")
-    manager.executorAdded("3")
-    manager.executorAdded("4")
-    manager.executorAdded("5")
-    manager.executorAdded("6")
-    manager.executorAdded("7")
+    manager.onExecutorAdded("1")
+    manager.onExecutorAdded("2")
+    manager.onExecutorAdded("3")
+    manager.onExecutorAdded("4")
+    manager.onExecutorAdded("5")
+    manager.onExecutorAdded("6")
+    manager.onExecutorAdded("7")
     assert(manager.getExecutorIds.size === 7)
 
     // Remove until limit
@@ -210,8 +210,8 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.removeExecutor("2"))
     assert(!manager.removeExecutor("3")) // lower limit reached
     assert(!manager.removeExecutor("4"))
-    manager.executorRemoved("1")
-    manager.executorRemoved("2")
+    manager.onExecutorRemoved("1")
+    manager.onExecutorRemoved("2")
     assert(manager.getExecutorIds.size === 5)
 
     // Add until limit
@@ -219,11 +219,11 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.addExecutors() === 0)
     assert(!manager.removeExecutor("3")) // still at lower limit
     assert(!manager.removeExecutor("4"))
-    manager.executorAdded("8")
-    manager.executorAdded("9")
-    manager.executorAdded("10")
-    manager.executorAdded("11")
-    manager.executorAdded("12")
+    manager.onExecutorAdded("8")
+    manager.onExecutorAdded("9")
+    manager.onExecutorAdded("10")
+    manager.onExecutorAdded("11")
+    manager.onExecutorAdded("12")
     assert(manager.getExecutorIds.size === 10)
 
     // Remove succeeds again, now that we are no longer at the lower limit
@@ -233,8 +233,8 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.removeExecutor("6"))
     assert(manager.getExecutorIds.size === 10)
     assert(manager.addExecutors() === 0) // still at upper limit
-    manager.executorRemoved("3")
-    manager.executorRemoved("4")
+    manager.onExecutorRemoved("3")
+    manager.onExecutorRemoved("4")
     assert(manager.getExecutorIds.size === 8)
 
     // Add succeeds again, now that we are no longer at the upper limit
@@ -243,16 +243,16 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.addExecutors() === 1) // upper limit reached again
     assert(manager.addExecutors() === 0)
     assert(manager.getExecutorIds.size === 8)
-    manager.executorRemoved("5")
-    manager.executorRemoved("6")
-    manager.executorAdded("13")
-    manager.executorAdded("14")
+    manager.onExecutorRemoved("5")
+    manager.onExecutorRemoved("6")
+    manager.onExecutorAdded("13")
+    manager.onExecutorAdded("14")
     assert(manager.getExecutorIds.size === 8)
     assert(manager.addExecutors() === 1)
     assert(manager.addExecutors() === 1) // upper limit reached again
     assert(manager.addExecutors() === 0)
-    manager.executorAdded("15")
-    manager.executorAdded("16")
+    manager.onExecutorAdded("15")
+    manager.onExecutorAdded("16")
     assert(manager.getExecutorIds.size === 10)
     sc.stop()
   }
@@ -262,20 +262,21 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     val sc = createSparkContext(2, 10, addThresholdSeconds = addThresholdSeconds)
     val manager = sc.executorAllocationManager.get
 
-    assert(manager.getAddTime === NOT_STARTED)
-    val firstAddTime = manager.startAddTimer()
-    assert(manager.getAddTime !== NOT_STARTED)
+    assert(manager.getAddTime === NOT_SET)
+    val firstAddTime = manager.onSchedulerBacklogged()
+    assert(manager.getAddTime !== NOT_SET)
     Thread.sleep(100)
-    assert(manager.startAddTimer() === firstAddTime) // timer is already started
-    assert(manager.startAddTimer() === firstAddTime)
-    assert(manager.startAddTimer() < System.currentTimeMillis() + addThresholdSeconds * 1000)
-    manager.cancelAddTimer()
+    assert(manager.onSchedulerBacklogged() === firstAddTime) // timer is already started
+    assert(manager.onSchedulerBacklogged() === firstAddTime)
+    assert(manager.onSchedulerBacklogged() <
+      System.currentTimeMillis() + addThresholdSeconds * 1000)
+    manager.onSchedulerQueueEmpty()
 
     // Restart add timer
-    assert(manager.getAddTime === NOT_STARTED)
-    val secondAddTime = manager.startAddTimer()
-    assert(manager.getAddTime !== NOT_STARTED)
-    assert(manager.startAddTimer() === secondAddTime)
+    assert(manager.getAddTime === NOT_SET)
+    val secondAddTime = manager.onSchedulerBacklogged()
+    assert(manager.getAddTime !== NOT_SET)
+    assert(manager.onSchedulerBacklogged() === secondAddTime)
     assert(firstAddTime !== secondAddTime)
   }
 
@@ -285,58 +286,59 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     val manager = sc.executorAllocationManager.get
 
     assert(manager.getRemoveTimes.isEmpty)
-    val firstRemoveTime = manager.startRemoveTimer("1")
+    val firstRemoveTime = manager.onExecutorIdle("1")
     assert(manager.getRemoveTimes.size === 1)
     assert(manager.getRemoveTimes.contains("1"))
     Thread.sleep(100)
-    assert(manager.startRemoveTimer("1") === firstRemoveTime) // timer is already started
-    assert(manager.startRemoveTimer("1") === firstRemoveTime)
-    assert(manager.startRemoveTimer("2") !== firstRemoveTime) // different executor
-    assert(manager.startRemoveTimer("3") !== firstRemoveTime)
+    assert(manager.onExecutorIdle("1") === firstRemoveTime) // timer is already started
+    assert(manager.onExecutorIdle("1") === firstRemoveTime)
+    assert(manager.onExecutorIdle("2") !== firstRemoveTime) // different executor
+    assert(manager.onExecutorIdle("3") !== firstRemoveTime)
     assert(manager.getRemoveTimes.size === 3)
     assert(manager.getRemoveTimes.contains("2"))
     assert(manager.getRemoveTimes.contains("3"))
-    assert(manager.getRemoveTimes("1") < System.currentTimeMillis() + removeThresholdSeconds * 1000)
+    assert(manager.getRemoveTimes("1") <
+      System.currentTimeMillis() + removeThresholdSeconds * 1000)
 
     // Restart remove timer
-    manager.cancelRemoveTimer("1")
+    manager.onExecutorBusy("1")
     assert(manager.getRemoveTimes.size === 2)
-    val secondRemoveTime = manager.startRemoveTimer("1")
+    val secondRemoveTime = manager.onExecutorIdle("1")
     assert(manager.getRemoveTimes.size === 3)
-    assert(manager.startRemoveTimer("1") === secondRemoveTime)
+    assert(manager.onExecutorIdle("1") === secondRemoveTime)
     assert(firstRemoveTime !== secondRemoveTime)
-    assert(manager.getRemoveTimes("2") === manager.startRemoveTimer("2"))
-    assert(manager.getRemoveTimes("3") === manager.startRemoveTimer("3"))
+    assert(manager.getRemoveTimes("2") === manager.onExecutorIdle("2"))
+    assert(manager.getRemoveTimes("3") === manager.onExecutorIdle("3"))
   }
 
   test("listeners trigger add executors correctly") {
     val sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
-    assert(manager.getAddTime === NOT_STARTED)
+    assert(manager.getAddTime === NOT_SET)
 
     // Starting a stage should start the add timer
     val numTasks = 10
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, numTasks)))
-    assert(manager.getAddTime !== NOT_STARTED)
+    assert(manager.getAddTime !== NOT_SET)
 
     // Starting a subset of the tasks should not cancel the add timer
     val taskInfos = (0 to numTasks - 1).map { i => createTaskInfo(i, i, "executor-1") }
     taskInfos.tail.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, info)) }
-    assert(manager.getAddTime !== NOT_STARTED)
+    assert(manager.getAddTime !== NOT_SET)
 
     // Starting all remaining tasks should cancel the add timer
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, taskInfos.head))
-    assert(manager.getAddTime === NOT_STARTED)
+    assert(manager.getAddTime === NOT_SET)
 
     // Start two different stages
     // The add timer should be canceled only if all tasks in both stages start running
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, numTasks)))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, numTasks)))
-    assert(manager.getAddTime !== NOT_STARTED)
+    assert(manager.getAddTime !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, info)) }
-    assert(manager.getAddTime !== NOT_STARTED)
+    assert(manager.getAddTime !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, info)) }
-    assert(manager.getAddTime === NOT_STARTED)
+    assert(manager.getAddTime === NOT_SET)
   }
 
   test("listeners trigger remove executors correctly") {
@@ -345,7 +347,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(manager.getRemoveTimes.isEmpty)
 
     // Added executors should start the remove timers for each executor
-    (1 to 5).map("executor-" + _).foreach(manager.executorAdded)
+    (1 to 5).map("executor-" + _).foreach(manager.onExecutorAdded)
     assert(manager.getRemoveTimes.size === 5)
 
     // Starting a task cancel the remove timer for that executor
