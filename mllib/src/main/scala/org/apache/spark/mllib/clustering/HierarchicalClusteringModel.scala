@@ -32,9 +32,9 @@ import org.apache.spark.rdd.RDD
  */
 class HierarchicalClusteringModel private (
   val clusterTree: ClusterTree,
-  var trainTime: Int,
-  var predictTime: Int,
-  var isTrained: Boolean) extends Serializable {
+  private[mllib] var trainTime: Int,
+  private[mllib] var predictTime: Int,
+  private[mllib] var isTrained: Boolean) extends Serializable {
 
   def this(clusterTree: ClusterTree) = this(clusterTree, 0, 0, false)
 

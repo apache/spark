@@ -263,7 +263,7 @@ class PythonMLLibAPI extends Serializable {
     numRetries: Int,
     epsilon: Double,
     randomSeed: Int,
-    randomRange: Double): HierarchicalClusteringModel = {
+    randomRange: Double): HierarchicalClusteringModelWrapper = {
     val algo = new HierarchicalClustering()
         .setNumClusters(k)
         .setSubIterations(subIterations)
@@ -271,7 +271,26 @@ class PythonMLLibAPI extends Serializable {
         .setEpsilon(epsilon)
         .setRandomSeed(randomSeed)
         .setRandomRange(randomRange)
-    algo.run(data)
+    val model = algo.run(data)
+    new HierarchicalClusteringModelWrapper(model)
+  }
+
+  private[python] class HierarchicalClusteringModelWrapper(model: HierarchicalClusteringModel) {
+    def predict(vector: Vector): Int =  model.predict(vector)
+
+    def predict(data: JavaRDD[Vector]): JavaRDD[java.lang.Integer] = model.predict(data)
+
+    def getCenters(): java.util.List[java.lang.Object] = {
+      val ret = new java.util.LinkedList[java.lang.Object]()
+      ret.add(model.getCenters())
+      ret
+    }
+
+    def getHights(): java.util.List[java.lang.Object] = {
+      val ret = new java.util.LinkedList[java.lang.Object]()
+      ret.add(model.getClusters().map(_.getHeight()))
+      ret
+    }
   }
 
   /**
