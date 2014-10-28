@@ -43,6 +43,8 @@ object ScalaReflection {
    *       This ordering is important for UDT registration.
    */
   def convertToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
+    // Check UDT first since UDTs can override other types
+    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (o: Option[_], _) => o.map(convertToCatalyst(_, dataType)).orNull
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToCatalyst(_, arrayType.elementType))
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
@@ -54,18 +56,18 @@ object ScalaReflection {
           convertToCatalyst(elem, field.dataType)
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
-    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (other, _) => other
   }
 
   /** Converts Catalyst types used internally in rows to standard Scala types */
   def convertToScala(a: Any, dataType: DataType): Any = (a, dataType) match {
+    // Check UDT first since UDTs can override other types
+    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
     case (s: Seq[_], arrayType: ArrayType) => s.map(convertToScala(_, arrayType.elementType))
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (d: Decimal, _: DecimalType) => d.toBigDecimal
-    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
     case (other, _) => other
   }
 

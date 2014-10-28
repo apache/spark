@@ -290,6 +290,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
         builder.named(name)
     }.getOrElse {
       ctype match {
+        // Check UDT first since UDTs can override other types
+        case udt: UserDefinedType[_] => {
+          fromDataType(udt.sqlType, name, nullable, inArray)
+        }
         case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,
@@ -336,9 +340,6 @@ private[parquet] object ParquetTypesConverter extends Logging {
             name,
             parquetKeyType,
             parquetValueType)
-        }
-        case udt: UserDefinedType[_] => {
-          fromDataType(udt.sqlType, name, nullable, inArray)
         }
         case _ => sys.error(s"Unsupported datatype $ctype")
       }
