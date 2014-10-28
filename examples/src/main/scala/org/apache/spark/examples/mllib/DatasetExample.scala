@@ -17,6 +17,9 @@
 
 package org.apache.spark.examples.mllib
 
+import java.io.File
+
+import com.google.common.io.Files
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -96,15 +99,21 @@ object DatasetExample {
       (sum1, sum2) => sum1.merge(sum2))
     println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
 
-    schemaRDD.saveAsParquetFile("/tmp/dataset")
-    val newDataset = sqlContext.parquetFile("/tmp/dataset")
+    val tmpDir = Files.createTempDir()
+    tmpDir.deleteOnExit()
+    val outputDir = new File(tmpDir, "dataset").toString
+    println(s"Saving to $outputDir as Parquet file.")
+    schemaRDD.saveAsParquetFile(outputDir)
+
+    println(s"Loading Parquet file with UDT from $outputDir.")
+    val newDataset = sqlContext.parquetFile(outputDir)
 
     println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
     val newFeatures = newDataset.select('features).map { case Row(v: Vector) => v }
     val newFeaturesSummary = newFeatures.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
-    println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
+    println(s"Selected features column with average values:\n ${newFeaturesSummary.mean.toString}")
 
     sc.stop()
   }
