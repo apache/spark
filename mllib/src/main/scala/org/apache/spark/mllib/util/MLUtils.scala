@@ -196,8 +196,8 @@ object MLUtils {
 
   /**
    * Load labeled data from a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param sc SparkContext
    * @param dir Directory to the input data files.
@@ -219,8 +219,8 @@ object MLUtils {
 
   /**
    * Save labeled data to a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.

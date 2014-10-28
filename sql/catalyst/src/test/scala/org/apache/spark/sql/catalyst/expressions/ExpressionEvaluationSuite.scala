@@ -23,7 +23,7 @@ import scala.collection.immutable.HashSet
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
-import org.scalautils.TripleEqualsSupport.Spread
+import org.scalactic.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -191,6 +191,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like "a%", true)
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
+    checkEvaluation("a\nb" like "a_b", true)
+    checkEvaluation("ab" like "a%b", true)
+    checkEvaluation("a\nb" like "a%b", true)
   }
 
   test("LIKE Non-literal Regular Expression") {
@@ -207,6 +210,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a_b")))
+    checkEvaluation("ab" like regEx, true, new GenericRow(Array[Any]("a%b")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a%b")))
 
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
@@ -673,5 +679,37 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
 
     checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+  }
+
+  test("Bitwise operations") {
+    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.int.at(3)
+
+    checkEvaluation(BitwiseAnd(c1, c4), null, row)
+    checkEvaluation(BitwiseAnd(c1, c2), 0, row)
+    checkEvaluation(BitwiseAnd(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseAnd(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseOr(c1, c4), null, row)
+    checkEvaluation(BitwiseOr(c1, c2), 3, row)
+    checkEvaluation(BitwiseOr(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseOr(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseXor(c1, c4), null, row)
+    checkEvaluation(BitwiseXor(c1, c2), 3, row)
+    checkEvaluation(BitwiseXor(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseXor(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseNot(c4), null, row)
+    checkEvaluation(BitwiseNot(c1), -2, row)
+    checkEvaluation(BitwiseNot(Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 & c2, 0, row)
+    checkEvaluation(c1 | c2, 3, row)
+    checkEvaluation(c1 ^ c2, 3, row)
+    checkEvaluation(~c1, -2, row)
   }
 }

@@ -19,13 +19,13 @@ package org.apache.spark.network.netty.client
 
 import java.util.concurrent.TimeoutException
 
+import com.google.common.base.Charsets.UTF_8
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.{ChannelFutureListener, ChannelFuture, ChannelInitializer, ChannelOption}
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.string.StringEncoder
-import io.netty.util.CharsetUtil
 
 import org.apache.spark.Logging
 
@@ -61,7 +61,7 @@ class BlockFetchingClient(factory: BlockFetchingClientFactory, hostname: String,
     b.handler(new ChannelInitializer[SocketChannel] {
       override def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline
-          .addLast("encoder", new StringEncoder(CharsetUtil.UTF_8))
+          .addLast("encoder", new StringEncoder(UTF_8))
           // maxFrameLength = 2G, lengthFieldOffset = 0, lengthFieldLength = 4
           .addLast("framedLengthDecoder", new LengthFieldBasedFrameDecoder(Int.MaxValue, 0, 4))
           .addLast("handler", handler)

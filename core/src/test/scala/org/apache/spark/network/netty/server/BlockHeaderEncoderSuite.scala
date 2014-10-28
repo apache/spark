@@ -17,11 +17,11 @@
 
 package org.apache.spark.network.netty.server
 
+import com.google.common.base.Charsets.UTF_8
 import io.netty.buffer.ByteBuf
 import io.netty.channel.embedded.EmbeddedChannel
 
 import org.scalatest.FunSuite
-
 
 class BlockHeaderEncoderSuite extends FunSuite {
 
@@ -35,7 +35,7 @@ class BlockHeaderEncoderSuite extends FunSuite {
 
     val blockIdBytes = new Array[Byte](blockId.length)
     out.readBytes(blockIdBytes)
-    assert(new String(blockIdBytes) === blockId)
+    assert(new String(blockIdBytes, UTF_8) === blockId)
     assert(out.readableBytes() === 0)
 
     channel.close()
@@ -52,11 +52,11 @@ class BlockHeaderEncoderSuite extends FunSuite {
 
     val blockIdBytes = new Array[Byte](blockId.length)
     out.readBytes(blockIdBytes)
-    assert(new String(blockIdBytes) === blockId)
+    assert(new String(blockIdBytes, UTF_8) === blockId)
 
     val errorMsgBytes = new Array[Byte](errorMsg.length)
     out.readBytes(errorMsgBytes)
-    assert(new String(errorMsgBytes) === errorMsg)
+    assert(new String(errorMsgBytes, UTF_8) === errorMsg)
     assert(out.readableBytes() === 0)
 
     channel.close()
