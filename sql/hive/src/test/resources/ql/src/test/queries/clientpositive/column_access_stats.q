@@ -4,7 +4,7 @@ SET hive.stats.collect.scancols=true;
 -- This test is used for testing the ColumnAccessAnalyzer
 
 CREATE TABLE T1(key STRING, val STRING) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1;
 
 CREATE TABLE T2(key STRING, val STRING) STORED AS TEXTFILE;
 CREATE TABLE T3(key STRING, val STRING) STORED AS TEXTFILE;

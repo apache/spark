@@ -56,6 +56,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     (maxMemory * unrollFraction).toLong
   }
 
+  // Initial memory to request before unrolling any block
+  private val unrollMemoryThreshold: Long =
+    conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
+
+  if (maxMemory < unrollMemoryThreshold) {
+    logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
+      s"threshold ${Utils.bytesToString(unrollMemoryThreshold)} needed to store a block in " +
+      s"memory. Please configure Spark with more memory.")
+  }
+
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
 
   /** Free memory not occupied by existing blocks. Note that this does not include unroll memory. */
@@ -213,7 +223,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     // Whether there is still enough memory for us to continue unrolling this block
     var keepUnrolling = true
     // Initial per-thread memory to request for unrolling blocks (bytes). Exposed for testing.
-    val initialMemoryThreshold = conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
+    val initialMemoryThreshold = unrollMemoryThreshold
     // How often to check whether we need to request more memory
     val memoryCheckPeriod = 16
     // Memory currently reserved by this thread for this particular unrolling operation
@@ -227,6 +237,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
     // Request enough memory to begin unrolling
     keepUnrolling = reserveUnrollMemoryForThisThread(initialMemoryThreshold)
+
+    if (!keepUnrolling) {
+      logWarning(s"Failed to reserve initial memory threshold of " +
+        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+    }
 
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     try {
