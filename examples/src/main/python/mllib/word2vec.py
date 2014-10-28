@@ -22,6 +22,7 @@
 
 
 import sys
+
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
 

@@ -169,6 +169,8 @@ for((synonym, cosineSimilarity) <- synonyms) {
 # grep -o -E '\w+(\W+\w+){0,15}' text8 > text8_lines
 # This was done so that the example can be run in local mode
 
+import sys
+
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
 
