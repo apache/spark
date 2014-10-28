@@ -15,22 +15,33 @@
 # limitations under the License.
 #
 
-# example uses text8 file from http://mattmahoney.net/dc/text8.zip
-# the file was unziped and split into multiple lines using
-# grep -o '[^ ]\+' text8 > text8_lines
-# this was done so that the example can be run in local mode
+# This example uses text8 file from http://mattmahoney.net/dc/text8.zip
+# The file was unziped and split into multiple lines using
+# grep -o -E '\w+(\W+\w+){0,15}' text8 > text8_lines
+# This was done so that the example can be run in local mode
 
+
+import sys
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
 
-sc = SparkContext(appName='Word2Vec')
-inp = sc.textFile("text8_lines").map(lambda row: [row])
+USAGE = ("bin/spark-submit --driver-memory 4g "
+         "examples/src/main/python/mllib/word2vec.py text8_lines")
 
-word2vec = Word2Vec()
-model = word2vec.fit(inp)
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print USAGE
+        return
+    file_path = sys.argv[1]
+    sc = SparkContext(appName='Word2Vec')
+    inp = sc.textFile("text8_lines").map(lambda row: [row])
 
-synonyms = model.findSynonyms('china', 40)
+    word2vec = Word2Vec()
+    model = word2vec.fit(inp)
 
-for word, cosine_distance in synonyms:
-    print "{}: {}".format(word, cosine_distance)
-sc.stop()
+    synonyms = model.findSynonyms('china', 40)
+
+    for word, cosine_distance in synonyms:
+        print "{}: {}".format(word, cosine_distance)
+    sc.stop()
+
