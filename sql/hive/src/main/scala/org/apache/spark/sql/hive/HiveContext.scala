@@ -306,7 +306,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
       proc match {
         case driver: Driver =>
-          driver.init()
           val results = HiveShim.createDriverResultsArray
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
