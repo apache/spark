@@ -55,6 +55,7 @@ private[spark] trait ClientBase extends Logging {
   protected val amMemoryOverhead = args.amMemoryOverhead // MB
   protected val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
+  private val isLaunchingDriver = args.userClass != null
 
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
@@ -267,7 +268,6 @@ private[spark] trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
@@ -344,7 +344,6 @@ private[spark] trait ClientBase extends Logging {
     }
 
     // Include driver-specific java options if we are launching a driver
-    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
@@ -357,7 +356,7 @@ private[spark] trait ClientBase extends Logging {
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val userClass =
-      if (args.userClass != null) {
+      if (isLaunchingDriver) {
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
       } else {
         Nil
