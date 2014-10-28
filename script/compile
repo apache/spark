@@ -20,7 +20,7 @@ else
 fi
 export JAVA_HOME=$JAVA_HOME
 
-./make-distribution.sh --skip-java-test -Phive -Dhadoop.version=$(cat SHOPIFY_HADOOP_VERSION)
+./make-distribution.sh --skip-java-test -Phive -Phive-thriftserver -Dhadoop.version=$(cat SHOPIFY_HADOOP_VERSION)
 
 if [ "$?" != "0" ] || [ -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
   echo "Failed to make spark distro using sbt."
