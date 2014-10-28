@@ -33,7 +33,7 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -1062,7 +1062,7 @@ private[spark] object Utils extends Logging {
 
     try {
       stream.skip(effectiveStart)
-      stream.read(buff)
+      ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()
     }
