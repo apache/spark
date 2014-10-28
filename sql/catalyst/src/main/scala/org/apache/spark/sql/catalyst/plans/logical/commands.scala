@@ -35,31 +35,36 @@ abstract class Command extends LeafNode {
  */
 case class NativeCommand(cmd: String) extends Command {
   override def output =
-    Seq(BoundReference(0, AttributeReference("result", StringType, nullable = false)()))
+    Seq(AttributeReference("result", StringType, nullable = false)())
 }
 
 /**
- * Commands of the form "SET (key) (= value)".
+ * Commands of the form "SET [key [= value] ]".
  */
-case class SetCommand(key: Option[String], value: Option[String]) extends Command {
+case class SetCommand(kv: Option[(String, Option[String])]) extends Command {
   override def output = Seq(
-    BoundReference(0, AttributeReference("key", StringType, nullable = false)()),
-    BoundReference(1, AttributeReference("value", StringType, nullable = false)()))
+    AttributeReference("", StringType, nullable = false)())
 }
 
 /**
  * Returned by a parser when the users only wants to see what query plan would be executed, without
  * actually performing the execution.
  */
-case class ExplainCommand(plan: LogicalPlan) extends Command {
+case class ExplainCommand(plan: LogicalPlan, extended: Boolean = false) extends Command {
   override def output =
-    Seq(BoundReference(0, AttributeReference("plan", StringType, nullable = false)()))
+    Seq(AttributeReference("plan", StringType, nullable = false)())
 }
 
 /**
- * Returned for the "CACHE TABLE tableName" and "UNCACHE TABLE tableName" command.
+ * Returned for the "CACHE TABLE tableName [AS SELECT ...]" command.
  */
-case class CacheCommand(tableName: String, doCache: Boolean) extends Command
+case class CacheTableCommand(tableName: String, plan: Option[LogicalPlan], isLazy: Boolean)
+  extends Command
+
+/**
+ * Returned for the "UNCACHE TABLE tableName" command.
+ */
+case class UncacheTableCommand(tableName: String) extends Command
 
 /**
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
@@ -72,7 +77,18 @@ case class DescribeCommand(
     isExtended: Boolean) extends Command {
   override def output = Seq(
     // Column names are based on Hive.
-    BoundReference(0, AttributeReference("col_name", StringType, nullable = false)()),
-    BoundReference(1, AttributeReference("data_type", StringType, nullable = false)()),
-    BoundReference(2, AttributeReference("comment", StringType, nullable = false)()))
+    AttributeReference("col_name", StringType, nullable = false)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("comment", StringType, nullable = false)())
 }
+
+/**
+ * Returned for the "! shellCommand" command
+ */
+case class ShellCommand(cmd: String) extends Command
+
+
+/**
+ * Returned for the "SOURCE file" command
+ */
+case class SourceCommand(filePath: String) extends Command

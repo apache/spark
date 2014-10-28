@@ -18,9 +18,9 @@
 package org.apache.spark.streaming
 
 import java.nio.ByteBuffer
+import java.util.concurrent.Semaphore
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.postfixOps
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -37,6 +37,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
 
     val receiver = new FakeReceiver
     val executor = new FakeReceiverSupervisor(receiver)
+    val executorStarted = new Semaphore(0)
 
     assert(executor.isAllEmpty)
 
@@ -44,6 +45,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     val executingThread = new Thread() {
       override def run() {
         executor.start()
+        executorStarted.release(1)
         executor.awaitTermination()
       }
     }
@@ -57,6 +59,9 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
         executingThread.join()
       }
     }
+
+    // Ensure executor is started
+    executorStarted.acquire()
 
     // Verify that receiver was started
     assert(receiver.onStartCalled)
@@ -145,14 +150,52 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     assert(recordedData.toSet === generatedData.toSet)
   }
 
+  test("block generator throttling") {
+    val blockGeneratorListener = new FakeBlockGeneratorListener
+    val blockInterval = 50
+    val maxRate = 200
+    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
+      set("spark.streaming.receiver.maxRate", maxRate.toString)
+    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
+    val expectedBlocks = 20
+    val waitTime = expectedBlocks * blockInterval
+    val expectedMessages = maxRate * waitTime / 1000
+    val expectedMessagesPerBlock = maxRate * blockInterval / 1000
+    val generatedData = new ArrayBuffer[Int]
+
+    // Generate blocks
+    val startTime = System.currentTimeMillis()
+    blockGenerator.start()
+    var count = 0
+    while(System.currentTimeMillis - startTime < waitTime) {
+      blockGenerator += count
+      generatedData += count
+      count += 1
+      Thread.sleep(1)
+    }
+    blockGenerator.stop()
+
+    val recordedData = blockGeneratorListener.arrayBuffers
+    assert(blockGeneratorListener.arrayBuffers.size > 0)
+    assert(recordedData.flatten.toSet === generatedData.toSet)
+    // recordedData size should be close to the expected rate
+    assert(recordedData.flatten.size >= expectedMessages * 0.9 &&
+      recordedData.flatten.size <= expectedMessages * 1.1 )
+    // the first and last block may be incomplete, so we slice them out
+    recordedData.slice(1, recordedData.size - 1).foreach { block =>
+      assert(block.size >= expectedMessagesPerBlock * 0.8 &&
+        block.size <= expectedMessagesPerBlock * 1.2 )
+    }
+  }
+
   /**
    * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
    */
   class FakeReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
-    var otherThread: Thread = null
-    var receiving = false
-    var onStartCalled = false
-    var onStopCalled = false
+    @volatile var otherThread: Thread = null
+    @volatile var receiving = false
+    @volatile var onStartCalled = false
+    @volatile var onStopCalled = false
 
     def onStart() {
       otherThread = new Thread() {

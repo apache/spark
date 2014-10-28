@@ -23,49 +23,44 @@
 # The distribution contains fat (assembly) jars that include the Scala library,
 # so it is completely self contained.
 # It does not contain source or *.class files.
-#
-# Optional Arguments
-#      --tgz: Additionally creates spark-$VERSION-bin.tar.gz
-#      --hadoop VERSION: Builds against specified version of Hadoop.
-#      --with-yarn: Enables support for Hadoop YARN.
-#      --with-hive: Enable support for reading Hive tables.
-#      --name: A moniker for the release target. Defaults to the Hadoop verison.
-#
-# Recommended deploy/testing procedure (standalone mode):
-# 1) Rsync / deploy the dist/ dir to one host
-# 2) cd to deploy dir; ./sbin/start-master.sh
-# 3) Verify master is up by visiting web page, ie http://master-ip:8080.  Note the spark:// URL.
-# 4) ./sbin/start-slave.sh 1 <<spark:// URL>>
-# 5) ./bin/spark-shell --master spark://my-master-ip:7077
-#
 
 set -o pipefail
 set -e
 
 # Figure out where the Spark framework is installed
-FWDIR="$(cd `dirname $0`; pwd)"
+FWDIR="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$FWDIR/dist"
 
-# Initialize defaults
-SPARK_HADOOP_VERSION=1.0.4
-SPARK_YARN=false
-SPARK_HIVE=false
 SPARK_TACHYON=false
 MAKE_TGZ=false
 NAME=none
+
+function exit_with_usage {
+  echo "make-distribution.sh - tool for making binary distributions of Spark"
+  echo ""
+  echo "usage:"
+  echo "./make-distribution.sh [--name] [--tgz] [--with-tachyon] <maven build options>"
+  echo "See Spark's \"Building Spark\" doc for correct Maven options."
+  echo ""
+  exit 1
+}
 
 # Parse arguments
 while (( "$#" )); do
   case $1 in
     --hadoop)
-      SPARK_HADOOP_VERSION="$2"
-      shift
+      echo "Error: '--hadoop' is no longer supported:"
+      echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
+      echo "Error: Related profiles include hadoop-0.23, hdaoop-2.2, hadoop-2.3 and hadoop-2.4."
+      exit_with_usage
       ;;
     --with-yarn)
-      SPARK_YARN=true
+      echo "Error: '--with-yarn' is no longer supported, use Maven option -Pyarn"
+      exit_with_usage
       ;;
     --with-hive)
-      SPARK_HIVE=true
+      echo "Error: '--with-hive' is no longer supported, use Maven option -Phive"
+      exit_with_usage
       ;;
     --skip-java-test)
       SKIP_JAVA_TEST=true
@@ -79,6 +74,12 @@ while (( "$#" )); do
     --name)
       NAME="$2"
       shift
+      ;;
+    --help)
+      exit_with_usage
+      ;;
+    *)
+      break
       ;;
   esac
   shift
@@ -113,7 +114,17 @@ if ! which mvn &>/dev/null; then
     echo -e "Download Maven from https://maven.apache.org/"
     exit -1;
 fi
+
 VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | tail -n 1)
+SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | fgrep --count "<id>hive</id>";\
+    # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
+    # because we use "set -o pipefail"
+    echo -n)
 
 JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
@@ -128,7 +139,7 @@ if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Okay, exiting."
     exit 1
-  fi 
+  fi
 fi
 
 if [ "$NAME" == "none" ]; then
@@ -143,14 +154,6 @@ else
   echo "Making distribution for Spark $VERSION in $DISTDIR..."
 fi
 
-echo "Hadoop version set to $SPARK_HADOOP_VERSION"
-echo "Release name set to $NAME"
-if [ "$SPARK_YARN" == "true" ]; then
-  echo "YARN enabled"
-else
-  echo "YARN disabled"
-fi
-
 if [ "$SPARK_TACHYON" == "true" ]; then
   echo "Tachyon Enabled"
 else
@@ -158,37 +161,16 @@ else
 fi
 
 # Build uber fat JAR
-cd $FWDIR
+cd "$FWDIR"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="mvn clean package"
-
-# Use special profiles for hadoop versions 0.23.x, 2.2.x, 2.3.x, 2.4.x
-if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.23\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-0.23"; fi
-if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.2\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.2"; fi
-if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.3\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.3"; fi
-if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.4\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.4"; fi
-if [[ "$SPARK_HIVE" == "true" ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phive"; fi
-if [[ "$SPARK_YARN" == "true" ]]; then
-  # For hadoop versions 0.23.x to 2.1.x, use the yarn-alpha profile
-  if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.2[3-9]\. ]] ||
-     [[ "$SPARK_HADOOP_VERSION" =~ ^0\.[3-9][0-9]\. ]] ||
-     [[ "$SPARK_HADOOP_VERSION" =~ ^1\.[0-9]\. ]] ||
-     [[ "$SPARK_HADOOP_VERSION" =~ ^2\.[0-1]\. ]]; then
-    BUILD_COMMAND="$BUILD_COMMAND -Pyarn-alpha"
-  # For hadoop versions 2.2+, use the yarn profile
-  elif [[ "$SPARK_HADOOP_VERSION" =~ ^2.[2-9]. ]]; then
-    BUILD_COMMAND="$BUILD_COMMAND -Pyarn"
-  fi
-  BUILD_COMMAND="$BUILD_COMMAND -Dyarn.version=$SPARK_HADOOP_VERSION"
-fi
-BUILD_COMMAND="$BUILD_COMMAND -Dhadoop.version=$SPARK_HADOOP_VERSION"
-BUILD_COMMAND="$BUILD_COMMAND -DskipTests"
+BUILD_COMMAND="mvn clean package -DskipTests $@"
 
 # Actually build the jar
 echo -e "\nBuilding with..."
 echo -e "\$ $BUILD_COMMAND\n"
+
 ${BUILD_COMMAND}
 
 # Make directories
@@ -197,29 +179,28 @@ mkdir -p "$DISTDIR/lib"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 
 # Copy jars
-cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
-cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
+cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
+cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
-cp -r $FWDIR/examples/src/main "$DISTDIR/examples/src/" 
+cp -r "$FWDIR"/examples/src/main "$DISTDIR/examples/src/"
 
-if [ "$SPARK_HIVE" == "true" ]; then
-  cp $FWDIR/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
+if [ "$SPARK_HIVE" == "1" ]; then
+  cp "$FWDIR"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
 fi
 
 # Copy license and ASF files
 cp "$FWDIR/LICENSE" "$DISTDIR"
 cp "$FWDIR/NOTICE" "$DISTDIR"
 
-if [ -e $FWDIR/CHANGES.txt ]; then
+if [ -e "$FWDIR"/CHANGES.txt ]; then
   cp "$FWDIR/CHANGES.txt" "$DISTDIR"
 fi
 
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
-cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
 cp "$FWDIR/README.md" "$DISTDIR"
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
@@ -228,7 +209,7 @@ cp -r "$FWDIR/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
-  TACHYON_VERSION="0.4.1"
+  TACHYON_VERSION="0.5.0"
   TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
 
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
@@ -238,10 +219,10 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   wget "$TACHYON_URL"
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
-  cp "tachyon-${TACHYON_VERSION}/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
+  cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
-  cp -r "tachyon-${TACHYON_VERSION}"/src/main/java/tachyon/web/resources "$DISTDIR/tachyon/src/main/java/tachyon/web"
+  cp -r "tachyon-${TACHYON_VERSION}"/core/src/main/java/tachyon/web "$DISTDIR/tachyon/src/main/java/tachyon/web"
 
   if [[ `uname -a` == Darwin* ]]; then
     # need to run sed differently on osx

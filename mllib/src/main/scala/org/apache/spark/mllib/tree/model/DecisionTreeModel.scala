@@ -24,7 +24,8 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
- * Model to store the decision tree parameters
+ * Decision tree model for classification or regression.
+ * This model stores the decision tree structure and parameters.
  * @param topNode root node
  * @param algo algorithm type -- classification or regression
  */
@@ -38,16 +39,52 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @return Double prediction from the trained model
    */
   def predict(features: Vector): Double = {
-    topNode.predictIfLeaf(features)
+    topNode.predict(features)
   }
 
   /**
    * Predict values for the given data set using the model trained.
    *
    * @param features RDD representing data points to be predicted
-   * @return RDD[Int] where each entry contains the corresponding prediction
+   * @return RDD of predictions for each of the given data points
    */
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
+
+  /**
+   * Get number of nodes in tree, including leaf nodes.
+   */
+  def numNodes: Int = {
+    1 + topNode.numDescendants
+  }
+
+  /**
+   * Get depth of tree.
+   * E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
+   */
+  def depth: Int = {
+    topNode.subtreeDepth
+  }
+
+  /**
+   * Print a summary of the model.
+   */
+  override def toString: String = algo match {
+    case Classification =>
+      s"DecisionTreeModel classifier of depth $depth with $numNodes nodes"
+    case Regression =>
+      s"DecisionTreeModel regressor of depth $depth with $numNodes nodes"
+    case _ => throw new IllegalArgumentException(
+      s"DecisionTreeModel given unknown algo parameter: $algo.")
+  }
+
+  /**
+   * Print the full model to a string.
+   */
+  def toDebugString: String = {
+    val header = toString + "\n"
+    header + topNode.subtreeToString(2)
+  }
+
 }

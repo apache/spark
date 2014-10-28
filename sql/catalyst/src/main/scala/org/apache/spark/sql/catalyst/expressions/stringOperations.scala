@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
-import org.apache.spark.sql.catalyst.types.DataType
-import org.apache.spark.sql.catalyst.types.StringType
-import org.apache.spark.sql.catalyst.types.BooleanType
+import scala.collection.IndexedSeqOptimized
 
+
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.types.{BinaryType, BooleanType, DataType, StringType}
 
 trait StringRegexExpression {
   self: BinaryExpression =>
@@ -32,7 +33,7 @@ trait StringRegexExpression {
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
-  def nullable: Boolean = true
+  def nullable: Boolean = left.nullable || right.nullable
   def dataType: DataType = BooleanType
 
   // try cache the pattern for Literal
@@ -101,30 +102,26 @@ case class Like(left: Expression, right: Expression)
 
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
-  override def escape(v: String) = {
-    val sb = new StringBuilder()
-    var i = 0;
-    while (i < v.length) {
-      // Make a special case for "\\_" and "\\%"
-      val n = v.charAt(i);
-      if (n == '\\' && i + 1 < v.length && (v.charAt(i + 1) == '_' || v.charAt(i + 1) == '%')) {
-        sb.append(v.charAt(i + 1))
-        i += 1
-      } else {
-        if (n == '_') {
-          sb.append(".");
-        } else if (n == '%') {
-          sb.append(".*");
-        } else {
-          sb.append(Pattern.quote(Character.toString(n)));
-        }
-      }
-
-      i += 1
+  override def escape(v: String) =
+    if (!v.isEmpty) {
+      "(?s)" + (' ' +: v.init).zip(v).flatMap {
+        case (prev, '\\') => ""
+        case ('\\', c) =>
+          c match {
+            case '_' => "_"
+            case '%' => "%"
+            case _ => Pattern.quote("\\" + c)
+          }
+        case (prev, c) =>
+          c match {
+            case '_' => "."
+            case '%' => ".*"
+            case _ => Pattern.quote(Character.toString(c))
+          }
+      }.mkString
+    } else {
+      v
     }
-
-    sb.toString()
-  }
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 }
@@ -157,19 +154,13 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def toString() = s"Lower($child)"
 }
 
-/** A base class for functions that compare two strings, returning a boolean. */
-abstract class StringComparison extends Expression {
-  self: Product =>
+/** A base trait for functions that compare two strings, returning a boolean. */
+trait StringComparison {
+  self: BinaryExpression =>
 
   type EvaluatedType = Any
 
-  def left: Expression
-  def right: Expression
-
-  override def references = children.flatMap(_.references).toSet
-  override def children = left :: right :: Nil
-
-  override def nullable: Boolean = true
+  def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = BooleanType
 
   def compare(l: String, r: String): Boolean
@@ -184,26 +175,100 @@ abstract class StringComparison extends Expression {
     }
   }
 
+  def symbol: String = nodeName
+
   override def toString() = s"$nodeName($left, $right)"
 }
 
 /**
  * A function that returns true if the string `left` contains the string `right`.
  */
-case class Contains(left: Expression, right: Expression) extends StringComparison {
+case class Contains(left: Expression, right: Expression)
+    extends BinaryExpression with StringComparison {
   override def compare(l: String, r: String) = l.contains(r)
 }
 
 /**
  * A function that returns true if the string `left` starts with the string `right`.
  */
-case class StartsWith(left: Expression, right: Expression) extends StringComparison {
+case class StartsWith(left: Expression, right: Expression)
+    extends BinaryExpression with StringComparison {
   def compare(l: String, r: String) = l.startsWith(r)
 }
 
 /**
  * A function that returns true if the string `left` ends with the string `right`.
  */
-case class EndsWith(left: Expression, right: Expression) extends StringComparison {
+case class EndsWith(left: Expression, right: Expression)
+    extends BinaryExpression with StringComparison {
   def compare(l: String, r: String) = l.endsWith(r)
+}
+
+/**
+ * A function that takes a substring of its first argument starting at a given position.
+ * Defined for String and Binary types.
+ */
+case class Substring(str: Expression, pos: Expression, len: Expression) extends Expression {
+  
+  type EvaluatedType = Any
+
+  override def foldable = str.foldable && pos.foldable && len.foldable
+
+  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+  def dataType: DataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
+    }
+    if (str.dataType == BinaryType) str.dataType else StringType
+  }
+
+  override def children = str :: pos :: len :: Nil
+
+  @inline
+  def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)
+      (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
+    val len = str.length
+    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
+    // negative indices for start positions. If a start index i is greater than 0, it 
+    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
+    // to the -ith element before the end of the sequence. If a start index i is 0, it
+    // refers to the first element.
+
+    val start = startPos match {
+      case pos if pos > 0 => pos - 1
+      case neg if neg < 0 => len + neg
+      case _ => 0
+    }
+
+    val end = sliceLen match {
+      case max if max == Integer.MAX_VALUE => max
+      case x => start + x
+    }
+
+    str.slice(start, end)    
+  }
+
+  override def eval(input: Row): Any = {
+    val string = str.eval(input)
+
+    val po = pos.eval(input)
+    val ln = len.eval(input)
+
+    if ((string == null) || (po == null) || (ln == null)) {
+      null
+    } else {
+      val start = po.asInstanceOf[Int]
+      val length = ln.asInstanceOf[Int] 
+
+      string match {
+        case ba: Array[Byte] => slice(ba, start, length)
+        case other => slice(other.toString, start, length)
+      }
+    }
+  }
+
+  override def toString = len match {
+    case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
+    case _ => s"SUBSTR($str, $pos, $len)"
+  }
 }

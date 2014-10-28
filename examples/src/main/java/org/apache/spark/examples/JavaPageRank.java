@@ -96,7 +96,7 @@ public final class JavaPageRank {
         .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {
           @Override
           public Iterable<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
-	    int urlCount = Iterables.size(s._1);
+            int urlCount = Iterables.size(s._1);
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
             for (String n : s._1) {
               results.add(new Tuple2<String, Double>(n, s._2() / urlCount));

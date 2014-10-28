@@ -22,14 +22,14 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
-
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -45,7 +45,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
  */
 private[sql] case class ParquetRelation(
     path: String,
-    @transient conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
+    @transient conf: Option[Configuration],
+    @transient sqlContext: SQLContext,
+    partitioningAttributes: Seq[Attribute] = Nil)
+  extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
 
@@ -57,9 +60,14 @@ private[sql] case class ParquetRelation(
       .getSchema
 
   /** Attributes */
-  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path), conf)
+  override val output =
+    partitioningAttributes ++
+    ParquetTypesConverter.readSchemaFromFile(
+      new Path(path.split(",").head),
+      conf,
+      sqlContext.isParquetBinaryAsString)
 
-  override def newInstance = ParquetRelation(path).asInstanceOf[this.type]
+  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
@@ -68,6 +76,9 @@ private[sql] case class ParquetRelation(
       p.path == path && p.output == output
     case _ => false
   }
+
+  // TODO: Use data from the footers.
+  override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
 }
 
 private[sql] object ParquetRelation {
@@ -88,8 +99,13 @@ private[sql] object ParquetRelation {
   // The compression type
   type CompressionType = parquet.hadoop.metadata.CompressionCodecName
 
-  // The default compression
-  val defaultCompression = CompressionCodecName.GZIP
+  // The parquet compression short names
+  val shortParquetCompressionCodecNames = Map(
+    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
+    "SNAPPY"       -> CompressionCodecName.SNAPPY,
+    "GZIP"         -> CompressionCodecName.GZIP,
+    "LZO"          -> CompressionCodecName.LZO)
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
@@ -104,13 +120,14 @@ private[sql] object ParquetRelation {
    */
   def create(pathString: String,
              child: LogicalPlan,
-             conf: Configuration): ParquetRelation = {
+             conf: Configuration,
+             sqlContext: SQLContext): ParquetRelation = {
     if (!child.resolved) {
       throw new UnresolvedException[LogicalPlan](
         child,
         "Attempt to create Parquet table from unresolved child (when schema is not available)")
     }
-    createEmpty(pathString, child.output, false, conf)
+    createEmpty(pathString, child.output, false, conf, sqlContext)
   }
 
   /**
@@ -125,14 +142,14 @@ private[sql] object ParquetRelation {
   def createEmpty(pathString: String,
                   attributes: Seq[Attribute],
                   allowExisting: Boolean,
-                  conf: Configuration): ParquetRelation = {
+                  conf: Configuration,
+                  sqlContext: SQLContext): ParquetRelation = {
     val path = checkPath(pathString, allowExisting, conf)
-    if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
-      conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
-    }
+    conf.set(ParquetOutputFormat.COMPRESSION, shortParquetCompressionCodecNames.getOrElse(
+      sqlContext.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED).name())
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
-    new ParquetRelation(path.toString, Some(conf)) {
+    new ParquetRelation(path.toString, Some(conf), sqlContext) {
       override val output = attributes
     }
   }

@@ -21,7 +21,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -43,15 +42,13 @@ private case class ExecutorSummaryInfo(
     maxMemory: Long)
 
 private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
-    val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
-    val memUsed = storageStatusList.map(_.memUsed).fold(0L)(_ + _)
-    val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_ + _)
+    val maxMem = storageStatusList.map(_.maxMem).sum
+    val memUsed = storageStatusList.map(_.memUsed).sum
+    val diskUsed = storageStatusList.map(_.diskUsed).sum
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
 
@@ -80,7 +77,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
           </th>
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow(_))}
+          {execInfoSorted.map(execRow)}
         </tbody>
       </table>
 
@@ -91,7 +88,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
             <li><strong>Memory:</strong>
               {Utils.bytesToString(memUsed)} Used
               ({Utils.bytesToString(maxMem)} Total) </li>
-            <li><strong>Disk:</strong> {Utils.bytesToString(diskSpaceUsed)} Used </li>
+            <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
           </ul>
         </div>
       </div>
@@ -101,8 +98,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, basePath, appName, "Executors (" + execInfo.size + ")",
-      parent.headerTabs, parent)
+    UIUtils.headerSparkPage("Executors (" + execInfo.size + ")", content, parent)
   }
 
   /** Render an HTML row representing an executor */
@@ -145,7 +141,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
-    val rddBlocks = status.blocks.size
+    val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed

@@ -27,6 +27,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -52,13 +53,13 @@ class KMeans private (
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
-  def setK(k: Int): KMeans = {
+  def setK(k: Int): this.type = {
     this.k = k
     this
   }
 
   /** Set maximum number of iterations to run. Default: 20. */
-  def setMaxIterations(maxIterations: Int): KMeans = {
+  def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
   }
@@ -68,7 +69,7 @@ class KMeans private (
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    */
-  def setInitializationMode(initializationMode: String): KMeans = {
+  def setInitializationMode(initializationMode: String): this.type = {
     if (initializationMode != KMeans.RANDOM && initializationMode != KMeans.K_MEANS_PARALLEL) {
       throw new IllegalArgumentException("Invalid initialization mode: " + initializationMode)
     }
@@ -83,7 +84,7 @@ class KMeans private (
    * return the best clustering found over any run. Default: 1.
    */
   @Experimental
-  def setRuns(runs: Int): KMeans = {
+  def setRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
     }
@@ -95,7 +96,7 @@ class KMeans private (
    * Set the number of steps for the k-means|| initialization mode. This is an advanced
    * setting -- the default of 5 is almost always enough. Default: 5.
    */
-  def setInitializationSteps(initializationSteps: Int): KMeans = {
+  def setInitializationSteps(initializationSteps: Int): this.type = {
     if (initializationSteps <= 0) {
       throw new IllegalArgumentException("Number of initialization steps must be positive")
     }
@@ -107,16 +108,31 @@ class KMeans private (
    * Set the distance threshold within which we've consider centers to have converged.
    * If all centers move less than this Euclidean distance, we stop iterating one run.
    */
-  def setEpsilon(epsilon: Double): KMeans = {
+  def setEpsilon(epsilon: Double): this.type = {
     this.epsilon = epsilon
     this
   }
+
+  /** Whether a warning should be logged if the input RDD is uncached. */
+  private var warnOnUncachedInput = true
+
+  /** Disable warnings about uncached input. */
+  private[spark] def disableUncachedWarning(): this.type = {
+    warnOnUncachedInput = false
+    this
+  }  
 
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Vector]): KMeansModel = {
+
+    if (warnOnUncachedInput && data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
     // Compute squared norms and cache them.
     val norms = data.map(v => breezeNorm(v.toBreeze, 2.0))
     norms.persist()
@@ -125,6 +141,12 @@ class KMeans private (
     }
     val model = runBreeze(breezeData)
     norms.unpersist()
+
+    // Warn at the end of the run as well, for increased visibility.
+    if (warnOnUncachedInput && data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
     model
   }
 
@@ -165,18 +187,21 @@ class KMeans private (
       val activeCenters = activeRuns.map(r => centers(r)).toArray
       val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
 
+      val bcActiveCenters = sc.broadcast(activeCenters)
+
       // Find the sum and count of points mapping to each center
       val totalContribs = data.mapPartitions { points =>
-        val runs = activeCenters.length
-        val k = activeCenters(0).length
-        val dims = activeCenters(0)(0).vector.length
+        val thisActiveCenters = bcActiveCenters.value
+        val runs = thisActiveCenters.length
+        val k = thisActiveCenters(0).length
+        val dims = thisActiveCenters(0)(0).vector.length
 
         val sums = Array.fill(runs, k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
         val counts = Array.fill(runs, k)(0L)
 
         points.foreach { point =>
           (0 until runs).foreach { i =>
-            val (bestCenter, cost) = KMeans.findClosest(activeCenters(i), point)
+            val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
             costAccums(i) += cost
             sums(i)(bestCenter) += point.vector
             counts(i)(bestCenter) += 1
@@ -264,16 +289,17 @@ class KMeans private (
     // to their squared distance from that run's current centers
     var step = 0
     while (step < initializationSteps) {
+      val bcCenters = data.context.broadcast(centers)
       val sumCosts = data.flatMap { point =>
         (0 until runs).map { r =>
-          (r, KMeans.pointCost(centers(r), point))
+          (r, KMeans.pointCost(bcCenters.value(r), point))
         }
       }.reduceByKey(_ + _).collectAsMap()
       val chosen = data.mapPartitionsWithIndex { (index, points) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
         points.flatMap { p =>
           (0 until runs).filter { r =>
-            rand.nextDouble() < 2.0 * KMeans.pointCost(centers(r), p) * k / sumCosts(r)
+            rand.nextDouble() < 2.0 * KMeans.pointCost(bcCenters.value(r), p) * k / sumCosts(r)
           }.map((_, p))
         }
       }.collect()
@@ -286,9 +312,10 @@ class KMeans private (
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
+    val bcCenters = data.context.broadcast(centers)
     val weightMap = data.flatMap { p =>
       (0 until runs).map { r =>
-        ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+        ((r, KMeans.findClosest(bcCenters.value(r), p)._1), 1.0)
       }
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).map { r =>

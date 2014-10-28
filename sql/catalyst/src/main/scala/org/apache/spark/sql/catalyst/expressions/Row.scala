@@ -32,6 +32,16 @@ object Row {
    * }}}
    */
   def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
+
+  /**
+   * This method can be used to construct a [[Row]] with the given values.
+   */
+  def apply(values: Any*): Row = new GenericRow(values.toArray)
+
+  /**
+   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   */
+  def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 }
 
 /**
@@ -54,6 +64,7 @@ trait Row extends Seq[Any] with Serializable {
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
   def getString(i: Int): String
+  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
 
   override def toString() =
     s"[${this.mkString(",")}]"
@@ -88,15 +99,6 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-
-  /**
-   * Experimental
-   *
-   * Returns a mutable string builder for the specified column.  A given row should return the
-   * result of any mutations made to the returned buffer next time getString is called for the same
-   * column.
-   */
-  def getStringBuilder(ordinal: Int): StringBuilder
 }
 
 /**
@@ -117,6 +119,7 @@ object EmptyRow extends Row {
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
   def getString(i: Int): String = throw new UnsupportedOperationException
+  override def getAs[T](i: Int): T = throw new UnsupportedOperationException
 
   def copy() = this
 }
@@ -126,7 +129,7 @@ object EmptyRow extends Row {
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
+class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
   def this() = this(null)
 
@@ -180,6 +183,35 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
+  // Custom hashCode function that matches the efficient code generated version.
+  override def hashCode(): Int = {
+    var result: Int = 37
+
+    var i = 0
+    while (i < values.length) {
+      val update: Int =
+        if (isNullAt(i)) {
+          0
+        } else {
+          apply(i) match {
+            case b: Boolean => if (b) 0 else 1
+            case b: Byte => b.toInt
+            case s: Short => s.toInt
+            case i: Int => i
+            case l: Long => (l ^ (l >>> 32)).toInt
+            case f: Float => java.lang.Float.floatToIntBits(f)
+            case d: Double =>
+              val b = java.lang.Double.doubleToLongBits(d)
+              (b ^ (b >>> 32)).toInt
+            case other => other.hashCode()
+          }
+        }
+      result = 37 * result + update
+      i += 1
+    }
+    result
+  }
+
   def copy() = this
 }
 
@@ -187,21 +219,19 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   /** No-arg constructor for serialization. */
   def this() = this(0)
 
-  def getStringBuilder(ordinal: Int): StringBuilder = ???
-
-  override def setBoolean(ordinal: Int,value: Boolean): Unit = { values(ordinal) = value }
-  override def setByte(ordinal: Int,value: Byte): Unit = { values(ordinal) = value }
-  override def setDouble(ordinal: Int,value: Double): Unit = { values(ordinal) = value }
-  override def setFloat(ordinal: Int,value: Float): Unit = { values(ordinal) = value }
-  override def setInt(ordinal: Int,value: Int): Unit = { values(ordinal) = value }
-  override def setLong(ordinal: Int,value: Long): Unit = { values(ordinal) = value }
-  override def setString(ordinal: Int,value: String): Unit = { values(ordinal) = value }
+  override def setBoolean(ordinal: Int, value: Boolean): Unit = { values(ordinal) = value }
+  override def setByte(ordinal: Int, value: Byte): Unit = { values(ordinal) = value }
+  override def setDouble(ordinal: Int, value: Double): Unit = { values(ordinal) = value }
+  override def setFloat(ordinal: Int, value: Float): Unit = { values(ordinal) = value }
+  override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
+  override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
+  override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 
-  override def setShort(ordinal: Int,value: Short): Unit = { values(ordinal) = value }
+  override def setShort(ordinal: Int, value: Short): Unit = { values(ordinal) = value }
 
-  override def update(ordinal: Int,value: Any): Unit = { values(ordinal) = value }
+  override def update(ordinal: Int, value: Any): Unit = { values(ordinal) = value }
 
   override def copy() = new GenericRow(values.clone())
 }

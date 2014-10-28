@@ -51,6 +51,11 @@ table.sortable thead {
   cursor: pointer;
 }
 
+table.sortable td {
+  word-wrap: break-word;
+  max-width: 600px;
+}
+
 .progress {
   margin-bottom: 0px; position: relative
 }
@@ -81,7 +86,9 @@ table.sortable thead {
 
 span.kill-link {
   margin-right: 2px;
+  margin-left: 20px;
   color: gray;
+  float: right;
 }
 
 span.kill-link a {

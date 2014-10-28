@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -27,7 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 
-object Optimizer extends RuleExecutor[LogicalPlan] {
+abstract class Optimizer extends RuleExecutor[LogicalPlan]
+
+object DefaultOptimizer extends Optimizer {
   val batches =
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::
@@ -38,13 +41,62 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      OptimizeIn) ::
     Batch("Filter Pushdown", FixedPoint(100),
+      UnionPushdown,
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughJoin,
       ColumnPruning) :: Nil
 }
+
+/**
+  *  Pushes operations to either side of a Union.
+  */
+object UnionPushdown extends Rule[LogicalPlan] {
+
+  /**
+    *  Maps Attributes from the left side to the corresponding Attribute on the right side.
+    */
+  def buildRewrites(union: Union): AttributeMap[Attribute] = {
+    assert(union.left.output.size == union.right.output.size)
+
+    AttributeMap(union.left.output.zip(union.right.output))
+  }
+
+  /**
+    *  Rewrites an expression so that it can be pushed to the right side of a Union operator.
+    *  This method relies on the fact that the output attributes of a union are always equal
+    *  to the left child's output.
+    */
+  def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]): A = {
+    val result = e transform {
+      case a: Attribute => rewrites(a)
+    }
+
+    // We must promise the compiler that we did not discard the names in the case of project
+    // expressions.  This is safe since the only transformation is from Attribute => Attribute.
+    result.asInstanceOf[A]
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down filter into union
+    case Filter(condition, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Filter(condition, left),
+        Filter(pushToRight(condition, rewrites), right))
+
+    // Push down projection into union
+    case Project(projectList, u @ Union(left, right)) =>
+      val rewrites = buildRewrites(u)
+      Union(
+        Project(projectList, left),
+        Project(projectList.map(pushToRight(_, rewrites)), right))
+  }
+}
+
 
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan using the following
@@ -65,8 +117,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate unneeded attributes from either side of a Join.
     case Project(projectList, Join(left, right, joinType, condition)) =>
       // Collect the list of all references required either above or to evaluate the condition.
-      val allReferences: Set[Attribute] =
-        projectList.flatMap(_.references).toSet ++ condition.map(_.references).getOrElse(Set.empty)
+      val allReferences: AttributeSet =
+        AttributeSet(
+          projectList.flatMap(_.references.iterator)) ++
+          condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
       /** Applies a projection only when the child is producing unnecessary attributes */
       def pruneJoinChild(c: LogicalPlan) = prunedChild(c, allReferences)
@@ -76,8 +130,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate unneeded attributes from right side of a LeftSemiJoin.
     case Join(left, right, LeftSemi, condition) =>
       // Collect the list of all references required to evaluate the condition.
-      val allReferences: Set[Attribute] =
-        condition.map(_.references).getOrElse(Set.empty)
+      val allReferences: AttributeSet =
+        condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
 
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
@@ -104,7 +158,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: Set[Attribute]) =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
       Project(allReferences.filter(c.outputSet.contains).toSeq, c)
     } else {
@@ -123,6 +177,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
   val startsWith = "([^_%]+)%".r
   val endsWith = "%([^_%]+)".r
   val contains = "%([^_%]+)%".r
+  val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(l, Literal(startsWith(pattern), StringType)) if !pattern.endsWith("\\") =>
@@ -131,6 +186,8 @@ object LikeSimplification extends Rule[LogicalPlan] {
       EndsWith(l, Literal(pattern))
     case Like(l, Literal(contains(pattern), StringType)) if !pattern.endsWith("\\") =>
       Contains(l, Literal(pattern))
+    case Like(l, Literal(equalTo(pattern), StringType)) =>
+      EqualTo(l, Literal(pattern))
   }
 }
 
@@ -150,11 +207,15 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
       case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
-      case e @ Coalesce(children) => {
-        val newChildren = children.filter(c => c match {
+      case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
+      case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
+
+      // For Coalesce, remove null literals.
+      case e @ Coalesce(children) =>
+        val newChildren = children.filter {
           case Literal(null, _) => false
           case _ => true
-        })
+        }
         if (newChildren.length == 0) {
           Literal(null, e.dataType)
         } else if (newChildren.length == 1) {
@@ -162,12 +223,11 @@ object NullPropagation extends Rule[LogicalPlan] {
         } else {
           Coalesce(newChildren)
         }
-      }
-      case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
-      case e @ In(Literal(v, _), list) if (list.exists(c => c match {
-          case Literal(candidate, _) if candidate == v => true
-          case _ => false
-        })) => Literal(true, BooleanType)
+
+      case e @ Substring(Literal(null, _), _, _) => Literal(null, e.dataType)
+      case e @ Substring(_, Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ Substring(_, _, Literal(null, _)) => Literal(null, e.dataType)
+
       // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
@@ -184,6 +244,11 @@ object NullPropagation extends Rule[LogicalPlan] {
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
         case _ => e
       }
+      case e: StringComparison => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
     }
   }
 }
@@ -195,9 +260,33 @@ object NullPropagation extends Rule[LogicalPlan] {
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      // Skip redundant folding of literals.
+      // Skip redundant folding of literals. This rule is technically not necessary. Placing this
+      // here avoids running the next rule for Literal values, which would create a new Literal
+      // object and running eval unnecessarily.
       case l: Literal => l
+
+      // Fold expressions that are foldable.
       case e if e.foldable => Literal(e.eval(null), e.dataType)
+
+      // Fold "literal in (item1, item2, ..., literal, ...)" into true directly.
+      case In(Literal(v, _), list) if list.exists {
+          case Literal(candidate, _) if candidate == v => true
+          case _ => false
+        } => Literal(true, BooleanType)
+    }
+  }
+}
+
+/**
+ * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
+ * which is much faster
+ */
+object OptimizeIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+          val hSet = list.map(e => e.eval(null))
+          InSet(v, HashSet() ++ hSet, v +: list)
     }
   }
 }
@@ -227,6 +316,21 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (l, Literal(false, BooleanType)) => l
           case (_, _) => or
         }
+
+      case not @ Not(exp) =>
+        exp match {
+          case Literal(true, BooleanType) => Literal(false)
+          case Literal(false, BooleanType) => Literal(true)
+          case GreaterThan(l, r) => LessThanOrEqual(l, r)
+          case GreaterThanOrEqual(l, r) => LessThan(l, r)
+          case LessThan(l, r) => GreaterThanOrEqual(l, r)
+          case LessThanOrEqual(l, r) => GreaterThan(l, r)
+          case Not(e) => e
+          case _ => not
+        }
+
+      // Turn "if (true) a else b" into "a", and if (false) a else b" into "b".
+      case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
     }
   }
 }
@@ -248,12 +352,12 @@ object CombineFilters extends Rule[LogicalPlan] {
  */
 object SimplifyFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(Literal(true, BooleanType), child) =>
-      child
-    case Filter(Literal(null, _), child) =>
-      LocalRelation(child.output)
-    case Filter(Literal(false, BooleanType), child) =>
-      LocalRelation(child.output)
+    // If the filter condition always evaluate to true, remove the filter.
+    case Filter(Literal(true, BooleanType), child) => child
+    // If the filter condition always evaluate to null or false,
+    // replace the input with an empty relation.
+    case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
+    case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
   }
 }
 
@@ -295,7 +399,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Splits join condition expressions into three categories based on the attributes required
    * to evaluate them.
-   * @returns (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
+   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =

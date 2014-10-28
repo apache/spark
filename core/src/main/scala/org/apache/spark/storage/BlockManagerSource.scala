@@ -22,15 +22,15 @@ import com.codahale.metrics.{Gauge,MetricRegistry}
 import org.apache.spark.SparkContext
 import org.apache.spark.metrics.source.Source
 
-private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: SparkContext)
+private[spark] class BlockManagerSource(val blockManager: BlockManager)
     extends Source {
-  val metricRegistry = new MetricRegistry()
-  val sourceName = "%s.BlockManager".format(sc.appName)
+  override val metricRegistry = new MetricRegistry()
+  override val sourceName = "BlockManager"
 
   metricRegistry.register(MetricRegistry.name("memory", "maxMem_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
-      val maxMem = storageStatusList.map(_.maxMem).reduce(_ + _)
+      val maxMem = storageStatusList.map(_.maxMem).sum
       maxMem / 1024 / 1024
     }
   })
@@ -38,7 +38,7 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: Spar
   metricRegistry.register(MetricRegistry.name("memory", "remainingMem_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
-      val remainingMem = storageStatusList.map(_.memRemaining).reduce(_ + _)
+      val remainingMem = storageStatusList.map(_.memRemaining).sum
       remainingMem / 1024 / 1024
     }
   })
@@ -46,20 +46,15 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: Spar
   metricRegistry.register(MetricRegistry.name("memory", "memUsed_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
-      val maxMem = storageStatusList.map(_.maxMem).reduce(_ + _)
-      val remainingMem = storageStatusList.map(_.memRemaining).reduce(_ + _)
-      (maxMem - remainingMem) / 1024 / 1024
+      val memUsed = storageStatusList.map(_.memUsed).sum
+      memUsed / 1024 / 1024
     }
   })
 
   metricRegistry.register(MetricRegistry.name("disk", "diskSpaceUsed_MB"), new Gauge[Long] {
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
-      val diskSpaceUsed = storageStatusList
-        .flatMap(_.blocks.values.map(_.diskSize))
-        .reduceOption(_ + _)
-        .getOrElse(0L)
-
+      val diskSpaceUsed = storageStatusList.map(_.diskUsed).sum
       diskSpaceUsed / 1024 / 1024
     }
   })

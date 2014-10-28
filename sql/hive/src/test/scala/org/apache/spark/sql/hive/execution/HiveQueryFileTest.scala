@@ -53,7 +53,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
   testCases.sorted.foreach {
     case (testCaseName, testCaseFile) =>
       if (blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
-        logger.debug(s"Blacklisted test skipped $testCaseName")
+        logDebug(s"Blacklisted test skipped $testCaseName")
       } else if (realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) || runAll) {
         // Build a test case and submit it to scala test framework...
         val queriesString = fileToString(testCaseFile)

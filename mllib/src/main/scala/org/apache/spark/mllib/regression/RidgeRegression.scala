@@ -28,7 +28,7 @@ import org.apache.spark.mllib.linalg.Vector
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class RidgeRegressionModel private[mllib] (
+class RidgeRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)

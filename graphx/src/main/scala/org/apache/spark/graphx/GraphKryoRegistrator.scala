@@ -27,17 +27,14 @@ import org.apache.spark.graphx.impl._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 import org.apache.spark.util.collection.OpenHashSet
 
-
 /**
  * Registers GraphX classes with Kryo for improved performance.
  */
+@deprecated("Register GraphX classes with Kryo using GraphXUtils.registerKryoClasses", "1.2.0")
 class GraphKryoRegistrator extends KryoRegistrator {
 
   def registerClasses(kryo: Kryo) {
     kryo.register(classOf[Edge[Object]])
-    kryo.register(classOf[MessageToPartition[Object]])
-    kryo.register(classOf[VertexBroadcastMsg[Object]])
-    kryo.register(classOf[RoutingTableMessage])
     kryo.register(classOf[(VertexId, Object)])
     kryo.register(classOf[EdgePartition[Object, Object]])
     kryo.register(classOf[BitSet])

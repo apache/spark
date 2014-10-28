@@ -47,7 +47,7 @@ object LinearRegression extends App {
       numIterations: Int = 100,
       stepSize: Double = 1.0,
       regType: RegType = L2,
-      regParam: Double = 0.1)
+      regParam: Double = 0.1) extends AbstractParams[Params]
 
   val defaultParams = Params()
 
@@ -91,7 +91,7 @@ object LinearRegression extends App {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val examples = MLUtils.loadLibSVMFile(sc, params.input, multiclass = true).cache()
+    val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()

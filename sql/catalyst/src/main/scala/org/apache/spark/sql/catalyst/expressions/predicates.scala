@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.BooleanType
 
-
 object InterpretedPredicate {
+  def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+    apply(BindReferences.bindReference(expression, inputSchema))
+
   def apply(expression: Expression): (Row => Boolean) = {
     (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }
@@ -82,13 +85,30 @@ case class Not(child: Expression) extends UnaryExpression with Predicate {
  */
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   def children = value +: list
-  def references = children.flatMap(_.references).toSet
+
   def nullable = true // TODO: Figure out correct nullability semantics of IN.
   override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: Row): Any = {
     val evaluatedValue = value.eval(input)
     list.exists(e => e.eval(input) == evaluatedValue)
+  }
+}
+
+/**
+ * Optimized version of In clause, when all filter values of In clause are
+ * static.
+ */
+case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+  extends Predicate {
+
+  def children = child
+
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$value INSET ${hset.mkString("(", ",", ")")}"
+
+  override def eval(input: Row): Any = {
+    hset.contains(value.eval(input))
   }
 }
 
@@ -153,6 +173,22 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   }
 }
 
+case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+  def symbol = "<=>"
+  override def nullable = false
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    val r = right.eval(input)
+    if (l == null && r == null) {
+      true
+    } else if (l == null || r == null) {
+      false
+    } else {
+      l == r
+    }
+  }
+}
+
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
   override def eval(input: Row): Any = c2(input, left, right, _.lt(_, _))
@@ -178,7 +214,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   def children = predicate :: trueValue :: falseValue :: Nil
   override def nullable = trueValue.nullable || falseValue.nullable
-  def references = children.flatMap(_.references).toSet
+
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
     if (!resolved) {
@@ -220,7 +256,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 case class CaseWhen(branches: Seq[Expression]) extends Expression {
   type EvaluatedType = Any
   def children = branches
-  def references = children.flatMap(_.references).toSet
+
   def dataType = {
     if (!resolved) {
       throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
@@ -246,12 +282,13 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
       false
     } else {
       val allCondBooleans = predicates.forall(_.dataType == BooleanType)
-      val dataTypesEqual = values.map(_.dataType).distinct.size <= 1
+      // both then and else val should be considered.
+      val dataTypesEqual = (values ++ elseValue).map(_.dataType).distinct.size <= 1
       allCondBooleans && dataTypesEqual
     }
   }
 
-  /** Written in imperative fashion for performance considerations.  Same for CaseKeyWhen. */
+  /** Written in imperative fashion for performance considerations. */
   override def eval(input: Row): Any = {
     val len = branchesArr.length
     var i = 0

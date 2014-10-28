@@ -31,8 +31,12 @@ import org.apache.spark.{SparkConf, SparkContext}
  */
 object SparkPageRank {
   def main(args: Array[String]) {
+    if (args.length < 1) {
+      System.err.println("Usage: SparkPageRank <file> <iter>")
+      System.exit(1)
+    }
     val sparkConf = new SparkConf().setAppName("PageRank")
-    var iters = args(1).toInt
+    val iters = if (args.length > 0) args(1).toInt else 10
     val ctx = new SparkContext(sparkConf)
     val lines = ctx.textFile(args(0), 1)
     val links = lines.map{ s =>

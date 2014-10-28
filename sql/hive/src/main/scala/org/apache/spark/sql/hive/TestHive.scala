@@ -20,27 +20,35 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.session.SessionState
+
 import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.SQLConf
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
+// SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
-  extends TestHiveContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
+  extends TestHiveContext(
+    new SparkContext("local[2]", "TestSQLContext", new SparkConf().set("spark.sql.test", "")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -53,15 +61,35 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
+class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
+  CommandProcessorFactory.clean(hiveconf)
 
-  override lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
-  override lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+  lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
+  lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+
+  /** Sets up the system initially or after a RESET command */
+  protected def configure(): Unit = {
+    setConf("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    setConf("hive.metastore.warehouse.dir", warehousePath)
+    Utils.registerShutdownDeleteDir(new File(warehousePath))
+    Utils.registerShutdownDeleteDir(new File(metastorePath))
+  }
+
+  val testTempDir = File.createTempFile("testTempFiles", "spark.hive.tmp")
+  testTempDir.delete()
+  testTempDir.mkdir()
+  Utils.registerShutdownDeleteDir(testTempDir)
+
+  // For some hive test case which contain ${system:test.tmp.dir}
+  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+
+  configure() // Must be called before initializing the catalog below.
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -73,6 +101,10 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
+
+  /** Fewer partitions to speed up testing. */
+  override private[spark] def numShufflePartitions: Int =
+    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -90,7 +122,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\.", testDataLocation)
+      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
     } else {
       cmd
     }
@@ -98,7 +130,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
-  hiveFilesTemp.deleteOnExit()
+  Utils.registerShutdownDeleteDir(hiveFilesTemp)
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -130,7 +162,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
-        case CacheCommand(tbl, _) => tbl :: Nil
+        case CacheTableCommand(tbl, _, _) => tbl :: Nil
         case _ => Nil
       }
 
@@ -139,7 +171,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         describedTables ++
         logical.collect { case UnresolvedRelation(databaseName, name, _) => name }
       val referencedTestTables = referencedTables.filter(testTables.contains)
-      logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
+      logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
       analyzer(logical)
@@ -252,7 +284,74 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
          |)
        """.stripMargin.cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
-    )
+    ),
+    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC PARITIONING
+    // IS NOT YET SUPPORTED
+    TestTable("episodes_part",
+      s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
+         |PARTITIONED BY (doctor_pt INT)
+         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
+         |STORED AS
+         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
+         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |TBLPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+       """.stripMargin.cmd,
+      // WORKAROUND: Required to pass schema to SerDe for partitioned tables.
+      // TODO: Pass this automatically from the table to partitions.
+      s"""
+         |ALTER TABLE episodes_part SET SERDEPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+        """.stripMargin.cmd,
+      s"""
+        INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
+        SELECT title, air_date, doctor FROM episodes
+      """.cmd
+      )
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)
@@ -262,9 +361,9 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   var cacheTables: Boolean = false
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
-      // Marks the table as loaded first to prevent infite mutually recursive table loading.
+      // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       loadedTables += name
-      logger.info(s"Loading test table $name")
+      logInfo(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
@@ -281,6 +380,9 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
+  // Database default may not exist in 0.13.1, create it if not exist
+  HiveShim.createDefaultDBIfNeeded(this)
+
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -288,22 +390,14 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   def reset() {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.foreach { logger =>
-        logger.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
+      org.apache.log4j.LogManager.getCurrentLoggers.foreach { log =>
+        log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
-      // It is important that we RESET first as broken hooks that might have been set could break
-      // other sql exec here.
-      runSqlHive("RESET")
-      // For some reason, RESET does not reset the following variables...
-      runSqlHive("set datanucleus.cache.collections=true")
-      runSqlHive("set datanucleus.cache.collections.lazy=true")
-      // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-
+      clearCache()
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
-        logger.debug(s"Deleting table $t")
+        logDebug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
 
         catalog.client.getIndexes("default", t, 255).foreach { index =>
@@ -316,7 +410,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
       }
 
       catalog.client.getAllDatabases.filterNot(_ == "default").foreach { db =>
-        logger.debug(s"Dropping Database: $db")
+        logDebug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
 
@@ -326,6 +420,16 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
+      // Some tests corrupt this value on purpose, which breaks the RESET call below.
+      hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      // It is important that we RESET first as broken hooks that might have been set could break
+      // other sql exec here.
+      runSqlHive("RESET")
+      // For some reason, RESET does not reset the following variables...
+      runSqlHive("set datanucleus.cache.collections=true")
+      runSqlHive("set datanucleus.cache.collections.lazy=true")
+      // Lots of tests fail if we do not change the partition whitelist from the default.
+      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
       configure()
 
       runSqlHive("USE default")
@@ -338,11 +442,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
       loadTestTable("srcpart")
     } catch {
       case e: Exception =>
-        logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
-        // At this point there is really no reason to continue, but the test framework traps exits.
-        // So instead we just pause forever so that at least the developer can see where things
-        // started to go wrong.
-        Thread.sleep(100000)
+        logError("FATAL ERROR: Failed to reset TestDB state.", e)
     }
   }
 }

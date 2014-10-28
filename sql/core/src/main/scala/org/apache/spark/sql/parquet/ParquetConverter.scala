@@ -23,7 +23,7 @@ import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 
 /**
@@ -58,6 +58,7 @@ private[sql] object CatalystConverter {
   // This is mostly Parquet convention (see, e.g., `ConversionPatterns`).
   // Note that "array" for the array elements is chosen by ParquetAvro.
   // Using a different value will result in Parquet silently dropping columns.
+  val ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME = "bag"
   val ARRAY_ELEMENTS_SCHEMA_NAME = "array"
   val MAP_KEY_SCHEMA_NAME = "key"
   val MAP_VALUE_SCHEMA_NAME = "value"
@@ -75,21 +76,24 @@ private[sql] object CatalystConverter {
     val fieldType: DataType = field.dataType
     fieldType match {
       // For native JVM types we use a converter with native arrays
-      case ArrayType(elementType: NativeType) => {
+      case ArrayType(elementType: NativeType, false) => {
         new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
       }
       // This is for other types of arrays, including those with nested fields
-      case ArrayType(elementType: DataType) => {
+      case ArrayType(elementType: DataType, false) => {
         new CatalystArrayConverter(elementType, fieldIndex, parent)
+      }
+      case ArrayType(elementType: DataType, true) => {
+        new CatalystArrayContainsNullConverter(elementType, fieldIndex, parent)
       }
       case StructType(fields: Seq[StructField]) => {
         new CatalystStructConverter(fields.toArray, fieldIndex, parent)
       }
-      case MapType(keyType: DataType, valueType: DataType) => {
+      case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) => {
         new CatalystMapConverter(
           Array(
             new FieldType(MAP_KEY_SCHEMA_NAME, keyType, false),
-            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, true)),
+            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, valueContainsNull)),
           fieldIndex,
           parent)
       }
@@ -114,7 +118,7 @@ private[sql] object CatalystConverter {
         }
       }
       // All other primitive types use the default converter
-      case ctype: NativeType => { // note: need the type tag here!
+      case ctype: PrimitiveType => { // note: need the type tag here!
         new CatalystPrimitiveConverter(parent, fieldIndex)
       }
       case _ => throw new RuntimeException(
@@ -229,9 +233,9 @@ private[parquet] class CatalystGroupConverter(
     this(attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)), 0, null)
 
   protected [parquet] val converters: Array[Converter] =
-    schema.map(field =>
-      CatalystConverter.createConverter(field, schema.indexOf(field), this))
-    .toArray
+    schema.zipWithIndex.map {
+      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
+    }.toArray
 
   override val size = schema.size
 
@@ -278,19 +282,19 @@ private[parquet] class CatalystGroupConverter(
  */
 private[parquet] class CatalystPrimitiveRowConverter(
     protected[parquet] val schema: Array[FieldType],
-    protected[parquet] var current: ParquetRelation.RowType)
+    protected[parquet] var current: MutableRow)
   extends CatalystConverter {
 
   // This constructor is used for the root converter only
   def this(attributes: Array[Attribute]) =
     this(
       attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)),
-      new ParquetRelation.RowType(attributes.length))
+      new SpecificMutableRow(attributes.map(_.dataType)))
 
   protected [parquet] val converters: Array[Converter] =
-    schema.map(field =>
-      CatalystConverter.createConverter(field, schema.indexOf(field), this))
-      .toArray
+    schema.zipWithIndex.map {
+      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
+    }.toArray
 
   override val size = schema.size
 
@@ -299,7 +303,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override val parent = null
 
   // Should be only called in root group converter!
-  override def getCurrentRecord: ParquetRelation.RowType = current
+  override def getCurrentRecord: Row = current
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
@@ -378,7 +382,7 @@ private[parquet] class CatalystPrimitiveConverter(
     parent.updateLong(fieldIndex, value)
 }
 
-object CatalystArrayConverter {
+private[parquet] object CatalystArrayConverter {
   val INITIAL_ARRAY_SIZE = 20
 }
 
@@ -564,6 +568,85 @@ private[parquet] class CatalystNativeArrayConverter(
       buffer = tmp
       capacity = newCapacity
     }
+  }
+}
+
+/**
+ * A `parquet.io.api.GroupConverter` that converts a single-element groups that
+ * match the characteristics of an array contains null (see
+ * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
+ * [[org.apache.spark.sql.catalyst.types.ArrayType]].
+ *
+ * @param elementType The type of the array elements (complex or primitive)
+ * @param index The position of this (array) field inside its parent converter
+ * @param parent The parent converter
+ * @param buffer A data buffer
+ */
+private[parquet] class CatalystArrayContainsNullConverter(
+    val elementType: DataType,
+    val index: Int,
+    protected[parquet] val parent: CatalystConverter,
+    protected[parquet] var buffer: Buffer[Any])
+  extends CatalystConverter {
+
+  def this(elementType: DataType, index: Int, parent: CatalystConverter) =
+    this(
+      elementType,
+      index,
+      parent,
+      new ArrayBuffer[Any](CatalystArrayConverter.INITIAL_ARRAY_SIZE))
+
+  protected[parquet] val converter: Converter = new CatalystConverter {
+
+    private var current: Any = null
+
+    val converter = CatalystConverter.createConverter(
+      new CatalystConverter.FieldType(
+        CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+        elementType,
+        false),
+      fieldIndex = 0,
+      parent = this)
+
+    override def getConverter(fieldIndex: Int): Converter = converter
+
+    override def end(): Unit = parent.updateField(index, current)
+
+    override def start(): Unit = {
+      current = null
+    }
+
+    override protected[parquet] val size: Int = 1
+    override protected[parquet] val index: Int = 0
+    override protected[parquet] val parent = CatalystArrayContainsNullConverter.this
+
+    override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+      current = value
+    }
+
+    override protected[parquet] def clearBuffer(): Unit = {}
+  }
+
+  override def getConverter(fieldIndex: Int): Converter = converter
+
+  // arrays have only one (repeated) field, which is its elements
+  override val size = 1
+
+  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+    buffer += value
+  }
+
+  override protected[parquet] def clearBuffer(): Unit = {
+    buffer.clear()
+  }
+
+  override def start(): Unit = {}
+
+  override def end(): Unit = {
+    assert(parent != null)
+    // here we need to make sure to use ArrayScalaType
+    parent.updateField(index, buffer.toArray.toSeq)
+    clearBuffer()
   }
 }
 

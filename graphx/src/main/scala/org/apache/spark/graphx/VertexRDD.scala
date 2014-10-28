@@ -108,7 +108,7 @@ class VertexRDD[@specialized VD: ClassTag](
 
   /** The number of vertices in the RDD. */
   override def count(): Long = {
-    partitionsRDD.map(_.size).reduce(_ + _)
+    partitionsRDD.map(_.size.toLong).reduce(_ + _)
   }
 
   /**
@@ -182,8 +182,8 @@ class VertexRDD[@specialized VD: ClassTag](
   /**
    * Left joins this RDD with another VertexRDD with the same index. This function will fail if
    * both VertexRDDs do not share the same index. The resulting vertex set contains an entry for
-   * each
-   * vertex in `this`. If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
+   * each vertex in `this`.
+   * If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
@@ -392,7 +392,7 @@ object VertexRDD {
    */
   def apply[VD: ClassTag](
       vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_, _], defaultVal: VD): VertexRDD[VD] = {
-    VertexRDD(vertices, edges, defaultVal, (a, b) => b)
+    VertexRDD(vertices, edges, defaultVal, (a, b) => a)
   }
 
   /**
@@ -419,7 +419,7 @@ object VertexRDD {
       (vertexIter, routingTableIter) =>
         val routingTable =
           if (routingTableIter.hasNext) routingTableIter.next() else RoutingTablePartition.empty
-        Iterator(ShippableVertexPartition(vertexIter, routingTable, defaultVal))
+        Iterator(ShippableVertexPartition(vertexIter, routingTable, defaultVal, mergeFunc))
     }
     new VertexRDD(vertexPartitions)
   }

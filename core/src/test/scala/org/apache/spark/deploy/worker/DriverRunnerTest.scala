@@ -25,14 +25,15 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{Command, DriverDescription}
 
 class DriverRunnerTest extends FunSuite {
   private def createDriverRunner() = {
-    val command = new Command("mainClass", Seq(), Map(), Seq(), Seq())
+    val command = new Command("mainClass", Seq(), Map(), Seq(), Seq(), Seq())
     val driverDescription = new DriverDescription("jarUrl", 512, 1, true, command)
-    new DriverRunner("driverId", new File("workDir"), new File("sparkHome"), driverDescription,
-      null, "akka://1.2.3.4/worker/")
+    new DriverRunner(new SparkConf(), "driverId", new File("workDir"), new File("sparkHome"),
+      driverDescription, null, "akka://1.2.3.4/worker/")
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {

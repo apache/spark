@@ -19,9 +19,6 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.log4j.Logger
-import org.apache.log4j.Level
-
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
@@ -29,12 +26,10 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
 
-import scala.language.postfixOps
-
 class DriverSuite extends FunSuite with Timeouts {
 
   test("driver should exit after finishing") {
-    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     // Regression test for SPARK-530: "Spark driver process doesn't exit after finishing"
     val masters = Table(("master"), ("local"), ("local-cluster[2,1,512]"))
     forAll(masters) { (master: String) =>
@@ -54,7 +49,7 @@ class DriverSuite extends FunSuite with Timeouts {
  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
-    Logger.getRootLogger().setLevel(Level.WARN)
+    Utils.configTestLog4j("INFO")
     val sc = new SparkContext(args(0), "DriverWithoutCleanup")
     sc.parallelize(1 to 100, 4).count()
   }

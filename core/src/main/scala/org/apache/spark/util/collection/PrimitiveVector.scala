@@ -36,7 +36,7 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
     _array(index)
   }
 
-  def +=(value: V) {
+  def +=(value: V): Unit = {
     if (_numElements == _array.length) {
       resize(_array.length * 2)
     }
@@ -49,6 +49,19 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
   def length: Int = _numElements
 
   def size: Int = _numElements
+
+  def iterator: Iterator[V] = new Iterator[V] {
+    var index = 0
+    override def hasNext: Boolean = index < _numElements
+    override def next(): V = {
+      if (!hasNext) {
+        throw new NoSuchElementException
+      }
+      val value = _array(index)
+      index += 1
+      value
+    }
+  }
 
   /** Gets the underlying array backing this vector. */
   def array: Array[V] = _array

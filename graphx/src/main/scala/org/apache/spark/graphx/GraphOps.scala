@@ -198,10 +198,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * {{{
    * val rawGraph: Graph[Int, Int] = GraphLoader.edgeListFile(sc, "webgraph")
-   *   .mapVertices(v => 0)
-   * val outDeg: RDD[(Int, Int)] = rawGraph.outDegrees
-   * val graph = rawGraph.leftJoinVertices[Int,Int](outDeg,
-   *   (v, deg) => deg )
+   *   .mapVertices((_, _) => 0)
+   * val outDeg = rawGraph.outDegrees
+   * val graph = rawGraph.joinVertices[Int](outDeg)
+   *   ((_, _, outDeg) => outDeg)
    * }}}
    *
    */
@@ -254,7 +254,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Picks a random vertex from the graph and returns its ID.
    */
   def pickRandomVertex(): VertexId = {
-    val probability = 50 / graph.numVertices
+    val probability = 50.0 / graph.numVertices
     var found = false
     var retVal: VertexId = null.asInstanceOf[VertexId]
     while (!found) {

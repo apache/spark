@@ -18,21 +18,54 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Logging, Row}
+
+
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+
+
+object SparkPlan {
+  protected[sql] val currentContext = new ThreadLocal[SQLContext]()
+}
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
+abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
   self: Product =>
+
+  /**
+   * A handle to the SQL Context that was used to create this plan.   Since many operators need
+   * access to the sqlContext for RDD operations or configuration this field is automatically
+   * populated by the query planning infrastructure.
+   */
+  @transient
+  protected[spark] val sqlContext = SparkPlan.currentContext.get()
+
+  protected def sparkContext = sqlContext.sparkContext
+
+  // sqlContext will be null when we are being deserialized on the slaves.  In this instance
+  // the value of codegenEnabled will be set by the desserializer after the constructor has run.
+  val codegenEnabled: Boolean = if (sqlContext != null) {
+    sqlContext.codegenEnabled
+  } else {
+    false
+  }
+
+  /** Overridden make copy also propogates sqlContext to copied plan. */
+  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
+    SparkPlan.currentContext.set(sqlContext)
+    super.makeCopy(newArgs)
+  }
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -51,35 +84,45 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
    */
   def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
-  protected def buildRow(values: Seq[Any]): Row =
-    new GenericRow(values.toArray)
-}
+  protected def newProjection(
+      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
+    log.debug(
+      s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
+    if (codegenEnabled) {
+      GenerateProjection(expressions, inputSchema)
+    } else {
+      new InterpretedProjection(expressions, inputSchema)
+    }
+  }
 
-/**
- * :: DeveloperApi ::
- * Allows already planned SparkQueries to be linked into logical query plans.
- *
- * Note that in general it is not valid to use this class to link multiple copies of the same
- * physical operator into the same query plan as this violates the uniqueness of expression ids.
- * Special handling exists for ExistingRdd as these are already leaf operators and thus we can just
- * replace the output attributes with new copies of themselves without breaking any attribute
- * linking.
- */
-@DeveloperApi
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan, tableName: String = "SparkLogicalPlan")
-  extends BaseRelation with MultiInstanceRelation {
+  protected def newMutableProjection(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute]): () => MutableProjection = {
+    log.debug(
+      s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
+    if(codegenEnabled) {
+      GenerateMutableProjection(expressions, inputSchema)
+    } else {
+      () => new InterpretedMutableProjection(expressions, inputSchema)
+    }
+  }
 
-  def output = alreadyPlanned.output
-  override def references = Set.empty
-  override def children = Nil
 
-  override final def newInstance: this.type = {
-    SparkLogicalPlan(
-      alreadyPlanned match {
-        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
-        case _ => sys.error("Multiple instance of the same relation detected.")
-      }, tableName)
-      .asInstanceOf[this.type]
+  protected def newPredicate(
+      expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
+    if (codegenEnabled) {
+      GeneratePredicate(expression, inputSchema)
+    } else {
+      InterpretedPredicate(expression, inputSchema)
+    }
+  }
+
+  protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
+    if (codegenEnabled) {
+      GenerateOrdering(order, inputSchema)
+    } else {
+      new RowOrdering(order, inputSchema)
+    }
   }
 }
 

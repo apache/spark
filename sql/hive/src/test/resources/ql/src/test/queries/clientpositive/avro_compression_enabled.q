@@ -35,7 +35,7 @@ TBLPROPERTIES ('avro.schema.literal'='{
   ]
 }');
 
-LOAD DATA LOCAL INPATH '../data/files/doctors.avro' INTO TABLE doctors4;
+LOAD DATA LOCAL INPATH '../../data/files/doctors.avro' INTO TABLE doctors4;
 
 set hive.exec.compress.output=true;
 

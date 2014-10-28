@@ -30,7 +30,7 @@ u'My app'
 u'local'
 >>> sc.appName
 u'My app'
->>> sc.sparkHome == None
+>>> sc.sparkHome is None
 True
 
 >>> conf = SparkConf(loadDefaults=False)
@@ -50,11 +50,15 @@ spark.executorEnv.VAR3=value3
 spark.executorEnv.VAR4=value4
 spark.home=/path
 >>> sorted(conf.getAll(), key=lambda p: p[0])
-[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
+[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), \
+(u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
+
+__all__ = ['SparkConf']
 
 
 class SparkConf(object):
+
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.
@@ -79,11 +83,11 @@ class SparkConf(object):
         """
         Create a new Spark configuration.
 
-        @param loadDefaults: whether to load values from Java system
+        :param loadDefaults: whether to load values from Java system
                properties (True by default)
-        @param _jvm: internal parameter used to pass a handle to the
+        :param _jvm: internal parameter used to pass a handle to the
                Java VM; does not need to be set by users
-        @param _jconf: Optionally pass in an existing SparkConf handle
+        :param _jconf: Optionally pass in an existing SparkConf handle
                to use its parameters
         """
         if _jconf:
@@ -97,6 +101,12 @@ class SparkConf(object):
     def set(self, key, value):
         """Set a configuration property."""
         self._jconf.set(key, unicode(value))
+        return self
+
+    def setIfMissing(self, key, value):
+        """Set a configuration property, if not already set."""
+        if self.get(key) is None:
+            self.set(key, value)
         return self
 
     def setMaster(self, value):
@@ -116,11 +126,11 @@ class SparkConf(object):
 
     def setExecutorEnv(self, key=None, value=None, pairs=None):
         """Set an environment variable to be passed to executors."""
-        if (key != None and pairs != None) or (key == None and pairs == None):
+        if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise Exception("Either pass one key-value pair or a list of pairs")
-        elif key != None:
+        elif key is not None:
             self._jconf.setExecutorEnv(key, value)
-        elif pairs != None:
+        elif pairs is not None:
             for (k, v) in pairs:
                 self._jconf.setExecutorEnv(k, v)
         return self
@@ -129,7 +139,7 @@ class SparkConf(object):
         """
         Set multiple parameters, passed as a list of key-value pairs.
 
-        @param pairs: list of key-value pairs to set
+        :param pairs: list of key-value pairs to set
         """
         for (k, v) in pairs:
             self._jconf.set(k, v)
@@ -137,7 +147,7 @@ class SparkConf(object):
 
     def get(self, key, defaultValue=None):
         """Get the configured value for some key, or return a default otherwise."""
-        if defaultValue == None:   # Py4J doesn't call the right get() if we pass None
+        if defaultValue is None:   # Py4J doesn't call the right get() if we pass None
             if not self._jconf.contains(key):
                 return None
             return self._jconf.get(key)

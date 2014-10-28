@@ -81,4 +81,8 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
   override def stop() {
     reporter.stop()
   }
+
+  override def report() {
+    reporter.report()
+  }
 }

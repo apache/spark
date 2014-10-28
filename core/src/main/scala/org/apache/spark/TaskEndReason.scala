@@ -20,6 +20,7 @@ package org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -88,10 +89,7 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     metrics: Option[TaskMetrics])
   extends TaskFailedReason {
-  override def toErrorString: String = {
-    val stackTraceString = if (stackTrace == null) "null" else stackTrace.mkString("\n")
-    s"$className ($description}\n$stackTraceString"
-  }
+  override def toErrorString: String = Utils.exceptionString(className, description, stackTrace)
 }
 
 /**

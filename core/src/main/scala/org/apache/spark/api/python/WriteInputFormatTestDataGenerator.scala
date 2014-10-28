@@ -17,15 +17,16 @@
 
 package org.apache.spark.api.python
 
-import org.apache.spark.SparkContext
-import org.apache.hadoop.io._
-import scala.Array
 import java.io.{DataOutput, DataInput}
+import java.nio.charset.Charset
+
+import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.{SparkContext, SparkException}
 
 /**
- * A class to test MsgPack serialization on the Scala side, that will be deserialized
+ * A class to test Pyrolite serialization on the Scala side, that will be deserialized
  * in Python
  * @param str
  * @param int
@@ -54,11 +55,49 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
   }
 }
 
-class TestConverter extends Converter[Any, Any] {
+private[python] class TestInputKeyConverter extends Converter[Any, Any] {
+  override def convert(obj: Any) = {
+    obj.asInstanceOf[IntWritable].get().toChar
+  }
+}
+
+private[python] class TestInputValueConverter extends Converter[Any, Any] {
   import collection.JavaConversions._
   override def convert(obj: Any) = {
     val m = obj.asInstanceOf[MapWritable]
     seqAsJavaList(m.keySet.map(w => w.asInstanceOf[DoubleWritable].get()).toSeq)
+  }
+}
+
+private[python] class TestOutputKeyConverter extends Converter[Any, Any] {
+  override def convert(obj: Any) = {
+    new Text(obj.asInstanceOf[Int].toString)
+  }
+}
+
+private[python] class TestOutputValueConverter extends Converter[Any, Any] {
+  import collection.JavaConversions._
+  override def convert(obj: Any) = {
+    new DoubleWritable(obj.asInstanceOf[java.util.Map[Double, _]].keySet().head)
+  }
+}
+
+private[python] class DoubleArrayWritable extends ArrayWritable(classOf[DoubleWritable])
+
+private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writable] {
+  override def convert(obj: Any) = obj match {
+    case arr if arr.getClass.isArray && arr.getClass.getComponentType == classOf[Double] =>
+      val daw = new DoubleArrayWritable
+      daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
+      daw
+    case other => throw new SparkException(s"Data of type $other is not supported")
+  }
+}
+
+private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
+  override def convert(obj: Any): Array[Double] = obj match {
+    case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
+    case other => throw new SparkException(s"Data of type $other is not supported")
   }
 }
 
@@ -97,7 +136,8 @@ object WriteInputFormatTestDataGenerator {
     sc.parallelize(intKeys).saveAsSequenceFile(intPath)
     sc.parallelize(intKeys.map{ case (k, v) => (k.toDouble, v) }).saveAsSequenceFile(doublePath)
     sc.parallelize(intKeys.map{ case (k, v) => (k.toString, v) }).saveAsSequenceFile(textPath)
-    sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes) }).saveAsSequenceFile(bytesPath)
+    sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes(Charset.forName("UTF-8"))) }
+      ).saveAsSequenceFile(bytesPath)
     val bools = Seq((1, true), (2, true), (2, false), (3, true), (2, false), (1, false))
     sc.parallelize(bools).saveAsSequenceFile(boolPath)
     sc.parallelize(intKeys).map{ case (k, v) =>
@@ -106,19 +146,20 @@ object WriteInputFormatTestDataGenerator {
 
     // Create test data for ArrayWritable
     val data = Seq(
-      (1, Array(1.0, 2.0, 3.0)),
+      (1, Array()),
       (2, Array(3.0, 4.0, 5.0)),
       (3, Array(4.0, 5.0, 6.0))
     )
     sc.parallelize(data, numSlices = 2)
       .map{ case (k, v) =>
-      (new IntWritable(k), new ArrayWritable(classOf[DoubleWritable], v.map(new DoubleWritable(_))))
-    }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, ArrayWritable]](arrPath)
+        val va = new DoubleArrayWritable
+        va.set(v.map(new DoubleWritable(_)))
+        (new IntWritable(k), va)
+    }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, DoubleArrayWritable]](arrPath)
 
     // Create test data for MapWritable, with keys DoubleWritable and values Text
     val mapData = Seq(
-      (1, Map(2.0 -> "aa")),
-      (2, Map(3.0 -> "bb")),
+      (1, Map()),
       (2, Map(1.0 -> "cc")),
       (3, Map(2.0 -> "dd")),
       (2, Map(1.0 -> "aa")),
@@ -126,9 +167,9 @@ object WriteInputFormatTestDataGenerator {
     )
     sc.parallelize(mapData, numSlices = 2).map{ case (i, m) =>
       val mw = new MapWritable()
-      val k = m.keys.head
-      val v = m.values.head
-      mw.put(new DoubleWritable(k), new Text(v))
+      m.foreach { case (k, v) =>
+        mw.put(new DoubleWritable(k), new Text(v))
+      }
       (new IntWritable(i), mw)
     }.saveAsSequenceFile(mapPath)
 

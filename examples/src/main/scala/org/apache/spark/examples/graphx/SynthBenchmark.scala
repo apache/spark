@@ -18,7 +18,7 @@
 package org.apache.spark.examples.graphx
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.graphx.PartitionStrategy
+import org.apache.spark.graphx.{GraphXUtils, PartitionStrategy}
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.graphx.util.GraphGenerators
 import java.io.{PrintWriter, FileOutputStream}
@@ -38,12 +38,13 @@ object SynthBenchmark {
    * Options:
    *   -app "pagerank" or "cc" for pagerank or connected components. (Default: pagerank)
    *   -niters the number of iterations of pagerank to use (Default: 10)
-   *   -numVertices the number of vertices in the graph (Default: 1000000)
+   *   -nverts the number of vertices in the graph (Default: 1000000)
    *   -numEPart the number of edge partitions in the graph (Default: number of cores)
    *   -partStrategy the graph partitioning strategy to use
    *   -mu the mean parameter for the log-normal graph (Default: 4.0)
    *   -sigma the stdev parameter for the log-normal graph (Default: 1.3)
    *   -degFile the local file to save the degree information (Default: Empty)
+   *   -seed seed to use for RNGs (Default: -1, picks seed randomly)
    */
   def main(args: Array[String]) {
     val options = args.map {
@@ -62,30 +63,31 @@ object SynthBenchmark {
     var mu: Double = 4.0
     var sigma: Double = 1.3
     var degFile: String = ""
+    var seed: Int = -1
 
     options.foreach {
       case ("app", v) => app = v
-      case ("niter", v) => niter = v.toInt
+      case ("niters", v) => niter = v.toInt
       case ("nverts", v) => numVertices = v.toInt
       case ("numEPart", v) => numEPart = Some(v.toInt)
       case ("partStrategy", v) => partitionStrategy = Some(PartitionStrategy.fromString(v))
       case ("mu", v) => mu = v.toDouble
       case ("sigma", v) => sigma = v.toDouble
       case ("degFile", v) => degFile = v
+      case ("seed", v) => seed = v.toInt
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
 
     val conf = new SparkConf()
       .setAppName(s"GraphX Synth Benchmark (nverts = $numVertices, app = $app)")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+    GraphXUtils.registerKryoClasses(conf)
 
     val sc = new SparkContext(conf)
 
     // Create the graph
     println(s"Creating graph...")
     val unpartitionedGraph = GraphGenerators.logNormalGraph(sc, numVertices,
-      numEPart.getOrElse(sc.defaultParallelism), mu, sigma)
+      numEPart.getOrElse(sc.defaultParallelism), mu, sigma, seed)
     // Repartition the graph
     val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_)).cache()
 
@@ -113,7 +115,7 @@ object SynthBenchmark {
       println(s"Total PageRank = $totalPR")
     } else if (app == "cc") {
       println("Running Connected Components")
-      val numComponents = graph.connectedComponents.vertices.map(_._2).distinct()
+      val numComponents = graph.connectedComponents.vertices.map(_._2).distinct().count()
       println(s"Number of components = $numComponents")
     }
     val runTime = System.currentTimeMillis() - startTime

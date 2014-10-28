@@ -20,48 +20,42 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
+import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
+      val stageAttemptId = request.getParameter("attempt").toInt
+      val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
 
-      if (!listener.stageIdToTaskData.contains(stageId)) {
+      if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(content, basePath, appName,
-          "Details for Stage %s".format(stageId), parent.headerTabs, parent)
+        return UIUtils.headerSparkPage(
+          s"Details for Stage $stageId (Attempt $stageAttemptId)", content, parent)
       }
 
-      val tasks = listener.stageIdToTaskData(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
+      val stageData = stageDataOption.get
+      val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val inputBytes = listener.stageIdToInputBytes.getOrElse(stageId, 0L)
-      val hasInput = inputBytes > 0
-      val shuffleReadBytes = listener.stageIdToShuffleRead.getOrElse(stageId, 0L)
-      val hasShuffleRead = shuffleReadBytes > 0
-      val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
-      val hasShuffleWrite = shuffleWriteBytes > 0
-      val memoryBytesSpilled = listener.stageIdToMemoryBytesSpilled.getOrElse(stageId, 0L)
-      val diskBytesSpilled = listener.stageIdToDiskBytesSpilled.getOrElse(stageId, 0L)
-      val hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
-
-      var activeTime = 0L
-      val now = System.currentTimeMillis
-      val tasksActive = listener.stageIdToTasksActive(stageId).values
-      tasksActive.foreach(activeTime += _.timeRunning(now))
+      val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val hasInput = stageData.inputBytes > 0
+      val hasShuffleRead = stageData.shuffleReadBytes > 0
+      val hasShuffleWrite = stageData.shuffleWriteBytes > 0
+      val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
 
       // scalastyle:off
       val summary =
@@ -69,43 +63,48 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           <ul class="unstyled">
             <li>
               <strong>Total task time across all tasks: </strong>
-              {UIUtils.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
+              {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
             {if (hasInput)
               <li>
                 <strong>Input: </strong>
-                {Utils.bytesToString(inputBytes)}
+                {Utils.bytesToString(stageData.inputBytes)}
               </li>
             }
             {if (hasShuffleRead)
               <li>
                 <strong>Shuffle read: </strong>
-                {Utils.bytesToString(shuffleReadBytes)}
+                {Utils.bytesToString(stageData.shuffleReadBytes)}
               </li>
             }
             {if (hasShuffleWrite)
               <li>
                 <strong>Shuffle write: </strong>
-                {Utils.bytesToString(shuffleWriteBytes)}
+                {Utils.bytesToString(stageData.shuffleWriteBytes)}
               </li>
             }
             {if (hasBytesSpilled)
             <li>
               <strong>Shuffle spill (memory): </strong>
-              {Utils.bytesToString(memoryBytesSpilled)}
+              {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
               <strong>Shuffle spill (disk): </strong>
-              {Utils.bytesToString(diskBytesSpilled)}
+              {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
             }
           </ul>
         </div>
         // scalastyle:on
+      val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
+      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
+        accumulables.values.toSeq)
+
       val taskHeaders: Seq[String] =
         Seq(
-          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor",
-          "Launch Time", "Duration", "GC Time") ++
+          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor ID / Host",
+          "Launch Time", "Duration", "GC Time", "Accumulators") ++
         {if (hasInput) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
@@ -214,16 +213,21 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           def quantileRow(data: Seq[Node]): Seq[Node] = <tr>{data}</tr>
           Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
-      val executorTable = new ExecutorTable(stageId, parent)
+
+      val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
+
+      val maybeAccumulableTable: Seq[Node] =
+        if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
+        maybeAccumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),
-        parent.headerTabs, parent)
+      UIUtils.headerSparkPage("Details for Stage %d".format(stageId), content, parent)
     }
   }
 
@@ -278,13 +282,18 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         }</td>
         <td>{info.status}</td>
         <td>{info.taskLocality}</td>
-        <td>{info.host}</td>
+        <td>{info.executorId} / {info.host}</td>
         <td>{UIUtils.formatDate(new Date(info.launchTime))}</td>
         <td sorttable_customkey={duration.toString}>
           {formatDuration}
         </td>
         <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
+        </td>
+        <td>
+          {Unparsed(
+            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
+          )}
         </td>
         <!--
         TODO: Add this back after we add support to hide certain columns.

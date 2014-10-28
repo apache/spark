@@ -23,15 +23,12 @@ import org.apache.spark.ExceptionFailure
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
-import org.apache.spark.ui.{SparkUI, WebUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "executors") {
-  val appName = parent.appName
-  val basePath = parent.basePath
-  val listener = new ExecutorsListener(parent.storageStatusListener)
+private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
+  val listener = parent.executorsListener
 
   attachPage(new ExecutorsPage(this))
-  parent.registerListener(listener)
 }
 
 /**

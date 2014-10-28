@@ -18,6 +18,8 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.BlockManagerId
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.
@@ -28,6 +30,8 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * DAGScheduler.
  */
 private[spark] trait TaskScheduler {
+
+  private val appId = "spark-application-" + System.currentTimeMillis
 
   def rootPool: Pool
 
@@ -54,4 +58,20 @@ private[spark] trait TaskScheduler {
 
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
+
+  /**
+   * Update metrics for in-progress tasks and let the master know that the BlockManager is still
+   * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
+   * indicating that the block manager should re-register.
+   */
+  def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+    blockManagerId: BlockManagerId): Boolean
+
+  /**
+   * Get an application ID associated with the job.
+   *
+   * @return An application ID
+   */
+  def applicationId(): String = appId
+
 }

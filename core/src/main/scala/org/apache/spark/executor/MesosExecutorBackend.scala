@@ -52,7 +52,8 @@ private[spark] class MesosExecutorBackend
       slaveInfo: SlaveInfo) {
     logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
     this.driver = driver
-    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
+    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
+      Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     executor = new Executor(
       executorInfo.getExecutorId.getValue,
       slaveInfo.getHostname,
@@ -64,7 +65,7 @@ private[spark] class MesosExecutorBackend
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
-      executor.launchTask(this, taskId, taskInfo.getData.asReadOnlyByteBuffer)
+      executor.launchTask(this, taskId, taskInfo.getName, taskInfo.getData.asReadOnlyByteBuffer)
     }
   }
 

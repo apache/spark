@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.{HashPartitioner, SparkConf}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
 /**
@@ -37,9 +37,11 @@ import org.apache.spark.util.MutablePair
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output = projectList.map(_.toAttribute)
 
-  override def execute() = child.execute().mapPartitions { iter =>
-    @transient val reusableProjection = new MutableProjection(projectList)
-    iter.map(reusableProjection)
+  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
+
+  def execute() = child.execute().mapPartitions { iter =>
+    val resuableProjection = buildProjection()
+    iter.map(resuableProjection)
   }
 }
 
@@ -50,8 +52,10 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output = child.output
 
-  override def execute() = child.execute().mapPartitions { iter =>
-    iter.filter(condition.eval(_).asInstanceOf[Boolean])
+  @transient lazy val conditionEvaluator = newPredicate(condition, child.output)
+
+  def execute() = child.execute().mapPartitions { iter =>
+    iter.filter(conditionEvaluator)
   }
 }
 
@@ -72,12 +76,10 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class Union(children: Seq[SparkPlan])(@transient sqlContext: SQLContext) extends SparkPlan {
+case class Union(children: Seq[SparkPlan]) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output = children.head.output
-  override def execute() = sqlContext.sparkContext.union(children.map(_.execute()))
-
-  override def otherCopyArgs = sqlContext :: Nil
+  override def execute() = sparkContext.union(children.map(_.execute()))
 }
 
 /**
@@ -89,14 +91,16 @@ case class Union(children: Seq[SparkPlan])(@transient sqlContext: SQLContext) ex
  * repartition all the data to a single partition to compute the global limit.
  */
 @DeveloperApi
-case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext)
+case class Limit(limit: Int, child: SparkPlan)
   extends UnaryNode {
   // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
   // partition local limit -> exchange into one partition -> partition local limit again
 
-  override def otherCopyArgs = sqlContext :: Nil
+  /** We must copy rows when sort based shuffle is on */
+  private def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
 
   override def output = child.output
+  override def outputPartitioning = SinglePartition
 
   /**
    * A custom implementation modeled after the take function on RDDs but which never runs any job
@@ -143,12 +147,18 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext
   }
 
   override def execute() = {
-    val rdd = child.execute().mapPartitions { iter =>
-      val mutablePair = new MutablePair[Boolean, Row]()
-      iter.take(limit).map(row => mutablePair.update(false, row))
+    val rdd: RDD[_ <: Product2[Boolean, Row]] = if (sortBasedShuffleOn) {
+      child.execute().mapPartitions { iter =>
+        iter.take(limit).map(row => (false, row.copy()))
+      }
+    } else {
+      child.execute().mapPartitions { iter =>
+        val mutablePair = new MutablePair[Boolean, Row]()
+        iter.take(limit).map(row => mutablePair.update(false, row))
+      }
     }
     val part = new HashPartitioner(1)
-    val shuffled = new ShuffledRDD[Boolean, Row, Row, MutablePair[Boolean, Row]](rdd, part)
+    val shuffled = new ShuffledRDD[Boolean, Row, Row](rdd, part)
     shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
     shuffled.mapPartitions(_.take(limit).map(_._2))
   }
@@ -161,20 +171,19 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext
  * Spark's top operator does the opposite in ordering so we name it TakeOrdered to avoid confusion.
  */
 @DeveloperApi
-case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
-                      (@transient sqlContext: SQLContext) extends UnaryNode {
-  override def otherCopyArgs = sqlContext :: Nil
+case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) extends UnaryNode {
 
   override def output = child.output
+  override def outputPartitioning = SinglePartition
 
-  @transient
-  lazy val ordering = new RowOrdering(sortOrder)
+  val ordering = new RowOrdering(sortOrder, child.output)
 
+  // TODO: Is this copying for no reason?
   override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  override def execute() = sqlContext.sparkContext.makeRDD(executeCollect(), 1)
+  override def execute() = sparkContext.makeRDD(executeCollect(), 1)
 }
 
 /**
@@ -189,15 +198,13 @@ case class Sort(
   override def requiredChildDistribution =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  @transient
-  lazy val ordering = new RowOrdering(sortOrder)
 
   override def execute() = attachTree(this, "sort") {
-    // TODO: Optimize sorting operation?
     child.execute()
-      .mapPartitions(
-        iterator => iterator.map(_.copy()).toArray.sorted(ordering).iterator,
-        preservesPartitioning = true)
+      .mapPartitions( { iterator =>
+        val ordering = newOrdering(sortOrder, child.output)
+        iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    }, preservesPartitioning = true)
   }
 
   override def output = child.output
@@ -205,49 +212,35 @@ case class Sort(
 
 /**
  * :: DeveloperApi ::
+ * Computes the set of distinct input rows using a HashSet.
+ * @param partial when true the distinct operation is performed partially, per partition, without
+ *                shuffling the data.
+ * @param child the input query plan.
  */
 @DeveloperApi
-object ExistingRdd {
-  def convertToCatalyst(a: Any): Any = a match {
-    case o: Option[_] => o.orNull
-    case s: Seq[Any] => s.map(convertToCatalyst)
-    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
-    case other => other
-  }
+case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
+  override def output = child.output
 
-  def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
-    data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
+  override def requiredChildDistribution =
+    if (partial) UnspecifiedDistribution :: Nil else ClusteredDistribution(child.output) :: Nil
 
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) = convertToCatalyst(r.productElement(i))
-            i += 1
-          }
+  override def execute() = {
+    child.execute().mapPartitions { iter =>
+      val hashSet = new scala.collection.mutable.HashSet[Row]()
 
-          mutableRow
+      var currentRow: Row = null
+      while (iter.hasNext) {
+        currentRow = iter.next()
+        if (!hashSet.contains(currentRow)) {
+          hashSet.add(currentRow.copy())
         }
       }
+
+      hashSet.iterator
     }
   }
-
-  def fromProductRdd[A <: Product : TypeTag](productRdd: RDD[A]) = {
-    ExistingRdd(ScalaReflection.attributesFor[A], productToRowRdd(productRdd))
-  }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  override def execute() = rdd
-}
 
 /**
  * :: DeveloperApi ::
@@ -275,4 +268,16 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   override def execute() = {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
+}
+
+/**
+ * :: DeveloperApi ::
+ * A plan node that does nothing but lie about the output of its child.  Used to spice a
+ * (hopefully structurally equivalent) tree from a different optimization sequence into an already
+ * resolved tree.
+ */
+@DeveloperApi
+case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
+  def children = child :: Nil
+  def execute() = child.execute()
 }

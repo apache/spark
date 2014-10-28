@@ -31,13 +31,9 @@ abstract class RedistributeData extends UnaryNode {
 
 case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)
     extends RedistributeData {
-
-  def references = sortExpressions.flatMap(_.references).toSet
 }
 
 case class Repartition(partitionExpressions: Seq[Expression], child: LogicalPlan)
     extends RedistributeData {
-
-  def references = partitionExpressions.flatMap(_.references).toSet
 }
 
