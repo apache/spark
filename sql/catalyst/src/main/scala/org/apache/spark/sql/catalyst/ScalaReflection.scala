@@ -62,7 +62,7 @@ object ScalaReflection {
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
-    case (r: Row, udt: UserDefinedType[_]) => udt.deserialize(r)
+    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
     case (other, _) => other
   }
 
