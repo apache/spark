@@ -213,7 +213,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
     val parent = childResults.mapPartitions { iter =>
       val pickle = new Pickler
       val currentRow = newMutableProjection(udf.children, child.output)()
-      val fields = udf.children.seq.map(_.dataType)
+      val fields = udf.children.map(_.dataType)
       iter.grouped(1000).map { inputRows =>
         val toBePickled = inputRows.map { row =>
           EvaluatePython.rowToArray(currentRow(row), fields)

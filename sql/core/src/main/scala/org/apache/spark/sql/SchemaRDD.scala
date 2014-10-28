@@ -381,12 +381,11 @@ class SchemaRDD(
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
-    val fields = rowSchema.fields.map(_.dataType)
+    val fieldTypes = schema.fields.map(_.dataType)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        EvaluatePython.rowToArray(row, fields)
+        EvaluatePython.rowToArray(row, fieldTypes)
       }.grouped(100).map(batched => pickle.dumps(batched.toArray))
     }
   }
@@ -396,11 +395,10 @@ class SchemaRDD(
    * format as javaToPython. It is used by pyspark.
    */
   private[sql] def collectToPython: JList[Array[Byte]] = {
-    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
-    val fields = rowSchema.fields.map(_.dataType)
+    val fieldTypes = schema.fields.map(_.dataType)
     val pickle = new Pickler
     new java.util.ArrayList(collect().map { row =>
-      EvaluatePython.rowToArray(row, fields)
+      EvaluatePython.rowToArray(row, fieldTypes)
     }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
 
