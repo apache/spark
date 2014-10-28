@@ -99,6 +99,16 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
   @transient
   protected lazy val arguments = children.map(c => toInspector(c.dataType)).toArray
 
+  @transient
+  protected lazy val isUDFDeterministic = {
+    val udfType = function.getClass().getAnnotation(classOf[HiveUDFType])
+    udfType != null && udfType.deterministic()
+  }
+
+  override def foldable = {
+    isUDFDeterministic && children.foldLeft(true)((prev, n) => prev && n.foldable)
+  }
+
   // Create parameter converters
   @transient
   protected lazy val conversionHelper = new ConversionHelper(method, arguments)

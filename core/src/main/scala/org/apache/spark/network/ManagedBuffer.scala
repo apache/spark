@@ -81,7 +81,13 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
       // Just copy the buffer if it's sufficiently small, as memory mapping has a high overhead.
       if (length < MIN_MEMORY_MAP_BYTES) {
         val buf = ByteBuffer.allocate(length.toInt)
-        channel.read(buf, offset)
+        channel.position(offset)
+        while (buf.remaining() != 0) {
+          if (channel.read(buf) == -1) {
+            throw new IOException("Reached EOF before filling buffer\n" +
+              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
+          }
+        }
         buf.flip()
         buf
       } else {
@@ -106,7 +112,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     var is: FileInputStream = null
     try {
       is = new FileInputStream(file)
-      is.skip(offset)
+      ByteStreams.skipFully(is, offset)
       ByteStreams.limit(is, length)
     } catch {
       case e: IOException =>
