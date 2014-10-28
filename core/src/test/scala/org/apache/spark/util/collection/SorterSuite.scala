@@ -90,7 +90,8 @@ class SorterSuite extends FunSuite {
   /**
    * This provides a simple benchmark for comparing the Sorter with Java internal sorting.
    * Ideally these would be executed one at a time, each in their own JVM, so their listing
-   * here is mainly to have the code.
+   * here is mainly to have the code. Running multiple tests within the same JVM session would
+   * prevent JIT inlining overridden methods and hence hurt the performance.
    *
    * The goal of this code is to sort an array of key-value pairs, where the array physically
    * has the keys and values alternating. The basic Java sorts work only on the keys, so the
@@ -151,6 +152,10 @@ class SorterSuite extends FunSuite {
    * Tests for sorting with primitive keys with/without key reuse. Java's Arrays.sort is used as
    * reference, which is expected to be faster but it can only sort a single array. Sorter can be
    * used to sort parallel arrays.
+   *
+   * Ideally these would be executed one at a time, each in their own JVM, so their listing
+   * here is mainly to have the code. Running multiple tests within the same JVM session would
+   * prevent JIT inlining overridden methods and hence hurt the performance.
    */
   ignore("Sorter benchmark for primitive int array") {
     val numElements = 25000000 // 25 mil

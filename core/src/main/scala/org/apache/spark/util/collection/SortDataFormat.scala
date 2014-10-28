@@ -27,14 +27,15 @@ import scala.reflect.ClassTag
  * Example format: an array of numbers, where each element is also the key.
  * See [[KVArraySortDataFormat]] for a more exciting format.
  *
- * This trait extends Any to ensure it is universal (and thus compiled to a Java interface).
+ * Declaring and instantiating multiple subclasses of this class would prevent JIT inlining
+ * overridden methods and hence decrease the shuffle performance.
  *
  * @tparam K Type of the sort key of each element
  * @tparam Buffer Internal data structure used by a particular format (e.g., Array[Int]).
  */
 // TODO: Making Buffer a real trait would be a better abstraction, but adds some complexity.
 private[spark]
-trait SortDataFormat[K, Buffer] extends Any {
+abstract class SortDataFormat[K, Buffer] extends Any {
 
   /**
    * Creates a new mutable key for reuse. This should be implemented if you want to override
