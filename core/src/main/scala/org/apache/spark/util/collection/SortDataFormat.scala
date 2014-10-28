@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
  * Example format: an array of numbers, where each element is also the key.
  * See [[KVArraySortDataFormat]] for a more exciting format.
  *
- * Declaring and instantiating multiple subclasses of this class would prevent JIT inlining
+ * Note: Declaring and instantiating multiple subclasses of this class would prevent JIT inlining
  * overridden methods and hence decrease the shuffle performance.
  *
  * @tparam K Type of the sort key of each element
