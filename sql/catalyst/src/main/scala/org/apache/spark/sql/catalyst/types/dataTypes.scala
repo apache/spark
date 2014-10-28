@@ -69,11 +69,9 @@ object DataType {
       StructType(fields.map(parseStructField))
 
     case JSortedObject(
-        ("serdes", JString(serdesClass)),
-        ("type", JString("udt"))) => {
-      val serdes = Class.forName(serdesClass).newInstance().asInstanceOf[UserDefinedTypeSerDes[_]]
-      new UserDefinedType(serdes)
-    }
+        ("class", JString(udtClass)),
+        ("type", JString("udt"))) =>
+      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -507,7 +505,7 @@ case class MapType(
  * The data type for User Defined Types (UDTs).
  *
  * This interface allows a user to make their own classes more interoperable with SparkSQL;
- * e.g., by creating a [[UserDefinedTypeSerDes]] for a class X, it becomes possible to create a SchemaRDD
+ * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create a SchemaRDD
  * which has class X in the schema.
  *
  * For SparkSQL to recognize UDTs, the UDT must be registered in
@@ -520,12 +518,12 @@ case class MapType(
  * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
  */
 @DeveloperApi
-abstract class UserDefinedTypeSerDes[UserType] extends Serializable {
+abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
-  def userType: Class[UserType]
+  // def userType: Class[UserType]
 
   /** Underlying storage type for this UDT used by SparkSQL */
-  def sqlType: DataType
+  def sqlType: StructType
 
   /** Convert the user type to a Row object */
   // TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
@@ -534,12 +532,9 @@ abstract class UserDefinedTypeSerDes[UserType] extends Serializable {
 
   /** Convert a Row object to the user type */
   def deserialize(row: Row): UserType
-}
 
-case class UserDefinedType[UserType](serdes: UserDefinedTypeSerDes[UserType])
-    extends DataType with Serializable {
   override private[sql] def jsonValue: JValue = {
     ("type" -> "udt") ~
-      ("serdes" -> serdes.getClass.getName)
+      ("class" -> this.getClass.getName)
   }
 }

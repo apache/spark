@@ -182,10 +182,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case t @ StructType(_) => writeStruct(
           t,
           value.asInstanceOf[CatalystConverter.StructScalaType[_]])
-        case UserDefinedType(serdes) => {
-          println(value.getClass)
-          writeValue(serdes.sqlType, serdes.serialize(value))
-        }
+        case t: UserDefinedType[_] => writeValue(t.sqlType, value)
         case _ => writePrimitive(schema.asInstanceOf[PrimitiveType], value)
       }
     }

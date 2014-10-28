@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.annotation;
 import java.lang.annotation.*;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.sql.catalyst.types.UserDefinedTypeSerDes;
+import org.apache.spark.sql.catalyst.types.UserDefinedType;
 
 /**
  * ::DeveloperApi::
@@ -38,5 +38,5 @@ import org.apache.spark.sql.catalyst.types.UserDefinedTypeSerDes;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface SQLUserDefinedType {
-  Class<? extends UserDefinedTypeSerDes<?> > serdes();
+  Class<? extends UserDefinedType<?> > udt();
 }
