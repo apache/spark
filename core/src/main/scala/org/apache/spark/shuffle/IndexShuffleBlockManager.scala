@@ -20,6 +20,8 @@ package org.apache.spark.shuffle
 import java.io._
 import java.nio.ByteBuffer
 
+import com.google.common.io.ByteStreams
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.network.{ManagedBuffer, FileSegmentManagedBuffer}
 import org.apache.spark.storage._
@@ -101,7 +103,7 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
 
     val in = new DataInputStream(new FileInputStream(indexFile))
     try {
-      in.skip(blockId.reduceId * 8)
+      ByteStreams.skipFully(in, blockId.reduceId * 8)
       val offset = in.readLong()
       val nextOffset = in.readLong()
       new FileSegmentManagedBuffer(

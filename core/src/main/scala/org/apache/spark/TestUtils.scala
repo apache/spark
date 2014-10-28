@@ -23,8 +23,8 @@ import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConversions._
 
+import com.google.common.io.{ByteStreams, Files}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
-import com.google.common.io.Files
 
 import org.apache.spark.util.Utils
 
@@ -64,12 +64,7 @@ private[spark] object TestUtils {
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
-      val buffer = new Array[Byte](10240)
-      var nRead = 0
-      while (nRead <= 0) {
-        nRead = in.read(buffer, 0, buffer.length)
-        jarStream.write(buffer, 0, nRead)
-      }
+      ByteStreams.copy(in, jarStream)
       in.close()
     }
     jarStream.close()
