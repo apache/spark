@@ -35,14 +35,6 @@ Session = sessionmaker()
 #engine = create_engine('mysql://airflow:airflow@localhost/airflow')
 engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )
 Session.configure(bind=engine)
-HEADER = """\
-       .__         _____.__                 
-_____  |__|_______/ ____\  |   ______  _  __
-\__  \ |  \_  __ \   __\|  |  /  _ \ \/ \/ /
- / __ \|  ||  | \/|  |  |  |_(  <_> )     / 
-(____  /__||__|   |__|  |____/\____/ \/\_/  
-     \/"""
-
 CELERY_APP_NAME = "airflow.executors.celery_worker"
 CELERY_BROKER = "amqp"
 CELERY_RESULTS_BACKEND = "amqp://"
