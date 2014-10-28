@@ -4,7 +4,7 @@ set hive.optimize.skewjoin.compiletime = true;
 
 CREATE TABLE tmpT1(key STRING, val STRING) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE tmpT1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE tmpT1;
 
 -- testing skew on other data types - int
 CREATE TABLE T1(key INT, val STRING) SKEWED BY (key) ON ((2));
@@ -16,7 +16,7 @@ INSERT OVERWRITE TABLE T1 SELECT key, val FROM tmpT1;
 CREATE TABLE T2(key STRING, val STRING)
 SKEWED BY (key) ON ((3)) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T2.txt' INTO TABLE T2;
+LOAD DATA LOCAL INPATH '../../data/files/T2.txt' INTO TABLE T2;
 
 -- Once HIVE-3445 is fixed, the compile time skew join optimization would be
 -- applicable here. Till the above jira is fixed, it would be performed as a

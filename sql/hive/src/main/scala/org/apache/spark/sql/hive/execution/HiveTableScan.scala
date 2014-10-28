@@ -23,7 +23,6 @@ import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -69,6 +68,9 @@ case class HiveTableScan(
   @transient
   private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
 
+  // append columns ids and names before broadcast
+  addColumnMetadataToConf(hiveExtraConf)
+
   @transient
   private[this] val hadoopReader = 
     new HadoopTableReader(attributes, relation, context, hiveExtraConf)
@@ -83,8 +85,7 @@ case class HiveTableScan(
       attributes.map(a =>
         relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
 
-    ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
-    ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
+    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
 
     val tableDesc = relation.tableDesc
     val deserializer = tableDesc.getDeserializerClass.newInstance
@@ -106,8 +107,6 @@ case class HiveTableScan(
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
     hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
   }
-
-  addColumnMetadataToConf(hiveExtraConf)
 
   /**
    * Prunes partitions not involve the query plan.
