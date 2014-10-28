@@ -28,18 +28,19 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   private def createSparkContext(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
-      addThresholdSeconds: Long = 1,
-      addIntervalSeconds: Long = 1,
-      removeThresholdSeconds: Long = 3): SparkContext = {
+      schedulerBacklogTimeout: Long = 1,
+      sustainedSchedulerBacklogTimeout: Long = 1,
+      executorIdleTimeout: Long = 3): SparkContext = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.minExecutors", minExecutors + "")
       .set("spark.dynamicAllocation.maxExecutors", maxExecutors + "")
-      .set("spark.dynamicAllocation.addExecutorThresholdSeconds", addThresholdSeconds + "")
-      .set("spark.dynamicAllocation.addExecutorIntervalSeconds", addIntervalSeconds + "")
-      .set("spark.dynamicAllocation.removeExecutorThresholdSeconds", removeThresholdSeconds + "")
+      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout + "")
+      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
+        sustainedSchedulerBacklogTimeout + "")
+      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout + "")
     new SparkContext(conf)
   }
 
@@ -258,57 +259,70 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("starting/canceling add timer") {
-    val addThresholdSeconds = 30L
-    val sc = createSparkContext(2, 10, addThresholdSeconds = addThresholdSeconds)
+    val schedulerBacklogTimeout = 30L
+    val sc = createSparkContext(2, 10, schedulerBacklogTimeout = schedulerBacklogTimeout)
     val manager = sc.executorAllocationManager.get
 
     assert(manager.getAddTime === NOT_SET)
-    val firstAddTime = manager.onSchedulerBacklogged()
-    assert(manager.getAddTime !== NOT_SET)
+    manager.onSchedulerBacklogged()
+    val firstAddTime = manager.getAddTime
+    assert(firstAddTime !== NOT_SET)
     Thread.sleep(100)
-    assert(manager.onSchedulerBacklogged() === firstAddTime) // timer is already started
-    assert(manager.onSchedulerBacklogged() === firstAddTime)
-    assert(manager.onSchedulerBacklogged() <
-      System.currentTimeMillis() + addThresholdSeconds * 1000)
+    manager.onSchedulerBacklogged()
+    assert(manager.getAddTime === firstAddTime) // timer is already started
+    manager.onSchedulerBacklogged()
+    assert(manager.getAddTime === firstAddTime)
+    manager.onSchedulerBacklogged()
+    assert(manager.getAddTime <
+      System.currentTimeMillis() + schedulerBacklogTimeout * 1000)
     manager.onSchedulerQueueEmpty()
 
     // Restart add timer
     assert(manager.getAddTime === NOT_SET)
-    val secondAddTime = manager.onSchedulerBacklogged()
-    assert(manager.getAddTime !== NOT_SET)
-    assert(manager.onSchedulerBacklogged() === secondAddTime)
+    manager.onSchedulerBacklogged()
+    val secondAddTime = manager.getAddTime
+    assert(secondAddTime !== NOT_SET)
+    manager.onSchedulerBacklogged()
+    assert(manager.getAddTime === secondAddTime)
+    assert(manager.getAddTime !== firstAddTime)
     assert(firstAddTime !== secondAddTime)
   }
 
   test("starting/canceling remove timers") {
-    val removeThresholdSeconds = 30L
-    val sc = createSparkContext(2, 10, removeThresholdSeconds = removeThresholdSeconds)
+    val executorIdleTimeout = 30L
+    val sc = createSparkContext(2, 10, executorIdleTimeout = executorIdleTimeout)
     val manager = sc.executorAllocationManager.get
 
     assert(manager.getRemoveTimes.isEmpty)
-    val firstRemoveTime = manager.onExecutorIdle("1")
+    manager.onExecutorIdle("1")
     assert(manager.getRemoveTimes.size === 1)
     assert(manager.getRemoveTimes.contains("1"))
+    val firstRemoveTime = manager.getRemoveTimes("1")
     Thread.sleep(100)
-    assert(manager.onExecutorIdle("1") === firstRemoveTime) // timer is already started
-    assert(manager.onExecutorIdle("1") === firstRemoveTime)
-    assert(manager.onExecutorIdle("2") !== firstRemoveTime) // different executor
-    assert(manager.onExecutorIdle("3") !== firstRemoveTime)
+    manager.onExecutorIdle("1")
+    assert(manager.getRemoveTimes("1") === firstRemoveTime) // timer is already started
+    manager.onExecutorIdle("1")
+    assert(manager.getRemoveTimes("1") === firstRemoveTime)
+    manager.onExecutorIdle("2")
+    assert(manager.getRemoveTimes("2") !== firstRemoveTime) // different executor
+    manager.onExecutorIdle("3")
+    assert(manager.getRemoveTimes("3") !== firstRemoveTime)
     assert(manager.getRemoveTimes.size === 3)
     assert(manager.getRemoveTimes.contains("2"))
     assert(manager.getRemoveTimes.contains("3"))
     assert(manager.getRemoveTimes("1") <
-      System.currentTimeMillis() + removeThresholdSeconds * 1000)
+      System.currentTimeMillis() + executorIdleTimeout * 1000)
 
     // Restart remove timer
     manager.onExecutorBusy("1")
     assert(manager.getRemoveTimes.size === 2)
-    val secondRemoveTime = manager.onExecutorIdle("1")
+    manager.onExecutorIdle("1")
     assert(manager.getRemoveTimes.size === 3)
-    assert(manager.onExecutorIdle("1") === secondRemoveTime)
+    assert(manager.getRemoveTimes.contains("1"))
+    val secondRemoveTime = manager.getRemoveTimes("1")
+    assert(manager.getRemoveTimes("1") === secondRemoveTime) // timer is already started
+    assert(manager.getRemoveTimes("1") !== firstRemoveTime)
     assert(firstRemoveTime !== secondRemoveTime)
-    assert(manager.getRemoveTimes("2") === manager.onExecutorIdle("2"))
-    assert(manager.getRemoveTimes("3") === manager.onExecutorIdle("3"))
   }
 
   test("listeners trigger add executors correctly") {

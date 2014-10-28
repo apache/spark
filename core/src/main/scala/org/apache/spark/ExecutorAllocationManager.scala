@@ -339,16 +339,27 @@ private object ExecutorAllocationManager {
 private class ExecutorAllocationListener(allocationManager: ExecutorAllocationManager)
   extends SparkListener {
 
-  private val stageIdToPendingTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
+  private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
+  private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
   private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     val stageId = stageSubmitted.stageInfo.stageId
     val numTasks = stageSubmitted.stageInfo.numTasks
-    // Start the add timer because there are new pending tasks
-    stageIdToPendingTaskIndices.getOrElseUpdate(
-      stageId, new mutable.HashSet[Int]) ++= (0 to numTasks - 1)
+    stageIdToNumTasks(stageId) = numTasks
     allocationManager.onSchedulerBacklogged()
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
+    val stageId = stageCompleted.stageInfo.stageId
+    stageIdToNumTasks -= stageId
+    stageIdToTaskIndices -= stageId
+
+    // If this is the last stage with pending tasks, mark the scheduler queue as empty
+    // This is needed in case the stage is aborted for any reason
+    if (stageIdToNumTasks.isEmpty) {
+      allocationManager.onSchedulerQueueEmpty()
+    }
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
@@ -357,18 +368,19 @@ private class ExecutorAllocationListener(allocationManager: ExecutorAllocationMa
     val taskIndex = taskStart.taskInfo.index
     val executorId = taskStart.taskInfo.executorId
 
-    // If there are no more pending tasks, cancel the add timer
-    if (stageIdToPendingTaskIndices.contains(stageId)) {
-      stageIdToPendingTaskIndices(stageId) -= taskIndex
-      if (stageIdToPendingTaskIndices(stageId).isEmpty) {
-        stageIdToPendingTaskIndices -= stageId
+    // If this is the last pending task, mark the scheduler queue as empty
+    stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+    val numTasksScheduled = stageIdToTaskIndices(stageId).size
+    val numTasksTotal = stageIdToNumTasks.getOrElse(stageId, -1)
+    if (numTasksScheduled == numTasksTotal) {
+      // No more pending tasks for this stage
+      stageIdToNumTasks -= stageId
+      if (stageIdToNumTasks.isEmpty) {
+        allocationManager.onSchedulerQueueEmpty()
       }
     }
-    if (stageIdToPendingTaskIndices.isEmpty) {
-      allocationManager.onSchedulerQueueEmpty()
-    }
 
-    // Cancel the remove timer because the executor is now running a task
+    // Mark the executor on which this task is scheduled as busy
     executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
     allocationManager.onExecutorBusy(executorId)
   }
@@ -376,15 +388,14 @@ private class ExecutorAllocationListener(allocationManager: ExecutorAllocationMa
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val executorId = taskEnd.taskInfo.executorId
     val taskId = taskEnd.taskInfo.taskId
+
+    // If the executor is no longer running scheduled any tasks, mark it as idle
     if (executorIdToTaskIds.contains(executorId)) {
       executorIdToTaskIds(executorId) -= taskId
       if (executorIdToTaskIds(executorId).isEmpty) {
         executorIdToTaskIds -= executorId
+        allocationManager.onExecutorIdle(executorId)
       }
-    }
-    // If there are no more tasks running on this executor, start the remove timer
-    if (!executorIdToTaskIds.contains(executorId)) {
-      allocationManager.onExecutorIdle(executorId)
     }
   }
 
