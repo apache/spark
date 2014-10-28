@@ -348,4 +348,4 @@ private[spark] class SparseVectorUDT extends UserDefinedType[SparseVector] {
     val values = row.getAs[Seq[Double]](2).toArray
     new SparseVector(vSize, indices, values)
   }
-
+}

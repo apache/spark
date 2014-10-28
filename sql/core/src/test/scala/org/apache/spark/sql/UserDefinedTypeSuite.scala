@@ -47,8 +47,8 @@ class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   }
 
   override def deserialize(row: Row): MyDenseVector = {
-    val features = row.getAs[Seq[Double]](0).toArray
-    new MyDenseVector(features)
+    val data = row.getAs[Seq[Double]](0).toArray
+    new MyDenseVector(data)
   }
 }
 
