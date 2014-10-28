@@ -204,88 +204,32 @@ private[hive] trait HiveInspectors {
   }
 
   def toInspector(expr: Expression): ObjectInspector = expr match {
-      // TODO this is how we used it in Hive 0.13
-//    case Literal(value: String, StringType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.stringTypeInfo, new hadoopIo.Text(value))
-//    case Literal(value: Int, IntegerType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.intTypeInfo, new hadoopIo.IntWritable(value))
-//    case Literal(value: Double, DoubleType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.doubleTypeInfo, new hiveIo.DoubleWritable(value))
-//    case Literal(value: Boolean, BooleanType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.booleanTypeInfo, new hadoopIo.BooleanWritable(value))
-//    case Literal(value: Long, LongType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.longTypeInfo, new hadoopIo.LongWritable(value))
-//    case Literal(value: Float, FloatType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.floatTypeInfo, new hadoopIo.FloatWritable(value))
-//    case Literal(value: Short, ShortType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.shortTypeInfo, new hiveIo.ShortWritable(value))
-//    case Literal(value: Byte, ByteType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.byteTypeInfo, new hiveIo.ByteWritable(value))
-//    case Literal(value: Array[Byte], BinaryType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.binaryTypeInfo, new hadoopIo.BytesWritable(value))
-//    case Literal(value: java.sql.Date, DateType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.dateTypeInfo, new hiveIo.DateWritable(value))
-//    case Literal(value: java.sql.Timestamp, TimestampType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.timestampTypeInfo, new hiveIo.TimestampWritable(value))
-//    case Literal(value: BigDecimal, DecimalType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.decimalTypeInfo,
-//        new hiveIo.HiveDecimalWritable(HiveShim.createDecimal(value.underlying())))
-//    case Literal(_, NullType) =>
-//      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-//        TypeInfoFactory.voidTypeInfo, null)
-      // the following code is for Hive 0.12
     case Literal(value: String, StringType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.STRING, new hadoopIo.Text(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Int, IntegerType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.INT, new hadoopIo.IntWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Double, DoubleType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.DOUBLE, new hiveIo.DoubleWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Boolean, BooleanType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.BOOLEAN, new hadoopIo.BooleanWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Long, LongType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.LONG, new hadoopIo.LongWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Float, FloatType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.FLOAT, new hadoopIo.FloatWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Short, ShortType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.SHORT, new hiveIo.ShortWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Byte, ByteType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.BYTE, new hiveIo.ByteWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: Array[Byte], BinaryType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.BINARY, new hadoopIo.BytesWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: java.sql.Date, DateType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.DATE, new hiveIo.DateWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: java.sql.Timestamp, TimestampType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.TIMESTAMP, new hiveIo.TimestampWritable(value))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(value: BigDecimal, DecimalType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.DECIMAL,
-        new hiveIo.HiveDecimalWritable(HiveShim.createDecimal(value.underlying())))
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
     case Literal(_, NullType) =>
-      PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-        PrimitiveCategory.VOID, null)
+      HiveShim.getPrimitiveNullWritableConstantObjectInspector
     case Literal(value: Seq[_], ArrayType(dt, _)) =>
       val listObjectInspector = toInspector(dt)
       val list = new java.util.ArrayList[Object]()
