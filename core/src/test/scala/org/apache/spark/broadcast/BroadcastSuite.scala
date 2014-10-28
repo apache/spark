@@ -17,11 +17,14 @@
 
 package org.apache.spark.broadcast
 
-import org.scalatest.FunSuite
+import scala.util.Random
+
+import org.scalatest.{Assertions, FunSuite}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
+import org.apache.spark.io.SnappyCompressionCodec
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
-
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
 
@@ -84,6 +87,24 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(results.collect().toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
   }
 
+  test("TorrentBroadcast's blockifyObject and unblockifyObject are inverses") {
+    import org.apache.spark.broadcast.TorrentBroadcast._
+    val blockSize = 1024
+    val conf = new SparkConf()
+    val compressionCodec = Some(new SnappyCompressionCodec(conf))
+    val serializer = new JavaSerializer(conf)
+    val seed = 42
+    val rand = new Random(seed)
+    for (trial <- 1 to 100) {
+      val size = 1 + rand.nextInt(1024 * 10)
+      val data: Array[Byte] = new Array[Byte](size)
+      rand.nextBytes(data)
+      val blocks = blockifyObject(data, blockSize, serializer, compressionCodec)
+      val unblockified = unBlockifyObject[Array[Byte]](blocks, serializer, compressionCodec)
+      assert(unblockified === data)
+    }
+  }
+
   test("Unpersisting HttpBroadcast on executors only in local mode") {
     testUnpersistHttpBroadcast(distributed = false, removeFromDriver = false)
   }
@@ -115,6 +136,12 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
   test("Unpersisting TorrentBroadcast on executors and driver in distributed mode") {
     testUnpersistTorrentBroadcast(distributed = true, removeFromDriver = true)
   }
+
+  test("Using broadcast after destroy prints callsite") {
+    sc = new SparkContext("local", "test")
+    testPackage.runCallSiteTest(sc)
+  }
+
   /**
    * Verify the persistence of state associated with an HttpBroadcast in either local mode or
    * local-cluster mode (when distributed = true).
@@ -193,26 +220,17 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
       statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      assert(statuses.size === (if (distributed) 1 else 0))
+      assert(statuses.size === 1)
     }
 
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(broadcastId: Long, bmm: BlockManagerMaster) {
       var blockId = BroadcastBlockId(broadcastId)
-      var statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      if (distributed) {
-        assert(statuses.size === numSlaves + 1)
-      } else {
-        assert(statuses.size === 1)
-      }
+      val statuses = bmm.getBlockStatus(blockId, askSlaves = true)
+      assert(statuses.size === numSlaves + 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      statuses = bmm.getBlockStatus(blockId, askSlaves = true)
-      if (distributed) {
-        assert(statuses.size === numSlaves + 1)
-      } else {
-        assert(statuses.size === 0)
-      }
+      assert(statuses.size === numSlaves + 1)
     }
 
     // Verify that blocks are unpersisted on all executors, and on all nodes if removeFromDriver
@@ -224,7 +242,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       assert(statuses.size === expectedNumBlocks)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      expectedNumBlocks = if (removeFromDriver || !distributed) 0 else 1
+      expectedNumBlocks = if (removeFromDriver) 0 else 1
       statuses = bmm.getBlockStatus(blockId, askSlaves = true)
       assert(statuses.size === expectedNumBlocks)
     }
@@ -298,4 +316,16 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.broadcast.factory", "org.apache.spark.broadcast.%s".format(factoryName))
     conf
   }
+}
+
+package object testPackage extends Assertions {
+
+  def runCallSiteTest(sc: SparkContext) {
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val broadcast = sc.broadcast(rdd)
+    broadcast.destroy()
+    val thrown = intercept[SparkException] { broadcast.value }
+    assert(thrown.getMessage.contains("BroadcastSuite.scala"))
+  }
+
 }

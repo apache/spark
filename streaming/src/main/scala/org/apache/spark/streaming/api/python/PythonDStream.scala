@@ -33,6 +33,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Interval, Duration, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -73,13 +74,13 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
     pfunc.call(time.milliseconds, rdds)
   }
 
-  private def writeObject(out: ObjectOutputStream): Unit = {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val bytes = PythonTransformFunctionSerializer.serialize(pfunc)
     out.writeInt(bytes.length)
     out.write(bytes)
   }
 
-  private def readObject(in: ObjectInputStream): Unit = {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val length = in.readInt()
     val bytes = new Array[Byte](length)
     in.readFully(bytes)
