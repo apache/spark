@@ -101,6 +101,13 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   fi
 fi
 
+echo "cleaning jenkins.."
+rm -rf /home/jenkins/.ivy2/
+
+find "$FWDIR" \( -name "target" -o -name "checkpoint" \) -type d -exec rm -r {} +
+
+rm -rf "$FWDIR"/lib_managed/
+
 set -o pipefail
 trap 'handle_error $LINENO' ERR
 
