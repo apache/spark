@@ -17,11 +17,11 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.collection.Map
-import scala.reflect.{classTag, ClassTag}
-
 import java.util.Properties
 import java.util.concurrent.Executors
+
+import scala.collection.Map
+import scala.reflect.{classTag, ClassTag}
 
 import kafka.consumer._
 import kafka.serializer.Decoder
