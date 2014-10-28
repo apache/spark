@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.UDTRegistry
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.UserDefinedType
@@ -60,6 +61,10 @@ class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   }
 }
 
+/*
+// This is to test registering a UDT which is defined within an object (where Java and Scala
+// reflection use different class names).  This functionality is currently not supported but
+// should be later on.
 object UserDefinedTypeSuiteObject {
 
   class ClassInObject(val dv: MyDenseVector) extends Serializable
@@ -79,6 +84,7 @@ object UserDefinedTypeSuiteObject {
     override def deserialize(row: Row): ClassInObject = new ClassInObject(dvUDT.deserialize(row))
   }
 }
+*/
 
 class UserDefinedTypeSuite extends QueryTest {
 

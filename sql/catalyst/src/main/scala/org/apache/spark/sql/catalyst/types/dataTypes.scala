@@ -581,6 +581,9 @@ case class MapType(
  * explicitly by calling [[org.apache.spark.sql.catalyst.UDTRegistry.registerType()]] before using
  * the UDT with SparkSQL, or implicitly by annotating the UDT with
  * [[org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType]].
+ *
+ * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
+ * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
  */
 @DeveloperApi
 abstract class UserDefinedType[UserType] extends DataType with Serializable {
