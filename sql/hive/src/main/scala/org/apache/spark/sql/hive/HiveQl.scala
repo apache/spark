@@ -448,14 +448,14 @@ private[hive] object HiveQl {
       }
 
     case Token("TOK_CREATETABLE", children)
-        if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      // TODO: Parse other clauses.
+        if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
       val (
           Some(tableNameParts) ::
           _ /* likeTable */ ::
-          Some(query) +:
-          notImplemented) =
+          Some(query) ::
+          allowExisting +:
+          ignores) =
         getClauses(
           Seq(
             "TOK_TABNAME",
@@ -479,14 +479,9 @@ private[hive] object HiveQl {
             "TOK_TABLELOCATION",
             "TOK_TABLEPROPERTIES"),
           children)
-      if (notImplemented.exists(token => !token.isEmpty)) {
-        throw new NotImplementedError(
-          s"Unhandled clauses: ${notImplemented.flatten.map(dumpTree(_)).mkString("\n")}")
-      }
-
       val (db, tableName) = extractDbNameTableName(tableNameParts)
 
-      CreateTableAsSelect(db, tableName, nodeToPlan(query))
+      CreateTableAsSelect(db, tableName, nodeToPlan(query), allowExisting != None, Some(node))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
