@@ -33,12 +33,12 @@ class ANNSuite extends FunSuite with LocalSparkContext {
       Array[Double](1,1)
     )
     val outputs = Array[Double](0, 1, 1, 0)
-    val hiddenSize = 5
     val data = inputs.zip(outputs).map { case(features, label) =>
       (Vectors.dense(features), Vectors.dense(Array(label)))}
     val rddData = sc.parallelize(data, 2)
-    val hiddenLayersTopology = Array[Int](hiddenSize)
-    val model = ArtificialNeuralNetwork.train(rddData, hiddenLayersTopology, 2000, 1e-5)
+    val hiddenLayersTopology = Array[Int](5)
+    val initialWeights = ArtificialNeuralNetwork.getRandomWeights(rddData, hiddenLayersTopology, 0x01234567)
+    val model = ArtificialNeuralNetwork.train(rddData, hiddenLayersTopology, initialWeights, 200)
     val predictionAndLabels = rddData.map { case(input, label) =>
       (model.predict(input)(0), label(0)) }.collect()
     assert(predictionAndLabels.forall { case(p, l) => (math.round(p) - l) == 0 })
@@ -107,7 +107,7 @@ class ANNSuite extends FunSuite with LocalSparkContext {
         val dEdW = ( E2 - E1 ) / eps
         val gradw = gradient(w)
         val err = dEdW - gradw
-        assert(math.abs(err) < accept, 
+        assert(math.abs(err) < accept,
       s"Difference between calculated and approximated gradient too large ($dEdW - $gradw = $err)"
         )
         arrTmpWeights(w) = arrTmpWeights(w) - eps
