@@ -101,6 +101,9 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   fi
 fi
 
+echo "cleaning jenkins.."
+rm -rf /home/jenkins/.ivy2/
+
 set -o pipefail
 trap 'handle_error $LINENO' ERR
 
