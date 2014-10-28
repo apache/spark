@@ -49,6 +49,7 @@ class ANNClassifierModel private[mllib](val annModel: ArtificialNeuralNetworkMod
 
 class ANNClassifier private(val labelToIndex: Map[Double, Int],
                              private val hiddenLayersTopology: Array[Int],
+                             private val initialWeights: Vector,
                              private val maxIterations: Int,
                              private val stepSize: Double,
                              private val convergeTol: Double)
@@ -57,17 +58,25 @@ class ANNClassifier private(val labelToIndex: Map[Double, Int],
   def run(data: RDD[LabeledPoint]): ANNClassifierModel = {
     val annData = data.map(lp => labeledPointToVectorPair(lp))
     /* train the model */
-    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology, maxIterations, convergeTol)
+    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology/*, initialWeights*/, maxIterations, convergeTol)
     new ANNClassifierModel(model, labelToIndex)
   }
 }
 
 object ANNClassifier {
 
-  def train(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int], maxIterations: Int,
+  def train(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int],
+            initialWeights: Vector, maxIterations: Int,
             stepSize: Double, convergenceTol: Double): ANNClassifierModel = {
     val labelToIndex = data.map( lp => lp.label).distinct().collect().zipWithIndex.toMap
-    new ANNClassifier(labelToIndex, hiddenLayersTopology, maxIterations, stepSize, convergenceTol).run(data)
+    new ANNClassifier(labelToIndex, hiddenLayersTopology,
+      initialWeights, maxIterations, stepSize, convergenceTol).run(data)
+  }
+
+  def train(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int], maxIterations: Int,
+            stepSize: Double, convergenceTol: Double): ANNClassifierModel = {
+    val initialWeights = randomWeights(data, hiddenLayersTopology)
+    train(data, hiddenLayersTopology, initialWeights, maxIterations, stepSize, convergenceTol)
   }
 
   def train(data: RDD[LabeledPoint]): ANNClassifierModel = {
@@ -77,4 +86,10 @@ object ANNClassifier {
     train(data, hiddenLayersTopology, 2000, 1.0, 1e-4)
   }
 
+  /* TODO: remove duplication - the same analysis will be done in ANNClassifier.run() */
+  def randomWeights(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int]) = {
+    val labelCount = data.map( lp => lp.label).distinct().collect().length
+    val featureCount = data.first().features.size
+    null
+  }
 }
