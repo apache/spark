@@ -46,7 +46,7 @@ public final class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream inputStream() throws IOException {
+  public InputStream createInputStream() throws IOException {
     return new ByteBufInputStream(buf);
   }
 
@@ -64,7 +64,7 @@ public final class NettyManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    return buf;
+    return buf.duplicate();
   }
 
   @Override

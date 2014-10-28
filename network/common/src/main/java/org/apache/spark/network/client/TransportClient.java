@@ -28,9 +28,9 @@ import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.protocol.ChunkFetchRequest;
+import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.request.ChunkFetchRequest;
-import org.apache.spark.network.protocol.request.RpcRequest;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -106,7 +106,7 @@ public class TransportClient implements Closeable {
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
             long timeTaken = System.currentTimeMillis() - startTime;
-            logger.debug("Sending request {} to {} took {} ms", streamChunkId, serverAddr,
+            logger.trace("Sending request {} to {} took {} ms", streamChunkId, serverAddr,
               timeTaken);
           } else {
             String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
@@ -114,6 +114,7 @@ public class TransportClient implements Closeable {
             logger.error(errorMsg, future.cause());
             handler.removeFetchRequest(streamChunkId);
             callback.onFailure(chunkIndex, new RuntimeException(errorMsg, future.cause()));
+            channel.close();
           }
         }
       });
@@ -126,24 +127,25 @@ public class TransportClient implements Closeable {
   public void sendRpc(byte[] message, final RpcResponseCallback callback) {
     final String serverAddr = NettyUtils.getRemoteAddress(channel);
     final long startTime = System.currentTimeMillis();
-    logger.debug("Sending RPC to {}", serverAddr);
+    logger.trace("Sending RPC to {}", serverAddr);
 
-    final long tag = UUID.randomUUID().getLeastSignificantBits();
-    handler.addRpcRequest(tag, callback);
+    final long requestId = UUID.randomUUID().getLeastSignificantBits();
+    handler.addRpcRequest(requestId, callback);
 
-    channel.writeAndFlush(new RpcRequest(tag, message)).addListener(
+    channel.writeAndFlush(new RpcRequest(requestId, message)).addListener(
       new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
             long timeTaken = System.currentTimeMillis() - startTime;
-            logger.debug("Sending request {} to {} took {} ms", tag, serverAddr, timeTaken);
+            logger.trace("Sending request {} to {} took {} ms", requestId, serverAddr, timeTaken);
           } else {
-            String errorMsg = String.format("Failed to send RPC %s to %s: %s", tag,
+            String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
-            handler.removeRpcRequest(tag);
+            handler.removeRpcRequest(requestId);
             callback.onFailure(new RuntimeException(errorMsg, future.cause()));
+            channel.close();
           }
         }
       });

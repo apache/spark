@@ -38,7 +38,6 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.DefaultStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class RpcIntegrationSuite {

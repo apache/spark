@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.util;
+package org.apache.spark.network;
 
 import java.util.NoSuchElementException;
+
+import org.apache.spark.network.util.ConfigProvider;
 
 /** Uses System properties to obtain config values. */
 public class SystemPropertyConfigProvider extends ConfigProvider {

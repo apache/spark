@@ -19,7 +19,7 @@ package org.apache.spark.network.protocol;
 
 import io.netty.buffer.ByteBuf;
 
-/** Messages from the client to the server. */
+/** An on-the-wire transmittable message. */
 public interface Message extends Encodable {
   /** Used to identify this request type. */
   Type type();

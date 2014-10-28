@@ -22,6 +22,12 @@ import io.netty.buffer.ByteBuf;
 /**
  * Interface for an object which can be encoded into a ByteBuf. Multiple Encodable objects are
  * stored in a single, pre-allocated ByteBuf, so Encodables must also provide their length.
+ *
+ * Encodable objects should provide a static "decode(ByteBuf)" method which is invoked by
+ * {@link MessageDecoder}. During decoding, if the object uses the ByteBuf as its data (rather than
+ * just copying data from it), then you must retain() the ByteBuf.
+ *
+ * Additionally, when adding a new Encodable Message, add it to {@link Message.Type}.
  */
 public interface Encodable {
   /** Number of bytes of the encoded form of this object. */

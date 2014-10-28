@@ -15,46 +15,49 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.request;
+package org.apache.spark.network.protocol;
+
+import java.util.Arrays;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
-import org.apache.spark.network.protocol.StreamChunkId;
+/** Response to {@link RpcRequest} for a successful RPC. */
+public final class RpcResponse implements ResponseMessage {
+  public final long requestId;
+  public final byte[] response;
 
-/**
- * Request to fetch a sequence of a single chunk of a stream. This will correspond to a single
- * {@link org.apache.spark.network.protocol.response.ResponseMessage} (either success or failure).
- */
-public final class ChunkFetchRequest implements RequestMessage {
-  public final StreamChunkId streamChunkId;
-
-  public ChunkFetchRequest(StreamChunkId streamChunkId) {
-    this.streamChunkId = streamChunkId;
+  public RpcResponse(long requestId, byte[] response) {
+    this.requestId = requestId;
+    this.response = response;
   }
 
   @Override
-  public Type type() { return Type.ChunkFetchRequest; }
+  public Type type() { return Type.RpcResponse; }
 
   @Override
-  public int encodedLength() {
-    return streamChunkId.encodedLength();
-  }
+  public int encodedLength() { return 8 + 4 + response.length; }
 
   @Override
   public void encode(ByteBuf buf) {
-    streamChunkId.encode(buf);
+    buf.writeLong(requestId);
+    buf.writeInt(response.length);
+    buf.writeBytes(response);
   }
 
-  public static ChunkFetchRequest decode(ByteBuf buf) {
-    return new ChunkFetchRequest(StreamChunkId.decode(buf));
+  public static RpcResponse decode(ByteBuf buf) {
+    long requestId = buf.readLong();
+    int responseLen = buf.readInt();
+    byte[] response = new byte[responseLen];
+    buf.readBytes(response);
+    return new RpcResponse(requestId, response);
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ChunkFetchRequest) {
-      ChunkFetchRequest o = (ChunkFetchRequest) other;
-      return streamChunkId.equals(o.streamChunkId);
+    if (other instanceof RpcResponse) {
+      RpcResponse o = (RpcResponse) other;
+      return requestId == o.requestId && Arrays.equals(response, o.response);
     }
     return false;
   }
@@ -62,7 +65,8 @@ public final class ChunkFetchRequest implements RequestMessage {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
+      .add("requestId", requestId)
+      .add("response", response)
       .toString();
   }
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.request;
+package org.apache.spark.network.protocol;
 
 import java.util.Arrays;
 
@@ -25,17 +25,17 @@ import io.netty.buffer.ByteBuf;
 /**
  * A generic RPC which is handled by a remote {@link org.apache.spark.network.server.RpcHandler}.
  * This will correspond to a single
- * {@link org.apache.spark.network.protocol.response.ResponseMessage} (either success or failure).
+ * {@link org.apache.spark.network.protocol.ResponseMessage} (either success or failure).
  */
 public final class RpcRequest implements RequestMessage {
-  /** Tag is used to link an RPC request with its response. */
-  public final long tag;
+  /** Used to link an RPC request with its response. */
+  public final long requestId;
 
   /** Serialized message to send to remote RpcHandler. */
   public final byte[] message;
 
-  public RpcRequest(long tag, byte[] message) {
-    this.tag = tag;
+  public RpcRequest(long requestId, byte[] message) {
+    this.requestId = requestId;
     this.message = message;
   }
 
@@ -49,24 +49,24 @@ public final class RpcRequest implements RequestMessage {
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeLong(tag);
+    buf.writeLong(requestId);
     buf.writeInt(message.length);
     buf.writeBytes(message);
   }
 
   public static RpcRequest decode(ByteBuf buf) {
-    long tag = buf.readLong();
+    long requestId = buf.readLong();
     int messageLen = buf.readInt();
     byte[] message = new byte[messageLen];
     buf.readBytes(message);
-    return new RpcRequest(tag, message);
+    return new RpcRequest(requestId, message);
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof RpcRequest) {
       RpcRequest o = (RpcRequest) other;
-      return tag == o.tag && Arrays.equals(message, o.message);
+      return requestId == o.requestId && Arrays.equals(message, o.message);
     }
     return false;
   }
@@ -74,7 +74,7 @@ public final class RpcRequest implements RequestMessage {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("tag", tag)
+      .add("requestId", requestId)
       .add("message", message)
       .toString();
   }

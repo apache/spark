@@ -15,49 +15,44 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
-
-import java.util.Arrays;
+package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
-/** Response to {@link org.apache.spark.network.protocol.request.RpcRequest} for a successful RPC. */
-public final class RpcResponse implements ResponseMessage {
-  public final long tag;
-  public final byte[] response;
+/**
+ * Request to fetch a sequence of a single chunk of a stream. This will correspond to a single
+ * {@link org.apache.spark.network.protocol.ResponseMessage} (either success or failure).
+ */
+public final class ChunkFetchRequest implements RequestMessage {
+  public final StreamChunkId streamChunkId;
 
-  public RpcResponse(long tag, byte[] response) {
-    this.tag = tag;
-    this.response = response;
+  public ChunkFetchRequest(StreamChunkId streamChunkId) {
+    this.streamChunkId = streamChunkId;
   }
 
   @Override
-  public Type type() { return Type.RpcResponse; }
+  public Type type() { return Type.ChunkFetchRequest; }
 
   @Override
-  public int encodedLength() { return 8 + 4 + response.length; }
+  public int encodedLength() {
+    return streamChunkId.encodedLength();
+  }
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.writeLong(tag);
-    buf.writeInt(response.length);
-    buf.writeBytes(response);
+    streamChunkId.encode(buf);
   }
 
-  public static RpcResponse decode(ByteBuf buf) {
-    long tag = buf.readLong();
-    int responseLen = buf.readInt();
-    byte[] response = new byte[responseLen];
-    buf.readBytes(response);
-    return new RpcResponse(tag, response);
+  public static ChunkFetchRequest decode(ByteBuf buf) {
+    return new ChunkFetchRequest(StreamChunkId.decode(buf));
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof RpcResponse) {
-      RpcResponse o = (RpcResponse) other;
-      return tag == o.tag && Arrays.equals(response, o.response);
+    if (other instanceof ChunkFetchRequest) {
+      ChunkFetchRequest o = (ChunkFetchRequest) other;
+      return streamChunkId.equals(o.streamChunkId);
     }
     return false;
   }
@@ -65,8 +60,7 @@ public final class RpcResponse implements ResponseMessage {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("tag", tag)
-      .add("response", response)
+      .add("streamChunkId", streamChunkId)
       .toString();
   }
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
+package org.apache.spark.network.protocol;
 
 import org.apache.spark.network.protocol.Message;
 

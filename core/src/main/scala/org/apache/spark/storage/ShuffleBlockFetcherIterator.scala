@@ -21,12 +21,11 @@ import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 
-import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.util.{CompletionIterator, Utils}
 import org.apache.spark.{Logging, TaskContext}
-
+import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -285,7 +284,7 @@ final class ShuffleBlockFetcherIterator(
     val iteratorOpt: Option[Iterator[Any]] = if (result.failed) {
       None
     } else {
-      val is = blockManager.wrapForCompression(result.blockId, result.buf.inputStream())
+      val is = blockManager.wrapForCompression(result.blockId, result.buf.createInputStream())
       val iter = serializer.newInstance().deserializeStream(is).asIterator
       Some(CompletionIterator[Any, Iterator[Any]](iter, {
         // Once the iterator is exhausted, release the buffer and set currentResult to null

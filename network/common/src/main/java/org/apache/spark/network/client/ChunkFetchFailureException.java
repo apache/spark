@@ -21,17 +21,11 @@ package org.apache.spark.network.client;
  * General exception caused by a remote exception while fetching a chunk.
  */
 public class ChunkFetchFailureException extends RuntimeException {
-  private final int chunkIndex;
-
-  public ChunkFetchFailureException(int chunkIndex, String errorMsg, Throwable cause) {
+  public ChunkFetchFailureException(String errorMsg, Throwable cause) {
     super(errorMsg, cause);
-    this.chunkIndex = chunkIndex;
   }
 
-  public ChunkFetchFailureException(int chunkIndex, String errorMsg) {
+  public ChunkFetchFailureException(String errorMsg) {
     super(errorMsg);
-    this.chunkIndex = chunkIndex;
   }
-
-  public int getChunkIndex() { return chunkIndex; }
 }

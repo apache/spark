@@ -31,13 +31,13 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.Encodable;
-import org.apache.spark.network.protocol.request.RequestMessage;
-import org.apache.spark.network.protocol.request.ChunkFetchRequest;
-import org.apache.spark.network.protocol.request.RpcRequest;
-import org.apache.spark.network.protocol.response.ChunkFetchFailure;
-import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.response.RpcFailure;
-import org.apache.spark.network.protocol.response.RpcResponse;
+import org.apache.spark.network.protocol.RequestMessage;
+import org.apache.spark.network.protocol.ChunkFetchRequest;
+import org.apache.spark.network.protocol.RpcRequest;
+import org.apache.spark.network.protocol.ChunkFetchFailure;
+import org.apache.spark.network.protocol.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.RpcFailure;
+import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -66,10 +66,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   private final Set<Long> streamIds;
 
   public TransportRequestHandler(
-    Channel channel,
-    TransportClient reverseClient,
-    StreamManager streamManager,
-    RpcHandler rpcHandler) {
+      Channel channel,
+      TransportClient reverseClient,
+      StreamManager streamManager,
+      RpcHandler rpcHandler) {
     this.channel = channel;
     this.reverseClient = reverseClient;
     this.streamManager = streamManager;
@@ -124,17 +124,17 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       rpcHandler.receive(reverseClient, req.message, new RpcResponseCallback() {
         @Override
         public void onSuccess(byte[] response) {
-          respond(new RpcResponse(req.tag, response));
+          respond(new RpcResponse(req.requestId, response));
         }
 
         @Override
         public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.tag, Throwables.getStackTraceAsString(e)));
+          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
         }
       });
     } catch (Exception e) {
-      logger.error("Error while invoking RpcHandler#receive() on RPC tag " + req.tag, e);
-      respond(new RpcFailure(req.tag, Throwables.getStackTraceAsString(e)));
+      logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
+      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     }
   }
 

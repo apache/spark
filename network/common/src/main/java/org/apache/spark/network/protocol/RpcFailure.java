@@ -15,64 +15,59 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
+package org.apache.spark.network.protocol;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
-import org.apache.spark.network.protocol.StreamChunkId;
-
-/**
- * Response to {@link org.apache.spark.network.protocol.request.ChunkFetchRequest} when there is an
- * error fetching the chunk.
- */
-public final class ChunkFetchFailure implements ResponseMessage {
-  public final StreamChunkId streamChunkId;
+/** Response to {@link RpcRequest} for a failed RPC. */
+public final class RpcFailure implements ResponseMessage {
+  public final long requestId;
   public final String errorString;
 
-  public ChunkFetchFailure(StreamChunkId streamChunkId, String errorString) {
-    this.streamChunkId = streamChunkId;
+  public RpcFailure(long requestId, String errorString) {
+    this.requestId = requestId;
     this.errorString = errorString;
   }
 
   @Override
-  public Type type() { return Type.ChunkFetchFailure; }
+  public Type type() { return Type.RpcFailure; }
 
   @Override
   public int encodedLength() {
-    return streamChunkId.encodedLength() + 4 + errorString.getBytes(Charsets.UTF_8).length;
+    return 8 + 4 + errorString.getBytes(Charsets.UTF_8).length;
   }
 
   @Override
   public void encode(ByteBuf buf) {
-    streamChunkId.encode(buf);
+    buf.writeLong(requestId);
     byte[] errorBytes = errorString.getBytes(Charsets.UTF_8);
     buf.writeInt(errorBytes.length);
     buf.writeBytes(errorBytes);
   }
 
-  public static ChunkFetchFailure decode(ByteBuf buf) {
-    StreamChunkId streamChunkId = StreamChunkId.decode(buf);
+  public static RpcFailure decode(ByteBuf buf) {
+    long requestId = buf.readLong();
     int numErrorStringBytes = buf.readInt();
     byte[] errorBytes = new byte[numErrorStringBytes];
     buf.readBytes(errorBytes);
-    return new ChunkFetchFailure(streamChunkId, new String(errorBytes, Charsets.UTF_8));
+    return new RpcFailure(requestId, new String(errorBytes, Charsets.UTF_8));
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ChunkFetchFailure) {
-      ChunkFetchFailure o = (ChunkFetchFailure) other;
-      return streamChunkId.equals(o.streamChunkId) && errorString.equals(o.errorString);
+    if (other instanceof RpcFailure) {
+      RpcFailure o = (RpcFailure) other;
+      return requestId == o.requestId && errorString.equals(o.errorString);
     }
     return false;
   }
 
   @Override
-  public String toString() {
+   public String toString() {
     return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
+      .add("requestId", requestId)
       .add("errorString", errorString)
       .toString();
   }

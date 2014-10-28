@@ -46,7 +46,7 @@ public final class NioManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream inputStream() throws IOException {
+  public InputStream createInputStream() throws IOException {
     return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
   }
 

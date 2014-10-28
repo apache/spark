@@ -25,12 +25,12 @@ import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.protocol.response.ResponseMessage;
+import org.apache.spark.network.protocol.ChunkFetchFailure;
+import org.apache.spark.network.protocol.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.ResponseMessage;
+import org.apache.spark.network.protocol.RpcFailure;
+import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.response.ChunkFetchFailure;
-import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.response.RpcFailure;
-import org.apache.spark.network.protocol.response.RpcResponse;
 import org.apache.spark.network.server.MessageHandler;
 import org.apache.spark.network.util.NettyUtils;
 
@@ -63,12 +63,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     outstandingFetches.remove(streamChunkId);
   }
 
-  public void addRpcRequest(long tag, RpcResponseCallback callback) {
-    outstandingRpcs.put(tag, callback);
+  public void addRpcRequest(long requestId, RpcResponseCallback callback) {
+    outstandingRpcs.put(requestId, callback);
   }
 
-  public void removeRpcRequest(long tag) {
-    outstandingRpcs.remove(tag);
+  public void removeRpcRequest(long requestId) {
+    outstandingRpcs.remove(requestId);
   }
 
   /**
@@ -115,7 +115,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) message;
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
-        logger.warn("Got a response for block {} from {} but it is not outstanding",
+        logger.warn("Ignoring response for block {} from {} since it is not outstanding",
           resp.streamChunkId, remoteAddress);
         resp.buffer.release();
       } else {
@@ -127,31 +127,31 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       ChunkFetchFailure resp = (ChunkFetchFailure) message;
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
-        logger.warn("Got a response for block {} from {} ({}) but it is not outstanding",
+        logger.warn("Ignoring response for block {} from {} ({}) since it is not outstanding",
           resp.streamChunkId, remoteAddress, resp.errorString);
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onFailure(resp.streamChunkId.chunkIndex,
-          new ChunkFetchFailureException(resp.streamChunkId.chunkIndex, resp.errorString));
+        listener.onFailure(resp.streamChunkId.chunkIndex, new ChunkFetchFailureException(
+          "Failure while fetching " + resp.streamChunkId + ": " + resp.errorString));
       }
     } else if (message instanceof RpcResponse) {
       RpcResponse resp = (RpcResponse) message;
-      RpcResponseCallback listener = outstandingRpcs.get(resp.tag);
+      RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
-        logger.warn("Got a response for RPC {} from {} ({} bytes) but it is not outstanding",
-          resp.tag, remoteAddress, resp.response.length);
+        logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
+          resp.requestId, remoteAddress, resp.response.length);
       } else {
-        outstandingRpcs.remove(resp.tag);
+        outstandingRpcs.remove(resp.requestId);
         listener.onSuccess(resp.response);
       }
     } else if (message instanceof RpcFailure) {
       RpcFailure resp = (RpcFailure) message;
-      RpcResponseCallback listener = outstandingRpcs.get(resp.tag);
+      RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
-        logger.warn("Got a response for RPC {} from {} ({}) but it is not outstanding",
-          resp.tag, remoteAddress, resp.errorString);
+        logger.warn("Ignoring response for RPC {} from {} ({}) since it is not outstanding",
+          resp.requestId, remoteAddress, resp.errorString);
       } else {
-        outstandingRpcs.remove(resp.tag);
+        outstandingRpcs.remove(resp.requestId);
         listener.onFailure(new RuntimeException(resp.errorString));
       }
     } else {

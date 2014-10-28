@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
+package org.apache.spark.network.protocol;
 
 import java.util.List;
 
@@ -25,10 +25,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.spark.network.protocol.Message;
-import org.apache.spark.network.protocol.request.ChunkFetchRequest;
-import org.apache.spark.network.protocol.request.RpcRequest;
 
 /**
  * Decoder used by the client side to encode server-to-client responses.
@@ -43,7 +39,7 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
     Message.Type msgType = Message.Type.decode(in);
     Message decoded = decode(msgType, in);
     assert decoded.type() == msgType;
-    logger.debug("Received message " + msgType + ": " + decoded);
+    logger.trace("Received message " + msgType + ": " + decoded);
     out.add(decoded);
   }
 

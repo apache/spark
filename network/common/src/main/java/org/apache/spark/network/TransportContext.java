@@ -25,10 +25,10 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
-import org.apache.spark.network.protocol.response.MessageDecoder;
-import org.apache.spark.network.protocol.response.MessageEncoder;
+import org.apache.spark.network.protocol.MessageDecoder;
+import org.apache.spark.network.protocol.MessageEncoder;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.TransportClientHandler;
+import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
@@ -37,7 +37,12 @@ import org.apache.spark.network.util.TransportConf;
 
 /**
  * Contains the context to create a {@link TransportServer}, {@link TransportClientFactory}, and to
- * setup Netty Channel pipelines with a {@link TransportClientHandler}.
+ * setup Netty Channel pipelines with a {@link org.apache.spark.network.server.TransportChannelHandler}.
+ *
+ * There are two communication protocols that the TransportClient provides, control-plane RPCs and
+ * data-plane "chunk fetching". The handling of the RPCs is performed outside of the scope of the
+ * TransportContext (i.e., by a user-provided handler), and it is responsible for setting up streams
+ * which can be streamed through the data plane in chunks using zero-copy IO.
  *
  * The TransportServer and TransportClientFactory both create a TransportChannelHandler for each
  * channel. As each TransportChannelHandler contains a TransportClient, this enables server
@@ -71,16 +76,16 @@ public class TransportContext {
 
   /**
    * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
-   * has a {@link org.apache.spark.network.server.TransportClientHandler} to handle request or
+   * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
    * response messages.
    *
    * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
    * be used to communicate on this channel. The TransportClient is directly associated with a
    * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
    */
-  public TransportClientHandler initializePipeline(SocketChannel channel) {
+  public TransportChannelHandler initializePipeline(SocketChannel channel) {
     try {
-      TransportClientHandler channelHandler = createChannelHandler(channel);
+      TransportChannelHandler channelHandler = createChannelHandler(channel);
       channel.pipeline()
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
@@ -100,12 +105,12 @@ public class TransportContext {
    * ResponseMessages. The channel is expected to have been successfully created, though certain
    * properties (such as the remoteAddress()) may not be available yet.
    */
-  private TransportClientHandler createChannelHandler(Channel channel) {
+  private TransportChannelHandler createChannelHandler(Channel channel) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
-    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client, streamManager,
-      rpcHandler);
-    return new TransportClientHandler(client, responseHandler, requestHandler);
+    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
+      streamManager, rpcHandler);
+    return new TransportChannelHandler(client, responseHandler, requestHandler);
   }
 
   public TransportConf getConf() { return conf; }

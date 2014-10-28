@@ -40,6 +40,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
    * Memory mapping is expensive and can destabilize the JVM (SPARK-1145, SPARK-3889).
    * Avoid unless there's a good reason not to.
    */
+  // TODO: Make this configurable
   private static final long MIN_MEMORY_MAP_BYTES = 2 * 1024 * 1024;
 
   private final File file;
@@ -88,7 +89,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream inputStream() throws IOException {
+  public InputStream createInputStream() throws IOException {
     FileInputStream is = null;
     try {
       is = new FileInputStream(file);

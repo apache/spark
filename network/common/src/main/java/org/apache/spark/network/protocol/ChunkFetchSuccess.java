@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
+package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
-import org.apache.spark.network.protocol.StreamChunkId;
 
 /**
- * Response to {@link org.apache.spark.network.protocol.request.ChunkFetchRequest} when a chunk
- * exists and has been successfully fetched.
+ * Response to {@link ChunkFetchRequest} when a chunk exists and has been successfully fetched.
  *
  * Note that the server-side encoding of this messages does NOT include the buffer itself, as this
  * may be written by Netty in a more efficient manner (i.e., zero-copy write).
@@ -49,7 +47,7 @@ public final class ChunkFetchSuccess implements ResponseMessage {
     return streamChunkId.encodedLength();
   }
 
-  /** Encoding does NOT include buffer itself. See {@link MessageEncoder}. */
+  /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);

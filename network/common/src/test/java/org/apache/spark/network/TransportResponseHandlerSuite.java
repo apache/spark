@@ -29,11 +29,11 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportResponseHandler;
+import org.apache.spark.network.protocol.ChunkFetchFailure;
+import org.apache.spark.network.protocol.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.RpcFailure;
+import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.response.ChunkFetchFailure;
-import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.response.RpcFailure;
-import org.apache.spark.network.protocol.response.RpcResponse;
 
 public class TransportResponseHandlerSuite {
   @Test

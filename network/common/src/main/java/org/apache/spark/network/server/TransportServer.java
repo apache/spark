@@ -47,7 +47,7 @@ public class TransportServer implements Closeable {
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
-  private int port;
+  private int port = -1;
 
   public TransportServer(TransportContext context) {
     this.context = context;
@@ -56,7 +56,12 @@ public class TransportServer implements Closeable {
     init();
   }
 
-  public int getPort() { return port; }
+  public int getPort() {
+    if (port == -1) {
+      throw new IllegalStateException("Server not initialized");
+    }
+    return port;
+  }
 
   private void init() {
 

@@ -45,7 +45,6 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ChunkFetchIntegrationSuite {

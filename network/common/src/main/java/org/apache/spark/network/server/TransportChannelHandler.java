@@ -25,14 +25,13 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.Message;
-import org.apache.spark.network.protocol.request.RequestMessage;
-import org.apache.spark.network.protocol.response.ResponseMessage;
+import org.apache.spark.network.protocol.RequestMessage;
+import org.apache.spark.network.protocol.ResponseMessage;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
- * A handler which is used for delegating requests to the
- * {@link TransportRequestHandler} and responses to the
- * {@link org.apache.spark.network.client.TransportResponseHandler}.
+ * The single Transport-level Channel handler which is used for delegating requests to the
+ * {@link TransportRequestHandler} and responses to the {@link TransportResponseHandler}.
  *
  * All channels created in the transport layer are bidirectional. When the Client initiates a Netty
  * Channel with a RequestMessage (which gets handled by the Server's RequestHandler), the Server
@@ -42,14 +41,14 @@ import org.apache.spark.network.util.NettyUtils;
  * This means that the Client also needs a RequestHandler and the Server needs a ResponseHandler,
  * for the Client's responses to the Server's requests.
  */
-public class TransportClientHandler extends SimpleChannelInboundHandler<Message> {
-  private final Logger logger = LoggerFactory.getLogger(TransportClientHandler.class);
+public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
+  private final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
   private final TransportResponseHandler responseHandler;
   private final TransportRequestHandler requestHandler;
 
-  public TransportClientHandler(
+  public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler) {
@@ -73,8 +72,16 @@ public class TransportClientHandler extends SimpleChannelInboundHandler<Message>
 
   @Override
   public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-    requestHandler.channelUnregistered();
-    responseHandler.channelUnregistered();
+    try {
+      requestHandler.channelUnregistered();
+    } catch (RuntimeException e) {
+      logger.error("Exception from request handler while unregistering channel", e);
+    }
+    try {
+      responseHandler.channelUnregistered();
+    } catch (RuntimeException e) {
+      logger.error("Exception from response handler while unregistering channel", e);
+    }
     super.channelUnregistered(ctx);
   }
 

@@ -42,6 +42,8 @@ public class DefaultStreamManager extends StreamManager {
   private static class StreamState {
     final Iterator<ManagedBuffer> buffers;
 
+    // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
+    // that the caller only requests each chunk one at a time, in order.
     int curChunk = 0;
 
     StreamState(Iterator<ManagedBuffer> buffers) {
@@ -50,7 +52,8 @@ public class DefaultStreamManager extends StreamManager {
   }
 
   public DefaultStreamManager() {
-    // Start with a random stream id to help identifying different streams.
+    // For debugging purposes, start with a random stream id to help identifying different streams.
+    // This does not need to be globally unique, only unique to this class.
     nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
     streams = new ConcurrentHashMap<Long, StreamState>();
   }
@@ -87,13 +90,15 @@ public class DefaultStreamManager extends StreamManager {
     }
   }
 
+  /**
+   * Registers a stream of ManagedBuffers which are served as individual chunks one at a time to
+   * callers. Each ManagedBuffer will be release()'d after it is transferred on the wire. If a
+   * client connection is closed before the iterator is fully drained, then the remaining buffers
+   * will all be release()'d.
+   */
   public long registerStream(Iterator<ManagedBuffer> buffers) {
     long myStreamId = nextStreamId.getAndIncrement();
     streams.put(myStreamId, new StreamState(buffers));
     return myStreamId;
-  }
-
-  public void unregisterStream(long streamId) {
-    streams.remove(streamId);
   }
 }

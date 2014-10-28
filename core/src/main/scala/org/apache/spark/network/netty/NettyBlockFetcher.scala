@@ -87,7 +87,7 @@ class NettyBlockFetcher(
         }
 
         override def onFailure(e: Throwable): Unit = {
-          logError("Failed while starting block fetches")
+          logError("Failed while starting block fetches", e)
           blockIds.foreach(blockId => Utils.tryLog(listener.onBlockFetchFailure(blockId, e)))
         }
       })

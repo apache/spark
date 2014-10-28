@@ -24,14 +24,14 @@ import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.protocol.request.ChunkFetchRequest;
-import org.apache.spark.network.protocol.request.RpcRequest;
-import org.apache.spark.network.protocol.response.ChunkFetchFailure;
-import org.apache.spark.network.protocol.response.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.response.MessageDecoder;
-import org.apache.spark.network.protocol.response.MessageEncoder;
-import org.apache.spark.network.protocol.response.RpcFailure;
-import org.apache.spark.network.protocol.response.RpcResponse;
+import org.apache.spark.network.protocol.ChunkFetchRequest;
+import org.apache.spark.network.protocol.ChunkFetchFailure;
+import org.apache.spark.network.protocol.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.RpcRequest;
+import org.apache.spark.network.protocol.RpcFailure;
+import org.apache.spark.network.protocol.RpcResponse;
+import org.apache.spark.network.protocol.MessageDecoder;
+import org.apache.spark.network.protocol.MessageEncoder;
 import org.apache.spark.network.util.NettyUtils;
 
 public class ProtocolSuite {

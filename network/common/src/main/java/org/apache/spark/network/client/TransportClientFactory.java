@@ -23,6 +23,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -37,7 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.server.TransportClientHandler;
+import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
@@ -66,6 +67,7 @@ public class TransportClientFactory implements Closeable {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
+    // TODO: Make thread pool name configurable.
     this.workerGroup = NettyUtils.createEventLoop(ioMode, conf.clientThreads(), "shuffle-client");
   }
 
@@ -100,17 +102,13 @@ public class TransportClientFactory implements Closeable {
     // Use pooled buffers to reduce temporary buffer allocation
     bootstrap.option(ChannelOption.ALLOCATOR, createPooledByteBufAllocator());
 
+    final AtomicReference<TransportClient> client = new AtomicReference<TransportClient>();
+
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
-        TransportClientHandler channelHandler = context.initializePipeline(ch);
-        TransportClient oldClient = connectionPool.putIfAbsent(address, channelHandler.getClient());
-        if (oldClient != null) {
-          logger.debug("Two clients were created concurrently, second one will be disposed.");
-          ch.close();
-          // Note: this type of failure is still considered a success by Netty, and thus the
-          // ChannelFuture will complete successfully.
-        }
+        TransportChannelHandler clientHandler = context.initializePipeline(ch);
+        client.set(clientHandler.getClient());
       }
     });
 
@@ -119,23 +117,31 @@ public class TransportClientFactory implements Closeable {
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
       throw new TimeoutException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
+    } else if (cf.cause() != null) {
+      throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
     }
 
-    TransportClient client = connectionPool.get(address);
-    if (client == null) {
-      // The only way we should be able to reach here is if the client we created started out
-      // in the "inactive" state, and someone else simultaneously tried to create another client to
-      // the same server. This is an error condition, as the first client failed to connect.
-      throw new IllegalStateException("Client was unset! Must have been immediately inactive.");
+    // Successful connection
+    assert client.get() != null : "Channel future completed successfully with null client";
+    TransportClient oldClient = connectionPool.putIfAbsent(address, client.get());
+    if (oldClient == null) {
+      return client.get();
+    } else {
+      logger.debug("Two clients were created concurrently, second one will be disposed.");
+      client.get().close();
+      return oldClient;
     }
-    return client;
   }
 
   /** Close all connections in the connection pool, and shutdown the worker thread pool. */
   @Override
   public void close() {
     for (TransportClient client : connectionPool.values()) {
-      client.close();
+      try {
+        client.close();
+      } catch (RuntimeException e) {
+        logger.warn("Ignoring exception during close", e);
+      }
     }
     connectionPool.clear();
 

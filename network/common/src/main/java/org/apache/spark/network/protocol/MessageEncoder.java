@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol.response;
+package org.apache.spark.network.protocol;
 
 import java.util.List;
 
@@ -25,8 +25,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.spark.network.protocol.Message;
 
 /**
  * Encoder used by the server side to encode server-to-client responses.
