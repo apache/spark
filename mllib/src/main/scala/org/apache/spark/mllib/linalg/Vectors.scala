@@ -296,8 +296,6 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         new SparseVectorUDT().deserialize(row.getAs[Row](2))
     }
   }
-
-  // override def userType: Class[Vector] = classOf[Vector]
 }
 
 /**
@@ -320,8 +318,6 @@ private[spark] class DenseVectorUDT extends UserDefinedType[DenseVector] {
     val values = row.getAs[Seq[Double]](0).toArray
     new DenseVector(values)
   }
-
-  // override def userType: Class[DenseVector] = classOf[DenseVector]
 }
 
 /**
@@ -353,5 +349,3 @@ private[spark] class SparseVectorUDT extends UserDefinedType[SparseVector] {
     new SparseVector(vSize, indices, values)
   }
 
-  // override def userType: Class[SparseVector] = classOf[SparseVector]
-}
