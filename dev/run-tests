@@ -133,26 +133,51 @@ CURRENT_BLOCK=$BLOCK_PYTHON_STYLE
 
 echo ""
 echo "========================================================================="
-echo "Building Spark"
+echo "Building Spark with hive 0.12"
 echo "========================================================================="
 
 CURRENT_BLOCK=$BLOCK_BUILD
 
 {
   # We always build with Hive because the PySpark Spark SQL tests need it.
-  BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
+  BUILD_MVN_PROFILE_ARGS_12="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
 
-  echo "[info] Building Spark with these arguments: $BUILD_MVN_PROFILE_ARGS"
+  echo "[info] Building Spark with these arguments: $BUILD_MVN_PROFILE_ARGS_12"
 
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   #+ (either resolution or compilation) prompts the user for input either q, r, etc
   #+ to quit or retry. This echo is there to make it not block.
-  # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS or else it will be interpreted as a 
+  # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS_12 or else it will be interpreted as a
   #+ single argument!
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   echo -e "q\n" \
-    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean package assembly/assembly \
+    | sbt/sbt $BUILD_MVN_PROFILE_ARGS_12 clean package assembly/assembly \
+    | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+}
+
+echo ""
+echo "========================================================================="
+echo "Building Spark with hive 0.13"
+echo "========================================================================="
+
+CURRENT_BLOCK=$BLOCK_BUILD
+
+{
+  # We always build with Hive because the PySpark Spark SQL tests need it.
+  BUILD_MVN_PROFILE_ARGS_13="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.13.1"
+
+  echo "[info] Building Spark with these arguments: $BUILD_MVN_PROFILE_ARGS_13"
+
+  # NOTE: echo "q" is needed because sbt on encountering a build file with failure
+  #+ (either resolution or compilation) prompts the user for input either q, r, etc
+  #+ to quit or retry. This echo is there to make it not block.
+  # NOTE: Do not quote $BUILD_MVN_PROFILE_ARGS_13 or else it will be interpreted as a
+  #+ single argument!
+  # QUESTION: Why doesn't 'yes "q"' work?
+  # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
+  echo -e "q\n" \
+    | sbt/sbt $BUILD_MVN_PROFILE_ARGS_13 clean package assembly/assembly \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
