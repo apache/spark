@@ -17,40 +17,17 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
+import org.scalatest.{FunSuite, PrivateMethodTester}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId
 
+/**
+ * Test add and remove behavior in ExecutorAllocationManager.
+ */
 class ExecutorAllocationManagerSuite extends FunSuite {
   import ExecutorAllocationManager._
-
-  private def createSparkContext(
-      minExecutors: Int = 1,
-      maxExecutors: Int = 5,
-      schedulerBacklogTimeout: Long = 1,
-      sustainedSchedulerBacklogTimeout: Long = 1,
-      executorIdleTimeout: Long = 3): SparkContext = {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.minExecutors", minExecutors + "")
-      .set("spark.dynamicAllocation.maxExecutors", maxExecutors + "")
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout + "")
-      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
-        sustainedSchedulerBacklogTimeout + "")
-      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout + "")
-    new SparkContext(conf)
-  }
-
-  private def createStageInfo(stageId: Int, numTasks: Int): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, "no details")
-  }
-
-  private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String): TaskInfo = {
-    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative = false)
-  }
+  import ExecutorAllocationManagerSuite._
 
   test("verify min/max executors") {
     // No min or max
@@ -85,11 +62,11 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   test("starting state") {
     val sc = createSparkContext()
     val manager = sc.executorAllocationManager.get
-    assert(manager.getNumExecutorsPending === 0)
-    assert(manager.getExecutorsPendingToRemove.isEmpty)
-    assert(manager.getExecutorIds.isEmpty)
-    assert(manager.getAddTime === ExecutorAllocationManager.NOT_SET)
-    assert(manager.getRemoveTimes.isEmpty)
+    assert(numExecutorsPending(manager) === 0)
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(executorIds(manager).isEmpty)
+    assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
+    assert(removeTimes(manager).isEmpty)
     sc.stop()
   }
 
@@ -98,94 +75,94 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     val manager = sc.executorAllocationManager.get
 
     // Keep adding until the limit is reached
-    assert(manager.getNumExecutorsPending === 0)
-    assert(manager.getNumExecutorsToAdd === 1)
-    assert(manager.addExecutors() === 1)
-    assert(manager.getNumExecutorsPending === 1)
-    assert(manager.getNumExecutorsToAdd === 2)
-    assert(manager.addExecutors() === 2)
-    assert(manager.getNumExecutorsPending === 3)
-    assert(manager.getNumExecutorsToAdd === 4)
-    assert(manager.addExecutors() === 4)
-    assert(manager.getNumExecutorsPending === 7)
-    assert(manager.getNumExecutorsToAdd === 8)
-    assert(manager.addExecutors() === 3) // reached the limit of 10
-    assert(manager.getNumExecutorsPending === 10)
-    assert(manager.getNumExecutorsToAdd === 1)
-    assert(manager.addExecutors() === 0)
-    assert(manager.getNumExecutorsPending === 10)
-    assert(manager.getNumExecutorsToAdd === 1)
+    assert(numExecutorsPending(manager) === 0)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutors(manager) === 1)
+    assert(numExecutorsPending(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 2)
+    assert(addExecutors(manager) === 2)
+    assert(numExecutorsPending(manager) === 3)
+    assert(numExecutorsToAdd(manager) === 4)
+    assert(addExecutors(manager) === 4)
+    assert(numExecutorsPending(manager) === 7)
+    assert(numExecutorsToAdd(manager) === 8)
+    assert(addExecutors(manager) === 3) // reached the limit of 10
+    assert(numExecutorsPending(manager) === 10)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutors(manager) === 0)
+    assert(numExecutorsPending(manager) === 10)
+    assert(numExecutorsToAdd(manager) === 1)
 
     // Register previously requested executors
-    manager.onExecutorAdded("first")
-    assert(manager.getNumExecutorsPending === 9)
-    manager.onExecutorAdded("second")
-    manager.onExecutorAdded("third")
-    manager.onExecutorAdded("fourth")
-    assert(manager.getNumExecutorsPending === 6)
-    manager.onExecutorAdded("first") // duplicates should not count
-    manager.onExecutorAdded("second")
-    assert(manager.getNumExecutorsPending === 6)
+    onExecutorAdded(manager, "first")
+    assert(numExecutorsPending(manager) === 9)
+    onExecutorAdded(manager, "second")
+    onExecutorAdded(manager, "third")
+    onExecutorAdded(manager, "fourth")
+    assert(numExecutorsPending(manager) === 6)
+    onExecutorAdded(manager, "first") // duplicates should not count
+    onExecutorAdded(manager, "second")
+    assert(numExecutorsPending(manager) === 6)
 
     // Try adding again
     // This should still fail because the number pending + running is still at the limit
-    assert(manager.addExecutors() === 0)
-    assert(manager.getNumExecutorsPending === 6)
-    assert(manager.getNumExecutorsToAdd === 1)
-    assert(manager.addExecutors() === 0)
-    assert(manager.getNumExecutorsPending === 6)
-    assert(manager.getNumExecutorsToAdd === 1)
+    assert(addExecutors(manager) === 0)
+    assert(numExecutorsPending(manager) === 6)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutors(manager) === 0)
+    assert(numExecutorsPending(manager) === 6)
+    assert(numExecutorsToAdd(manager) === 1)
     sc.stop()
   }
 
   test("remove executors") {
     val sc = createSparkContext(5, 10)
     val manager = sc.executorAllocationManager.get
-    (1 to 10).map(_.toString).foreach(manager.onExecutorAdded)
+    (1 to 10).map(_.toString).foreach { id => onExecutorAdded(manager, id) }
 
     // Keep removing until the limit is reached
-    assert(manager.getExecutorsPendingToRemove.isEmpty)
-    assert(manager.removeExecutor("1"))
-    assert(manager.getExecutorsPendingToRemove.size === 1)
-    assert(manager.getExecutorsPendingToRemove.contains("1"))
-    assert(manager.removeExecutor("2"))
-    assert(manager.removeExecutor("3"))
-    assert(manager.getExecutorsPendingToRemove.size === 3)
-    assert(manager.getExecutorsPendingToRemove.contains("2"))
-    assert(manager.getExecutorsPendingToRemove.contains("3"))
-    assert(!manager.removeExecutor("100")) // remove non-existent executors
-    assert(!manager.removeExecutor("101"))
-    assert(manager.getExecutorsPendingToRemove.size === 3)
-    assert(manager.removeExecutor("4"))
-    assert(manager.removeExecutor("5"))
-    assert(!manager.removeExecutor("6")) // reached the limit of 5
-    assert(manager.getExecutorsPendingToRemove.size === 5)
-    assert(manager.getExecutorsPendingToRemove.contains("4"))
-    assert(manager.getExecutorsPendingToRemove.contains("5"))
-    assert(!manager.getExecutorsPendingToRemove.contains("6"))
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(removeExecutor(manager, "1"))
+    assert(executorsPendingToRemove(manager).size === 1)
+    assert(executorsPendingToRemove(manager).contains("1"))
+    assert(removeExecutor(manager, "2"))
+    assert(removeExecutor(manager, "3"))
+    assert(executorsPendingToRemove(manager).size === 3)
+    assert(executorsPendingToRemove(manager).contains("2"))
+    assert(executorsPendingToRemove(manager).contains("3"))
+    assert(!removeExecutor(manager, "100")) // remove non-existent executors
+    assert(!removeExecutor(manager, "101"))
+    assert(executorsPendingToRemove(manager).size === 3)
+    assert(removeExecutor(manager, "4"))
+    assert(removeExecutor(manager, "5"))
+    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    assert(executorsPendingToRemove(manager).size === 5)
+    assert(executorsPendingToRemove(manager).contains("4"))
+    assert(executorsPendingToRemove(manager).contains("5"))
+    assert(!executorsPendingToRemove(manager).contains("6"))
 
     // Kill executors previously requested to remove
-    manager.onExecutorRemoved("1")
-    assert(manager.getExecutorsPendingToRemove.size === 4)
-    assert(!manager.getExecutorsPendingToRemove.contains("1"))
-    manager.onExecutorRemoved("2")
-    manager.onExecutorRemoved("3")
-    assert(manager.getExecutorsPendingToRemove.size === 2)
-    assert(!manager.getExecutorsPendingToRemove.contains("2"))
-    assert(!manager.getExecutorsPendingToRemove.contains("3"))
-    manager.onExecutorRemoved("2") // duplicates should not count
-    manager.onExecutorRemoved("3")
-    assert(manager.getExecutorsPendingToRemove.size === 2)
-    manager.onExecutorRemoved("4")
-    manager.onExecutorRemoved("5")
-    assert(manager.getExecutorsPendingToRemove.isEmpty)
+    onExecutorRemoved(manager, "1")
+    assert(executorsPendingToRemove(manager).size === 4)
+    assert(!executorsPendingToRemove(manager).contains("1"))
+    onExecutorRemoved(manager, "2")
+    onExecutorRemoved(manager, "3")
+    assert(executorsPendingToRemove(manager).size === 2)
+    assert(!executorsPendingToRemove(manager).contains("2"))
+    assert(!executorsPendingToRemove(manager).contains("3"))
+    onExecutorRemoved(manager, "2") // duplicates should not count
+    onExecutorRemoved(manager, "3")
+    assert(executorsPendingToRemove(manager).size === 2)
+    onExecutorRemoved(manager, "4")
+    onExecutorRemoved(manager, "5")
+    assert(executorsPendingToRemove(manager).isEmpty)
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!manager.removeExecutor("7"))
-    assert(manager.getExecutorsPendingToRemove.isEmpty)
-    assert(!manager.removeExecutor("8"))
-    assert(manager.getExecutorsPendingToRemove.isEmpty)
+    assert(!removeExecutor(manager, "7"))
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(!removeExecutor(manager, "8"))
+    assert(executorsPendingToRemove(manager).isEmpty)
     sc.stop()
   }
 
@@ -194,67 +171,67 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     val manager = sc.executorAllocationManager.get
 
     // Add a few executors
-    assert(manager.addExecutors() === 1)
-    assert(manager.addExecutors() === 2)
-    assert(manager.addExecutors() === 4)
-    manager.onExecutorAdded("1")
-    manager.onExecutorAdded("2")
-    manager.onExecutorAdded("3")
-    manager.onExecutorAdded("4")
-    manager.onExecutorAdded("5")
-    manager.onExecutorAdded("6")
-    manager.onExecutorAdded("7")
-    assert(manager.getExecutorIds.size === 7)
+    assert(addExecutors(manager) === 1)
+    assert(addExecutors(manager) === 2)
+    assert(addExecutors(manager) === 4)
+    onExecutorAdded(manager, "1")
+    onExecutorAdded(manager, "2")
+    onExecutorAdded(manager, "3")
+    onExecutorAdded(manager, "4")
+    onExecutorAdded(manager, "5")
+    onExecutorAdded(manager, "6")
+    onExecutorAdded(manager, "7")
+    assert(executorIds(manager).size === 7)
 
     // Remove until limit
-    assert(manager.removeExecutor("1"))
-    assert(manager.removeExecutor("2"))
-    assert(!manager.removeExecutor("3")) // lower limit reached
-    assert(!manager.removeExecutor("4"))
-    manager.onExecutorRemoved("1")
-    manager.onExecutorRemoved("2")
-    assert(manager.getExecutorIds.size === 5)
+    assert(removeExecutor(manager, "1"))
+    assert(removeExecutor(manager, "2"))
+    assert(!removeExecutor(manager, "3")) // lower limit reached
+    assert(!removeExecutor(manager, "4"))
+    onExecutorRemoved(manager, "1")
+    onExecutorRemoved(manager, "2")
+    assert(executorIds(manager).size === 5)
 
     // Add until limit
-    assert(manager.addExecutors() === 5) // upper limit reached
-    assert(manager.addExecutors() === 0)
-    assert(!manager.removeExecutor("3")) // still at lower limit
-    assert(!manager.removeExecutor("4"))
-    manager.onExecutorAdded("8")
-    manager.onExecutorAdded("9")
-    manager.onExecutorAdded("10")
-    manager.onExecutorAdded("11")
-    manager.onExecutorAdded("12")
-    assert(manager.getExecutorIds.size === 10)
+    assert(addExecutors(manager) === 5) // upper limit reached
+    assert(addExecutors(manager) === 0)
+    assert(!removeExecutor(manager, "3")) // still at lower limit
+    assert(!removeExecutor(manager, "4"))
+    onExecutorAdded(manager, "8")
+    onExecutorAdded(manager, "9")
+    onExecutorAdded(manager, "10")
+    onExecutorAdded(manager, "11")
+    onExecutorAdded(manager, "12")
+    assert(executorIds(manager).size === 10)
 
     // Remove succeeds again, now that we are no longer at the lower limit
-    assert(manager.removeExecutor("3"))
-    assert(manager.removeExecutor("4"))
-    assert(manager.removeExecutor("5"))
-    assert(manager.removeExecutor("6"))
-    assert(manager.getExecutorIds.size === 10)
-    assert(manager.addExecutors() === 0) // still at upper limit
-    manager.onExecutorRemoved("3")
-    manager.onExecutorRemoved("4")
-    assert(manager.getExecutorIds.size === 8)
+    assert(removeExecutor(manager, "3"))
+    assert(removeExecutor(manager, "4"))
+    assert(removeExecutor(manager, "5"))
+    assert(removeExecutor(manager, "6"))
+    assert(executorIds(manager).size === 10)
+    assert(addExecutors(manager) === 0) // still at upper limit
+    onExecutorRemoved(manager, "3")
+    onExecutorRemoved(manager, "4")
+    assert(executorIds(manager).size === 8)
 
     // Add succeeds again, now that we are no longer at the upper limit
     // Number of executors added restarts at 1
-    assert(manager.addExecutors() === 1)
-    assert(manager.addExecutors() === 1) // upper limit reached again
-    assert(manager.addExecutors() === 0)
-    assert(manager.getExecutorIds.size === 8)
-    manager.onExecutorRemoved("5")
-    manager.onExecutorRemoved("6")
-    manager.onExecutorAdded("13")
-    manager.onExecutorAdded("14")
-    assert(manager.getExecutorIds.size === 8)
-    assert(manager.addExecutors() === 1)
-    assert(manager.addExecutors() === 1) // upper limit reached again
-    assert(manager.addExecutors() === 0)
-    manager.onExecutorAdded("15")
-    manager.onExecutorAdded("16")
-    assert(manager.getExecutorIds.size === 10)
+    assert(addExecutors(manager) === 1)
+    assert(addExecutors(manager) === 1) // upper limit reached again
+    assert(addExecutors(manager) === 0)
+    assert(executorIds(manager).size === 8)
+    onExecutorRemoved(manager, "5")
+    onExecutorRemoved(manager, "6")
+    onExecutorAdded(manager, "13")
+    onExecutorAdded(manager, "14")
+    assert(executorIds(manager).size === 8)
+    assert(addExecutors(manager) === 1)
+    assert(addExecutors(manager) === 1) // upper limit reached again
+    assert(addExecutors(manager) === 0)
+    onExecutorAdded(manager, "15")
+    onExecutorAdded(manager, "16")
+    assert(executorIds(manager).size === 10)
     sc.stop()
   }
 
@@ -263,28 +240,28 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     val sc = createSparkContext(2, 10, schedulerBacklogTimeout = schedulerBacklogTimeout)
     val manager = sc.executorAllocationManager.get
 
-    assert(manager.getAddTime === NOT_SET)
-    manager.onSchedulerBacklogged()
-    val firstAddTime = manager.getAddTime
+    assert(addTime(manager) === NOT_SET)
+    onSchedulerBacklogged(manager)
+    val firstAddTime = addTime(manager)
     assert(firstAddTime !== NOT_SET)
     Thread.sleep(100)
-    manager.onSchedulerBacklogged()
-    assert(manager.getAddTime === firstAddTime) // timer is already started
-    manager.onSchedulerBacklogged()
-    assert(manager.getAddTime === firstAddTime)
-    manager.onSchedulerBacklogged()
-    assert(manager.getAddTime <
+    onSchedulerBacklogged(manager)
+    assert(addTime(manager) === firstAddTime) // timer is already started
+    onSchedulerBacklogged(manager)
+    assert(addTime(manager) === firstAddTime)
+    onSchedulerBacklogged(manager)
+    assert(addTime(manager) <
       System.currentTimeMillis() + schedulerBacklogTimeout * 1000)
-    manager.onSchedulerQueueEmpty()
+    onSchedulerQueueEmpty(manager)
 
     // Restart add timer
-    assert(manager.getAddTime === NOT_SET)
-    manager.onSchedulerBacklogged()
-    val secondAddTime = manager.getAddTime
+    assert(addTime(manager) === NOT_SET)
+    onSchedulerBacklogged(manager)
+    val secondAddTime = addTime(manager)
     assert(secondAddTime !== NOT_SET)
-    manager.onSchedulerBacklogged()
-    assert(manager.getAddTime === secondAddTime)
-    assert(manager.getAddTime !== firstAddTime)
+    onSchedulerBacklogged(manager)
+    assert(addTime(manager) === secondAddTime)
+    assert(addTime(manager) !== firstAddTime)
     assert(firstAddTime !== secondAddTime)
   }
 
@@ -293,131 +270,238 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     val sc = createSparkContext(2, 10, executorIdleTimeout = executorIdleTimeout)
     val manager = sc.executorAllocationManager.get
 
-    assert(manager.getRemoveTimes.isEmpty)
-    manager.onExecutorIdle("1")
-    assert(manager.getRemoveTimes.size === 1)
-    assert(manager.getRemoveTimes.contains("1"))
-    val firstRemoveTime = manager.getRemoveTimes("1")
+    assert(removeTimes(manager).isEmpty)
+    onExecutorIdle(manager, "1")
+    assert(removeTimes(manager).size === 1)
+    assert(removeTimes(manager).contains("1"))
+    val firstRemoveTime = removeTimes(manager)("1")
     Thread.sleep(100)
-    manager.onExecutorIdle("1")
-    assert(manager.getRemoveTimes("1") === firstRemoveTime) // timer is already started
-    manager.onExecutorIdle("1")
-    assert(manager.getRemoveTimes("1") === firstRemoveTime)
-    manager.onExecutorIdle("2")
-    assert(manager.getRemoveTimes("2") !== firstRemoveTime) // different executor
-    manager.onExecutorIdle("3")
-    assert(manager.getRemoveTimes("3") !== firstRemoveTime)
-    assert(manager.getRemoveTimes.size === 3)
-    assert(manager.getRemoveTimes.contains("2"))
-    assert(manager.getRemoveTimes.contains("3"))
-    assert(manager.getRemoveTimes("1") <
+    onExecutorIdle(manager, "1")
+    assert(removeTimes(manager)("1") === firstRemoveTime) // timer is already started
+    onExecutorIdle(manager, "1")
+    assert(removeTimes(manager)("1") === firstRemoveTime)
+    onExecutorIdle(manager, "2")
+    assert(removeTimes(manager)("2") !== firstRemoveTime) // different executor
+    onExecutorIdle(manager, "3")
+    assert(removeTimes(manager)("3") !== firstRemoveTime)
+    assert(removeTimes(manager).size === 3)
+    assert(removeTimes(manager).contains("2"))
+    assert(removeTimes(manager).contains("3"))
+    assert(removeTimes(manager)("1") <
       System.currentTimeMillis() + executorIdleTimeout * 1000)
 
     // Restart remove timer
-    manager.onExecutorBusy("1")
-    assert(manager.getRemoveTimes.size === 2)
-    manager.onExecutorIdle("1")
-    assert(manager.getRemoveTimes.size === 3)
-    assert(manager.getRemoveTimes.contains("1"))
-    val secondRemoveTime = manager.getRemoveTimes("1")
-    assert(manager.getRemoveTimes("1") === secondRemoveTime) // timer is already started
-    assert(manager.getRemoveTimes("1") !== firstRemoveTime)
+    onExecutorBusy(manager, "1")
+    assert(removeTimes(manager).size === 2)
+    onExecutorIdle(manager, "1")
+    assert(removeTimes(manager).size === 3)
+    assert(removeTimes(manager).contains("1"))
+    val secondRemoveTime = removeTimes(manager)("1")
+    assert(removeTimes(manager)("1") === secondRemoveTime) // timer is already started
+    assert(removeTimes(manager)("1") !== firstRemoveTime)
     assert(firstRemoveTime !== secondRemoveTime)
   }
 
   test("listeners trigger add executors correctly") {
     val sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
-    assert(manager.getAddTime === NOT_SET)
+    assert(addTime(manager) === NOT_SET)
 
     // Starting a stage should start the add timer
     val numTasks = 10
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, numTasks)))
-    assert(manager.getAddTime !== NOT_SET)
+    assert(addTime(manager) !== NOT_SET)
 
     // Starting a subset of the tasks should not cancel the add timer
     val taskInfos = (0 to numTasks - 1).map { i => createTaskInfo(i, i, "executor-1") }
     taskInfos.tail.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, info)) }
-    assert(manager.getAddTime !== NOT_SET)
+    assert(addTime(manager) !== NOT_SET)
 
     // Starting all remaining tasks should cancel the add timer
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, taskInfos.head))
-    assert(manager.getAddTime === NOT_SET)
+    assert(addTime(manager) === NOT_SET)
 
     // Start two different stages
     // The add timer should be canceled only if all tasks in both stages start running
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, numTasks)))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, numTasks)))
-    assert(manager.getAddTime !== NOT_SET)
+    assert(addTime(manager) !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, info)) }
-    assert(manager.getAddTime !== NOT_SET)
+    assert(addTime(manager) !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, info)) }
-    assert(manager.getAddTime === NOT_SET)
+    assert(addTime(manager) === NOT_SET)
   }
 
   test("listeners trigger remove executors correctly") {
     val sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
-    assert(manager.getRemoveTimes.isEmpty)
+    assert(removeTimes(manager).isEmpty)
 
     // Added executors should start the remove timers for each executor
-    (1 to 5).map("executor-" + _).foreach(manager.onExecutorAdded)
-    assert(manager.getRemoveTimes.size === 5)
+    (1 to 5).map("executor-" + _).foreach { id => onExecutorAdded(manager, id) }
+    assert(removeTimes(manager).size === 5)
 
     // Starting a task cancel the remove timer for that executor
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(1, 1, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(2, 2, "executor-2")))
-    assert(manager.getRemoveTimes.size === 3)
-    assert(!manager.getRemoveTimes.contains("executor-1"))
-    assert(!manager.getRemoveTimes.contains("executor-2"))
+    assert(removeTimes(manager).size === 3)
+    assert(!removeTimes(manager).contains("executor-1"))
+    assert(!removeTimes(manager).contains("executor-2"))
 
     // Finishing all tasks running on an executor should start the remove timer for that executor
     sc.listenerBus.postToAll(SparkListenerTaskEnd(
       0, 0, "task-type", Success, createTaskInfo(0, 0, "executor-1"), new TaskMetrics))
     sc.listenerBus.postToAll(SparkListenerTaskEnd(
       0, 0, "task-type", Success, createTaskInfo(2, 2, "executor-2"), new TaskMetrics))
-    assert(manager.getRemoveTimes.size === 4)
-    assert(manager.getRemoveTimes.contains("executor-2"))
+    assert(removeTimes(manager).size === 4)
+    assert(removeTimes(manager).contains("executor-2"))
     sc.listenerBus.postToAll(SparkListenerTaskEnd(
       0, 0, "task-type", Success, createTaskInfo(1, 1, "executor-1"), new TaskMetrics))
-    assert(manager.getRemoveTimes.size === 5)
-    assert(manager.getRemoveTimes.contains("executor-1"))
+    assert(removeTimes(manager).size === 5)
+    assert(removeTimes(manager).contains("executor-1"))
   }
 
   test("listeners trigger add and remove executor callbacks correctly") {
     val sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
-    assert(manager.getExecutorIds.isEmpty)
-    assert(manager.getRemoveTimes.isEmpty)
+    assert(executorIds(manager).isEmpty)
+    assert(removeTimes(manager).isEmpty)
 
     // New executors have registered
     sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
       0L, BlockManagerId("executor-1", "host1", 1), 100L))
-    assert(manager.getExecutorIds.size === 1)
-    assert(manager.getExecutorIds.contains("executor-1"))
-    assert(manager.getRemoveTimes.size === 1)
-    assert(manager.getRemoveTimes.contains("executor-1"))
+    assert(executorIds(manager).size === 1)
+    assert(executorIds(manager).contains("executor-1"))
+    assert(removeTimes(manager).size === 1)
+    assert(removeTimes(manager).contains("executor-1"))
     sc.listenerBus.postToAll(SparkListenerBlockManagerAdded(
       0L, BlockManagerId("executor-2", "host2", 1), 100L))
-    assert(manager.getExecutorIds.size === 2)
-    assert(manager.getExecutorIds.contains("executor-2"))
-    assert(manager.getRemoveTimes.size === 2)
-    assert(manager.getRemoveTimes.contains("executor-2"))
+    assert(executorIds(manager).size === 2)
+    assert(executorIds(manager).contains("executor-2"))
+    assert(removeTimes(manager).size === 2)
+    assert(removeTimes(manager).contains("executor-2"))
 
     // Existing executors have disconnected
     sc.listenerBus.postToAll(SparkListenerBlockManagerRemoved(
       0L, BlockManagerId("executor-1", "host1", 1)))
-    assert(manager.getExecutorIds.size === 1)
-    assert(!manager.getExecutorIds.contains("executor-1"))
-    assert(manager.getRemoveTimes.size === 1)
-    assert(!manager.getRemoveTimes.contains("executor-1"))
+    assert(executorIds(manager).size === 1)
+    assert(!executorIds(manager).contains("executor-1"))
+    assert(removeTimes(manager).size === 1)
+    assert(!removeTimes(manager).contains("executor-1"))
 
     // Unknown executor has disconnected
     sc.listenerBus.postToAll(SparkListenerBlockManagerRemoved(
       0L, BlockManagerId("executor-3", "host3", 1)))
-    assert(manager.getExecutorIds.size === 1)
-    assert(manager.getRemoveTimes.size === 1)
+    assert(executorIds(manager).size === 1)
+    assert(removeTimes(manager).size === 1)
+  }
+
+}
+
+/**
+ * Helper methods for testing ExecutorAllocationManager.
+ * This includes methods to access private methods and fields in ExecutorAllocationManager.
+ */
+private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
+  private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
+  private val _numExecutorsPending = PrivateMethod[Int]('numExecutorsPending)
+  private val _executorsPendingToRemove =
+    PrivateMethod[collection.Set[String]]('executorsPendingToRemove)
+  private val _executorIds = PrivateMethod[collection.Set[String]]('executorIds)
+  private val _addTime = PrivateMethod[Long]('addTime)
+  private val _removeTimes = PrivateMethod[collection.Map[String, Long]]('removeTimes)
+  private val _addExecutors = PrivateMethod[Int]('addExecutors)
+  private val _removeExecutor = PrivateMethod[Boolean]('removeExecutor)
+  private val _onExecutorAdded = PrivateMethod[Unit]('onExecutorAdded)
+  private val _onExecutorRemoved = PrivateMethod[Unit]('onExecutorRemoved)
+  private val _onSchedulerBacklogged = PrivateMethod[Unit]('onSchedulerBacklogged)
+  private val _onSchedulerQueueEmpty = PrivateMethod[Unit]('onSchedulerQueueEmpty)
+  private val _onExecutorIdle = PrivateMethod[Unit]('onExecutorIdle)
+  private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
+
+  private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _numExecutorsToAdd()
+  }
+
+  private def numExecutorsPending(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _numExecutorsPending()
+  }
+
+  private def executorsPendingToRemove(
+      manager: ExecutorAllocationManager): collection.Set[String] = {
+    manager invokePrivate _executorsPendingToRemove()
+  }
+
+  private def executorIds(manager: ExecutorAllocationManager): collection.Set[String] = {
+    manager invokePrivate _executorIds()
+  }
+
+  private def addTime(manager: ExecutorAllocationManager): Long = {
+    manager invokePrivate _addTime()
+  }
+
+  private def removeTimes(manager: ExecutorAllocationManager): collection.Map[String, Long] = {
+    manager invokePrivate _removeTimes()
+  }
+
+  private def addExecutors(manager: ExecutorAllocationManager): Int = {
+    manager invokePrivate _addExecutors()
+  }
+
+  private def removeExecutor(manager: ExecutorAllocationManager, id: String): Boolean = {
+    manager invokePrivate _removeExecutor(id)
+  }
+
+  private def onExecutorAdded(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _onExecutorAdded(id)
+  }
+
+  private def onExecutorRemoved(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _onExecutorRemoved(id)
+  }
+
+  private def onSchedulerBacklogged(manager: ExecutorAllocationManager): Unit = {
+    manager invokePrivate _onSchedulerBacklogged()
+  }
+
+  private def onSchedulerQueueEmpty(manager: ExecutorAllocationManager): Unit = {
+    manager invokePrivate _onSchedulerQueueEmpty()
+  }
+
+  private def onExecutorIdle(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _onExecutorIdle(id)
+  }
+
+  private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _onExecutorBusy(id)
+  }
+
+  private def createSparkContext(
+      minExecutors: Int = 1,
+      maxExecutors: Int = 5,
+      schedulerBacklogTimeout: Long = 1,
+      sustainedSchedulerBacklogTimeout: Long = 1,
+      executorIdleTimeout: Long = 3): SparkContext = {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.minExecutors", minExecutors + "")
+      .set("spark.dynamicAllocation.maxExecutors", maxExecutors + "")
+      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout + "")
+      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
+        sustainedSchedulerBacklogTimeout + "")
+      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout + "")
+    new SparkContext(conf)
+  }
+
+  private def createStageInfo(stageId: Int, numTasks: Int): StageInfo = {
+    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, "no details")
+  }
+
+  private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String): TaskInfo = {
+    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative = false)
   }
 
 }

@@ -162,9 +162,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * Request a number of executors from the cluster manager.
    * If the cap on the number of executors is reached, give up and reset the
    * number of executors to add next round instead of continuing to double it.
-   * Return the number actually requested. Exposed for testing.
+   * Return the number actually requested.
    */
-  def addExecutors(): Int = synchronized {
+  private def addExecutors(): Int = synchronized {
     // Do not request more executors if we have already reached the upper bound
     val numExistingExecutors = executorIds.size + numExecutorsPending
     if (numExistingExecutors >= maxNumExecutors) {
@@ -200,9 +200,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
   /**
    * Request the cluster manager to remove the given executor.
-   * Return whether the request is received. Exposed for testing.
+   * Return whether the request is received.
    */
-  def removeExecutor(executorId: String): Boolean = synchronized {
+  private def removeExecutor(executorId: String): Boolean = synchronized {
     // Do not kill the executor if we are not aware of it (should never happen)
     if (!executorIds.contains(executorId)) {
       logWarning(s"Attempted to remove unknown executor $executorId!")
@@ -239,9 +239,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   }
 
   /**
-   * Callback invoked when the specified executor has been added. Exposed for testing.
+   * Callback invoked when the specified executor has been added.
    */
-  def onExecutorAdded(executorId: String): Unit = synchronized {
+  private def onExecutorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
       executorIds.foreach(onExecutorIdle)
@@ -254,9 +254,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   }
 
   /**
-   * Callback invoked when the specified executor has been removed. Exposed for testing.
+   * Callback invoked when the specified executor has been removed.
    */
-  def onExecutorRemoved(executorId: String): Unit = synchronized {
+  private def onExecutorRemoved(executorId: String): Unit = synchronized {
     if (executorIds.contains(executorId)) {
       executorIds.remove(executorId)
       removeTimes.remove(executorId)
@@ -274,9 +274,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   /**
    * Callback invoked when the scheduler receives new pending tasks.
    * This sets a time in the future that decides when executors should be added
-   * if it is not already set. Exposed for testing.
+   * if it is not already set.
    */
-  def onSchedulerBacklogged(): Unit = synchronized {
+  private def onSchedulerBacklogged(): Unit = synchronized {
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeout seconds)")
@@ -286,9 +286,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
   /**
    * Callback invoked when the scheduler queue is drained.
-   * This resets all variables used for adding executors. Exposed for testing.
+   * This resets all variables used for adding executors.
    */
-  def onSchedulerQueueEmpty(): Unit = synchronized {
+  private def onSchedulerQueueEmpty(): Unit = synchronized {
     logDebug(s"Clearing timer to add executors because there are no more pending tasks")
     addTime = NOT_SET
     numExecutorsToAdd = 1
@@ -297,9 +297,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   /**
    * Callback invoked when the specified executor is no longer running any tasks.
    * This sets a time in the future that decides when this executor should be removed if
-   * the executor is not already marked as idle. Exposed for testing.
+   * the executor is not already marked as idle.
    */
-  def onExecutorIdle(executorId: String): Unit = synchronized {
+  private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (!removeTimes.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
         s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
@@ -309,109 +309,98 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
   /**
    * Callback invoked when the specified executor is now running a task.
-   * This resets all variables used for removing this executor. Exposed for testing.
+   * This resets all variables used for removing this executor.
    */
-  def onExecutorBusy(executorId: String): Unit = synchronized {
+  private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
   }
 
-  /* --------------------------- *
-   | Getters exposed for testing |
-   * --------------------------- */
+  /**
+   * A listener that notifies the given allocation manager of when to add and remove executors.
+   *
+   * This class is intentionally conservative in its assumptions about the relative ordering
+   * and consistency of events returned by the listener. For simplicity, it does not account
+   * for speculated tasks.
+   */
+  private class ExecutorAllocationListener(allocationManager: ExecutorAllocationManager)
+    extends SparkListener {
 
-  def getNumExecutorsToAdd: Int = numExecutorsToAdd
-  def getNumExecutorsPending: Int = numExecutorsPending
-  def getExecutorsPendingToRemove: collection.Set[String] = executorsPendingToRemove
-  def getExecutorIds: collection.Set[String] = executorIds
-  def getAddTime: Long = addTime
-  def getRemoveTimes: collection.Map[String, Long] = removeTimes
+    private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
+    private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
+    private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
 
-}
-
-private object ExecutorAllocationManager {
-  val NOT_SET = Long.MaxValue
-}
-
-/**
- * A listener that notifies the given allocation manager of when to add and remove executors.
- *
- * This class is intentionally conservative in its assumptions about the relative ordering
- * and consistency of events returned by the listener. For simplicity, it does not account
- * for speculated tasks.
- */
-private class ExecutorAllocationListener(allocationManager: ExecutorAllocationManager)
-  extends SparkListener {
-
-  private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
-  private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
-  private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
-
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
-    val stageId = stageSubmitted.stageInfo.stageId
-    val numTasks = stageSubmitted.stageInfo.numTasks
-    stageIdToNumTasks(stageId) = numTasks
-    allocationManager.onSchedulerBacklogged()
-  }
-
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
-    val stageId = stageCompleted.stageInfo.stageId
-    stageIdToNumTasks -= stageId
-    stageIdToTaskIndices -= stageId
-
-    // If this is the last stage with pending tasks, mark the scheduler queue as empty
-    // This is needed in case the stage is aborted for any reason
-    if (stageIdToNumTasks.isEmpty) {
-      allocationManager.onSchedulerQueueEmpty()
+    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
+      val stageId = stageSubmitted.stageInfo.stageId
+      val numTasks = stageSubmitted.stageInfo.numTasks
+      stageIdToNumTasks(stageId) = numTasks
+      allocationManager.onSchedulerBacklogged()
     }
-  }
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
-    val stageId = taskStart.stageId
-    val taskId = taskStart.taskInfo.taskId
-    val taskIndex = taskStart.taskInfo.index
-    val executorId = taskStart.taskInfo.executorId
-
-    // If this is the last pending task, mark the scheduler queue as empty
-    stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
-    val numTasksScheduled = stageIdToTaskIndices(stageId).size
-    val numTasksTotal = stageIdToNumTasks.getOrElse(stageId, -1)
-    if (numTasksScheduled == numTasksTotal) {
-      // No more pending tasks for this stage
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
+      val stageId = stageCompleted.stageInfo.stageId
       stageIdToNumTasks -= stageId
+      stageIdToTaskIndices -= stageId
+
+      // If this is the last stage with pending tasks, mark the scheduler queue as empty
+      // This is needed in case the stage is aborted for any reason
       if (stageIdToNumTasks.isEmpty) {
         allocationManager.onSchedulerQueueEmpty()
       }
     }
 
-    // Mark the executor on which this task is scheduled as busy
-    executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
-    allocationManager.onExecutorBusy(executorId)
-  }
+    override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
+      val stageId = taskStart.stageId
+      val taskId = taskStart.taskInfo.taskId
+      val taskIndex = taskStart.taskInfo.index
+      val executorId = taskStart.taskInfo.executorId
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
-    val executorId = taskEnd.taskInfo.executorId
-    val taskId = taskEnd.taskInfo.taskId
+      // If this is the last pending task, mark the scheduler queue as empty
+      stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+      val numTasksScheduled = stageIdToTaskIndices(stageId).size
+      val numTasksTotal = stageIdToNumTasks.getOrElse(stageId, -1)
+      if (numTasksScheduled == numTasksTotal) {
+        // No more pending tasks for this stage
+        stageIdToNumTasks -= stageId
+        if (stageIdToNumTasks.isEmpty) {
+          allocationManager.onSchedulerQueueEmpty()
+        }
+      }
 
-    // If the executor is no longer running scheduled any tasks, mark it as idle
-    if (executorIdToTaskIds.contains(executorId)) {
-      executorIdToTaskIds(executorId) -= taskId
-      if (executorIdToTaskIds(executorId).isEmpty) {
-        executorIdToTaskIds -= executorId
-        allocationManager.onExecutorIdle(executorId)
+      // Mark the executor on which this task is scheduled as busy
+      executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
+      allocationManager.onExecutorBusy(executorId)
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+      val executorId = taskEnd.taskInfo.executorId
+      val taskId = taskEnd.taskInfo.taskId
+
+      // If the executor is no longer running scheduled any tasks, mark it as idle
+      if (executorIdToTaskIds.contains(executorId)) {
+        executorIdToTaskIds(executorId) -= taskId
+        if (executorIdToTaskIds(executorId).isEmpty) {
+          executorIdToTaskIds -= executorId
+          allocationManager.onExecutorIdle(executorId)
+        }
       }
     }
-  }
 
-  override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
-    val executorId = blockManagerAdded.blockManagerId.executorId
-    if (executorId != "<driver>") {
-      allocationManager.onExecutorAdded(executorId)
+    override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
+      val executorId = blockManagerAdded.blockManagerId.executorId
+      if (executorId != "<driver>") {
+        allocationManager.onExecutorAdded(executorId)
+      }
+    }
+
+    override def onBlockManagerRemoved(
+        blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
+      allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
     }
   }
 
-  override def onBlockManagerRemoved(
-      blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
-    allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
-  }
+}
+
+private object ExecutorAllocationManager {
+  val NOT_SET = Long.MaxValue
 }
