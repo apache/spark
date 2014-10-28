@@ -41,7 +41,7 @@ function run_test() {
 
     # Fail and exit on the first test failure.
     if [[ $FAILED != 0 ]]; then
-        cat unit-tests.log | grep -v "^[0-9][0-9]*" # filter all lines starting with a number.
+        cat $LOG_FILE | grep -v "^[0-9][0-9]*" # filter all lines starting with a number.
         echo -en "\033[31m"  # Red
         echo "Had test failures; see logs."
         echo -en "\033[0m"  # No color
@@ -87,7 +87,7 @@ function run_streaming_tests() {
     run_test "pyspark/streaming/tests.py"
 }
 
-echo "Running PySpark tests. Output is in python/unit-tests.log."
+echo "Running PySpark tests. Output is in python/$LOG_FILE."
 
 export PYSPARK_PYTHON="python"
 
