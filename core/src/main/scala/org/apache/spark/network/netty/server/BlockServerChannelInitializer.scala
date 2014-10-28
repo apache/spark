@@ -17,13 +17,13 @@
 
 package org.apache.spark.network.netty.server
 
+import com.google.common.base.Charsets.UTF_8
 import io.netty.channel.ChannelInitializer
 import io.netty.channel.socket.SocketChannel
 import io.netty.handler.codec.LineBasedFrameDecoder
 import io.netty.handler.codec.string.StringDecoder
-import io.netty.util.CharsetUtil
-import org.apache.spark.storage.BlockDataProvider
 
+import org.apache.spark.storage.BlockDataProvider
 
 /** Channel initializer that sets up the pipeline for the BlockServer. */
 private[netty]
@@ -33,7 +33,7 @@ class BlockServerChannelInitializer(dataProvider: BlockDataProvider)
   override def initChannel(ch: SocketChannel): Unit = {
     ch.pipeline
       .addLast("frameDecoder", new LineBasedFrameDecoder(1024))  // max block id length 1024
-      .addLast("stringDecoder", new StringDecoder(CharsetUtil.UTF_8))
+      .addLast("stringDecoder", new StringDecoder(UTF_8))
       .addLast("blockHeaderEncoder", new BlockHeaderEncoder)
       .addLast("handler", new BlockServerHandler(dataProvider))
   }

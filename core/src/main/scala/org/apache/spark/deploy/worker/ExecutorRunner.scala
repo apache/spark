@@ -20,7 +20,7 @@ package org.apache.spark.deploy.worker
 import java.io._
 
 import akka.actor.ActorRef
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkConf, Logging}
@@ -151,7 +151,7 @@ private[spark] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, Charsets.UTF_8)
+      Files.write(header, stderr, UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       state = ExecutorState.RUNNING

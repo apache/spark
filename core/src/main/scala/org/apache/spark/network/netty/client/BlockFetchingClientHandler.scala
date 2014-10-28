@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty.client
 
+import com.google.common.base.Charsets.UTF_8
 import io.netty.buffer.ByteBuf
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
@@ -67,7 +68,7 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
     val blockIdLen = in.readInt()
     val blockIdBytes = new Array[Byte](math.abs(blockIdLen))
     in.readBytes(blockIdBytes)
-    val blockId = new String(blockIdBytes)
+    val blockId = new String(blockIdBytes, UTF_8)
     val blockSize = totalLen - math.abs(blockIdLen) - 4
 
     def server = ctx.channel.remoteAddress.toString
@@ -76,7 +77,7 @@ class BlockFetchingClientHandler extends SimpleChannelInboundHandler[ByteBuf] wi
     if (blockIdLen < 0) {
       val errorMessageBytes = new Array[Byte](blockSize)
       in.readBytes(errorMessageBytes)
-      val errorMsg = new String(errorMessageBytes)
+      val errorMsg = new String(errorMessageBytes, UTF_8)
       logTrace(s"Received block $blockId ($blockSize B) with error $errorMsg from $server")
 
       val listener = outstandingRequests.get(blockId)

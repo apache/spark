@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.base.Charsets.UTF_8
+
 import org.apache.spark.util.Utils
 
 private[nio] abstract class Message(val typ: Long, val id: Int) {
@@ -92,7 +94,7 @@ private[nio] object Message {
    */
   def createErrorMessage(exception: Exception, ackId: Int): BufferMessage = {
     val exceptionString = Utils.exceptionString(exception)
-    val serializedExceptionString = ByteBuffer.wrap(exceptionString.getBytes("utf-8"))
+    val serializedExceptionString = ByteBuffer.wrap(exceptionString.getBytes(UTF_8))
     val errorMessage = createBufferMessage(serializedExceptionString, ackId)
     errorMessage.hasError = true
     errorMessage

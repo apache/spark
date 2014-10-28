@@ -31,6 +31,8 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets.UTF_8
+
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
@@ -923,7 +925,7 @@ private[nio] class ConnectionManager(
             val errorMsgByteBuf = ackMessage.asInstanceOf[BufferMessage].buffers.head
             val errorMsgBytes = new Array[Byte](errorMsgByteBuf.limit())
             errorMsgByteBuf.get(errorMsgBytes)
-            val errorMsg = new String(errorMsgBytes, "utf-8")
+            val errorMsg = new String(errorMsgBytes, UTF_8)
             val e = new IOException(
               s"sendMessageReliably failed with ACK that signalled a remote error: $errorMsg")
             if (!promise.tryFailure(e)) {

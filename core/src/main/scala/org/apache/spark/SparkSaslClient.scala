@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.io.IOException
 import javax.security.auth.callback.Callback
 import javax.security.auth.callback.CallbackHandler
 import javax.security.auth.callback.NameCallback
@@ -30,6 +29,8 @@ import javax.security.sasl.SaslClient
 import javax.security.sasl.SaslException
 
 import scala.collection.JavaConversions.mapAsJavaMap
+
+import com.google.common.base.Charsets.UTF_8
 
 /**
  * Implements SASL Client logic for Spark
@@ -111,10 +112,10 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
     CallbackHandler {
 
     private val userName: String =
-      SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes("utf-8"))
+      SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes(UTF_8))
     private val secretKey = securityMgr.getSecretKey()
     private val userPassword: Array[Char] = SparkSaslServer.encodePassword(
-        if (secretKey != null) secretKey.getBytes("utf-8") else "".getBytes("utf-8"))
+        if (secretKey != null) secretKey.getBytes(UTF_8) else "".getBytes(UTF_8))
 
     /**
      * Implementation used to respond to SASL request from the server.
