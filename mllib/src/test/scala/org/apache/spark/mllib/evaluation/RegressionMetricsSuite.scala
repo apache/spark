@@ -30,7 +30,7 @@ class RegressionMetricsSuite extends FunSuite with LocalSparkContext {
     assert(metrics.explainedVarianceScore() ~== 0.95717 absTol 1E-5,"explained variance regression score mismatch")
     assert(metrics.mae() ~== 0.5 absTol 1E-5, "mean absolute error mismatch")
     assert(metrics.mse() ~== 0.375 absTol 1E-5, "mean square error mismatch")
-    assert(metrics.r2_socre() ~== 0.94861 absTol 1E-5, "r2 score mismatch")
+    assert(metrics.r2_score() ~== 0.94861 absTol 1E-5, "r2 score mismatch")
   }
 
   test("regression metrics with complete fitting") {
@@ -40,6 +40,6 @@ class RegressionMetricsSuite extends FunSuite with LocalSparkContext {
     assert(metrics.explainedVarianceScore() ~== 1.0 absTol 1E-5,"explained variance regression score mismatch")
     assert(metrics.mae() ~== 0.0 absTol 1E-5, "mean absolute error mismatch")
     assert(metrics.mse() ~== 0.0 absTol 1E-5, "mean square error mismatch")
-    assert(metrics.r2_socre() ~== 1.0 absTol 1E-5, "r2 score mismatch")
+    assert(metrics.r2_score() ~== 1.0 absTol 1E-5, "r2 score mismatch")
   }
 }

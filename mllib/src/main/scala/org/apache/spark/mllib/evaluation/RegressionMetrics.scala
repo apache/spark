@@ -41,7 +41,7 @@ class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
   private lazy val summarizer: MultivariateOnlineSummarizer = {
     val summarizer: MultivariateOnlineSummarizer = valuesAndPreds.map{
       case (value,pred) => Vectors.dense(
-        Array(value, pred, value - pred, math.abs(value - pred), math.pow(value - pred, 2.0))
+        Array(value, value - pred, math.abs(value - pred), math.pow(value - pred, 2.0))
       )
     }.treeAggregate(new MultivariateOnlineSummarizer())(
         (summary, v) => summary.add(v),
@@ -54,7 +54,7 @@ class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
    * Computes the explained variance regression score
    */
   def explainedVarianceScore(): Double = {
-    1 - summarizer.variance(2) / summarizer.variance(0)
+    1 - summarizer.variance(1) / summarizer.variance(0)
   }
 
   /**
@@ -62,7 +62,7 @@ class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
    * expected value of the absolute error loss or l1-norm loss.
    */
   def mae(): Double = {
-    summarizer.mean(3)
+    summarizer.mean(2)
   }
 
   /**
@@ -70,14 +70,14 @@ class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
    * expected value of the squared error loss or quadratic loss.
    */
   def mse(): Double = {
-    summarizer.mean(4)
+    summarizer.mean(3)
   }
 
   /**
    * Computes R^2^, the coefficient of determination.
    * @return
    */
-  def r2_socre(): Double = {
-    1 - summarizer.mean(4) * summarizer.count / (summarizer.variance(0) * (summarizer.count - 1))
+  def r2_score(): Double = {
+    1 - summarizer.mean(3) * summarizer.count / (summarizer.variance(0) * (summarizer.count - 1))
   }
 }
