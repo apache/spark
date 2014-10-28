@@ -96,7 +96,7 @@ private[spark] object XORShiftRandom {
       xorRand.nextInt()
     }
 
-    val iters: (=> Unit) => Unit = (f) => timeIt(numIters)(f)
+    val iters = timeIt(numIters)(_)
 
     /* Return results as a map instead of just printing to screen
     in case the user wants to do something with them */
