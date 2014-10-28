@@ -24,6 +24,7 @@ import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
@@ -57,10 +58,19 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
             iter.map(r => mutablePair.update(hashExpressions(r), r))
           }
         }
+        
+        val sortingExpressions = expressions.map(s => new SortOrder(s, Ascending))
+        implicit val ordering = new RowOrdering(sortingExpressions, child.output)
         val part = new HashPartitioner(numPartitions)
-        val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
+        val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part).setKeyOrdering(ordering)
+        //val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
-        shuffled.map(_._2)
+        val temp = shuffled.map(_._2)
+        for ( x <- temp.collect()) {
+          println(x)
+        }
+        println("------------")
+        temp
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
         val rdd = if (sortBasedShuffleOn) {

@@ -84,6 +84,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
+        val mergeJoin = joins.MergeJoin(leftKeys, rightKeys, Inner, condition, planLater(left), planLater(right))
+        condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
+      
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
             joins.BuildRight
