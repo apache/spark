@@ -24,9 +24,9 @@ import scala.collection.mutable
 
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.{Distribution, Utils, ThreadStackTrace}
 
 @DeveloperApi
 sealed trait SparkListenerEvent

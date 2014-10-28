@@ -21,9 +21,8 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
-import java.util.Arrays
+import java.util.{Arrays, Properties, Timer, TimerTask, UUID}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
@@ -241,6 +240,18 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   // Bind the UI before starting the task scheduler to communicate
   // the bound port to the cluster manager properly
   ui.foreach(_.bind())
+
+  // If we are not running in local mode, then start a new timer thread for capturing driver thread
+  // dumps for display in the web UI (in local mode, this is handled by the local Executor):
+  private val threadDumpTimer = new Timer("Driver thread dump timer", true)
+  if (!isLocal) {
+    val threadDumpInterval = conf.getInt("spark.executor.heartbeatInterval", 10000)
+    threadDumpTimer.scheduleAtFixedRate(new TimerTask {
+      override def run(): Unit = {
+        listenerBus.post(SparkListenerExecutorThreadDump("<driver>", Utils.getThreadDump()))
+      }
+    }, threadDumpInterval, threadDumpInterval)
+  }
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
@@ -960,6 +971,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   def stop() {
     postApplicationEnd()
     ui.foreach(_.stop())
+    threadDumpTimer.cancel()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler

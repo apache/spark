@@ -18,8 +18,9 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.ThreadStackTrace
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.

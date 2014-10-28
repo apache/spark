@@ -379,12 +379,7 @@ private[spark] class Executor(
               }
             }
           }
-          val threadDump = Thread.getAllStackTraces.toArray.sortBy(_._1.getId).map {
-            case (thread, stackElements) =>
-              val stackTrace = stackElements.map(_.toString).mkString("\n")
-              ThreadStackTrace(thread.getId, thread.getName, thread.getState.toString, stackTrace)
-          }
-          val message = Heartbeat(executorId, threadDump, tasksMetrics.toArray,
+          val message = Heartbeat(executorId, Utils.getThreadDump(), tasksMetrics.toArray,
             env.blockManager.blockManagerId)
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,

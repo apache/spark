@@ -1568,6 +1568,15 @@ private[spark] object Utils extends Logging {
     s"$className: $desc\n$st"
   }
 
+  /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
+  def getThreadDump(): Array[ThreadStackTrace] = {
+    Thread.getAllStackTraces.toArray.sortBy(_._1.getId).map {
+      case (thread, stackElements) =>
+        val stackTrace = stackElements.map(_.toString).mkString("\n")
+        ThreadStackTrace(thread.getId, thread.getName, thread.getState.toString, stackTrace)
+    }
+  }
+
   /**
    * Convert all spark properties set in the given SparkConf to a sequence of java options.
    */

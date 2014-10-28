@@ -21,11 +21,12 @@ import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.util.ThreadStackTrace
 
 /**
  * :: DeveloperApi ::

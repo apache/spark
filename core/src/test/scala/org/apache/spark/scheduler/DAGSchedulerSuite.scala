@@ -31,8 +31,8 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.CallSite
-import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
+import org.apache.spark.util.{CallSite, ThreadStackTrace}
+import org.apache.spark.executor.TaskMetrics
 
 class BuggyDAGEventProcessActor extends Actor {
   val state = 0

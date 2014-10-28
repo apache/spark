@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
 /**
  * Used for shipping per-thread stacktraces from the executors to driver.

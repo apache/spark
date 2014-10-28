@@ -31,8 +31,8 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.util.Utils
-import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
+import org.apache.spark.util.{ThreadStackTrace, Utils}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**

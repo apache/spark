@@ -18,10 +18,10 @@
 package org.apache.spark
 
 import akka.actor.Actor
-import org.apache.spark.executor.{TaskMetrics, ThreadStackTrace}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.TaskScheduler
-import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.util.{ActorLogReceive, ThreadStackTrace}
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
