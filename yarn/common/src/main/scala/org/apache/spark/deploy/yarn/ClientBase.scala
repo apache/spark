@@ -379,7 +379,7 @@ private[spark] trait ClientBase extends Logging {
     val amArgs =
       Seq(amClass) ++ userClass ++ userJar ++ userArgs ++
       Seq(
-        "--executor-memory", args.executorMemory.toString,
+        "--executor-memory", args.executorMemory.toString + "m",
         "--executor-cores", args.executorCores.toString,
         "--num-executors ", args.numExecutors.toString)
 

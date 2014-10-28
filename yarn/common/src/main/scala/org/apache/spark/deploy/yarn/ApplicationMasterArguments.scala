@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.spark.util.IntParam
+import org.apache.spark.util.{MemoryParam, IntParam}
 import collection.mutable.ArrayBuffer
 
 class ApplicationMasterArguments(val args: Array[String]) {
@@ -55,7 +55,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
           numExecutors = value
           args = tail
 
-        case ("--worker-memory" | "--executor-memory") :: IntParam(value) :: tail =>
+        case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>
           executorMemory = value
           args = tail
 
