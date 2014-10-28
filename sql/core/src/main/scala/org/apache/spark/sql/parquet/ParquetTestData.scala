@@ -92,6 +92,7 @@ private[sql] object ParquetTestData {
       required int64 mylong;
       required float myfloat;
       required double mydouble;
+      optional int32 myoptint;
       }
     """
 
@@ -255,6 +256,10 @@ private[sql] object ParquetTestData {
       record.add(3, i.toLong)
       record.add(4, i.toFloat + 0.5f)
       record.add(5, i.toDouble + 0.5d)
+      if (i % 4 == 0){
+        record.add(6, i*2)
+      }
+ 
       writer.write(record)
     }
     writer.close()

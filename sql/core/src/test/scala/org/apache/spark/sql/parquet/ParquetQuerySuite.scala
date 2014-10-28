@@ -560,8 +560,19 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(stringResult.size === 1)
     assert(stringResult(0).getString(2) == "100", "stringvalue incorrect")
     assert(stringResult(0).getInt(1) === 100)
+  
+    val query7 = sql(s"SELECT * FROM testfiltersource WHERE myoptint < 80")
+    assert(
+      query7.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val optResult = query7.collect()
+    assert(optResult.size === 10)
+    for(i <- 0 until 10) {
+      if (optResult(i)(6) != i * 4 * 2) {
+        fail(s"optional Int value in result row $i should be ${2*4*i}")
+      }
+    }
   }
-
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     val query = sql(s"SELECT mystring FROM testfiltersource WHERE myint < 10")
     assert(query.collect().size === 10)
