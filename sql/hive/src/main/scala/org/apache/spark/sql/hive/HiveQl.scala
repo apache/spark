@@ -124,7 +124,8 @@ private[hive] object HiveQl {
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
     "TOK_CREATETABLE",
-    "TOK_DESCTABLE"
+    "TOK_DESCTABLE",
+    "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
 
   protected val hqlParser = {
@@ -489,6 +490,10 @@ private[hive] object HiveQl {
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
+
+    // Support "TRUNCATE TABLE table_name [PARTITION partition_spec]"
+    case Token("TOK_TRUNCATETABLE",
+          Token("TOK_TABLE_PARTITION",table)::Nil) =>  NativePlaceholder
 
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::
@@ -951,6 +956,7 @@ private[hive] object HiveQl {
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
+    case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
     case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
@@ -958,6 +964,9 @@ private[hive] object HiveQl {
     case Token(DIV(), left :: right:: Nil) =>
       Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
+    case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
+    case Token("|", left :: right:: Nil) => BitwiseOr(nodeToExpr(left), nodeToExpr(right))
+    case Token("^", left :: right:: Nil) => BitwiseXor(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */

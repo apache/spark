@@ -19,6 +19,7 @@ package org.apache.spark.network.netty.client
 
 import java.nio.ByteBuffer
 
+import com.google.common.base.Charsets.UTF_8
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 
@@ -42,7 +43,7 @@ class BlockFetchingClientHandlerSuite extends FunSuite with PrivateMethodTester 
           parsedBlockId = bid
           val bytes = new Array[Byte](refCntBuf.byteBuffer().remaining)
           refCntBuf.byteBuffer().get(bytes)
-          parsedBlockData = new String(bytes)
+          parsedBlockData = new String(bytes, UTF_8)
         }
       }
     )

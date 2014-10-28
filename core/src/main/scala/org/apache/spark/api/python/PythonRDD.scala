@@ -19,7 +19,6 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
@@ -27,6 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
 
+import com.google.common.base.Charsets.UTF_8
 import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.hadoop.conf.Configuration
@@ -134,7 +134,7 @@ private[spark] class PythonRDD(
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj, "utf-8"),
+              throw new PythonException(new String(obj, UTF_8),
                 writerThread.exception.getOrElse(null))
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
@@ -318,7 +318,6 @@ private object SpecialLengths {
 }
 
 private[spark] object PythonRDD extends Logging {
-  val UTF8 = Charset.forName("UTF-8")
 
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
@@ -586,7 +585,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(UTF8)
+    val bytes = str.getBytes(UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -849,7 +848,7 @@ private[spark] object PythonRDD extends Logging {
 
 private
 class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
-  override def call(arr: Array[Byte]) : String = new String(arr, PythonRDD.UTF8)
+  override def call(arr: Array[Byte]) : String = new String(arr, UTF_8)
 }
 
 /**

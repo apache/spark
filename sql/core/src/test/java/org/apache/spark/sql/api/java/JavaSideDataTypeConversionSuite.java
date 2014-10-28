@@ -39,6 +39,7 @@ public class JavaSideDataTypeConversionSuite {
     checkDataType(DataType.StringType);
     checkDataType(DataType.BinaryType);
     checkDataType(DataType.BooleanType);
+    checkDataType(DataType.DateType);
     checkDataType(DataType.TimestampType);
     checkDataType(DataType.DecimalType);
     checkDataType(DataType.DoubleType);

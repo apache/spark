@@ -167,8 +167,8 @@ object EvaluatePython {
         case (e, f) => fromJava(e, f.dataType)
       }): Row
 
-    case (c: java.util.Calendar, TimestampType) =>
-      new java.sql.Timestamp(c.getTime().getTime())
+    case (c: java.util.Calendar, DateType) =>
+      new java.sql.Date(c.getTime().getTime())
 
     case (c: Int, ByteType) => c.toByte
     case (c: Long, ByteType) => c.toByte
