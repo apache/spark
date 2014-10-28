@@ -114,7 +114,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
         while (buf.remaining() != 0) {
           if (channel.read(buf) == -1) {
             throw new IOException("Reached EOF before filling buffer\n" +
-              s"offset=$offset\nfile=${file.getName}\nbuf.remaining=${buf.remaining}")
+              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
           }
         }
         buf.flip()
