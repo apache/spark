@@ -23,9 +23,11 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
+
+import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite {
 
@@ -116,7 +118,7 @@ class UtilsSuite extends FunSuite {
     tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(Charsets.UTF_8))
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
     f1.close()
 
     // Read first few bytes
@@ -144,9 +146,9 @@ class UtilsSuite extends FunSuite {
     val tmpDir = Utils.createTempDir()
     tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), Charsets.UTF_8)
-    Files.write("abcdefghij", files(1), Charsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), Charsets.UTF_8)
+    Files.write("0123456789", files(0), UTF_8)
+    Files.write("abcdefghij", files(1), UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), UTF_8)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
@@ -332,4 +334,32 @@ class UtilsSuite extends FunSuite {
     assert(!tempFile2.exists())
   }
 
+  test("loading properties from file") {
+    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    try {
+      System.setProperty("spark.test.fileNameLoadB", "2")
+      Files.write("spark.test.fileNameLoadA true\n" +
+        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+      val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
+      properties
+        .filter { case (k, v) => k.startsWith("spark.")}
+        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
+      val sparkConf = new SparkConf
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
+    } finally {
+      outFile.delete()
+    }
+  }
+
+  test("timeIt with prepare") {
+    var cnt = 0
+    val prepare = () => {
+      cnt += 1
+      Thread.sleep(1000)
+    }
+    val time = Utils.timeIt(2)({}, Some(prepare))
+    require(cnt === 2, "prepare should be called twice")
+    require(time < 500, "preparation time should not count")
+  }
 }

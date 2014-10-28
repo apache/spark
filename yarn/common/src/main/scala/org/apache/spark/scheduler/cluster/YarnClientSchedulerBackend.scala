@@ -48,7 +48,7 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
-    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIHostPort) }
+    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIAddress) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
@@ -99,7 +99,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def waitForApplication(): Unit = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
-    val state = client.monitorApplication(appId, returnOnRunning = true) // blocking
+    val (state, _) = client.monitorApplication(appId, returnOnRunning = true) // blocking
     if (state == YarnApplicationState.FINISHED ||
       state == YarnApplicationState.FAILED ||
       state == YarnApplicationState.KILLED) {

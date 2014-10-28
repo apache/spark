@@ -61,7 +61,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-    ",", ";", "%", "{", "}", ":", "[", "]", "."
+    ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~"
   )
 
   override lazy val token: Parser[Token] =
@@ -75,6 +75,8 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
       { case chars => StringLit(chars mkString "") }
     | '"' ~> chrExcept('"', '\n', EofCh).* <~ '"' ^^
       { case chars => StringLit(chars mkString "") }
+    | '`' ~> chrExcept('`', '\n', EofCh).* <~ '`' ^^
+      { case chars => Identifier(chars mkString "") }
     | EofCh ^^^ EOF
     | '\'' ~> failure("unclosed string literal")
     | '"' ~> failure("unclosed string literal")

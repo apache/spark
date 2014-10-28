@@ -18,6 +18,7 @@
 from pyspark import SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.rdd import RDD
+from pyspark.mllib.linalg import _to_java_object_rdd
 
 __all__ = ['MatrixFactorizationModel', 'ALS']
 
@@ -52,6 +53,23 @@ class MatrixFactorizationModel(object):
     >>> model = ALS.train(ratings, 1)
     >>> model.predictAll(testset).count() == 2
     True
+
+    >>> model = ALS.train(ratings, 4)
+    >>> model.userFeatures().count() == 2
+    True
+
+    >>> first_user = model.userFeatures().take(1)[0]
+    >>> latents = first_user[1]
+    >>> len(latents) == 4
+    True
+
+    >>> model.productFeatures().count() == 2
+    True
+
+    >>> first_product = model.productFeatures().take(1)[0]
+    >>> latents = first_product[1]
+    >>> len(latents) == 4
+    True
     """
 
     def __init__(self, sc, java_model):
@@ -77,9 +95,23 @@ class MatrixFactorizationModel(object):
             first = tuple(map(int, first))
         assert all(type(x) is int for x in first), "user and product in user_product shoul be int"
         sc = self._context
-        tuplerdd = sc._jvm.SerDe.asTupleRDD(user_product._to_java_object_rdd().rdd())
+        tuplerdd = sc._jvm.SerDe.asTupleRDD(_to_java_object_rdd(user_product).rdd())
         jresult = self._java_model.predict(tuplerdd).toJavaRDD()
-        return RDD(sc._jvm.PythonRDD.javaToPython(jresult), sc,
+        return RDD(sc._jvm.SerDe.javaToPython(jresult), sc,
+                   AutoBatchedSerializer(PickleSerializer()))
+
+    def userFeatures(self):
+        sc = self._context
+        juf = self._java_model.userFeatures()
+        juf = sc._jvm.SerDe.fromTuple2RDD(juf).toJavaRDD()
+        return RDD(sc._jvm.PythonRDD.javaToPython(juf), sc,
+                   AutoBatchedSerializer(PickleSerializer()))
+
+    def productFeatures(self):
+        sc = self._context
+        jpf = self._java_model.productFeatures()
+        jpf = sc._jvm.SerDe.fromTuple2RDD(jpf).toJavaRDD()
+        return RDD(sc._jvm.PythonRDD.javaToPython(jpf), sc,
                    AutoBatchedSerializer(PickleSerializer()))
 
 
@@ -97,7 +129,7 @@ class ALS(object):
         # serialize them by AutoBatchedSerializer before cache to reduce the
         # objects overhead in JVM
         cached = ratings._reserialize(AutoBatchedSerializer(PickleSerializer())).cache()
-        return cached._to_java_object_rdd()
+        return _to_java_object_rdd(cached)
 
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
