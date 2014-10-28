@@ -140,7 +140,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
 
 {
   # We always build with Hive because the PySpark Spark SQL tests need it.
-  BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
+  BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
 
   echo "[info] Building Spark with these arguments: $BUILD_MVN_PROFILE_ARGS"
 
@@ -173,7 +173,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   if [ -n "$_SQL_TESTS_ONLY" ]; then
     # This must be an array of individual arguments. Otherwise, having one long string
     #+ will be interpreted as a single test, which doesn't work.
-    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "hive-thriftserver/test")
+    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test")
   else
     SBT_MAVEN_TEST_ARGS=("test")
   fi

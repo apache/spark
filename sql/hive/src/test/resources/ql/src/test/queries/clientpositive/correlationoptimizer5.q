@@ -1,11 +1,11 @@
 CREATE TABLE T1(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/kv1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/kv1.txt' INTO TABLE T1;
 CREATE TABLE T2(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/kv2.txt' INTO TABLE T2;
+LOAD DATA LOCAL INPATH '../../data/files/kv2.txt' INTO TABLE T2;
 CREATE TABLE T3(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/kv3.txt' INTO TABLE T3;
+LOAD DATA LOCAL INPATH '../../data/files/kv3.txt' INTO TABLE T3;
 CREATE TABLE T4(key INT, val STRING);
-LOAD DATA LOCAL INPATH '../data/files/kv5.txt' INTO TABLE T4;
+LOAD DATA LOCAL INPATH '../../data/files/kv5.txt' INTO TABLE T4;
 
 CREATE TABLE dest_co1(key INT, val STRING);
 CREATE TABLE dest_co2(key INT, val STRING);

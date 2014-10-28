@@ -149,7 +149,7 @@ private[hive] trait HiveInspectors {
     case l: Long => l: java.lang.Long
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
-    case b: BigDecimal => new HiveDecimal(b.underlying())
+    case b: BigDecimal => HiveShim.createDecimal(b.underlying())
     case b: Array[Byte] => b
     case d: java.sql.Date => d
     case t: java.sql.Timestamp => t
