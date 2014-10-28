@@ -271,7 +271,7 @@ object ArtificialNeuralNetwork {
    * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
    * @return random weights vector.
    */
-  def getRandomWeights(
+  def randomWeights(
       trainingRDD: RDD[(Vector,Vector)],
       hiddenLayersTopology: Array[Int]): Vector = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
@@ -286,11 +286,29 @@ object ArtificialNeuralNetwork {
    * @param seed random generator seed.
    * @return random weights vector.
    */
-  def getRandomWeights(
+  def randomWeights(
       trainingRDD: RDD[(Vector,Vector)],
       hiddenLayersTopology: Array[Int],
       seed: Int): Vector = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
+    return randomWeights(topology, true, seed)
+  }
+
+  /**
+   * Provides a random weights vector, using given random seed.
+   *
+   * @param inputLayerSize size of input layer.
+   * @param outputLayerSize size of output layer.
+   * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
+   * @param seed random generator seed.
+   * @return random weights vector.
+   */
+  def randomWeights(
+                     inputLayerSize: Int,
+                     outputLayerSize: Int,
+                     hiddenLayersTopology: Array[Int],
+                     seed: Int): Vector = {
+    val topology = inputLayerSize +: hiddenLayersTopology :+ outputLayerSize
     return randomWeights(topology, true, seed)
   }
 
