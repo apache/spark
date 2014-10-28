@@ -47,24 +47,34 @@ class ANNClassifierModel private[mllib](val annModel: ArtificialNeuralNetworkMod
   }
 }
 
-class ANNClassifier private(val labelToIndex: Map[Double, Int]) extends ANNClassifierHelper {
+class ANNClassifier private(val labelToIndex: Map[Double, Int],
+                             private val hiddenLayersTopology: Array[Int],
+                             private val maxIterations: Int,
+                             private val stepSize: Double,
+                             private val convergeTol: Double)
+  extends ANNClassifierHelper with Serializable {
 
   def run(data: RDD[LabeledPoint]): ANNClassifierModel = {
-    val featureCount = data.first().features.size
-    val hiddenSize = featureCount / 2 + 1
-    val numSteps = 2000
-    val hiddenLayersTopology = Array[Int](hiddenSize)
     val annData = data.map(lp => labeledPointToVectorPair(lp))
     /* train the model */
-    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology, numSteps, 1e-5)
+    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology, maxIterations, convergeTol)
     new ANNClassifierModel(model, labelToIndex)
   }
 }
 
 object ANNClassifier {
 
-  def train(data: RDD[LabeledPoint]): ANNClassifierModel = {
+  def train(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int], maxIterations: Int,
+            stepSize: Double, convergenceTol: Double): ANNClassifierModel = {
     val labelToIndex = data.map( lp => lp.label).distinct().collect().zipWithIndex.toMap
-    new ANNClassifier(labelToIndex).run(data)
+    new ANNClassifier(labelToIndex, hiddenLayersTopology, maxIterations, stepSize, convergenceTol).run(data)
   }
+
+  def train(data: RDD[LabeledPoint]): ANNClassifierModel = {
+    val featureCount = data.first().features.size
+    val hiddenSize = featureCount / 2 + 1
+    val hiddenLayersTopology = Array[Int](hiddenSize)
+    train(data, hiddenLayersTopology, 2000, 1.0, 1e-4)
+  }
+
 }
