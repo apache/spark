@@ -412,6 +412,7 @@ object HiveContext {
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "NULL"
     case (d: Date, DateType) => new DateWritable(d).toString
+    case (o, ArrayType(typ, _)) => toHiveStructString(o, typ)
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
