@@ -30,7 +30,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.sql.catalyst.{UDTRegistry, ScalaReflectionLock}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
 import org.apache.spark.util.Utils
 
@@ -67,6 +67,13 @@ object DataType {
         ("fields", JArray(fields)),
         ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
+
+    case JSortedObject(
+        ("serdes", JString(serdesClass)),
+        ("type", JString("udt"))) => {
+      val serdes = Class.forName(serdesClass).newInstance().asInstanceOf[UserDefinedTypeSerDes[_]]
+      new UserDefinedType(serdes)
+    }
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -500,7 +507,7 @@ case class MapType(
  * The data type for User Defined Types (UDTs).
  *
  * This interface allows a user to make their own classes more interoperable with SparkSQL;
- * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create a SchemaRDD
+ * e.g., by creating a [[UserDefinedTypeSerDes]] for a class X, it becomes possible to create a SchemaRDD
  * which has class X in the schema.
  *
  * For SparkSQL to recognize UDTs, the UDT must be registered in
@@ -513,7 +520,9 @@ case class MapType(
  * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
  */
 @DeveloperApi
-abstract class UserDefinedType[UserType] extends DataType with Serializable {
+abstract class UserDefinedTypeSerDes[UserType] extends Serializable {
+
+  def userType: Class[UserType]
 
   /** Underlying storage type for this UDT used by SparkSQL */
   def sqlType: DataType
@@ -525,6 +534,12 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   /** Convert a Row object to the user type */
   def deserialize(row: Row): UserType
+}
 
-  def simpleString: String = "udt"
+case class UserDefinedType[UserType](serdes: UserDefinedTypeSerDes[UserType])
+    extends DataType with Serializable {
+  override private[sql] def jsonValue: JValue = {
+    ("type" -> "udt") ~
+      ("serdes" -> serdes.getClass.getName)
+  }
 }

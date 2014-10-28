@@ -21,10 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.UDTRegistry
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.UserDefinedType
+import org.apache.spark.sql.catalyst.types.UserDefinedTypeSerDes
 import org.apache.spark.sql.test.TestSQLContext._
 
-@SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
+@SQLUserDefinedType(serdes = classOf[MyDenseVectorUDT])
 class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
@@ -35,7 +35,9 @@ class MyDenseVector(val data: Array[Double]) extends Serializable {
 
 case class MyLabeledPoint(label: Double, features: MyDenseVector)
 
-class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
+class MyDenseVectorUDT extends UserDefinedTypeSerDes[MyDenseVector] {
+
+  override def userType: Class[MyDenseVector] = classOf[MyDenseVector]
 
   override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
 

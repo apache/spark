@@ -79,6 +79,7 @@ object DatasetExample {
 
     // Convert input data to SchemaRDD explicitly.
     val schemaRDD: SchemaRDD = origData
+    println(s"Inferred schema:\n${schemaRDD.schema.prettyJson}")
     println(s"Converted to SchemaRDD with ${schemaRDD.count()} records")
 
     // Select columns, using implicit conversion to SchemaRDD.
@@ -91,6 +92,16 @@ object DatasetExample {
     val featuresSchemaRDD: SchemaRDD = origData.select('features)
     val features: RDD[Vector] = featuresSchemaRDD.map { case Row(v: Vector) => v }
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
+      (summary, feat) => summary.add(feat),
+      (sum1, sum2) => sum1.merge(sum2))
+    println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
+
+    schemaRDD.saveAsParquetFile("/tmp/dataset")
+    val newDataset = sqlContext.parquetFile("/tmp/dataset")
+
+    println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
+    val newFeatures = newDataset.select('features).map { case Row(v: Vector) => v }
+    val newFeaturesSummary = newFeatures.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
     println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
