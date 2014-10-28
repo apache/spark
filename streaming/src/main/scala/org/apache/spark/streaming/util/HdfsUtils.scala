@@ -52,8 +52,7 @@ private[streaming] object HdfsUtils {
     }
   }
 
-  def getBlockLocations(path: String, offset: Long, length: Long, conf: Configuration):
-  Option[Array[String]] = {
+  def getBlockLocations(path: String, offset: Long, length: Long, conf: Configuration): Option[Seq[String]] = {
     val dfsPath = new Path(path)
     val dfs = getFileSystemForPath(dfsPath, conf)
     val fileStatus = dfs.getFileStatus(dfsPath)
