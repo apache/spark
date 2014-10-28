@@ -895,7 +895,7 @@ private[hive] object HiveQl {
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
-        case other => GetField(other, attr)
+        case other => UnresolvedGetField(other, attr)
       }
 
     /* Stars (*) */

@@ -507,7 +507,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
     checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
-    checkEvaluation('c.struct(typeS).at(2).getField("a"), "aa", row)
+    checkEvaluation(GetField('c.struct(typeS).at(2).getField("a")), "aa", row)
   }
 
   test("arithmetic") {

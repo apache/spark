@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGetField, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -96,7 +96,7 @@ package object dsl {
     def isNotNull = IsNotNull(expr)
 
     def getItem(ordinal: Expression) = GetItem(expr, ordinal)
-    def getField(fieldName: String) = GetField(expr, fieldName)
+    def getField(fieldName: String) = UnresolvedGetField(expr, fieldName)
 
     def cast(to: DataType) = Cast(expr, to)
 

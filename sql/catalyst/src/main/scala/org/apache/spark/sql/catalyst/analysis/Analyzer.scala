@@ -52,6 +52,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       NewRelationInstances),
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
+      ResolveGetField ::
       ResolveRelations ::
       ResolveSortReferences ::
       NewRelationInstances ::
@@ -161,6 +162,19 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             val result = q.resolveChildren(name, resolver).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
+        }
+    }
+  }
+
+  /**
+   * Replaces [[UnresolvedGetField]]s with concrete [[GetField]]
+   */
+  object ResolveGetField extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case q: LogicalPlan if q.childrenResolved =>
+        q transformExpressionsUp {
+          case u @ UnresolvedGetField(child, fieldName) if child.resolved =>
+            GetField(u.child, u.fieldName, resolver)
         }
     }
   }
