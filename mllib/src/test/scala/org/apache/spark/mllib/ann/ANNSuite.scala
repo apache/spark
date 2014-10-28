@@ -37,7 +37,7 @@ class ANNSuite extends FunSuite with LocalSparkContext {
       (Vectors.dense(features), Vectors.dense(Array(label)))}
     val rddData = sc.parallelize(data, 2)
     val hiddenLayersTopology = Array[Int](5)
-    val initialWeights = ArtificialNeuralNetwork.getRandomWeights(rddData, hiddenLayersTopology, 0x01234567)
+    val initialWeights = ArtificialNeuralNetwork.randomWeights(rddData, hiddenLayersTopology, 0x01234567)
     val model = ArtificialNeuralNetwork.train(rddData, hiddenLayersTopology, initialWeights, 200)
     val predictionAndLabels = rddData.map { case(input, label) =>
       (model.predict(input)(0), label(0)) }.collect()
