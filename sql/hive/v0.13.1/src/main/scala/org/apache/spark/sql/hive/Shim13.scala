@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Table, Hive, Partition}
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
 import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer}
 import org.apache.hadoop.mapred.InputFormat
@@ -120,6 +120,10 @@ private[hive] object HiveShim {
   def getAllPartitionsOf(client: Hive, tbl: Table) =  client.getAllPartitionsOf(tbl)
 
   def compatibilityBlackList = Seq()
+
+  def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {
+    tbl.setDataLocation(new Path(crtTbl.getLocation()))
+  }
 
   /*
    * Bug introdiced in hive-0.13. FileSinkDesc is serializable, but its member path is not.

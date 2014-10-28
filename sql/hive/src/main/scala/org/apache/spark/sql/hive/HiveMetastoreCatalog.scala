@@ -191,7 +191,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
 
     if (crtTbl != null && crtTbl.getLocation() != null) {
-      tbl.setDataLocation(new Path(crtTbl.getLocation()).toUri())
+      HiveShim.setLocation(tbl, crtTbl)
     }
 
     if (crtTbl != null && crtTbl.getSkewedColNames() != null) {
