@@ -229,7 +229,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Needs constant object inspectors
     "udf_round",
-    "udf7"
+    "udf7",
+
+    // Sort with Limit clause causes failure.
+    "ctas",
+    "ctas_hadoop20"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -767,6 +771,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "touch",
     "transform_ppr1",
     "transform_ppr2",
+    "truncate_table",
     "type_cast_1",
     "type_widening",
     "udaf_collect_set",

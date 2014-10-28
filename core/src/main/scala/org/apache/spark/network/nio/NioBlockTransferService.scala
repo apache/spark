@@ -97,17 +97,25 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
       val bufferMessage = message.asInstanceOf[BufferMessage]
       val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
 
-      for (blockMessage: BlockMessage <- blockMessageArray) {
-        if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
-          if (blockMessage.getId != null) {
-            listener.onBlockFetchFailure(blockMessage.getId.toString,
-              new SparkException(s"Unexpected message ${blockMessage.getType} received from $cmId"))
+      // SPARK-4064: In some cases(eg. Remote block was removed) blockMessageArray may be empty.
+      if (blockMessageArray.isEmpty) {
+        blockIds.foreach { id =>
+          listener.onBlockFetchFailure(id,
+            new SparkException(s"Received empty message from $cmId"))
+        }
+      } else {
+        for (blockMessage: BlockMessage <- blockMessageArray) {
+          if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
+            if (blockMessage.getId != null) {
+              listener.onBlockFetchFailure(blockMessage.getId.toString,
+                new SparkException(s"Unexpected message ${blockMessage.getType} received from $cmId"))
+            }
+          } else {
+            val blockId = blockMessage.getId
+            val networkSize = blockMessage.getData.limit()
+            listener.onBlockFetchSuccess(
+              blockId.toString, new NioManagedBuffer(blockMessage.getData))
           }
-        } else {
-          val blockId = blockMessage.getId
-          val networkSize = blockMessage.getData.limit()
-          listener.onBlockFetchSuccess(
-            blockId.toString, new NioManagedBuffer(blockMessage.getData))
         }
       }
     }(cm.futureExecContext)

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.hive.test.TestHive
+
 class HiveTableScanSuite extends HiveComparisonTest {
 
   createQueryTest("partition_based_table_scan_with_different_serde",
@@ -38,4 +40,11 @@ class HiveTableScanSuite extends HiveComparisonTest {
       |
       |SELECT * from part_scan_test;
     """.stripMargin)
+
+  test("Spark-4041: lowercase issue") {
+    TestHive.sql("CREATE TABLE tb (KEY INT, VALUE STRING) STORED AS ORC")
+    TestHive.sql("insert into table tb select key, value from src")
+    TestHive.sql("select KEY from tb where VALUE='just_for_test' limit 5").collect()
+    TestHive.sql("drop table tb")
+  }
 }

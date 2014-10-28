@@ -66,7 +66,14 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
       // Just copy the buffer if it's sufficiently small, as memory mapping has a high overhead.
       if (length < MIN_MEMORY_MAP_BYTES) {
         ByteBuffer buf = ByteBuffer.allocate((int) length);
-        channel.read(buf, offset);
+        channel.position(offset);
+        while (buf.remaining() != 0) {
+          if (channel.read(buf) == -1) {
+            throw new IOException(String.format("Reached EOF before filling buffer\n" +
+              "offset=%s\nfile=%s\nbuf.remaining=%s",
+              offset, file.getAbsoluteFile(), buf.remaining()));
+          }
+        }
         buf.flip();
         return buf;
       } else {
@@ -93,7 +100,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     FileInputStream is = null;
     try {
       is = new FileInputStream(file);
-      is.skip(offset);
+      ByteStreams.skipFully(is, offset);
       return ByteStreams.limit(is, length);
     } catch (IOException e) {
       try {
