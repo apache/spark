@@ -31,8 +31,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
-import org.apache.spark.mllib.feature.Word2Vec
-import org.apache.spark.mllib.feature.Word2VecModel
+import org.apache.spark.mllib.feature._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -292,6 +291,43 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Normalizer.transform()
+   */
+  def normalizeVector(p: Double, vector: Vector): Vector = {
+    new Normalizer(p).transform(vector)
+  }
+
+  /**
+   * Java stub for Normalizer.transform()
+   */
+  def normalizeVector(p: Double, rdd: JavaRDD[Vector]): JavaRDD[Vector] = {
+    new Normalizer(p).transform(rdd)
+  }
+
+  /**
+   * Java stub for IDF.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitStandardScaler(
+      withMean: Boolean,
+      withStd: Boolean,
+      data: JavaRDD[Vector]): StandardScalerModel = {
+    new StandardScaler(withMean, withStd).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for IDF.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitIDF(minDocFreq: Int, dataset: JavaRDD[Vector]): IDFModel = {
+    new IDF(minDocFreq).fit(dataset)
+  }
+
+  /**
    * Java stub for Python mllib Word2Vec fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
@@ -326,6 +362,15 @@ class PythonMLLibAPI extends Serializable {
   private[python] class Word2VecModelWrapper(model: Word2VecModel) {
     def transform(word: String): Vector = {
       model.transform(word)
+    }
+
+    /**
+     * Transforms an RDD of words to its vector representation
+     * @param rdd an RDD of words
+     * @return an RDD of vector representations of words
+     */
+    def transform(rdd: JavaRDD[String]): JavaRDD[Vector] = {
+      rdd.rdd.map(model.transform)
     }
 
     def findSynonyms(word: String, num: Int): java.util.List[java.lang.Object] = {

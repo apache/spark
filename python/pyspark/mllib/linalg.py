@@ -111,6 +111,13 @@ def _vector_size(v):
         raise TypeError("Cannot treat type %s as a vector" % type(v))
 
 
+def _format_float(f, digits=4):
+    s = str(round(f, digits))
+    if '.' in s:
+        s = s[:s.index('.') + 1 + digits]
+    return s
+
+
 class Vector(object):
     """
     Abstract class for DenseVector and SparseVector
@@ -228,7 +235,7 @@ class DenseVector(Vector):
         return "[" + ",".join([str(v) for v in self.array]) + "]"
 
     def __repr__(self):
-        return "DenseVector(%r)" % self.array
+        return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
         return isinstance(other, DenseVector) and self.array == other.array
@@ -416,7 +423,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(self.indices.size):
+        for i in xrange(len(self.indices)):
             arr[self.indices[i]] = self.values[i]
         return arr
 
@@ -431,7 +438,8 @@ class SparseVector(Vector):
     def __repr__(self):
         inds = self.indices
         vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
+        entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
+                             for i in xrange(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -491,7 +499,7 @@ class Vectors(object):
         returns a NumPy array.
 
         >>> Vectors.dense([1, 2, 3])
-        DenseVector(array('d', [1.0, 2.0, 3.0]))
+        DenseVector([1.0, 2.0, 3.0])
         """
         return DenseVector(elements)
 
