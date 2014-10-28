@@ -52,7 +52,7 @@ object ScalaReflection {
         p.productIterator.toSeq.zip(structType.fields).map { case (elem, field) =>
           convertToCatalyst(elem, field.dataType)
         }.toArray)
-    case (udt, udtType: UserDefinedType[_]) => udtType.serialize(udt)
+    case (obj, udt: UserDefinedType[_]) => udt.serialize(obj)
     case (other, _) => other
   }
 
@@ -62,7 +62,7 @@ object ScalaReflection {
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
-    case (udt: Row, udtType: UserDefinedType[_]) => udtType.deserialize(udt)
+    case (d, udt: UserDefinedType[_]) => udt.deserialize(d)
     case (other, _) => other
   }
 

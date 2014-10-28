@@ -31,7 +31,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.util.Utils
 
 
@@ -67,6 +67,11 @@ object DataType {
         ("fields", JArray(fields)),
         ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
+
+    case JSortedObject(
+        ("class", JString(udtClass)),
+        ("type", JString("udt"))) =>
+      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -518,13 +523,16 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Underlying storage type for this UDT used by SparkSQL */
   def sqlType: DataType
 
-  /** Convert the user type to a Row object */
+  /** Convert the user type to a SQL datum */
   // TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
   //       where we need to convert Any to UserType.
-  def serialize(obj: Any): Row
+  def serialize(obj: Any): Any
 
-  /** Convert a Row object to the user type */
-  def deserialize(row: Row): UserType
+  /** Convert a SQL datum to the user type */
+  def deserialize(datum: Any): UserType
 
-  def simpleString: String = "udt"
+  override private[sql] def jsonValue: JValue = {
+    ("type" -> "udt") ~
+      ("class" -> this.getClass.getName)
+  }
 }

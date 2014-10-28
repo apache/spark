@@ -89,8 +89,6 @@ object Vectors {
   // Note: Explicit registration is only needed for Vector and SparseVector;
   //       the annotation works for DenseVector.
   UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[Vector], new VectorUDT())
-  UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[DenseVector],
-    new DenseVectorUDT())
   UDTRegistry.registerType(scala.reflect.runtime.universe.typeOf[SparseVector],
     new SparseVectorUDT())
 
@@ -269,8 +267,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
    */
   override def sqlType: StructType = StructType(Seq(
     StructField("vectorType", ByteType, nullable = false),
-    StructField("dense", new DenseVectorUDT(), nullable = true),
-    StructField("sparse", new SparseVectorUDT(), nullable = true)))
+    StructField("dense", new DenseVectorUDT, nullable = true),
+    StructField("sparse", new SparseVectorUDT, nullable = true)))
 
   override def serialize(obj: Any): Row = {
     val row = new GenericMutableRow(3)
@@ -287,15 +285,18 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     row
   }
 
-  override def deserialize(row: Row): Vector = {
-    require(row.length == 3,
-      s"VectorUDT.deserialize given row with length ${row.length} but requires length == 3")
-    val vectorType = row.getByte(0)
-    vectorType match {
-      case 0 =>
-        new DenseVectorUDT().deserialize(row.getAs[Row](1))
-      case 1 =>
-        new SparseVectorUDT().deserialize(row.getAs[Row](2))
+  override def deserialize(datum: Any): Vector = {
+    datum match {
+      case row: Row =>
+        require(row.length == 3,
+          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 3")
+        val vectorType = row.getByte(0)
+        vectorType match {
+          case 0 =>
+            new DenseVectorUDT().deserialize(row.getAs[Row](1))
+          case 1 =>
+            new SparseVectorUDT().deserialize(row.getAs[Row](2))
+        }
     }
   }
 }
@@ -306,27 +307,20 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
  */
 private[spark] class DenseVectorUDT extends UserDefinedType[DenseVector] {
 
-  override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
+  override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-  override def serialize(obj: Any): Row = obj match {
-    case v: DenseVector =>
-      val row: GenericMutableRow = new GenericMutableRow(v.size)
-      var i = 0
-      while (i < v.size) {
-        row.setDouble(i, v(i))
-        i += 1
-      }
-      row
+  override def serialize(obj: Any): Seq[Double] = {
+    obj match {
+      case v: DenseVector =>
+        v.values.toSeq
+    }
   }
 
-  override def deserialize(row: Row): DenseVector = {
-    val values = new Array[Double](row.length)
-    var i = 0
-    while (i < row.length) {
-      values(i) = row.getDouble(i)
-      i += 1
+  override def deserialize(datum: Any): DenseVector = {
+    datum match {
+      case values: Seq[_] =>
+        new DenseVector(values.asInstanceOf[Seq[Double]].toArray)
     }
-    new DenseVector(values)
   }
 }
 
@@ -338,42 +332,27 @@ private[spark] class SparseVectorUDT extends UserDefinedType[SparseVector] {
 
   override def sqlType: StructType = StructType(Seq(
     StructField("size", IntegerType, nullable = false),
-    StructField("indices", ArrayType(DoubleType, containsNull = false), nullable = false),
+    StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = false),
     StructField("values", ArrayType(DoubleType, containsNull = false), nullable = false)))
 
   override def serialize(obj: Any): Row = obj match {
     case v: SparseVector =>
-      val nnz = v.indices.size
-      val row: GenericMutableRow = new GenericMutableRow(1 + 2 * nnz)
+      val row: GenericMutableRow = new GenericMutableRow(3)
       row.setInt(0, v.size)
-      var i = 0
-      while (i < nnz) {
-        row.setInt(1 + i, v.indices(i))
-        i += 1
-      }
-      i = 0
-      while (i < nnz) {
-        row.setDouble(1 + nnz + i, v.values(i))
-        i += 1
-      }
+      row.update(1, v.indices.toSeq)
+      row.update(2, v.values.toSeq)
       row
   }
 
-  override def deserialize(row: Row): SparseVector = {
-    require(row.length >= 1,
-      s"SparseVectorUDT.deserialize given row with length ${row.length} but requires length >= 1")
-    val vSize = row.getInt(0)
-    val nnz: Int = (row.length - 1) / 2
-    require(nnz * 2 + 1 == row.length,
-      s"SparseVectorUDT.deserialize given row with non-matching indices, values lengths")
-    val indices = new Array[Int](nnz)
-    val values = new Array[Double](nnz)
-    var i = 0
-    while (i < nnz) {
-      indices(i) = row.getInt(1 + i)
-      values(i) = row.getDouble(1 + nnz + i)
-      i += 1
+  override def deserialize(datum: Any): SparseVector = {
+    datum match {
+      case row: Row =>
+        require(row.length == 3,
+          s"SparseVectorUDT.deserialize given row with length ${row.length} but expect 3.")
+        val vSize = row.getInt(0)
+        val indices = row.getAs[Seq[Int]](1).toArray
+        val values = row.getAs[Seq[Double]](2).toArray
+        new SparseVector(vSize, indices, values)
     }
-    new SparseVector(vSize, indices, values)
   }
 }

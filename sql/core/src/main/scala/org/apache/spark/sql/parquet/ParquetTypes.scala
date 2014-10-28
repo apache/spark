@@ -300,6 +300,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
             parquetKeyType,
             parquetValueType)
         }
+        case udt: UserDefinedType[_] => {
+          fromDataType(udt.sqlType, name, nullable, inArray)
+        }
         case _ => sys.error(s"Unsupported datatype $ctype")
       }
     }

@@ -18,9 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.UDTRegistry
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
@@ -37,27 +35,20 @@ case class MyLabeledPoint(label: Double, features: MyDenseVector)
 
 class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
-  override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
+  override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-  override def serialize(obj: Any): Row = obj match {
-    case features: MyDenseVector =>
-      val row: GenericMutableRow = new GenericMutableRow(features.data.length)
-      var i = 0
-      while (i < features.data.length) {
-        row.setDouble(i, features.data(i))
-        i += 1
-      }
-      row
+  override def serialize(obj: Any): Seq[Double] = {
+    obj match {
+      case features: MyDenseVector =>
+        features.data.toSeq
+    }
   }
 
-  override def deserialize(row: Row): MyDenseVector = {
-    val features = new MyDenseVector(new Array[Double](row.length))
-    var i = 0
-    while (i < row.length) {
-      features.data(i) = row.getDouble(i)
-      i += 1
+  override def deserialize(datum: Any): MyDenseVector = {
+    datum match {
+      case data: Seq[_] =>
+        new MyDenseVector(data.asInstanceOf[Seq[Double]].toArray)
     }
-    features
   }
 }
 
