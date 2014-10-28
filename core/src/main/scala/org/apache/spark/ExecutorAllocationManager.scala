@@ -168,8 +168,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     // Do not request more executors if we have already reached the upper bound
     val numExistingExecutors = executorIds.size + numExecutorsPending
     if (numExistingExecutors >= maxNumExecutors) {
-      logDebug(s"Not adding executors because there are already " +
-        s"$maxNumExecutors executor(s), which is the limit")
+      logDebug(s"Not adding executors because there are already ${executorIds.size} " +
+        s"registered and $numExecutorsPending pending executor(s) (limit $maxNumExecutors)")
       numExecutorsToAdd = 1
       return 0
     }
@@ -185,8 +185,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     // TODO: Actually request executors once SPARK-3822 goes in
     val addRequestAcknowledged = true // sc.requestExecutors(actualNumbersToAdd)
     if (addRequestAcknowledged) {
-      logInfo(s"Adding $actualNumExecutorsToAdd new executor(s) because " +
-        s"tasks are backlogged (new total will be $newTotalExecutors)")
+      logInfo(s"Requesting $actualNumExecutorsToAdd new executor(s) because " +
+        s"tasks are backlogged (new desired total will be $newTotalExecutors)")
       numExecutorsToAdd =
         if (actualNumExecutorsToAdd == numExecutorsToAdd) numExecutorsToAdd * 2 else 1
       numExecutorsPending += actualNumExecutorsToAdd
@@ -229,7 +229,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     val removeRequestAcknowledged = true // sc.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
-        s"$removeThresholdSeconds seconds (new total will be ${numExistingExecutors - 1})")
+        s"$removeThresholdSeconds seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
       true
     } else {

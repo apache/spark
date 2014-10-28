@@ -329,7 +329,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     } else None
   }
 
-  // Optionally scale number of executors dynamically based on workload
+  // Optionally scale number of executors dynamically based on workload. Exposed for testing.
   private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
     if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
       Some(new ExecutorAllocationManager(this))
