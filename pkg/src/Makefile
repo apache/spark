@@ -15,6 +15,7 @@ RESOURCE_FILES := $(wildcard $(RESOURCE_DIR)/*)
 
 SPARK_HADOOP_VERSION ?= 1.0.4
 SPARK_VERSION ?= 1.1.0
+SPARK_YARN_VERSION ?= 2.4.0
 
 ifdef USE_MAVEN
 	TARGET_NAME := $(MAVEN_TARGET_NAME)
@@ -24,6 +25,14 @@ else
 	BUILD_TOOL := sbt/sbt
 endif
 
+ifdef USE_YARN
+	MAVEN_YARN_FLAG := "-Pyarn"
+	SBT_YARN_FLAG := "yarn"
+else
+	MAVEN_YARN_FLAG := ""
+	SBT_YARN_FLAG := ""
+endif
+
 all: $(TARGET_NAME)
 
 $(SBT_TARGET_NAME): build.sbt $(SCALA_FILES) $(RESOURCE_FILES)
@@ -31,7 +40,7 @@ $(SBT_TARGET_NAME): build.sbt $(SCALA_FILES) $(RESOURCE_FILES)
 	cp -f $(SBT_TARGET_NAME) ../inst/
 
 $(MAVEN_TARGET_NAME): pom.xml $(SCALA_FILES) $(RESOURCE_FILES)
-	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -Dspark.version=$(SPARK_VERSION) -DskipTests clean package shade:shade
+	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -Dspark.version=$(SPARK_VERSION) -DskipTests $(MAVEN_YARN_FLAG) -Dyarn.version=$(SPARK_YARN_VERSION) clean package shade:shade
 	cp -f $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
 
 clean:
