@@ -36,7 +36,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * For a network of H hidden layers:
  *
- * hiddenLayersTopology(h) indicates the number of nodes in hidden layer h, excluding the bias 
+ * hiddenLayersTopology(h) indicates the number of nodes in hidden layer h, excluding the bias
  * node. h counts from 0 (first hidden layer, taking inputs from input layer) to H - 1 (last
  * hidden layer, sending outputs to the output layer).
  *
@@ -76,7 +76,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Artificial neural network (ANN) model
- * 
+ *
  * @param weights the weights between the neurons in the ANN.
  * @param topology array containing the number of nodes per layer in the network, including
  * the nodes in the input and output layer, but excluding the bias nodes.
@@ -171,7 +171,7 @@ object ArtificialNeuralNetwork {
       trainingRDD: RDD[(Vector, Vector)],
       hiddenLayersTopology: Array[Int],
       maxNumIterations: Int): ArtificialNeuralNetworkModel = {
-    train( trainingRDD, hiddenLayersTopology, maxNumIterations, defaultTolerance)
+    train(trainingRDD, hiddenLayersTopology, maxNumIterations, defaultTolerance)
   }
 
   /**
@@ -191,6 +191,23 @@ object ArtificialNeuralNetwork {
   }
 
   /**
+   * Trains an ANN with given initial weights.
+   * Uses default convergence tolerance 1e-4 for LBFGS.
+   *
+   * @param trainingRDD RDD containing (input, output) pairs for training.
+   * @param initialWeights initial weights vector.
+   * @param maxNumIterations maximum number of training iterations.
+   * @return ANN model.
+   */
+  def train(
+      trainingRDD: RDD[(Vector,Vector)],
+      hiddenLayersTopology: Array[Int],
+      initialWeights: Vector,
+      maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+    train(trainingRDD, hiddenLayersTopology, initialWeights, maxNumIterations, defaultTolerance)
+  }
+
+  /**
    * Trains an ANN using customized convergence tolerance.
    *
    * @param trainingRDD RDD containing (input, output) pairs for training.
@@ -204,7 +221,7 @@ object ArtificialNeuralNetwork {
       model: ArtificialNeuralNetworkModel,
       maxNumIterations: Int,
       convergenceTol: Double): ArtificialNeuralNetworkModel = {
-    new ArtificialNeuralNetwork( model.topology, maxNumIterations, convergenceTol ).
+    new ArtificialNeuralNetwork(model.topology, maxNumIterations, convergenceTol).
       run(trainingRDD, model.weights)
   }
 
@@ -224,17 +241,69 @@ object ArtificialNeuralNetwork {
       convergenceTol: Double): ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
-      run(trainingRDD, randomWeights(topology))
+      run(trainingRDD, randomWeights(topology, false))
   }
 
-  private def convertTopology( input: RDD[(Vector,Vector)],
+  /**
+   * Trains an ANN with given initial weights.
+   *
+   * @param trainingRDD RDD containing (input, output) pairs for training.
+   * @param initialWeights initial weights vector.
+   * @param maxNumIterations maximum number of training iterations.
+   * @param convergenceTol convergence tolerance for LBFGS. Smaller value for closer convergence.
+   * @return ANN model.
+   */
+  def train(
+      trainingRDD: RDD[(Vector,Vector)],
+      hiddenLayersTopology: Array[Int],
+      initialWeights: Vector,
+      maxNumIterations: Int,
+      convergenceTol: Double): ArtificialNeuralNetworkModel = {
+    val topology = convertTopology(trainingRDD, hiddenLayersTopology)
+    new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
+      run(trainingRDD, initialWeights)
+  }
+
+  /**
+   * Provides a random weights vector.
+   *
+   * @param trainingRDD RDD containing (input, output) pairs for training.
+   * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
+   * @return random weights vector.
+   */
+  def getRandomWeights(
+      trainingRDD: RDD[(Vector,Vector)],
+      hiddenLayersTopology: Array[Int]): Vector = {
+    val topology = convertTopology(trainingRDD, hiddenLayersTopology)
+    return randomWeights(topology, false)
+  }
+
+  /**
+   * Provides a random weights vector, using given random seed.
+   *
+   * @param trainingRDD RDD containing (input, output) pairs for later training.
+   * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
+   * @param seed random generator seed.
+   * @return random weights vector.
+   */
+  def getRandomWeights(
+      trainingRDD: RDD[(Vector,Vector)],
+      hiddenLayersTopology: Array[Int],
+      seed: Int): Vector = {
+    val topology = convertTopology(trainingRDD, hiddenLayersTopology)
+    return randomWeights(topology, true, seed)
+  }
+
+  private def convertTopology(
+      input: RDD[(Vector,Vector)],
       hiddenLayersTopology: Array[Int] ): Array[Int] = {
     val firstElt = input.first
     firstElt._1.size +: hiddenLayersTopology :+ firstElt._2.size
   }
 
-  private def randomWeights(topology: Array[Int]): Vector = {
-    val rand = new XORShiftRandom()
+  private def randomWeights(topology: Array[Int], useSeed: Boolean, seed: Int = 0): Vector = {
+    val rand: XORShiftRandom =
+      if( useSeed == false ) new XORShiftRandom() else new XORShiftRandom(seed)
     var i: Int = 0
     var l: Int = 0
     val noWeights = {
