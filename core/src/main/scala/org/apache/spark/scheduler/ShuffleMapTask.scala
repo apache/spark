@@ -90,19 +90,19 @@ private[spark] object ShuffleMapTask {
  *
  * See [[org.apache.spark.scheduler.Task]] for more information.
  *
- * @param stageId id of the stage this task belongs to
+ * @param _stageId id of the stage this task belongs to
  * @param rdd the final RDD in this stage
  * @param dep the ShuffleDependency
  * @param _partitionId index of the number in the RDD
  * @param locs preferred task execution locations for locality scheduling
  */
 private[spark] class ShuffleMapTask(
-    stageId: Int,
+    _stageId: Int,
     var rdd: RDD[_],
     var dep: ShuffleDependency[_,_],
     _partitionId: Int,
     @transient private var locs: Seq[TaskLocation])
-  extends Task[MapStatus](stageId, _partitionId)
+  extends Task[MapStatus](_stageId, _partitionId)
   with Externalizable
   with Logging {
 
@@ -128,7 +128,7 @@ private[spark] class ShuffleMapTask(
   }
 
   override def readExternal(in: ObjectInput) {
-    val stageId = in.readInt()
+    stageId = in.readInt()
     val numBytes = in.readInt()
     val bytes = new Array[Byte](numBytes)
     in.readFully(bytes)
