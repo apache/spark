@@ -62,12 +62,16 @@ package object dsl {
 
     def unary_- = UnaryMinus(expr)
     def unary_! = Not(expr)
+    def unary_~ = BitwiseNot(expr)
 
     def + (other: Expression) = Add(expr, other)
     def - (other: Expression) = Subtract(expr, other)
     def * (other: Expression) = Multiply(expr, other)
     def / (other: Expression) = Divide(expr, other)
     def % (other: Expression) = Remainder(expr, other)
+    def & (other: Expression) = BitwiseAnd(expr, other)
+    def | (other: Expression) = BitwiseOr(expr, other)
+    def ^ (other: Expression) = BitwiseXor(expr, other)
 
     def && (other: Expression) = And(expr, other)
     def || (other: Expression) = Or(expr, other)

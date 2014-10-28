@@ -680,4 +680,36 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
   }
+
+  test("Bitwise operations") {
+    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.int.at(3)
+
+    checkEvaluation(BitwiseAnd(c1, c4), null, row)
+    checkEvaluation(BitwiseAnd(c1, c2), 0, row)
+    checkEvaluation(BitwiseAnd(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseAnd(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseOr(c1, c4), null, row)
+    checkEvaluation(BitwiseOr(c1, c2), 3, row)
+    checkEvaluation(BitwiseOr(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseOr(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseXor(c1, c4), null, row)
+    checkEvaluation(BitwiseXor(c1, c2), 3, row)
+    checkEvaluation(BitwiseXor(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseXor(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseNot(c4), null, row)
+    checkEvaluation(BitwiseNot(c1), -2, row)
+    checkEvaluation(BitwiseNot(Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 & c2, 0, row)
+    checkEvaluation(c1 | c2, 3, row)
+    checkEvaluation(c1 ^ c2, 3, row)
+    checkEvaluation(~c1, -2, row)
+  }
 }
