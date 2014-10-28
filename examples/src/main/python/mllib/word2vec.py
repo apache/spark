@@ -31,10 +31,10 @@ USAGE = ("bin/spark-submit --driver-memory 4g "
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print USAGE
-        return
+        sys.exit("Argument for file not provided")
     file_path = sys.argv[1]
     sc = SparkContext(appName='Word2Vec')
-    inp = sc.textFile("text8_lines").map(lambda row: [row])
+    inp = sc.textFile("text8_lines").map(lambda row: row.split(" "))
 
     word2vec = Word2Vec()
     model = word2vec.fit(inp)
