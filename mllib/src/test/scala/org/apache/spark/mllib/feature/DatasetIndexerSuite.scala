@@ -17,11 +17,8 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.random.RandomRDDs
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.scalatest.FunSuite
 
 class DatasetIndexerSuite extends FunSuite with LocalSparkContext {
@@ -123,19 +120,30 @@ class DatasetIndexerSuite extends FunSuite with LocalSparkContext {
     testDenseSparse(densePoints2, sparsePoints2)
   }
 
-  test("Chooses between categorical and continuous features correctly") {
-    val points1 = Seq(
+  test("Builds correct categorical feature value index") {
+    def checkCategoricalFeatureIndex(values: Seq[Double], valueIndex: Map[Double, Int]): Unit = {
+      val valSet = values.toSet
+      assert(valueIndex.keys.toSet === valSet)
+      assert(valueIndex.values.toSet === Range(0, valSet.size).toSet)
+    }
+    val points = Seq(
       Array(1.0, 2.0, 0.0),
       Array(0.0, 1.0, 2.0),
       Array(0.0, 0.0, -1.0),
       Array(1.0, 3.0, 2.0)).map(Vectors.dense)
-    val rdd1 = sc.parallelize(points1)
-    val datasetIndexer1 = new DatasetIndexer(maxCategories = 2)
-    datasetIndexer1.fit(rdd1)
-    val featureIndex1 = datasetIndexer1.getCategoricalFeatureIndexes
-  }
+    val rdd = sc.parallelize(points, 2)
 
-  test("Indexes categorical features correctly") {
-  }
+    val datasetIndexer2 = new DatasetIndexer(maxCategories = 2)
+    datasetIndexer2.fit(rdd)
+    val featureIndex2 = datasetIndexer2.getCategoricalFeatureIndexes
+    assert(featureIndex2.keys.toSet === Set(0))
+    checkCategoricalFeatureIndex(points.map(_(0)), featureIndex2(0))
 
+    val datasetIndexer3 = new DatasetIndexer(maxCategories = 3)
+    datasetIndexer3.fit(rdd)
+    val featureIndex3 = datasetIndexer3.getCategoricalFeatureIndexes
+    assert(featureIndex3.keys.toSet === Set(0, 2))
+    checkCategoricalFeatureIndex(points.map(_(0)), featureIndex3(0))
+    checkCategoricalFeatureIndex(points.map(_(2)), featureIndex3(2))
+  }
 }

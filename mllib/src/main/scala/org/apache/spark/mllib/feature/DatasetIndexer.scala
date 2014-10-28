@@ -42,6 +42,8 @@ import org.apache.spark.util.collection.OpenHashSet
  *   datasetIndexer.fit(myData2)
  *   val indexedData2: RDD[Vector] = datasetIndexer.transform(myData2)
  *   val categoricalFeaturesInfo: Map[Int, Int] = datasetIndexer.getCategoricalFeaturesInfo()
+ *
+ * TODO: Add option for transform: defaultForUnknownValue (default index for unknown category).
  */
 @Experimental
 class DatasetIndexer(
@@ -238,7 +240,8 @@ class DatasetIndexer(
     case Some(fvs) =>
       fvs.featureValueSets.zipWithIndex
         .filter(_._1.size <= maxCategories).map { case (featureValues, featureIndex) =>
-        val categoryMap: Map[Double, Int] = featureValues.iterator.toList.sorted.zipWithIndex.toMap
+        val sortedFeatureValues = featureValues.iterator.toList.sorted
+        val categoryMap: Map[Double, Int] = sortedFeatureValues.zipWithIndex.toMap
         (featureIndex, categoryMap)
       }.toMap
     case None =>
