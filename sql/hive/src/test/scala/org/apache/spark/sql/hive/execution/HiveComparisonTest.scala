@@ -340,6 +340,10 @@ abstract class HiveComparisonTest
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHive.HiveQLQueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
+            case it: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+              // Hive doesn't throw exceptions for DROP TABLE on non-existent table but Spark SQL
+              // does.  As a result, we must ignore it when it is thrown by Hive tests.
+              (query, Seq.empty[String])
             case e: Throwable =>
               val errorMessage =
                 s"""
