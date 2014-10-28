@@ -105,7 +105,6 @@ Each record could be an iterable of strings or other types.
 
 {% highlight python %}
 from pyspark import SparkContext
-from pyspark.mllib.linalg import Vector
 from pyspark.mllib.feature import HashingTF
 
 sc = SparkContext()
@@ -202,20 +201,6 @@ val synonyms = model.findSynonyms("china", 40)
 for((synonym, cosineSimilarity) <- synonyms) {
   println(s"$synonym $cosineSimilarity")
 }
-{% endhighlight %}
-</div>
-<div data-lang="python">
-{% highlight python %}
-from pyspark.mllib.feature import Word2Vec
-
-input = sc.textFile("text8").map(lambda line: line.split(" "))
-
-word2vec = Word2Vec()
-model = word2vec.fit(input)
-
-synonyms = model.findSynonyms("china", 40)
-for synonym, cosineSimilarity in synonyms:
-  print synonym, cosineSimilarity
 {% endhighlight %}
 </div>
 </div>
@@ -354,17 +339,17 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.feature import Normalizer
 
 data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-label = data.map(lambda x: x.label)
+labels = data.map(lambda x: x.label)
 features = data.map(lambda x: x.features)
 
 normalizer1 = Normalizer()
 normalizer2 = Normalizer(p=float("inf"))
 
 # Each sample in data1 will be normalized using $L^2$ norm.
-data1 = label.zip(normalizer1.transform(features))
+data1 = labels.zip(normalizer1.transform(features))
 
 # Each sample in data2 will be normalized using $L^\infty$ norm.
-data2 = label.zip(normalizer2.transform(features))
+data2 = labels.zip(normalizer2.transform(features))
 {% endhighlight %}
 </div>
 </div>

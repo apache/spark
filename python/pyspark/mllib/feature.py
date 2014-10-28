@@ -30,27 +30,26 @@ from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.mllib.linalg import Vectors, _to_java_object_rdd
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
-           'HashTF', 'IDFModel', 'IDF',
-           'Word2Vec', 'Word2VecModel']
+           'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
 
 
 # Hack for support float('inf') in Py4j
-old_smart_decode = py4j.protocol.smart_decode
+_old_smart_decode = py4j.protocol.smart_decode
 
-float_str_mapping = {
+_float_str_mapping = {
     u'nan': u'NaN',
     u'inf': u'Infinity',
     u'-inf': u'-Infinity',
 }
 
 
-def new_smart_decode(obj):
+def _new_smart_decode(obj):
     if isinstance(obj, float):
         s = unicode(obj)
-        return float_str_mapping.get(s, s)
-    return old_smart_decode(obj)
+        return _float_str_mapping.get(s, s)
+    return _old_smart_decode(obj)
 
-py4j.protocol.smart_decode = new_smart_decode
+py4j.protocol.smart_decode = _new_smart_decode
 
 
 # TODO: move these helper functions into utils
@@ -108,6 +107,7 @@ def _callAPI(sc, name, *args):
 class VectorTransformer(object):
     """
     :: DeveloperApi ::
+
     Base class for transformation of a vector or RDD of vector
     """
     def transform(self, vector):
@@ -122,12 +122,13 @@ class VectorTransformer(object):
 class Normalizer(VectorTransformer):
     """
     :: Experimental ::
-    Normalizes samples individually to unit L^p^ norm
 
-    For any 1 <= p <= float('inf'), normalizes samples using
-    sum(abs(vector).^p^)^(1/p)^ as norm.
+    Normalizes samples individually to unit L\ :sup:`p`\ norm
 
-    For p = float('inf'), max(abs(vector)) will be used as norm for normalization.
+    For any 1 <= `p` <= float('inf'), normalizes samples using
+    sum(abs(vector). :sup:`p`) :sup:`(1/p)` as norm.
+
+    For `p` = float('inf'), max(abs(vector)) will be used as norm for normalization.
 
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
@@ -142,7 +143,7 @@ class Normalizer(VectorTransformer):
     >>> nor2.transform(v)
     DenseVector([0.0, 0.5, 1.0])
     """
-    def __init__(self, p=2):
+    def __init__(self, p=2.0):
         """
         :param p: Normalization in L^p^ space, p = 2 by default.
         """
@@ -180,6 +181,7 @@ class JavaModelWrapper(VectorTransformer):
 class StandardScalerModel(JavaModelWrapper):
     """
     :: Experimental ::
+
     Represents a StandardScaler model that can transform vectors.
     """
     def transform(self, vector):
@@ -196,6 +198,7 @@ class StandardScalerModel(JavaModelWrapper):
 class StandardScaler(object):
     """
     :: Experimental ::
+
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
     training set.
@@ -238,6 +241,7 @@ class StandardScaler(object):
 class HashingTF(object):
     """
     :: Experimental ::
+
     Maps a sequence of terms to their term frequencies using the hashing trick.
 
     >>> htf = HashingTF(100)
@@ -291,6 +295,7 @@ class IDFModel(JavaModelWrapper):
 class IDF(object):
     """
     :: Experimental ::
+
     Inverse document frequency (IDF).
 
     The standard formulation is used: `idf = log((m + 1) / (d(t) + 1))`,
@@ -340,6 +345,8 @@ class Word2VecModel(JavaModelWrapper):
     def transform(self, word):
         """
         Transforms a word to its vector representation
+
+        Note: local use only
 
         :param word: a word
         :return: vector representation of word(s)
