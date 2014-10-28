@@ -112,7 +112,7 @@ final class FileSegmentManagedBuffer(val file: File, val offset: Long, val lengt
     var is: FileInputStream = null
     try {
       is = new FileInputStream(file)
-      is.skip(offset)
+      ByteStreams.skipFully(is, offset)
       ByteStreams.limit(is, length)
     } catch {
       case e: IOException =>

@@ -1061,7 +1061,7 @@ private[spark] object Utils extends Logging {
     val stream = new FileInputStream(file)
 
     try {
-      stream.skip(effectiveStart)
+      ByteStreams.skipFully(stream, effectiveStart)
       ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()
