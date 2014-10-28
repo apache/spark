@@ -70,8 +70,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
   }
   if (minNumExecutors > maxNumExecutors) {
-    throw new SparkException("spark.dynamicAllocation.minExecutors must " +
-      "be less than or equal to spark.dynamicAllocation.maxExecutors!")
+    throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
+      s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
   }
 
   // How long there must be backlogged tasks for before an addition is triggered
@@ -335,6 +335,10 @@ private object ExecutorAllocationManager {
 
 /**
  * A listener that notifies the given allocation manager of when to add and remove executors.
+ *
+ * This class is intentionally conservative in its assumptions about the relative ordering
+ * and consistency of events returned by the listener. For simplicity, it does not account
+ * for speculated tasks.
  */
 private class ExecutorAllocationListener(allocationManager: ExecutorAllocationManager)
   extends SparkListener {
