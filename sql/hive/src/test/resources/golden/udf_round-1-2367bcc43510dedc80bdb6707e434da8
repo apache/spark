@@ -1,4 +1,0 @@
-round(x[, d]) - round x to d decimal places
-Example:
-  > SELECT round(12.3456, 1) FROM src LIMIT 1;
-  12.3'

@@ -19,12 +19,13 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
+
+import com.google.common.base.Charsets.UTF_8
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -72,6 +73,7 @@ private[spark] class PythonRDD(
     var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
+      writerThread.join()
       if (reuse_worker && complete_cleanly) {
         env.releasePythonWorker(pythonExec, envVars.toMap, worker)
       } else {
@@ -130,7 +132,7 @@ private[spark] class PythonRDD(
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj, "utf-8"),
+              throw new PythonException(new String(obj, UTF_8),
                 writerThread.exception.getOrElse(null))
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
@@ -142,7 +144,9 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
-               complete_cleanly = true
+              if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
+                complete_cleanly = true
+              }
               null
           }
         } catch {
@@ -150,6 +154,10 @@ private[spark] class PythonRDD(
           case e: Exception if context.isInterrupted =>
             logDebug("Exception thrown after task interruption", e)
             throw new TaskKilledException
+
+          case e: Exception if env.isStopped =>
+            logDebug("Exception thrown after context is stopped", e)
+            null  // exit silently
 
           case e: Exception if writerThread.exception.isDefined =>
             logError("Python worker exited unexpectedly (crashed)", e)
@@ -232,6 +240,7 @@ private[spark] class PythonRDD(
         // Data values
         PythonRDD.writeIteratorToStream(firstParent.iterator(split, context), dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+        dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
       } catch {
         case e: Exception if context.isCompleted || context.isInterrupted =>
@@ -303,10 +312,10 @@ private object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
+  val END_OF_STREAM = -4
 }
 
 private[spark] object PythonRDD extends Logging {
-  val UTF8 = Charset.forName("UTF-8")
 
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
@@ -574,7 +583,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(UTF8)
+    val bytes = str.getBytes(UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -739,7 +748,7 @@ private[spark] object PythonRDD extends Logging {
 
 private
 class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
-  override def call(arr: Array[Byte]) : String = new String(arr, PythonRDD.UTF8)
+  override def call(arr: Array[Byte]) : String = new String(arr, UTF_8)
 }
 
 /**

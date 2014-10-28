@@ -1,1 +1,0 @@
-lpad(str, len, pad) - Returns str, left-padded with pad to a length of len
