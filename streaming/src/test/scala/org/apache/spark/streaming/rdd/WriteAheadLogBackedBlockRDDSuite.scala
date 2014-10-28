@@ -71,14 +71,19 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to Block Manager and the rest
-   * to a WriteAheadLog, and then reading reading it all back using the RDD.
-   * It can also test if the partitions that were read from the log were again stored in block manager.
+   * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to block manager
+   * and the rest to a write ahead log, and then reading reading it all back using the RDD.
+   * It can also test if the partitions that were read from the log were again stored in
+   * block manager.
    * @param numPartitionssInBM Number of partitions to write to the Block Manager
    * @param numPartitionsInWAL Number of partitions to write to the Write Ahead Log
    * @param testStoreInBM Test whether blocks read from log are stored back into block manager
    */
-  private def testRDD(numPartitionssInBM: Int, numPartitionsInWAL: Int, testStoreInBM: Boolean = false) {
+  private def testRDD(
+      numPartitionssInBM: Int,
+      numPartitionsInWAL: Int,
+      testStoreInBM: Boolean = false
+    ) {
     val numBlocks = numPartitionssInBM + numPartitionsInWAL
     val data = Seq.tabulate(numBlocks) { _ => Seq.fill(10) { scala.util.Random.nextString(50) } }
 
@@ -104,11 +109,13 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
 
     // Make sure that the right `numPartitionsInWAL` blocks are in write ahead logs, and other are not
     require(
-      segments.takeRight(numPartitionsInWAL).forall(s => new File(s.path.stripPrefix("file://")).exists()),
+      segments.takeRight(numPartitionsInWAL).forall(s =>
+        new File(s.path.stripPrefix("file://")).exists()),
       "Expected blocks not in write ahead log"
     )
     require(
-      segments.take(numPartitionssInBM).forall(s => !new File(s.path.stripPrefix("file://")).exists()),
+      segments.take(numPartitionssInBM).forall(s =>
+        !new File(s.path.stripPrefix("file://")).exists()),
       "Unexpected blocks in write ahead log"
     )
 
@@ -128,7 +135,10 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  private def writeLogSegments(blockData: Seq[Seq[String]], blockIds: Seq[BlockId]): Seq[WriteAheadLogFileSegment] = {
+  private def writeLogSegments(
+      blockData: Seq[Seq[String]],
+      blockIds: Seq[BlockId]
+    ): Seq[WriteAheadLogFileSegment] = {
     require(blockData.size === blockIds.size)
     val writer = new WriteAheadLogWriter(new File(dir, Random.nextString(10)).toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
