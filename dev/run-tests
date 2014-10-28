@@ -153,12 +153,12 @@ CURRENT_BLOCK=$BLOCK_BUILD
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   # First build with 0.12 to ensure patches do not break the hive 12 build
   echo -e "q\n" \
-    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean hive/compile hive-thiftserver/compile \
+    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean hive/compile hive-thriftserver/compile \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
   # Then build with default version(0.13.1) because tests based on this version
   echo -e "q\n" \
-    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive clean hive/compile hive-thiftserver/compile  \
+    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive clean assembly/assembly  \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
