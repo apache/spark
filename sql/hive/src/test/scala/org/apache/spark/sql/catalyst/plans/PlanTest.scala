@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.scalatest.FunSuite
 
 /**
- * Provides helper methods for comparing plans.
+ * *** DUPLICATED FROM sql/catalyst/plans. ***
+ *
+ * It is hard to have maven allow one subproject depend on another subprojects test code.
+ * So, we duplicate this code here.
  */
 class PlanTest extends FunSuite {
 
