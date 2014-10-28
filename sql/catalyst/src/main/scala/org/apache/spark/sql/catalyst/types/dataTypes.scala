@@ -48,7 +48,7 @@ object DataType {
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private def parseDataType(json: JValue): DataType = json match {
     case JString(name) =>
-      PrimitiveType.nameToType(name)   // TODO: Doesn't work for fixed-precision decimal
+      PrimitiveType.nameToType(name)
 
     case JSortedObject(
         ("containsNull", JBool(n)),

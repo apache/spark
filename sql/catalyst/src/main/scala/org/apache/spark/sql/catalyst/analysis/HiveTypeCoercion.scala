@@ -279,7 +279,7 @@ trait HiveTypeCoercion {
     }
   }
 
-
+  // scalastyle:off
   /**
    * Calculates and propagates precision for fixed-precision decimals. Hive has a number of
    * rules for this based on the SQL standard and MS SQL:
@@ -313,6 +313,7 @@ trait HiveTypeCoercion {
    * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
    *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
    */
+  // scalastyle:on
   object DecimalPrecision extends Rule[LogicalPlan] {
     import scala.math.{max, min}
 

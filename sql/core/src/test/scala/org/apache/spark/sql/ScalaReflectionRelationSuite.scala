@@ -84,7 +84,7 @@ class ScalaReflectionRelationSuite extends FunSuite {
 
     assert(sql("SELECT * FROM reflectData").collect().head ===
       Seq("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-          BigDecimal(1), new Timestamp(12345), Seq(1,2,3)))
+          BigDecimal(1), new Date(12345), new Timestamp(12345), Seq(1,2,3)))
   }
 
   test("query case class RDD with nulls") {

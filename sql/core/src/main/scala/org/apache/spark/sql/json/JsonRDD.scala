@@ -393,7 +393,7 @@ private[sql] object JsonRDD extends Logging {
         case IntegerType => value.asInstanceOf[IntegerType.JvmType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
-        case DecimalType() => toDecimal(value)  // TODO: fix precision and scale
+        case DecimalType() => toDecimal(value)
         case BooleanType => value.asInstanceOf[BooleanType.JvmType]
         case NullType => null
 
