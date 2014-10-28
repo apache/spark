@@ -116,51 +116,48 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    pushAndReportBlock(ArrayBufferBlock(arrayBuffer), optionalMetadata, optionalBlockId)
+    pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
   }
 
   /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    pushAndReportBlock(IteratorBlock(iterator), optionalMetadata, optionalBlockId)
+    pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption)
   }
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    pushAndReportBlock(ByteBufferBlock(bytes), optionalMetadata, optionalBlockId)
+    pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption)
   }
 
   /** Store block and report it to driver */
   def pushAndReportBlock(
       receivedBlock: ReceivedBlock,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
+    val blockId = blockIdOption.getOrElse(nextBlockId)
     val numRecords = receivedBlock match {
       case ArrayBufferBlock(arrayBuffer) => arrayBuffer.size
       case _ => -1
     }
 
     val time = System.currentTimeMillis
-    val fileSegmentOption = receivedBlockHandler.storeBlock(blockId, receivedBlock) match {
-      case Some(f: WriteAheadLogFileSegment) => Some(f)
-      case _ => None
-    }
+    val persistenceInfoOption = receivedBlockHandler.storeBlock(blockId, receivedBlock)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time) + " ms")
 
     val blockInfo = ReceivedBlockInfo(streamId,
-      blockId, numRecords, optionalMetadata.orNull, fileSegmentOption)
+      blockId, numRecords, metadataOption.orNull, persistenceInfoOption)
     val future = trackerActor.ask(AddBlock(blockInfo))(askTimeout)
     Await.result(future, askTimeout)
     logDebug("Reported block " + blockId)

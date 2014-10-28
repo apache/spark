@@ -10,6 +10,6 @@ private[streaming] case class ReceivedBlockInfo(
     blockId: StreamBlockId,
     numRecords: Long,
     metadata: Any,
-    fileSegmentOption: Option[WriteAheadLogFileSegment]
+    persistenceInfoOption: Option[Any]
   )
 
