@@ -384,7 +384,7 @@ class Word2Vec(object):
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
-    >>> model = Word2Vec(vectorSize=10).fit(doc)
+    >>> model = Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
 
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
@@ -394,26 +394,53 @@ class Word2Vec(object):
     >>> [s[0] for s in syms]
     [u'b', u'c']
     """
-    def __init__(self, vectorSize=100, learningRate=0.025, numPartitions=1,
-                 numIterations=1, seed=None):
+    def __init__(self):
         """
         Construct Word2Vec instance
-
-        :param vectorSize: vector size (default: 100).
-        :param learningRate:  initial learning rate (default: 0.025).
-        :param numPartitions: number of partitions (default: 1). Use
-                              a small number for accuracy.
-        :param numIterations: number of iterations (default: 1), which should
-                              be smaller than or equal to number of partitions.
-        :param seed: the seed used for randomness
         """
         import random  # this can't be on the top because of mllib.random
 
+        self.vectorSize = 100
+        self.learningRate = 0.025
+        self.numPartitions = 1
+        self.numIterations = 1
+        self.seed = random.randint(0, sys.maxint)
+
+    def setVectorSize(self, vectorSize):
+        """
+        Sets vector size (default: 100).
+        """
         self.vectorSize = vectorSize
+        return self
+
+    def setLearningRate(self, learningRate):
+        """
+        Sets initial learning rate (default: 0.025).
+        """
         self.learningRate = learningRate
+        return self
+
+    def setNumPartitions(self, numPartitions):
+        """
+        Sets number of partitions (default: 1). Use a small number for accuracy.
+        """
         self.numPartitions = numPartitions
+        return self
+
+    def setNumIterations(self, numIterations):
+        """
+        Sets number of iterations (default: 1), which should be smaller than or equal to number of
+        partitions.
+        """
         self.numIterations = numIterations
-        self.seed = random.randint(0, sys.maxint) if seed is None else seed
+        return self
+
+    def setSeed(self, seed):
+        """
+        Sets random seed.
+        """
+        self.seed = seed
+        return self
 
     def fit(self, data):
         """
