@@ -38,7 +38,8 @@ import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveShim
+import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServerShim
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"

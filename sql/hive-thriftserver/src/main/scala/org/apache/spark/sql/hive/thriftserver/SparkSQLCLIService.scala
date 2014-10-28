@@ -51,7 +51,7 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
       try {
         HiveAuthFactory.loginFromKeytab(hiveConf)
         sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
-        HiveShim.setServerUserName(sparkServiceUGI, this)
+        HiveThriftServerShim.setServerUserName(sparkServiceUGI, this)
       } catch {
         case e @ (_: IOException | _: LoginException) =>
           throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)

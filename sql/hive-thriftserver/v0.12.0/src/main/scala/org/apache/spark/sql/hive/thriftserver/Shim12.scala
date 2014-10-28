@@ -44,16 +44,12 @@ import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
  */
-private[thriftserver] object HiveShim {
+private[thriftserver] object HiveThriftServerShim {
   val version = "0.12.0"
 
   def setServerUserName(sparkServiceUGI: UserGroupInformation, sparkCliService:SparkSQLCLIService) = {
     val serverUserName = ShimLoader.getHadoopShims.getShortUserName(sparkServiceUGI)
     setSuperField(sparkCliService, "serverUserName", serverUserName)
-  }
-
-  def getCommandProcessor(cmd: Array[String], conf: HiveConf) =  {
-    CommandProcessorFactory.get(cmd(0), conf)
   }
 }
 
