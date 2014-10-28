@@ -54,7 +54,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         throw new IllegalStateException("Aggregator is empty for map-side combine")
       }
       sorter = new ExternalSorter[K, V, C](
-        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        dep.aggregator, Some(dep.partitioner), dep.keyCombinerOrdering, dep.serializer)
       sorter.insertAll(records)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't

@@ -48,6 +48,8 @@ class ShuffledRDD[K, V, C](
 
   private var keyOrdering: Option[Ordering[K]] = None
 
+  private var combinerOrdering: Option[Ordering[C]] = None
+
   private var aggregator: Option[Aggregator[K, V, C]] = None
 
   private var mapSideCombine: Boolean = false
@@ -64,6 +66,12 @@ class ShuffledRDD[K, V, C](
     this
   }
 
+  /** Set combiner ordering for RDD's shuffle. */
+  def setCombinerOrdering(combinerOrdering: Ordering[C]): ShuffledRDD[K, V, C] = {
+    this.combinerOrdering = Option(combinerOrdering)
+    this
+  }
+
   /** Set aggregator for RDD's shuffle. */
   def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C] = {
     this.aggregator = Option(aggregator)
@@ -77,7 +85,9 @@ class ShuffledRDD[K, V, C](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
+    List(new ShuffleDependency(
+      prev, part, serializer, keyOrdering, combinerOrdering, aggregator, mapSideCombine
+    ))
   }
 
   override val partitioner = Some(part)

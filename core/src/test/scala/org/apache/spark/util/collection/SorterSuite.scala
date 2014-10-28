@@ -23,6 +23,7 @@ import java.util.{Arrays, Comparator}
 import org.scalatest.FunSuite
 
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.util.KeyValueOrdering._
 
 class SorterSuite extends FunSuite {
 
@@ -52,8 +53,8 @@ class SorterSuite extends FunSuite {
       keyValueArray.grouped(2).map { case Array(k, v) => k.doubleValue() -> v.intValue() }.toMap
 
     Arrays.sort(keys)
-    new Sorter(new KVArraySortDataFormat[Double, Number])
-      .sort(keyValueArray, 0, keys.length, Ordering.Double)
+    new Sorter(new KVArraySortDataFormat[Product2[Double, Int], Number])
+      .sort(keyValueArray, 0, keys.length, implicitly[Ordering[Product2[Double, Int]]])
 
     keys.zipWithIndex.foreach { case (k, i) =>
       assert(k === keyValueArray(2 * i))

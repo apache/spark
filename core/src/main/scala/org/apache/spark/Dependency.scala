@@ -21,6 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleHandle
+import org.apache.spark.util.KeyValueOrdering
 
 /**
  * :: DeveloperApi ::
@@ -67,12 +68,21 @@ class ShuffleDependency[K, V, C](
     val partitioner: Partitioner,
     val serializer: Option[Serializer] = None,
     val keyOrdering: Option[Ordering[K]] = None,
+    val combinerOrdering: Option[Ordering[C]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false)
   extends Dependency[Product2[K, V]] {
 
   override def rdd = _rdd.asInstanceOf[RDD[Product2[K, V]]]
 
+  def keyCombinerOrdering: Option[Ordering[Product2[K, C]]] = 
+    (keyOrdering, combinerOrdering) match {
+      case (None, None) => None
+      case (Some(ko), None) => Some(Ordering.by[Product2[K, C], K](_._1)(ko))
+      case (Some(ko), Some(co)) => Some(new KeyValueOrdering(Some(ko), Some(co)))
+      case (None, Some(co)) => Some(new KeyValueOrdering(None, Some(co)))
+    }
+  
   val shuffleId: Int = _rdd.context.newShuffleId()
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(

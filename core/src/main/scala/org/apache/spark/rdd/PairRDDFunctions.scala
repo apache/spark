@@ -460,6 +460,57 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * Group the values for each key in the RDD and apply a binary operator to a start value and all 
+   * ordered values for a key, going left to right.
+   * 
+   * Note: this operation may be expensive, since there is no map-side combine, so all values are
+   * send through the shuffle.
+   */
+  def foldLeftByKey[U: ClassTag](valueOrdering: Ordering[V], zeroValue: U,
+    partitioner: Partitioner)(func: (U, V) => U): RDD[(K, U)] = {
+    val shuffled = new ShuffledRDD[K, V, V](self, partitioner)
+      .setCombinerOrdering(valueOrdering)
+
+    val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
+    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    zeroBuffer.get(zeroArray)
+    lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
+    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+
+    new RDD[(K, U)](shuffled) {
+      def compute(split: Partition, context: TaskContext): Iterator[(K, U)] = new Iterator[(K, U)] {
+        private val iter = shuffled.compute(split, context).buffered
+
+        override def hasNext: Boolean = iter.hasNext
+
+        override def next(): (K, U) = {
+          val key = iter.head._1
+          var u = createZero()
+          while (iter.hasNext && iter.head._1 == key)
+            u = func(u, iter.next()._2)
+          (key, u)
+        }
+      }
+
+      protected def getPartitions: Array[Partition] = shuffled.getPartitions
+    }
+  }
+
+  /**
+   * Simplified version of foldLeftByKey that hash-partitions the output RDD.
+   */
+  def foldLeftByKey[U: ClassTag](valueOrdering: Ordering[V], zeroValue: U, numPartitions: Int)(
+    func: (U, V) => U): RDD[(K, U)] =
+    foldLeftByKey(valueOrdering, zeroValue, new HashPartitioner(numPartitions))(func)
+
+  /**
+   * Simplified version of foldLeftByKey that uses the default partitioner.
+   */
+  def foldLeftByKey[U: ClassTag](valueOrdering: Ordering[V], zeroValue: U)(
+    func: (U, V) => U): RDD[(K, U)] =
+    foldLeftByKey(valueOrdering, zeroValue, defaultPartitioner(self))(func)
+
+  /**
    * Return a copy of the RDD partitioned using the specified partitioner.
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {

@@ -99,7 +99,7 @@ class ExternalAppendOnlyMap[K, V, C](
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
 
-  private val keyComparator = new HashComparator[K]
+  private val keyCombinerComparator = new HashComparator[K, C]
   private val ser = serializer.newInstance()
 
   /**
@@ -174,7 +174,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     var success = false
     try {
-      val it = currentMap.destructiveSortedIterator(keyComparator)
+      val it = currentMap.destructiveSortedIterator(keyCombinerComparator)
       while (it.hasNext) {
         val kv = it.next()
         writer.write(kv)
@@ -238,7 +238,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = currentMap.destructiveSortedIterator(keyComparator)
+    private val sortedMap = currentMap.destructiveSortedIterator(keyCombinerComparator)
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -501,11 +501,19 @@ private[spark] object ExternalAppendOnlyMap {
   /**
    * A comparator which sorts arbitrary keys based on their hash codes.
    */
-  private class HashComparator[K] extends Comparator[K] {
-    def compare(key1: K, key2: K): Int = {
-      val hash1 = hash(key1)
-      val hash2 = hash(key2)
-      if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
+  private class HashComparator[K, C] extends Comparator[(K, C)] {
+    def compare(kc1: (K, C), kc2: (K, C)): Int = {
+      val hash1 = hash(kc1._1)
+      val hash2 = hash(kc2._1)
+      if (hash1 < hash2) {
+        -1 
+      } else if (hash1 == hash2) {
+        val hash1 = hash(kc1._2)
+        val hash2 = hash(kc1._2)
+        if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
+      } else {
+        1
+      }
     }
   }
 }

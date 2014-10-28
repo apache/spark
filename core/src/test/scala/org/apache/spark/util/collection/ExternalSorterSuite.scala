@@ -23,6 +23,7 @@ import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.KeyValueOrdering._
 
 import scala.util.Random
 
@@ -55,7 +56,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
 
     // Both aggregator and ordering
     val sorter = new ExternalSorter[Int, Int, Int](
@@ -89,38 +90,41 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
-    val ord = implicitly[Ordering[Int]]
-    val elements = Set((1, 1), (2, 2), (5, 5))
-    val expected = Set(
-      (0, Set()), (1, Set((1, 1))), (2, Set((2, 2))), (3, Set()), (4, Set()),
-      (5, Set((5, 5))), (6, Set()))
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
+    val elements = List((1, 1), (5, 6), (2, 2), (5, 5))
+    val expectedAggr = List(
+      (0, List()), (1, List((1, 1))), (2, List((2, 2))), (3, List()), (4, List()),
+      (5, List((5, 11))), (6, List()))
+    val expectedNotAggr = List(
+      (0, List()), (1, List((1, 1))), (2, List((2, 2))), (3, List()), (4, List()),
+      (5, List((5, 5), (5, 6))), (6, List()))
 
     // Both aggregator and ordering
     val sorter = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
     sorter.insertAll(elements.iterator)
-    assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter.partitionedIterator.map(p => (p._1, p._2.toList)).toList === expectedAggr)
     sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), None, None)
     sorter2.insertAll(elements.iterator)
-    assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toList)).toList === expectedAggr)
     sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), Some(ord), None)
     sorter3.insertAll(elements.iterator)
-    assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toList)).toList === expectedNotAggr)
     sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
     sorter4.insertAll(elements.iterator)
-    assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expectedNotAggr.map(x => (x._1, x._2.toSet)).toSet)
     sorter4.stop()
   }
 
@@ -130,7 +134,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
     val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
 
     val sorter = new ExternalSorter[Int, Int, Int](
@@ -322,7 +326,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
@@ -372,7 +376,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
 
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
@@ -503,7 +507,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
     sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
@@ -519,7 +523,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     sorter.insertAll((0 until 100).iterator.map(i => (i, i)))
@@ -536,7 +540,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
@@ -683,7 +687,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
-    val ord = implicitly[Ordering[Int]]
+    val ord = implicitly[Ordering[Product2[Int, Int]]]
 
     // Numbers of partitions that are above and below the default bypassMergeThreshold
     val FEW_PARTITIONS = 50
@@ -718,10 +722,10 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
 
     // Using wrongOrdering to show integer overflow introduced exception.
     val rand = new Random(100L)
-    val wrongOrdering = new Ordering[String] {
-      override def compare(a: String, b: String) = {
-        val h1 = if (a == null) 0 else a.hashCode()
-        val h2 = if (b == null) 0 else b.hashCode()
+    val wrongOrdering = new Ordering[Product2[String, String]] {
+      override def compare(a: Product2[String, String], b: Product2[String, String]) = {
+        val h1 = if (a._1 == null) 0 else a._1.hashCode()
+        val h2 = if (b._1 == null) 0 else b._1.hashCode()
         h1 - h2
       }
     }

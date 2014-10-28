@@ -30,5 +30,5 @@ private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
   def estimateSize(): Long
 
   /** Iterate through the data in a given key order. This may destroy the underlying collection. */
-  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
+  def destructiveSortedIterator(keyComparator: Comparator[(K, V)]): Iterator[(K, V)]
 }
