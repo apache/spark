@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
@@ -29,7 +31,7 @@ import org.apache.spark.sql.catalyst.util._
  * It is hard to have maven allow one subproject depend on another subprojects test code.
  * So, we duplicate this code here.
  */
-class QueryTest extends FunSuite {
+class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
