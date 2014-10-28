@@ -244,6 +244,8 @@ class HashingTF(object):
 
     Maps a sequence of terms to their term frequencies using the hashing trick.
 
+    Note: the terms must be hashable (can not be dict/set/list...).
+
     >>> htf = HashingTF(100)
     >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
