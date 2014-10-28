@@ -947,7 +947,7 @@ private[spark] object Utils extends Logging {
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
-          System.err.println(line)
+          logInfo(s"CHILD STDERR: $line")
         }
       }
     }.start()
