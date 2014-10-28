@@ -300,7 +300,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       // Spark SQL Hive support uses a single `SessionState` for all Hive operations and breaks
       // session isolation under multi-user scenarios (i.e. HiveThriftServer2).
       // TODO Fix session isolation
-      SessionState.start(sessionState)
+      if (SessionState.get() != sessionState) {
+        SessionState.start(sessionState)
+      }
 
       proc match {
         case driver: Driver =>
