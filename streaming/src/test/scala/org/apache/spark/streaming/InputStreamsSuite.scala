@@ -383,18 +383,20 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           }
         }
 
-        // Verify that all the files have been read
-        val expectedOutput = if (newFilesOnly) {
-          input.map(_.toString).toSet
-        } else {
-          (Seq(0) ++ input).map(_.toString).toSet
-        }
-        assert(outputBuffer.flatten.toSet === expectedOutput)
+      // Verify that all the files have been read
+      val expectedOutput = if (newFilesOnly) {
+        input.map(_.toString).toSet
+      } else {
+        (Seq(0) ++ input).map(_.toString).toSet
       }
-    } finally {
-      if (testDir != null) Utils.deleteRecursively(testDir)
+      assert(outputBuffer.flatten.toSet === expectedOutput)
     }
+  }finally
+  {
+    if (testDir != null) Utils.deleteRecursively(testDir)
   }
+}
+
 }
 
 
