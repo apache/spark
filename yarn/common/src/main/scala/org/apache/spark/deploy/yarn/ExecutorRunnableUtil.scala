@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.URI
 
 import scala.collection.JavaConversions._
@@ -62,8 +61,7 @@ trait ExecutorRunnableUtil extends Logging {
       javaOpts += opts
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
-      val libraryPath = Seq(p, Utils.libraryPathScriptVar).mkString(File.pathSeparator)
-      prefixEnv += s"${Utils.libraryPathName}=$libraryPath"
+      prefixEnv += Utils.prefixLibraryPath(Seq(p))
     }
 
     javaOpts += "-Djava.io.tmpdir=" +

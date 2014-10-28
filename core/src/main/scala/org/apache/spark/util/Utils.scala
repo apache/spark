@@ -1733,15 +1733,19 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /**
-   * Return the LD_LIBRARY_PATH script variable
-   */
-  def libraryPathScriptVar: String = {
-    if (isWindows) {
+  def prefixLibraryPath(libraryPaths: Seq[String]): String = {
+    val libraryPathScriptVar = if (isWindows) {
       s"%${libraryPathName}%"
     } else {
       "$" + libraryPathName
     }
+    val libraryPath = (libraryPaths :+ libraryPathScriptVar).mkString(File.pathSeparator)
+    val ampersand = if (Utils.isWindows) {
+      " &"
+    } else {
+      ""
+    }
+    s"$libraryPathName=$libraryPath$ampersand"
   }
 
 }

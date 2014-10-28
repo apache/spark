@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 
 import scala.collection.JavaConversions._
@@ -349,11 +348,10 @@ private[spark] trait ClientBase extends Logging {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
-      var libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
+      val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
-        libraryPaths = libraryPaths :+ Utils.libraryPathScriptVar
-        prefixEnv += s"${Utils.libraryPathName}=${libraryPaths.mkString(File.pathSeparator)}"
+        prefixEnv += Utils.prefixLibraryPath(libraryPaths)
       }
     }
 

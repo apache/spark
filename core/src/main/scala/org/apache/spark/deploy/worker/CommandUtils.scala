@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.worker
 
-import scala.collection.Map
-
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
+
+import scala.collection.Map
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.Command

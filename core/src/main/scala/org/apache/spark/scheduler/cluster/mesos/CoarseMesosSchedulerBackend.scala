@@ -124,7 +124,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
-      s"${Utils.libraryPathName}=$p${File.pathSeparator}${Utils.libraryPathScriptVar}"
+      Utils.prefixLibraryPath(Seq(p))
     }.getOrElse("")
 
     environment.addVariables(
