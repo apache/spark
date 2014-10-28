@@ -44,7 +44,7 @@ import org.apache.spark.sql.hive._
  */
 @DeveloperApi
 case class HiveTableScan(
-    attributes: Seq[Attribute],
+    requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Option[Expression])(
     @transient val context: HiveContext)
@@ -52,6 +52,9 @@ case class HiveTableScan(
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
+
+  // Retrieve the original attributes based on expression ID so that capitalization matches.
+  val attributes = requestedAttributes.map(relation.attributeMap)
 
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
@@ -81,9 +84,7 @@ case class HiveTableScan(
 
   private def addColumnMetadataToConf(hiveConf: HiveConf) {
     // Specifies needed column IDs for those non-partitioning columns.
-    val neededColumnIDs =
-      attributes.map(a =>
-        relation.attributes.indexWhere(_.name == a.name): Integer).filter(index => index >= 0)
+    val neededColumnIDs = attributes.flatMap(relation.columnOrdinals.get).map(o => o: Integer)
 
     HiveShim.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
 

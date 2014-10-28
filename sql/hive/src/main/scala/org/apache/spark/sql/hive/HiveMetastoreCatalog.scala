@@ -307,4 +307,10 @@ private[hive] case class MetastoreRelation
   val attributes = hiveQlTable.getCols.map(_.toAttribute) 
 
   val output = attributes ++ partitionKeys
+
+  /** An attribute map that can be used to lookup original attributes based on expression id. */
+  val attributeMap = AttributeMap(output.map(o => (o,o)))
+
+  /** An attribute map for determining the ordinal for non-partition columns. */
+  val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 }
