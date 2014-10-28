@@ -53,6 +53,14 @@ function handle_error () {
   fi
 }
 
+AMPLAB_JENKINS_BUILD_SCALA211=1
+
+if [ -n "$AMPLAB_JENKINS_BUILD_SCALA211" ]; then 
+    export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pscala-2.11"
+else
+    export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pscala-2.10"
+fi
+
 export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 
 # Determine Java path and version.
@@ -100,13 +108,6 @@ if [ -n "$AMPLAB_JENKINS" ]; then
     fi
   fi
 fi
-
-echo "cleaning jenkins.."
-rm -rf /home/jenkins/.ivy2/
-
-find "$FWDIR" \( -name "target" -o -name "checkpoint" \) -type d -exec rm -r {} +
-
-rm -rf "$FWDIR"/lib_managed/
 
 set -o pipefail
 trap 'handle_error $LINENO' ERR
