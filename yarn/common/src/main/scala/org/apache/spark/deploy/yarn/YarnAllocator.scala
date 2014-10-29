@@ -23,12 +23,14 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.ListBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
+
 import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
@@ -88,8 +90,10 @@ private[yarn] abstract class YarnAllocator(
   private val executorIdCounter = new AtomicInteger()
   private val numExecutorsFailed = new AtomicInteger()
 
-  private val maxExecutors = args.numExecutors
-
+  private var numExecutors = args.numExecutors
+  private var maxExecutors = args.numExecutors
+  private val executorIdToContainers = new HashMap[String, Container]()
+  
   protected val executorMemory = args.executorMemory
   protected val executorCores = args.executorCores
   protected val (preferredHostToCount, preferredRackToCount) =
@@ -110,7 +114,11 @@ private[yarn] abstract class YarnAllocator(
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
 
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
-
+  
+  def addExecutors(count: Int) {
+    maxExecutors = maxExecutors + count
+  }
+  
   def allocateResources() = {
     val missing = maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get()
 
@@ -269,6 +277,7 @@ private[yarn] abstract class YarnAllocator(
             CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
           logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
+          executorIdToContainers(executorId) = container
 
           // To be safe, remove the container from `releasedContainers`.
           releasedContainers.remove(containerId)
@@ -380,6 +389,32 @@ private[yarn] abstract class YarnAllocator(
           completedContainers.size,
           numExecutorsRunning.get(),
           releasedContainers))
+    }
+  }
+  
+  def deleteExecutors(execIds: List[String]) {
+    var toDeleteContainers = new ListBuffer[Container]()
+    for(id <- execIds) {
+      if (executorIdToContainers.contains(id)) {
+        var cont = executorIdToContainers(id)
+        toDeleteContainers += cont
+        executorIdToContainers.remove(id)
+      }
+      else {
+        logInfo("YarnAllocator : Could not find the container for the given executor ID : " + id + " -Ignoring")
+      }
+    }
+    
+    var autoscaledCount = maxExecutors - numExecutors
+    var toDeleteCount = toDeleteContainers.size
+    if (toDeleteContainers.size > autoscaledCount) {
+      logInfo("YarnAllocator : Cant delete all requested containers. Could only delete " + autoscaledCount + " of it")
+      toDeleteCount = autoscaledCount
+    }
+    
+    for(cont <- toDeleteContainers.take(toDeleteCount)) {
+      maxExecutors = maxExecutors - 1
+      releaseContainer(cont)
     }
   }
 

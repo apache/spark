@@ -228,6 +228,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         "Timed out waiting for SparkContext.")
     } else {
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
+      var as = new AutoscaleServer(allocator, sparkConf, sc.env.actorSystem, false).start()
       userClassThread.join()
     }
   }
@@ -237,7 +238,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       conf = sparkConf, securityManager = securityMgr)._1
     actor = waitForSparkDriver()
     addAmIpFilter()
+
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
+    var as = new AutoscaleServer(allocator, sparkConf, actorSystem).start()
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
