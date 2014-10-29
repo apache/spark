@@ -134,6 +134,18 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
 }
 
+
+/**
+ * A function that converts the characters of a string to uppercase.
+ */
+case class Trim(child: Expression) extends UnaryExpression with CaseConversionExpression {
+
+    override def convert(v: String): String = v.trim()
+
+    override def toString() = s"Trim($child)"
+}
+
+
 /**
  * A function that converts the characters of a string to uppercase.
  */

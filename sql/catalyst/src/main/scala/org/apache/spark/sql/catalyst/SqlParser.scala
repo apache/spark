@@ -103,6 +103,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
+  protected val WHERE = Keyword("TRIM")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -282,6 +283,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | MAX   ~ "(" ~> expression <~ ")" ^^ { case exp => Max(exp) }
     | UPPER ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
     | LOWER ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
+    | TRIM ~ "(" ~> expression <~ ")" ^^ { case exp => TRIM(exp) }
     | IF ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
       { case c ~ t ~ f => If(c, t, f) }
     | CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
