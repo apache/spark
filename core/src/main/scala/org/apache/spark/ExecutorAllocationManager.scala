@@ -66,13 +66,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Lower and upper bounds on the number of executors. These are required.
   private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
   private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", -1)
-  if (minNumExecutors < 0 || maxNumExecutors < 0) {
-    throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
-  }
-  if (minNumExecutors > maxNumExecutors) {
-    throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
-      s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
-  }
+  verifyBounds()
 
   // How long there must be backlogged tasks for before an addition is triggered
   private val schedulerBacklogTimeout = conf.getLong(
@@ -110,12 +104,27 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   private val intervalMillis: Long = 100
 
   /**
+   * Verify that the lower and upper bounds on the number of executors are valid.
+   * If not, throw an appropriate exception.
+   */
+  private def verifyBounds(): Unit = {
+    if (minNumExecutors < 0 || maxNumExecutors < 0) {
+      throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
+    }
+    if (minNumExecutors > maxNumExecutors) {
+      throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
+        s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
+    }
+  }
+
+  /**
    * Register for scheduler callbacks to decide when to add and remove executors.
    */
   def start(): Unit = {
     val listener = new ExecutorAllocationListener(this)
     sc.addSparkListener(listener)
     startPolling()
+    // TODO: start at `maxNumExecutors` once SPARK-3822 goes in
   }
 
   /**
