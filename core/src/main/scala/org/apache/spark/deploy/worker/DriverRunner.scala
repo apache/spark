@@ -23,7 +23,7 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 
 import akka.actor.ActorRef
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
@@ -178,7 +178,7 @@ private[spark] class DriverRunner(
       val stderr = new File(baseDir, "stderr")
       val header = "Launch Command: %s\n%s\n\n".format(
         command.mkString("\"", "\" \"", "\""), "=" * 40)
-      Files.append(header, stderr, Charsets.UTF_8)
+      Files.append(header, stderr, UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)

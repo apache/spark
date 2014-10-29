@@ -112,6 +112,7 @@ object ScalaReflection {
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
     case obj: DecimalType.JvmType => DecimalType
+    case obj: DateType.JvmType => DateType
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a
