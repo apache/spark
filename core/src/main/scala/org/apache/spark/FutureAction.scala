@@ -210,6 +210,8 @@ class ComplexFutureAction[T] extends FutureAction[T] {
       } catch {
         case e: Exception => p.failure(e)
       } finally {
+        // This lock guarantees when calling `thread.interrupt()` in `cancel`,
+        // thread won't be set to null.
         ComplexFutureAction.this.synchronized {
           thread = null
         }
