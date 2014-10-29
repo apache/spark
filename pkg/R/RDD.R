@@ -554,6 +554,62 @@ setMethod("reduce",
             Reduce(func, partitionList)
           })
 
+#' Get the maximum element of an RDD.
+#'
+#' @param rdd The RDD to get the maximum element from
+#' @export
+#' @rdname maximum
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' maximum(rdd) # 10
+#'}
+setGeneric("maximum", function(rdd) { standardGeneric("maximum") })
+
+#' @rdname maximum
+#' @aliases maximum,RDD
+setMethod("maximum",
+          signature(rdd = "RDD"),
+          function(rdd) {
+
+            maxInPartition <- function(part) {
+              max(unlist(part, recursive=FALSE))
+            }
+
+            partitionList <- collect(lapplyPartition(rdd, maxInPartition),
+                                     flatten=FALSE)
+            max(unlist(partitionList, recursive=FALSE))
+          })
+
+#' Get the minimum element of an RDD.
+#'
+#' @param rdd The RDD to get the minimum element from
+#' @export
+#' @rdname minimum
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' minimum(rdd) # 1
+#'}
+setGeneric("minimum", function(rdd) { standardGeneric("minimum") })
+
+#' @rdname minimum
+#' @aliases minimum,RDD
+setMethod("minimum",
+          signature(rdd = "RDD"),
+          function(rdd) {
+
+            minInPartition <- function(part) {
+              min(unlist(part, recursive=FALSE))
+            }
+
+            partitionList <- collect(lapplyPartition(rdd, minInPartition),
+                                     flatten=FALSE)
+            min(unlist(partitionList, recursive=FALSE))
+          })
+
 #' Take elements from an RDD.
 #'
 #' This function takes the first NUM elements in the RDD and

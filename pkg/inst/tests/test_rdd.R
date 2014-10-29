@@ -178,3 +178,13 @@ test_that("distinct() on RDDs", {
   actual <- sort(unlist(collect(uniques)))
   expect_equal(actual, nums)
 })
+
+test_that("maximum() on RDDs", {
+  max <- maximum(rdd)
+  expect_equal(max, 10)
+})
+
+test_that("minimum() on RDDs", {
+  min <- minimum(rdd)
+  expect_equal(min, 1)
+})

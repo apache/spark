@@ -21,6 +21,8 @@ exportMethods(
               "mapPartitions",
               "mapPartitionsWithIndex",
               "mapValues",
+              "maximum",
+              "minimum",
               "partitionBy",
               "reduce",
               "reduceByKey",
