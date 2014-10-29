@@ -110,4 +110,16 @@ protected[sql] object DataTypeConversions {
     case structType: org.apache.spark.sql.api.java.StructType =>
       StructType(structType.getFields.map(asScalaStructField))
   }
+
+  /** Converts Java objects to catalyst rows / types */
+  def convertJavaToCatalyst(a: Any): Any = a match {
+    case d: java.math.BigDecimal => BigDecimal(d)
+    case other => other
+  }
+
+  /** Converts Java objects to catalyst rows / types */
+  def convertCatalystToJava(a: Any): Any = a match {
+    case d: scala.math.BigDecimal => d.underlying()
+    case other => other
+  }
 }
