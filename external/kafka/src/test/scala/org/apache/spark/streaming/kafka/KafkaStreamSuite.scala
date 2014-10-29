@@ -19,14 +19,10 @@ package org.apache.spark.streaming.kafka
 
 import java.io.File
 import java.net.InetSocketAddress
-import java.util
 import java.util.{Properties, Random}
 
-import akka.actor.FSM.->
-import org.apache.spark.rdd.RDD
-import org.slf4j.{LoggerFactory, Logger}
-
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import kafka.consumer._
 import kafka.message.MessageAndMetadata
@@ -36,18 +32,16 @@ import kafka.producer.{KeyedMessage, ProducerConfig, Producer}
 import kafka.utils.ZKStringSerializer
 import kafka.serializer.{StringDecoder, StringEncoder}
 import kafka.server.{KafkaConfig, KafkaServer}
-
-import org.I0Itec.zkclient.ZkClient
-
 import org.apache.zookeeper.server.ZooKeeperServer
 import org.apache.zookeeper.server.NIOServerCnxnFactory
+import org.I0Itec.zkclient.ZkClient
+import org.slf4j.{LoggerFactory, Logger}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.kafka.KafkaWriter._
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable.ArrayBuffer
 
 class KafkaStreamSuite extends TestSuiteBase {
   import KafkaTestUtils._

@@ -18,11 +18,12 @@ package org.apache.spark.streaming.kafka
 
 import java.util.Properties
 
+import scala.reflect.ClassTag
+
 import kafka.producer.{ProducerConfig, KeyedMessage, Producer}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
-
-import scala.reflect.ClassTag
 
 /**
  * Import this object in this form:
