@@ -34,24 +34,8 @@ if [ -z "$SPARK_ON_MESOS" ]; then
       if ifconfig $vpn_interface > /dev/null 2>&1; then
         export SPARK_LOCAL_IP=`bash -c "$get_ip_command"`
       else
-        if [[ -e /Applications/Viscosity.app ]]; then
-          echoerr "WARNING: could not find an VPN interface to connect to the Shopify Spark Cluster! Trying to autoconnect..."
-          osascript -e "
-            tell application \"Viscosity\"
-              connect first connection
-              set total to 0
-              repeat while (first connection's state is not equal to \"Connected\") or total is greater than 15
-                delay 0.5
-                set total to total + 0.5
-              end repeat
-              return \"Connected!\"
-            end tell
-          "
-          export SPARK_LOCAL_IP=`$get_ip_command`
-        else
-          echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
-          exit 1
-        fi
+        echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
+        exit 1
       fi
     fi
   fi
