@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat
 
-import breeze.linalg.{DenseVector => BDV}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
@@ -72,9 +72,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
-    sample.toBreeze.activeIterator.foreach {
-      case (_, 0.0) => // Skip explicit zero elements.
-      case (i, value) =>
+    @inline def update(i: Int, value: Double) = {
+      if (value != 0.0) {
         if (currMax(i) < value) {
           currMax(i) = value
         }
@@ -89,6 +88,24 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         currL1(i) += math.abs(value)
 
         nnz(i) += 1.0
+      }
+    }
+
+    sample.toBreeze match {
+      case dv: BDV[Double] => {
+        var j = 0
+        while (j < dv.length) {
+          update(j, dv(j))
+          j += 1
+        }
+      }
+      case sv: BSV[Double] =>
+        var j = 0
+        while (j < sv.data.length) {
+          update(sv.index(j), sv.data(j))
+          j += 1
+        }
+      case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
 
     totalCnt += 1
