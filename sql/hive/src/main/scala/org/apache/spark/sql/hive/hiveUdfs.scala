@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.exec.{UDF, UDAF}
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
@@ -134,11 +135,19 @@ private[hive] case class HiveSimpleUdf(functionClassName: String, children: Seq[
   }
 }
 
+// Adapter from Catalyst ExpressionResult to Hive DeferredObject
+private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
+  extends DeferredObject with HiveInspectors {
+  private var func: () => Any = _
+  def set(func: () => Any) {
+    this.func = func
+  }
+  override def prepare(i: Int) = {}
+  override def get(): AnyRef = wrap(func(), oi)
+}
+
 private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq[Expression])
   extends HiveUdf with HiveInspectors {
-
-  import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
-
   type UDFType = GenericUDF
 
   @transient
@@ -160,16 +169,6 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
   @transient
   protected lazy val deferedObjects =
     argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
-
-  // Adapter from Catalyst ExpressionResult to Hive DeferredObject
-  class DeferredObjectAdapter(oi: ObjectInspector) extends DeferredObject {
-    private var func: () => Any = _
-    def set(func: () => Any) {
-      this.func = func
-    }
-    override def prepare(i: Int) = {}
-    override def get(): AnyRef = wrap(func(), oi)
-  }
 
   lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
