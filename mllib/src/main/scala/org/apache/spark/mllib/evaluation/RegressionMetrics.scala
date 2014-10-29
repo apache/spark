@@ -22,16 +22,15 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
-import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
  * :: Experimental ::
  * Evaluator for regression.
  *
- * @param valuesAndPreds an RDD of (value, pred) pairs.
+ * @param predictionAndObservations an RDD of (prediction,observation) pairs.
  */
 @Experimental
-class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
+class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
 
   /**
    * Use MultivariateOnlineSummarizer to calculate mean and variance of different combination.
@@ -39,11 +38,11 @@ class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
    * in a online fashion.
    */
   private lazy val summarizer: MultivariateOnlineSummarizer = {
-    val summarizer: MultivariateOnlineSummarizer = valuesAndPreds.map{
-      case (value,pred) => Vectors.dense(
-        Array(value, value - pred, math.abs(value - pred), math.pow(value - pred, 2.0))
+    val summarizer: MultivariateOnlineSummarizer = predictionAndObservations.map{
+      case (prediction,observation) => Vectors.dense(
+        Array(observation, observation - prediction)
       )
-    }.treeAggregate(new MultivariateOnlineSummarizer())(
+    }.aggregate(new MultivariateOnlineSummarizer())(
         (summary, v) => summary.add(v),
         (sum1,sum2) => sum1.merge(sum2)
       )
@@ -51,33 +50,43 @@ class RegressionMetrics(valuesAndPreds: RDD[(Double, Double)]) extends Logging {
   }
 
   /**
-   * Computes the explained variance regression score
+   * Returns the explained variance regression score.
+   * explainedVarianceScore = 1 - variance(y - \hat{y}) / variance(y)
+   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    */
-  def explainedVarianceScore(): Double = {
+  def explainedVarianceScore: Double = {
     1 - summarizer.variance(1) / summarizer.variance(0)
   }
 
   /**
-   * Computes the mean absolute error, which is a risk function corresponding to the
+   * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    */
-  def mae(): Double = {
-    summarizer.mean(2)
+  def meanAbsoluteError: Double = {
+    summarizer.normL1(1) / summarizer.count
   }
 
   /**
-   * Computes the mean square error, which is a risk function corresponding to the
+   * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    */
-  def mse(): Double = {
-    summarizer.mean(3)
+  def meanSquaredError: Double = {
+    summarizer.normL2(1) * summarizer.normL2(1) / summarizer.count
   }
 
   /**
-   * Computes R^2^, the coefficient of determination.
-   * @return
+   * Returns the root mean squared error, which is defined as the square root of
+   * the mean squared error.
    */
-  def r2_score(): Double = {
-    1 - summarizer.mean(3) * summarizer.count / (summarizer.variance(0) * (summarizer.count - 1))
+  def rootMeanSquaredError: Double = {
+    summarizer.normL2(1) / math.sqrt(summarizer.count)
+  }
+
+  /**
+   * Returns R^2^, the coefficient of determination.
+   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   */
+  def r2Score: Double = {
+    1 - summarizer.normL2(1) * summarizer.normL2(1) / (summarizer.variance(0) * (summarizer.count - 1))
   }
 }

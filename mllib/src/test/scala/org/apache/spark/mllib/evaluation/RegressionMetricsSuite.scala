@@ -18,28 +18,35 @@
 package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
 class RegressionMetricsSuite extends FunSuite with LocalSparkContext {
 
   test("regression metrics") {
-    val valuesAndPreds = sc.parallelize(
-      Seq((3.0,2.5),(-0.5,0.0),(2.0,2.0),(7.0,8.0)),2)
-    val metrics = new RegressionMetrics(valuesAndPreds)
-    assert(metrics.explainedVarianceScore() ~== 0.95717 absTol 1E-5,"explained variance regression score mismatch")
-    assert(metrics.mae() ~== 0.5 absTol 1E-5, "mean absolute error mismatch")
-    assert(metrics.mse() ~== 0.375 absTol 1E-5, "mean square error mismatch")
-    assert(metrics.r2_score() ~== 0.94861 absTol 1E-5, "r2 score mismatch")
+    val predictionAndObservations = sc.parallelize(
+      Seq((2.5,3.0),(0.0,-0.5),(2.0,2.0),(8.0,7.0)),2)
+    val metrics = new RegressionMetrics(predictionAndObservations)
+    assert(metrics.explainedVarianceScore ~== 0.95717 absTol 1E-5,
+      "explained variance regression score mismatch")
+    assert(metrics.meanAbsoluteError ~== 0.5 absTol 1E-5, "mean absolute error mismatch")
+    assert(metrics.meanSquaredError ~== 0.375 absTol 1E-5, "mean squared error mismatch")
+    assert(metrics.rootMeanSquaredError ~== 0.61237 absTol 1E-5,
+      "root mean squared error mismatch")
+    assert(metrics.r2Score ~== 0.94861 absTol 1E-5, "r2 score mismatch")
   }
 
   test("regression metrics with complete fitting") {
-    val valuesAndPreds = sc.parallelize(
+    val predictionAndObservations = sc.parallelize(
       Seq((3.0,3.0),(0.0,0.0),(2.0,2.0),(8.0,8.0)),2)
-    val metrics = new RegressionMetrics(valuesAndPreds)
-    assert(metrics.explainedVarianceScore() ~== 1.0 absTol 1E-5,"explained variance regression score mismatch")
-    assert(metrics.mae() ~== 0.0 absTol 1E-5, "mean absolute error mismatch")
-    assert(metrics.mse() ~== 0.0 absTol 1E-5, "mean square error mismatch")
-    assert(metrics.r2_score() ~== 1.0 absTol 1E-5, "r2 score mismatch")
+    val metrics = new RegressionMetrics(predictionAndObservations)
+    assert(metrics.explainedVarianceScore ~== 1.0 absTol 1E-5,
+      "explained variance regression score mismatch")
+    assert(metrics.meanAbsoluteError ~== 0.0 absTol 1E-5, "mean absolute error mismatch")
+    assert(metrics.meanSquaredError ~== 0.0 absTol 1E-5, "mean squared error mismatch")
+    assert(metrics.rootMeanSquaredError ~== 0.0 absTol 1E-5,
+      "root mean squared error mismatch")
+    assert(metrics.r2Score ~== 1.0 absTol 1E-5, "r2 score mismatch")
   }
 }
