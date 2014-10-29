@@ -183,7 +183,7 @@ case class Rtrim(child: Expression) extends UnaryExpression with StringTransform
  */
 case class Length(child: Expression) extends UnaryExpression with StringCalculationExpression {
 
-    override def convert(v: String): String = v.length()
+    override def calc(v: String): Int = v.length()
 
     override def toString() = s"Length($child)"
 }
