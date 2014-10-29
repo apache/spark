@@ -655,6 +655,13 @@ Apart from these, the following properties are also available, and may be useful
     the driver know that the executor is still alive and update it with metrics for in-progress
     tasks.</td>
 </tr>
+<tr>
+    <td><code>spark.executor.sendThreadDumps</code></td>
+    <td>true</td>
+    <td>If set to true, executors will periodically send thread dumps to the driver for display
+    in the web UI.  The frequency of these dumps is controlled by
+    <code>spark.executor.heartbeatInterval</code>./td>
+</tr>
 </table>
 
 #### Networking

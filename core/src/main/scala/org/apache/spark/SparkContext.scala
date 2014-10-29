@@ -244,7 +244,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   // If we are not running in local mode, then start a new timer thread for capturing driver thread
   // dumps for display in the web UI (in local mode, this is handled by the local Executor):
   private val threadDumpTimer = new Timer("Driver thread dump timer", true)
-  if (!isLocal) {
+  if (!isLocal && conf.getBoolean("spark.executor.sendThreadDumps", true)) {
     val threadDumpInterval = conf.getInt("spark.executor.heartbeatInterval", 10000)
     threadDumpTimer.scheduleAtFixedRate(new TimerTask {
       override def run(): Unit = {

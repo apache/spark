@@ -355,14 +355,17 @@ private[spark] class Executor(
     val retryAttempts = AkkaUtils.numRetries(conf)
     val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
     val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+    val threadDumpsEnabled = conf.getBoolean("spark.executor.sendThreadDumps", true)
 
     val t = new Thread() {
       override def run() {
         // Sleep a random interval so the heartbeats don't end up in sync
         Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
         while (!isStopped) {
-          // Send the thread-dump as a fire-and-forget, best-effort message:
-          heartbeatReceiverRef ! ThreadDump(executorId, Utils.getThreadDump())
+          if (threadDumpsEnabled) {
+            // Send the thread-dump as a fire-and-forget, best-effort message:
+            heartbeatReceiverRef ! ThreadDump(executorId, Utils.getThreadDump())
+          }
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
             if (!taskRunner.attemptedTask.isEmpty) {
