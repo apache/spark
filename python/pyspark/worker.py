@@ -19,7 +19,6 @@
 Worker that receives input from Piped RDD.
 """
 import os
-import pprint
 import sys
 import time
 import socket
@@ -73,12 +72,7 @@ def main(infile, outfile):
             value = ser._read_with_length(infile)
             _broadcastRegistry[bid] = Broadcast(bid, value)
 
-        try:
-            command = pickleSer._read_with_length(infile)
-        except ImportError:
-            pprint.pprint(sys.modules)
-            pprint.pprint(sys.path)
-            raise
+        command = pickleSer._read_with_length(infile)
         (func, deserializer, serializer) = command
         init_time = time.time()
         iterator = deserializer.load_stream(infile)
