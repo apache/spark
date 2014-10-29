@@ -19,15 +19,13 @@ package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.Queue
+import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 
-import org.apache.spark.{TaskContext, Logging}
-import org.apache.spark.network.{ManagedBuffer, BlockFetchingListener, BlockTransferService}
+import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.Utils
-
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -88,16 +86,50 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] val results = new LinkedBlockingQueue[FetchResult]
 
-  // Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
-  // the number of bytes in flight is limited to maxBytesInFlight
+  /**
+   * Current [[FetchResult]] being processed. We track this so we can release the current buffer
+   * in case of a runtime exception when processing the current buffer.
+   */
+  private[this] var currentResult: FetchResult = null
+
+  /**
+   * Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
+   * the number of bytes in flight is limited to maxBytesInFlight.
+   */
   private[this] val fetchRequests = new Queue[FetchRequest]
 
-  // Current bytes in flight from our requests
+  /** Current bytes in flight from our requests */
   private[this] var bytesInFlight = 0L
 
   private[this] val shuffleMetrics = context.taskMetrics.createShuffleReadMetricsForDependency()
 
+  /**
+   * Whether the iterator is still active. If isZombie is true, the callback interface will no
+   * longer place fetched blocks into [[results]].
+   */
+  @volatile private[this] var isZombie = false
+
   initialize()
+
+  /**
+   * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
+   */
+  private[this] def cleanup() {
+    isZombie = true
+    // Release the current buffer if necessary
+    if (currentResult != null && !currentResult.failed) {
+      currentResult.buf.release()
+    }
+
+    // Release buffers in the results queue
+    val iter = results.iterator()
+    while (iter.hasNext) {
+      val result = iter.next()
+      if (!result.failed) {
+        result.buf.release()
+      }
+    }
+  }
 
   private[this] def sendRequest(req: FetchRequest) {
     logDebug("Sending request for %d blocks (%s) from %s".format(
@@ -110,24 +142,23 @@ final class ShuffleBlockFetcherIterator(
 
     blockTransferService.fetchBlocks(req.address.host, req.address.port, blockIds,
       new BlockFetchingListener {
-        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-          results.put(new FetchResult(BlockId(blockId), sizeMap(blockId),
-            () => serializer.newInstance().deserializeStream(
-              blockManager.wrapForCompression(BlockId(blockId), data.inputStream())).asIterator
-          ))
-          shuffleMetrics.remoteBytesRead += data.size
-          shuffleMetrics.remoteBlocksFetched += 1
-          logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+        override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
+          // Only add the buffer to results queue if the iterator is not zombie,
+          // i.e. cleanup() has not been called yet.
+          if (!isZombie) {
+            // Increment the ref count because we need to pass this to a different thread.
+            // This needs to be released after use.
+            buf.retain()
+            results.put(new FetchResult(BlockId(blockId), sizeMap(blockId), buf))
+            shuffleMetrics.remoteBytesRead += buf.size
+            shuffleMetrics.remoteBlocksFetched += 1
+          }
+          logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
 
-        override def onBlockFetchFailure(e: Throwable): Unit = {
+        override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
           logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-          // Note that there is a chance that some blocks have been fetched successfully, but we
-          // still add them to the failed queue. This is fine because when the caller see a
-          // FetchFailedException, it is going to fail the entire task anyway.
-          for ((blockId, size) <- req.blocks) {
-            results.put(new FetchResult(blockId, -1, null))
-          }
+          results.put(new FetchResult(BlockId(blockId), -1, null))
         }
       }
     )
@@ -138,7 +169,7 @@ final class ShuffleBlockFetcherIterator(
     // smaller than maxBytesInFlight is to allow multiple, parallel fetches from up to 5
     // nodes, rather than blocking on reading output from one node.
     val targetRequestSize = math.max(maxBytesInFlight / 5, 1L)
-    logInfo("maxBytesInFlight: " + maxBytesInFlight + ", targetRequestSize: " + targetRequestSize)
+    logDebug("maxBytesInFlight: " + maxBytesInFlight + ", targetRequestSize: " + targetRequestSize)
 
     // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
     // at most maxBytesInFlight in order to limit the amount of data in flight.
@@ -185,26 +216,34 @@ final class ShuffleBlockFetcherIterator(
     remoteRequests
   }
 
+  /**
+   * Fetch the local blocks while we are fetching remote blocks. This is ok because
+   * [[ManagedBuffer]]'s memory is allocated lazily when we create the input stream, so all we
+   * track in-memory are the ManagedBuffer references themselves.
+   */
   private[this] def fetchLocalBlocks() {
-    // Get the local blocks while remote blocks are being fetched. Note that it's okay to do
-    // these all at once because they will just memory-map some files, so they won't consume
-    // any memory that might exceed our maxBytesInFlight
-    for (id <- localBlocks) {
+    val iter = localBlocks.iterator
+    while (iter.hasNext) {
+      val blockId = iter.next()
       try {
+        val buf = blockManager.getBlockData(blockId)
         shuffleMetrics.localBlocksFetched += 1
-        results.put(new FetchResult(
-          id, 0, () => blockManager.getLocalShuffleFromDisk(id, serializer).get))
-        logDebug("Got local block " + id)
+        buf.retain()
+        results.put(new FetchResult(blockId, 0, buf))
       } catch {
         case e: Exception =>
+          // If we see an exception, stop immediately.
           logError(s"Error occurred while fetching local blocks", e)
-          results.put(new FetchResult(id, -1, null))
+          results.put(new FetchResult(blockId, -1, null))
           return
       }
     }
   }
 
   private[this] def initialize(): Unit = {
+    // Add a task completion callback (called in both success case and failure case) to cleanup.
+    context.addTaskCompletionListener(_ => cleanup())
+
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()
     // Add the remote requests into our queue in a random order
@@ -229,7 +268,8 @@ final class ShuffleBlockFetcherIterator(
   override def next(): (BlockId, Option[Iterator[Any]]) = {
     numBlocksProcessed += 1
     val startFetchWait = System.currentTimeMillis()
-    val result = results.take()
+    currentResult = results.take()
+    val result = currentResult
     val stopFetchWait = System.currentTimeMillis()
     shuffleMetrics.fetchWaitTime += (stopFetchWait - startFetchWait)
     if (!result.failed) {
@@ -240,7 +280,21 @@ final class ShuffleBlockFetcherIterator(
       (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
       sendRequest(fetchRequests.dequeue())
     }
-    (result.blockId, if (result.failed) None else Some(result.deserialize()))
+
+    val iteratorOpt: Option[Iterator[Any]] = if (result.failed) {
+      None
+    } else {
+      val is = blockManager.wrapForCompression(result.blockId, result.buf.createInputStream())
+      val iter = serializer.newInstance().deserializeStream(is).asIterator
+      Some(CompletionIterator[Any, Iterator[Any]](iter, {
+        // Once the iterator is exhausted, release the buffer and set currentResult to null
+        // so we don't release it again in cleanup.
+        currentResult = null
+        result.buf.release()
+      }))
+    }
+
+    (result.blockId, iteratorOpt)
   }
 }
 
@@ -254,7 +308,7 @@ object ShuffleBlockFetcherIterator {
    * @param blocks Sequence of tuple, where the first element is the block id,
    *               and the second element is the estimated size, used to calculate bytesInFlight.
    */
-  class FetchRequest(val address: BlockManagerId, val blocks: Seq[(BlockId, Long)]) {
+  case class FetchRequest(address: BlockManagerId, blocks: Seq[(BlockId, Long)]) {
     val size = blocks.map(_._2).sum
   }
 
@@ -262,10 +316,11 @@ object ShuffleBlockFetcherIterator {
    * Result of a fetch from a remote block. A failure is represented as size == -1.
    * @param blockId block id
    * @param size estimated size of the block, used to calculate bytesInFlight.
-   *             Note that this is NOT the exact bytes.
-   * @param deserialize closure to return the result in the form of an Iterator.
+   *             Note that this is NOT the exact bytes. -1 if failure is present.
+   * @param buf [[ManagedBuffer]] for the content. null is error.
    */
-  class FetchResult(val blockId: BlockId, val size: Long, val deserialize: () => Iterator[Any]) {
+  case class FetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer) {
     def failed: Boolean = size == -1
+    if (failed) assert(buf == null) else assert(buf != null)
   }
 }
