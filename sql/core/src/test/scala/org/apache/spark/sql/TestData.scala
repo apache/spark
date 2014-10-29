@@ -72,6 +72,16 @@ object TestData {
 
   val emptyTableData = logical.LocalRelation('a.int, 'b.int)
 
+  case class UntrimmedData(N: Int, L: String)
+  val untrimmedData =
+    TestSQLContext.sparkContext.parallelize(
+      UntrimmedData(1, " Good ") ::
+      UntrimmedData(2, "To ") ::
+      UntrimmedData(3, " See") ::
+      UntrimmedData(4, " You ! ") :: Nil).toSchemaRDD
+    untrimmedData.registerTempTable("untrimmedData")
+
+
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
     TestSQLContext.sparkContext.parallelize(

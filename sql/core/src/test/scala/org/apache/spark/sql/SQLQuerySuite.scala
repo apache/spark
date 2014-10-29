@@ -500,6 +500,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         (2, "abc"),
         (3, null)))
   }
+  test("system function trim()") {
+    checkAnswer(
+      sql("SELECT N,TRIM(L) FROM untrimmedData"),
+      Seq(
+        (1, "Good"),
+        (2, "To"),
+        (3, "See"),
+        (4, "You !")
+        ))
+
+    checkAnswer(
+      sql("SELECT n, TRIM(s) FROM nullStrings"),
+        Seq(
+          (1, "abc"),
+          (2, "ABC"),
+          (3, null)))
+    }
 
   test("UNION") {
     checkAnswer(
