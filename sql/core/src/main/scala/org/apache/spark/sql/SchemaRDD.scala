@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.Pickler
 
@@ -33,14 +32,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-<<<<<<< HEAD
-import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.storage.StorageLevel
-=======
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
-import org.apache.spark.api.java.JavaRDD
->>>>>>> upstream/master
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: AlphaComponent ::
