@@ -51,6 +51,11 @@ object MimaExcludes {
             // MapStatus should be private[spark]
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
               "org.apache.spark.scheduler.MapStatus"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.PathResolver"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.client.BlockClientListener"),
+
             // TaskContext was promoted to Abstract class
             ProblemFilters.exclude[AbstractClassProblem](
               "org.apache.spark.TaskContext"),
@@ -68,6 +73,10 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.collectAsync")
+          ) ++ Seq(
+            // SPARK-3822
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
           )
 
         case v if v.startsWith("1.1") =>
