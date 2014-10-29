@@ -137,7 +137,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     val listener = new ExecutorAllocationListener(this)
     sc.addSparkListener(listener)
     startPolling()
-    // TODO: start at `maxNumExecutors` once SPARK-3822 goes in
   }
 
   /**
@@ -207,8 +206,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
         maxNumExecutors - numExistingExecutors
       }
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
-    // TODO: Actually request executors once SPARK-3822 goes in
-    val addRequestAcknowledged = true // sc.requestExecutors(actualNumbersToAdd)
+    val addRequestAcknowledged = sc.requestExecutors(actualNumExecutorsToAdd)
     if (addRequestAcknowledged) {
       logInfo(s"Requesting $actualNumExecutorsToAdd new executor(s) because " +
         s"tasks are backlogged (new desired total will be $newTotalExecutors)")
@@ -250,8 +248,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     }
 
     // Send a request to the backend to kill this executor
-    // TODO: Actually kill the executor once SPARK-3822 goes in
-    val removeRequestAcknowledged = true // sc.killExecutor(executorId)
+    val removeRequestAcknowledged = sc.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$removeThresholdSeconds seconds (new desired total will be ${numExistingExecutors - 1})")
