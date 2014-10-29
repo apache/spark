@@ -239,7 +239,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     try {
       val logStatus = fs.listStatus(new Path(resolvedLogDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
-      val maxAge = conf.getLong("spark.history.fs.maxAge.seconds",
+      val maxAge = conf.getLong("spark.history.fs.cleaner.maxAge.seconds",
         DEFAULT_SPARK_HISTORY_FS_MAXAGE_S) * 1000
 
       val now = System.currentTimeMillis()

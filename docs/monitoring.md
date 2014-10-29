@@ -156,11 +156,11 @@ follows:
     <td>86400</td>
     <td>
       How often the job history cleaner checks for files to delete, in seconds. Defaults to 864000 (one day).
-      Files are only deleted if they are older than spark.history.fs.maxAge-s.
+      Files are only deleted if they are older than spark.history.fs.cleaner.maxAge.seconds.
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.maxAge.seconds</td>
+    <td>spark.history.fs.cleaner.maxAge.seconds</td>
     <td>604800</td>
     <td>
       Job history files older than this many seconds will be deleted when the history cleaner runs.
