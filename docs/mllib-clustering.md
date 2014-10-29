@@ -156,7 +156,11 @@ a dependency.
 
 ## Streaming clustering
 
-When data arrive in a stream, we may want to estimate clusters dynamically, updating them as new data arrive. MLlib provides support for streaming KMeans clustering, with parameters to control the decay (or "forgetfulness") of the estimates. The algorithm uses a generalization of the mini-batch KMeans update rule. For each batch of data, we assign all points to their nearest cluster, compute new cluster centers, then update each cluster using:
+When data arrive in a stream, we may want to estimate clusters dynamically, 
+updating them as new data arrive. MLlib provides support for streaming k-means clustering, 
+with parameters to control the decay (or "forgetfulness") of the estimates. The algorithm 
+uses a generalization of the mini-batch k-means update rule. For each batch of data, we assign 
+all points to their nearest cluster, compute new cluster centers, then update each cluster using:
 
 `\begin{equation}
     c_{t+1} = \frac{c_tn_t\alpha + x_tm_t}{n_t\alpha+m_t}
@@ -165,7 +169,12 @@ When data arrive in a stream, we may want to estimate clusters dynamically, upda
     n_{t+1} = n_t + m_t  
 \end{equation}`
 
-Where `$c_t$` is the previous center for the cluster, `$n_t$` is the number of points assigned to the cluster thus far, `$x_t$` is the new cluster center from the current batch, and `$m_t$` is the number of points added to the cluster in the current batch. The decay factor `$\alpha$` can be used to ignore the past: with `$\alpha$=1` all data will be used from the beginning; with `$\alpha$=0` only the most recent data will be used. This is analogous to an expontentially-weighted moving average.
+Where `$c_t$` is the previous center for the cluster, `$n_t$` is the number of points assigned 
+to the cluster thus far, `$x_t$` is the new cluster center from the current batch, and `$m_t$` 
+is the number of points added to the cluster in the current batch. The decay factor `$\alpha$` 
+can be used to ignore the past: with `$\alpha$=1` all data will be used from the beginning; 
+with `$\alpha$=0` only the most recent data will be used. This is analogous to an 
+exponentially-weighted moving average.
 
 ### Examples
 
@@ -185,7 +194,9 @@ import org.apache.spark.mllib.clustering.StreamingKMeans
 
 {% endhighlight %}
 
-Then we make an input stream of vectors for training, as well as one for testing. We assume a StreamingContext `ssc` has been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info. For this example, we use vector data. 
+Then we make an input stream of vectors for training, as well as a stream of labeled data 
+points for testing. We assume a StreamingContext `ssc` has been created, see 
+[Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info.  
 
 {% highlight scala %}
 
@@ -201,13 +212,14 @@ We create a model with random clusters and specify the number of clusters to fin
 val numDimensions = 3
 val numClusters = 2
 val model = new StreamingKMeans()
-    .setK(numClusters)
-    .setDecayFactor(1.0)
-    .setRandomWeights(numDimensions)
+  .setK(numClusters)
+  .setDecayFactor(1.0)
+  .setRandomWeights(numDimensions)
 
 {% endhighlight %}
 
-Now register the streams for training and testing and start the job, printing the predicted cluster assignments on new data points as they arrive.
+Now register the streams for training and testing and start the job, printing 
+the predicted cluster assignments on new data points as they arrive.
 
 {% highlight scala %}
 
@@ -219,9 +231,12 @@ ssc.awaitTermination()
  
 {% endhighlight %}
 
-As you add new text files with data the cluster centers will update. Each data point should be formatted as `[x1, x2, x3]`. Anytime a text file is placed in `/training/data/dir` 
-the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions. With new data, the cluster centers will change.
-
+As you add new text files with data the cluster centers will update. Each training 
+point should be formatted as `[x1, x2, x3]`, and each test data point
+should be formatted as `(y, [x1, x2, x3])`, where `y` is some useful label or identifier 
+(e.g. a true category assignment). Anytime a text file is placed in `/training/data/dir` 
+the model will update. Anytime a text file is placed in `/testing/data/dir` 
+you will see predictions. With new data, the cluster centers will change!
 
 </div>
 
