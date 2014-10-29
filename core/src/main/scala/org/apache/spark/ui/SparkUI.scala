@@ -23,7 +23,7 @@ import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
-import org.apache.spark.ui.jobs.{JobProgressListener, JobProgressTab}
+import org.apache.spark.ui.jobs.{JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 
 /**
@@ -45,7 +45,7 @@ private[spark] class SparkUI private (
 
   /** Initialize all components of the server. */
   def initialize() {
-    val jobProgressTab = new JobProgressTab(this)
+    val jobProgressTab = new StagesTab(this)
     attachTab(jobProgressTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))

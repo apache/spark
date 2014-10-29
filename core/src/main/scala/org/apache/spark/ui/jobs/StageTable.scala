@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTableBase(
     stages: Seq[StageInfo],
-    parent: JobProgressTab,
+    parent: StagesTab,
     killEnabled: Boolean = false) {
 
   private val listener = parent.listener
@@ -187,7 +187,7 @@ private[ui] class StageTableBase(
 
 private[ui] class FailedStageTable(
     stages: Seq[StageInfo],
-    parent: JobProgressTab,
+    parent: StagesTab,
     killEnabled: Boolean = false)
   extends StageTableBase(stages, parent, killEnabled) {
 

@@ -25,7 +25,7 @@ import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
-private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") {
+private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val listener = parent.listener
   private def isFairScheduler = parent.isFairScheduler

@@ -28,7 +28,7 @@ import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
+private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {

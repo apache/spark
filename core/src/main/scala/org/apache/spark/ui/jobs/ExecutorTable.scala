@@ -25,7 +25,7 @@ import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 /** Stage summary grouped by executors. */
-private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobProgressTab) {
+private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: StagesTab) {
   private val listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {
