@@ -7,9 +7,12 @@ sparkR.onLoad <- function(libname, pkgname) {
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
+  yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
+  
   .sparkREnv$libname <- libname
   .sparkREnv$assemblyJarPath <- assemblyJarPath
   .jinit(classpath=assemblyJarPath, parameters=paste("-Xmx", sparkMem, sep=""))
+  .jaddClassPath(yarn_conf_dir)
 }
 
 #' Initialize a new Spark Context.
