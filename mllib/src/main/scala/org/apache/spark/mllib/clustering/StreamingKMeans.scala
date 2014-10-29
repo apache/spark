@@ -86,13 +86,13 @@ class StreamingKMeansModel(
       closest.reduceByKey(mergeContribs).collect()
 
     // implement update rule
-    for (newP <- pointStats) {
+    pointStats.foreach { case (label, (mean, count)) =>
       // store old count and centroid
-      val oldCount = counts(newP._1)
-      val oldCentroid = centers(newP._1).toBreeze
+      val oldCount = counts(label)
+      val oldCentroid = centers(label).toBreeze
       // get new count and centroid
-      val newCount = newP._2._2
-      val newCentroid = newP._2._1 / newCount.toDouble
+      val newCount = count
+      val newCentroid = mean / newCount.toDouble
       // compute the normalized scale factor that controls forgetting
       val decayFactor = units match {
         case "batches" =>  newCount / (a * oldCount + newCount)
@@ -101,15 +101,15 @@ class StreamingKMeansModel(
       // perform the update
       val updatedCentroid = oldCentroid + (newCentroid - oldCentroid) * decayFactor
       // store the new counts and centers
-      counts(newP._1) = oldCount + newCount
-      centers(newP._1) = Vectors.fromBreeze(updatedCentroid)
+      counts(label) = oldCount + newCount
+      centers(label) = Vectors.fromBreeze(updatedCentroid)
 
       // display the updated cluster centers
-      val display = centers(newP._1).size match {
-        case x if x > 100 => centers(newP._1).toArray.take(100).mkString("[", ",", "...")
-        case _ => centers(newP._1).toArray.mkString("[", ",", "]")
+      val display = centers(label).size match {
+        case x if x > 100 => centers(label).toArray.take(100).mkString("[", ",", "...")
+        case _ => centers(label).toArray.mkString("[", ",", "]")
       }
-      logInfo("Cluster %d updated: %s ".format (newP._1, display))
+      logInfo("Cluster %d updated: %s ".format (label, display))
     }
     new StreamingKMeansModel(centers, counts)
   }
