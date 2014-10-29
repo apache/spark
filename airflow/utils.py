@@ -74,3 +74,9 @@ def alchemy_to_dict(obj):
             value = value.isoformat()
         d[c.name] = value
     return d
+
+def readfile(filepath):
+    f = open(filepath)
+    content = f.read()
+    f.close()
+    return content

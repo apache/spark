@@ -215,17 +215,18 @@ class Airflow(BaseView):
                 'value': {'label': task.task_id}
             })
 
-        def get_downstream(task, edges):
+        def get_upstream(task):
             for t in task.upstream_list:
-                edges.append({
+                edge = {
                     'u': t.task_id,
                     'v': task.task_id,
-                    'value': {'label': ''}
-                })
-                get_downstream(t, edges)
+                }
+                if edge not in edges:
+                    edges.append(edge)
+                    get_upstream(t)
 
         for t in dag.roots:
-            get_downstream(t, edges)
+            get_upstream(t)
 
         dttm = request.args.get('execution_date')
         if dttm:
