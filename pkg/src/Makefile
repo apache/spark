@@ -27,10 +27,10 @@ endif
 
 ifdef USE_YARN
 	MAVEN_YARN_FLAG := "-Pyarn"
-	SBT_YARN_FLAG := "yarn"
+	SBT_YARN_FLAG := yarn
 else
 	MAVEN_YARN_FLAG := ""
-	SBT_YARN_FLAG := ""
+	SBT_YARN_FLAG :=
 endif
 
 all: $(TARGET_NAME)
