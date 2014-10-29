@@ -30,7 +30,11 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
   import KafkaTestUtils._
 
   test("Reliable Kafka input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
+    val sparkConf = new SparkConf()
+      .setMaster(master)
+      .setAppName(framework)
+      .set("spark.streaming.receiver.writeAheadLog.enable", "true")
+    val ssc = new StreamingContext(sparkConf, batchDuration)
     val topic = "test"
     val sent = Map("a" -> 1, "b" -> 1, "c" -> 1)
     createTopic(topic)
@@ -40,7 +44,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
       "group.id" -> s"test-consumer-${random.nextInt(10000)}",
       "auto.offset.reset" -> "smallest")
 
-    val stream = KafkaUtils.createReliableStream[String, String, StringDecoder, StringDecoder](
+    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
       Map(topic -> 1),
@@ -64,7 +68,11 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
   }
 
   test("Verify the offset commit") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
+    val sparkConf = new SparkConf()
+      .setMaster(master)
+      .setAppName(framework)
+      .set("spark.streaming.receiver.writeAheadLog.enable", "true")
+    val ssc = new StreamingContext(sparkConf, batchDuration)
     val topic = "test"
     val sent = Map("a" -> 10, "b" -> 10, "c" -> 10)
     createTopic(topic)
@@ -78,7 +86,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
 
     assert(getCommitOffset(groupId, topic, 0) === 0L)
 
-    val stream = KafkaUtils.createReliableStream[String, String, StringDecoder, StringDecoder](
+    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
       Map(topic -> 1),
@@ -92,7 +100,11 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
   }
 
   test("Verify multiple topics offset commit") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
+    val sparkConf = new SparkConf()
+      .setMaster(master)
+      .setAppName(framework)
+      .set("spark.streaming.receiver.writeAheadLog.enable", "true")
+    val ssc = new StreamingContext(sparkConf, batchDuration)
     val topics = Map("topic1" -> 1, "topic2" -> 1, "topic3" -> 1)
     val sent = Map("a" -> 10, "b" -> 10, "c" -> 10)
     topics.foreach { case (t, _) =>
@@ -108,7 +120,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
 
     topics.foreach { case (t, _) => assert(getCommitOffset(groupId, t, 0) === 0L) }
 
-    val stream = KafkaUtils.createReliableStream[String, String, StringDecoder, StringDecoder](
+    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
       topics,
@@ -125,6 +137,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
     val sparkConf = new SparkConf()
       .setMaster(master)
       .setAppName(framework)
+      .set("spark.streaming.receiver.writeAheadLog.enable", "true")
     var ssc = new StreamingContext(
       sparkConf.clone.set("spark.streaming.blockInterval", "4000"),
       batchDuration)
@@ -141,7 +154,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
       "group.id" -> groupId,
       "auto.offset.reset" -> "smallest")
 
-    KafkaUtils.createReliableStream[String, String, StringDecoder, StringDecoder](
+    KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
       topics,
@@ -161,7 +174,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
 
     // Restart to see if data is consumed from last checkpoint.
     ssc = new StreamingContext(sparkConf, batchDuration)
-    KafkaUtils.createReliableStream[String, String, StringDecoder, StringDecoder](
+    KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
       topics,

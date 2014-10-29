@@ -70,7 +70,8 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, false, storageLevel)
+    val WALEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, WALEnabled, storageLevel)
   }
 
   /**
@@ -141,123 +142,6 @@ object KafkaUtils {
     implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
 
     createStream[K, V, U, T](
-      jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
-  }
-
-  /**
-   * Create an reliable input stream that pulls messages from a Kafka Broker.
-   * @param ssc       StreamingContext object
-   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
-   * @param groupId   The group id for this consumer
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread
-   * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
-   */
-  def createReliableStream(
-      ssc: StreamingContext,
-      zkQuorum: String,
-      groupId: String,
-      topics: Map[String, Int],
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2)
-    : ReceiverInputDStream[(String, String)] = {
-    val kafkaParams = Map[String, String](
-      "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
-      "zookeeper.connection.timeout.ms" -> "10000")
-    createReliableStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, topics, storageLevel)
-  }
-
-  /**
-   * Create an reliable input stream that pulls messages from a Kafka Broker.
-   * @param ssc         StreamingContext object
-   * @param kafkaParams Map of kafka configuration parameters,
-   *                    see http://kafka.apache.org/08/configuration.html
-   * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                    in its own thread.
-   * @param storageLevel Storage level to use for storing the received objects
-   */
-  def createReliableStream[
-    K: ClassTag,
-    V: ClassTag,
-    U <: Decoder[_]: ClassTag,
-    T <: Decoder[_]: ClassTag](
-      ssc: StreamingContext,
-      kafkaParams: Map[String, String],
-      topics: Map[String, Int],
-      storageLevel: StorageLevel
-    ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, true, storageLevel)
-  }
-
-  /**
-   * Create an reliable Java input stream that pulls messages form a Kafka Broker.
-   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
-   * @param jssc      JavaStreamingContext object
-   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
-   * @param groupId   The group id for this consumer
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread
-   */
-  def createReliableStream(
-      jssc: JavaStreamingContext,
-      zkQuorum: String,
-      groupId: String,
-      topics: JMap[String, JInt]
-    ): JavaPairReceiverInputDStream[String, String] = {
-    createReliableStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
-  }
-
-  /**
-   * Create an reliable Java input stream that pulls messages form a Kafka Broker.
-   * @param jssc      JavaStreamingContext object
-   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
-   * @param groupId   The group id for this consumer.
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread.
-   * @param storageLevel RDD storage level.
-   */
-  def createReliableStream(
-      jssc: JavaStreamingContext,
-      zkQuorum: String,
-      groupId: String,
-      topics: JMap[String, JInt],
-      storageLevel: StorageLevel
-    ): JavaPairReceiverInputDStream[String, String] = {
-    createReliableStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
-      storageLevel)
-  }
-
-  /**
-   * Create an reliable Java input stream that pulls messages form a Kafka Broker.
-   * @param jssc      JavaStreamingContext object
-   * @param keyTypeClass Key type of RDD
-   * @param valueTypeClass value type of RDD
-   * @param keyDecoderClass Type of kafka key decoder
-   * @param valueDecoderClass Type of kafka value decoder
-   * @param kafkaParams Map of kafka configuration parameters,
-   *                    see http://kafka.apache.org/08/configuration.html
-   * @param topics  Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                in its own thread
-   * @param storageLevel RDD storage level.
-   */
-  def createReliableStream[K, V, U <: Decoder[_], T <: Decoder[_]](
-      jssc: JavaStreamingContext,
-      keyTypeClass: Class[K],
-      valueTypeClass: Class[V],
-      keyDecoderClass: Class[U],
-      valueDecoderClass: Class[T],
-      kafkaParams: JMap[String, String],
-      topics: JMap[String, JInt],
-      storageLevel: StorageLevel
-    ): JavaPairReceiverInputDStream[K, V] = {
-    implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
-    implicit val valueCmt: ClassTag[V] = ClassTag(valueTypeClass)
-
-    implicit val keyCmd: ClassTag[U] = ClassTag(keyDecoderClass)
-    implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
-
-    createReliableStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
   }
 }

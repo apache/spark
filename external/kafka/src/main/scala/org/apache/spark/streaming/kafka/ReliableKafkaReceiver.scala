@@ -82,7 +82,6 @@ class ReliableKafkaReceiver[
     }
 
     override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
-      // TODO. this should be replaced to reliable store after WAL is ready.
       store(arrayBuffer.asInstanceOf[mutable.ArrayBuffer[Any]])
 
       // Commit and remove the related offsets.
@@ -120,7 +119,7 @@ class ReliableKafkaReceiver[
 
     if (kafkaParams.contains(AUTO_OFFSET_COMMIT) && kafkaParams(AUTO_OFFSET_COMMIT) == "true") {
       logWarning(s"$AUTO_OFFSET_COMMIT should be set to false in ReliableKafkaReceiver, " +
-        "otherwise we cannot enable reliable offset commit mechanism")
+        "otherwise we will manually set it to false to turn off auto offset commit in Kafka")
     }
 
     val props = new Properties()
