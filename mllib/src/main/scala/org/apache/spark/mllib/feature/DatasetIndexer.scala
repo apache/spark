@@ -44,12 +44,17 @@ import org.apache.spark.util.collection.OpenHashSet
  *   val categoricalFeaturesInfo: Map[Int, Int] = datasetIndexer.getCategoricalFeaturesInfo()
  *
  * TODO: Add option for transform: defaultForUnknownValue (default index for unknown category).
+ *
+ * TODO: Add warning if a categorical feature has only 1 category.
  */
 @Experimental
 class DatasetIndexer(
     val maxCategories: Int,
     val ignoreUnrecognizedCategories: Boolean = true)
   extends Logging with Serializable {
+
+  require(maxCategories > 1,
+    s"DatasetIndexer given maxCategories = $maxCategories, but requires maxCategories > 1.")
 
   private class FeatureValueStats(val numFeatures: Int, val maxCategories: Int)
     extends Serializable {
@@ -125,43 +130,44 @@ class DatasetIndexer(
     // For each partition, get (featureValueStats, newNumFeatures).
     //  If all vectors have the same length, then newNumFeatures = -1.
     //  If a vector with a new length is found, then newNumFeatures is set to that length.
-    val partitionFeatureValueSets: RDD[(Option[FeatureValueStats], Int)] = data.mapPartitions { iter =>
-      // Make local copy of featureValueStats.
-      //  This will be None initially if this is the first dataset to be fitted.
-      var localFeatureValueStats: Option[FeatureValueStats] = featureValueStats
-      var localNumFeatures: Int = -1
-      // TODO: Track which features are known to be continuous already, and do not bother
-      //       updating counts for them.  Probably store featureValueCounts in a linked list.
-      iter.foreach {
-        case dv: DenseVector =>
-          localFeatureValueStats match {
-            case Some(fvs) =>
-              if (fvs.numFeatures == dv.size) {
-                fvs.addDenseVector(dv)
-              } else {
-                // non-matching vector lengths
-                localNumFeatures = dv.size
-              }
-            case None =>
-              localFeatureValueStats = Some(new FeatureValueStats(dv.size, maxCategories))
-              localFeatureValueStats.get.addDenseVector(dv)
-          }
-        case sv: SparseVector =>
-          localFeatureValueStats match {
-            case Some(fvs) =>
-              if (fvs.numFeatures == sv.size) {
-                fvs.addSparseVector(sv)
-              } else {
-                // non-matching vector lengths
-                localNumFeatures = sv.size
-              }
-            case None =>
-              localFeatureValueStats = Some(new FeatureValueStats(sv.size, maxCategories))
-              localFeatureValueStats.get.addSparseVector(sv)
-          }
+    val partitionFeatureValueSets: RDD[(Option[FeatureValueStats], Int)] =
+      data.mapPartitions { iter =>
+        // Make local copy of featureValueStats.
+        //  This will be None initially if this is the first dataset to be fitted.
+        var localFeatureValueStats: Option[FeatureValueStats] = featureValueStats
+        var localNumFeatures: Int = -1
+        // TODO: Track which features are known to be continuous already, and do not bother
+        //       updating counts for them.  Probably store featureValueStats in a linked list.
+        iter.foreach {
+          case dv: DenseVector =>
+            localFeatureValueStats match {
+              case Some(fvs) =>
+                if (fvs.numFeatures == dv.size) {
+                  fvs.addDenseVector(dv)
+                } else {
+                  // non-matching vector lengths
+                  localNumFeatures = dv.size
+                }
+              case None =>
+                localFeatureValueStats = Some(new FeatureValueStats(dv.size, maxCategories))
+                localFeatureValueStats.get.addDenseVector(dv)
+            }
+          case sv: SparseVector =>
+            localFeatureValueStats match {
+              case Some(fvs) =>
+                if (fvs.numFeatures == sv.size) {
+                  fvs.addSparseVector(sv)
+                } else {
+                  // non-matching vector lengths
+                  localNumFeatures = sv.size
+                }
+              case None =>
+                localFeatureValueStats = Some(new FeatureValueStats(sv.size, maxCategories))
+                localFeatureValueStats.get.addSparseVector(sv)
+            }
+        }
+        Iterator((localFeatureValueStats, localNumFeatures))
       }
-      Iterator((localFeatureValueStats, localNumFeatures))
-    }
     val (aggFeatureValueStats: Option[FeatureValueStats], newNumFeatures: Int) =
       partitionFeatureValueSets.fold((None, -1)) {
         case ((Some(fvs1), newNumFeatures1), (Some(fvs2), newNumFeatures2)) =>
@@ -212,35 +218,57 @@ class DatasetIndexer(
    */
   def transform(data: RDD[Vector]): RDD[Vector] = {
     val catFeatIdx = getCategoricalFeatureIndexes
-    data.map { v: Vector => v match {
-      case dv: DenseVector =>
-        catFeatIdx.foreach { case (featureIndex, categoryMap) =>
-          dv.values(featureIndex) = categoryMap(dv(featureIndex))
+    data.mapPartitions { iterator =>
+      val sortedCategoricalFeatureIndices = catFeatIdx.keys.toArray.sorted
+      iterator.map { v: Vector =>
+        v match {
+          case dv: DenseVector =>
+            catFeatIdx.foreach { case (featureIndex, categoryMap) =>
+              dv.values(featureIndex) = categoryMap(dv(featureIndex))
+            }
+            dv.asInstanceOf[Vector]
+          case sv: SparseVector =>
+            var sortedFeatInd = 0 // index into sortedCategoricalFeatureIndices
+            var k = 0 // index into non-zero elements of sparse vector
+            while (sortedFeatInd < sortedCategoricalFeatureIndices.size && k < sv.indices.size) {
+              val featInd = sortedCategoricalFeatureIndices(sortedFeatInd)
+              if (featInd < sv.indices(k)) {
+                sortedFeatInd += 1
+              } else if (featInd > sv.indices(k)) {
+                k += 1
+              } else {
+                sv.values(k) = catFeatIdx(featInd)(sv.values(k))
+                sortedFeatInd += 1
+                k += 1
+              }
+            }
+            sv.asInstanceOf[Vector]
         }
-        dv.asInstanceOf[Vector]
-      case sv: SparseVector =>
-        // TODO: This currently converts to a dense vector. After updating
-        //       getCategoricalFeatureIndexes, make this maintain sparsity when possible.
-        val dv = sv.toArray
-        catFeatIdx.foreach { case (featureIndex, categoryMap) =>
-          dv(featureIndex) = categoryMap(dv(featureIndex))
-        }
-        Vectors.dense(dv)
-    }}
+      }
+    }
   }
 
   /**
    * Based on datasets given to [[fit]], decide which features are categorical,
    * and choose indices for categories.
-   * @return  Feature index.  Keys are categorical feature indices (column indices).
+   *
+   * Sparsity: This tries to maintain sparsity by treating value 0.0 specially.
+   *           If a categorical feature takes value 0.0, then value 0.0 is given index 0.
+   *
+   * @return  Feature value index.  Keys are categorical feature indices (column indices).
    *          Values are mappings from original features values to 0-based category indices.
    */
   def getCategoricalFeatureIndexes: Map[Int, Map[Double, Int]] = featureValueStats match {
-    // TODO: It would be ideal to have value 0 set to index 0 to maintain sparsity if possible.
     case Some(fvs) =>
       fvs.featureValueSets.zipWithIndex
         .filter(_._1.size <= maxCategories).map { case (featureValues, featureIndex) =>
-        val sortedFeatureValues = featureValues.iterator.toList.sorted
+        // Get feature values, but remove 0 to treat separately.
+        // If value 0 exists, give it index 0 to maintain sparsity if possible.
+        var sortedFeatureValues = featureValues.iterator.filter(_ != 0.0).toArray.sorted
+        val zeroExists = sortedFeatureValues.size + 1 == featureValues.size
+        if (zeroExists) {
+          sortedFeatureValues = 0.0 +: sortedFeatureValues
+        }
         val categoryMap: Map[Double, Int] = sortedFeatureValues.zipWithIndex.toMap
         (featureIndex, categoryMap)
       }.toMap
