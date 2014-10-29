@@ -28,7 +28,8 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
   val executorsListener = parent.executorsListener
   val jobProgressListener = parent.jobProgressListener
-  val threadDumpEnabled = parent.conf.getBoolean("spark.executor.sendThreadDumps", true)
+  val threadDumpEnabled = parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
+  val sc = parent.sc
 
   attachPage(new ExecutorsPage(this, threadDumpEnabled))
   if (threadDumpEnabled) {

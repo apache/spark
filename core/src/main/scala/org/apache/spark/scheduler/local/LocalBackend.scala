@@ -47,7 +47,7 @@ private[spark] class LocalActor(
 
   private var freeCores = totalCores
 
-  private val localExecutorId = "<driver>"
+  private val localExecutorId = "localhost"
   private val localExecutorHostname = "localhost"
 
   val executor = new Executor(

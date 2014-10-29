@@ -31,9 +31,10 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.util.{ThreadStackTrace, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -339,10 +340,6 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
-  }
-
-  override def executorThreadDumpReceived(execId: String, stackTraces: Array[ThreadStackTrace]) {
-    dagScheduler.executorThreadDumpReceived(execId, stackTraces)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {

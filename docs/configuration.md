@@ -395,6 +395,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.threadDumpsEnabled</code></td>
+  <td>true</td>
+  <td>
+    Allows executor and driver thread dumps to be collected and viewed from the web ui.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.enabled</code></td>
   <td>false</td>
   <td>
@@ -654,13 +661,6 @@ Apart from these, the following properties are also available, and may be useful
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
     the driver know that the executor is still alive and update it with metrics for in-progress
     tasks.</td>
-</tr>
-<tr>
-    <td><code>spark.executor.sendThreadDumps</code></td>
-    <td>true</td>
-    <td>If set to true, executors will periodically send thread dumps to the driver for display
-    in the web UI.  The frequency of these dumps is controlled by
-    <code>spark.executor.heartbeatInterval</code>./td>
 </tr>
 </table>
 

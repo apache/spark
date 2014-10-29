@@ -19,20 +19,23 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.util.Try
 import scala.xml.{Text, Node}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
 
+  private val sc = parent.sc
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val executorId = Option(request.getParameter("executorId")).getOrElse {
       return Text(s"Missing executorId parameter")
     }
-    val maybeThreadDump = parent.jobProgressListener synchronized {
-      parent.jobProgressListener.executorIdToLastThreadDump.get(executorId)
-    }
-    val content = maybeThreadDump.map { case (time, threadDump) =>
+    val time = System.currentTimeMillis()
+    val maybeThreadDump = Try(sc.get.getExecutorThreadDump(executorId))
+
+    val content = maybeThreadDump.map { threadDump =>
       val dumpRows = threadDump.map { thread =>
         <div class="accordion-group">
           <div class="accordion-heading" onclick="$(this).next().toggleClass('hidden')">
@@ -62,7 +65,7 @@ class ThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
         }
         <div class="accordion">{dumpRows}</div>
       </div>
-    }.getOrElse(Text("No thread dump to display"))
+    }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(s"Thread dump for executor $executorId", content, parent)
   }
 }

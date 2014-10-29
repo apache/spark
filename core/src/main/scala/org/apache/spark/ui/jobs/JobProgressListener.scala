@@ -26,7 +26,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.ThreadStackTrace
 
 /**
  * :: DeveloperApi ::
@@ -65,9 +64,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
 
   val executorIdToBlockManagerId = HashMap[String, BlockManagerId]()
-
-  /** Map entries are (last update timestamp, thread dump) pairs */
-  val executorIdToLastThreadDump = HashMap[String, (Long, Array[ThreadStackTrace])]()
 
   var schedulingMode: Option[SchedulingMode] = None
 
@@ -267,11 +263,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val timeDelta =
       taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)
     stageData.executorRunTime += timeDelta
-  }
-
-  override def onExecutorThreadDump(executorThreadDump: SparkListenerExecutorThreadDump) {
-    val timeAndThreadDump = (System.currentTimeMillis(), executorThreadDump.threadStackTraces)
-    executorIdToLastThreadDump.put(executorThreadDump.execId, timeAndThreadDump)
   }
 
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {

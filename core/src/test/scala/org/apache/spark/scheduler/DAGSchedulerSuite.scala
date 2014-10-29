@@ -31,7 +31,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{CallSite, ThreadStackTrace}
+import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
 
 class BuggyDAGEventProcessActor extends Actor {
@@ -83,7 +83,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     override def stop() = {}
     override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
       blockManagerId: BlockManagerId): Boolean = true
-    override def executorThreadDumpReceived(execId: String, threadDump: Array[ThreadStackTrace]) {}
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -374,8 +373,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       override def defaultParallelism() = 2
       override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
         blockManagerId: BlockManagerId): Boolean = true
-      override def executorThreadDumpReceived(execId: String, threadDump: Array[ThreadStackTrace]) {
-      }
     }
     val noKillScheduler = new DAGScheduler(
       sc,

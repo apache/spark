@@ -86,6 +86,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetPeers(blockManagerId) =>
       sender ! getPeers(blockManagerId)
 
+    case GetActorSystemHostPortForExecutor(executorId) =>
+      sender ! getActorSystemHostPortForExecutor(executorId)
+
     case GetMemoryStatus =>
       sender ! memoryStatus
 
@@ -410,6 +413,17 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
     } else {
       Seq.empty
+    }
+  }
+
+  private def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    for (
+      blockManagerId <- blockManagerIdByExecutor.get(executorId);
+      info <- blockManagerInfo.get(blockManagerId);
+      host <- info.slaveActor.path.address.host;
+      port <- info.slaveActor.path.address.port
+    ) yield {
+      (host, port)
     }
   }
 }

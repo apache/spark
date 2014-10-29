@@ -26,7 +26,7 @@ import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{Distribution, Utils, ThreadStackTrace}
+import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
 sealed trait SparkListenerEvent
@@ -76,12 +76,6 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
-
-@DeveloperApi
-case class SparkListenerExecutorThreadDump(
-    execId: String,
-    threadStackTraces: Array[ThreadStackTrace])
-  extends SparkListenerEvent
 
 /**
  * Periodic updates from executors.
@@ -177,11 +171,6 @@ trait SparkListener {
    * Called when the application ends
    */
   def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) { }
-
-  /**
-   * Called when the driver receives thread dumps from an executor in a heartbeat.
-   */
-  def onExecutorThreadDump(executorThreadDump: SparkListenerExecutorThreadDump) {}
 
   /**
    * Called when the driver receives task metrics from an executor in a heartbeat.

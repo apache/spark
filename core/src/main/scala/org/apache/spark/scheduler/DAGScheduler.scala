@@ -39,7 +39,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
-import org.apache.spark.util._
+import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
@@ -172,13 +172,6 @@ class DAGScheduler(
     Await.result(
       blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),
       timeout.duration).asInstanceOf[Boolean]
-  }
-
-  /**
-   * Called by the TaskScheduler when a thread dump is received from an executor.
-   */
-  def executorThreadDumpReceived(execId: String, stackTraces: Array[ThreadStackTrace]) {
-    listenerBus.post(SparkListenerExecutorThreadDump(execId, stackTraces))
   }
 
   // Called by TaskScheduler when an executor fails.

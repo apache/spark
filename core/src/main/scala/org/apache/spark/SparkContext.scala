@@ -21,7 +21,7 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
-import java.util.{Arrays, Properties, Timer, TimerTask, UUID}
+import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
@@ -40,6 +40,7 @@ import akka.actor.Props
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.executor.TriggerThreadDump
 import org.apache.spark.input.WholeTextFileInputFormat
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -50,7 +51,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
-import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
+import org.apache.spark.util._
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -241,18 +242,6 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   // the bound port to the cluster manager properly
   ui.foreach(_.bind())
 
-  // If we are not running in local mode, then start a new timer thread for capturing driver thread
-  // dumps for display in the web UI (in local mode, this is handled by the local Executor):
-  private val threadDumpTimer = new Timer("Driver thread dump timer", true)
-  if (!isLocal && conf.getBoolean("spark.executor.sendThreadDumps", true)) {
-    val threadDumpInterval = conf.getInt("spark.executor.heartbeatInterval", 10000)
-    threadDumpTimer.scheduleAtFixedRate(new TimerTask {
-      override def run(): Unit = {
-        listenerBus.post(SparkListenerExecutorThreadDump("<driver>", Utils.getThreadDump()))
-      }
-    }, threadDumpInterval, threadDumpInterval)
-  }
-
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
@@ -360,6 +349,18 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = new Properties(parent)
+  }
+
+  /** Called by the web UI to obtain executor thread dumps */
+  private[spark] def getExecutorThreadDump(executorId: String): Array[ThreadStackTrace] = {
+    if (executorId == "<driver>") {
+      Utils.getThreadDump()
+    } else {
+      val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
+      val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
+      AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump(), actorRef,
+        AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf))
+    }
   }
 
   private[spark] def getLocalProperties: Properties = localProperties.get()
@@ -971,7 +972,6 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   def stop() {
     postApplicationEnd()
     ui.foreach(_.stop())
-    threadDumpTimer.cancel()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler

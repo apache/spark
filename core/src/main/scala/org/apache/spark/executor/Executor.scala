@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.ActorSystem
+import akka.actor.{Props, ActorSystem}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -92,6 +92,10 @@ private[spark] class Executor(
     }
   }
 
+  // Create an actor for receiving RPCs from the driver
+  private val executorActor = env.actorSystem.actorOf(
+    Props(new ExecutorActor(executorId)), "ExecutorActor")
+
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
@@ -128,6 +132,7 @@ private[spark] class Executor(
 
   def stop() {
     env.metricsSystem.report()
+    env.actorSystem.stop(executorActor)
     isStopped = true
     threadPool.shutdown()
     if (!isLocal) {
@@ -355,17 +360,13 @@ private[spark] class Executor(
     val retryAttempts = AkkaUtils.numRetries(conf)
     val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
     val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
-    val threadDumpsEnabled = conf.getBoolean("spark.executor.sendThreadDumps", true)
 
     val t = new Thread() {
       override def run() {
         // Sleep a random interval so the heartbeats don't end up in sync
         Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
+
         while (!isStopped) {
-          if (threadDumpsEnabled) {
-            // Send the thread-dump as a fire-and-forget, best-effort message:
-            heartbeatReceiverRef ! ThreadDump(executorId, Utils.getThreadDump())
-          }
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
             if (!taskRunner.attemptedTask.isEmpty) {
@@ -384,6 +385,7 @@ private[spark] class Executor(
               }
             }
           }
+
           val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
