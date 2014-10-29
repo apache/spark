@@ -136,8 +136,8 @@ class HierarchicalClusteringModel(object):
     >>> predicted_rdd = model.predict(train_rdd)
     >>> type(predicted_rdd)
     <class 'pyspark.rdd.RDD'>
-    >>> (predicted_rdd.collect() == [0,0,1,1] 
-    ...     or predicted_rdd.collect() == [1,1,0,0] )
+    >>> (predicted_rdd.collect() == [0, 0, 1, 1]
+    ...     or predicted_rdd.collect() == [1, 1, 0, 0] )
     True
     >>> type(model.clusterCenters)
     <type 'list'>
