@@ -71,7 +71,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * expected value of the squared error loss or quadratic loss.
    */
   def meanSquaredError: Double = {
-    summarizer.normL2(1) * summarizer.normL2(1) / summarizer.count
+    math.pow(summarizer.normL2(1),2) / summarizer.count
   }
 
   /**
@@ -87,6 +87,6 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
   def r2Score: Double = {
-    1 - summarizer.normL2(1) * summarizer.normL2(1) / (summarizer.variance(0) * (summarizer.count - 1))
+    1 - math.pow(summarizer.normL2(1),2) / (summarizer.variance(0) * (summarizer.count - 1))
   }
 }
