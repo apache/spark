@@ -133,9 +133,9 @@ class StreamingKMeansModel(
  */
 @DeveloperApi
 class StreamingKMeans(
-     var k: Int,
-     var a: Double,
-     var units: String) extends Logging {
+    var k: Int,
+    var a: Double,
+    var units: String) extends Logging {
 
   protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
 
