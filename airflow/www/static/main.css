@@ -30,3 +30,12 @@ input#execution_date {
 .modal{
     margin-top:5000px;
 }
+pre {
+  overflow: auto;
+  word-wrap: normal;
+  white-space: pre;
+}
+pre code {
+    overflow-wrap: normal;
+    white-space: pre;
+}

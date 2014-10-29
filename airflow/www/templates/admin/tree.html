@@ -99,7 +99,7 @@ function update(source) {
   // Compute the flattened node list. TODO use d3.layout.hierarchy.
   var nodes = tree.nodes(root);
 
-  var height = Math.min(500, nodes.length * barHeight + margin.top + margin.bottom);
+  var height = Math.max(500, nodes.length * barHeight + margin.top + margin.bottom);
   var width = square_x + (num_square * (square_size + square_spacing)) + margin.left + margin.right + 50;
   d3.select("svg").transition()
       .duration(duration)

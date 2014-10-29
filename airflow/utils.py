@@ -32,10 +32,10 @@ def validate_key(k, max_length=250):
     elif len(k) > max_length:
         raise Exception("The key has to be less than {0} characters".format(
             max_length))
-    elif not re.match(r'^[A-Za-z0-9_]+$', k):
+    elif not re.match(r'^[A-Za-z0-9_-]+$', k):
         raise Exception(
-            "The key has to be made of alphanumeric characters and "
-            "undersairflows exclusively")
+            "The key has to be made of alphanumeric characters, dashes "
+            "and underscores exclusively")
     else:
         return True
 

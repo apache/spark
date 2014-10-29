@@ -16,7 +16,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from airflow import macros
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow import settings
 from airflow import utils
@@ -407,6 +406,7 @@ class TaskInstance(Base):
                 logging.info(msg.format(self=self))
             try:
                 if not mark_success:
+                    from airflow import macros
                     jinja_context = {
                         'ti': self,
                         'execution_date': self.execution_date,

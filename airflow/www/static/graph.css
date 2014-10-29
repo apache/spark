@@ -15,7 +15,7 @@ g.node.running rect{
 g.node.failed rect {
     stroke: red;
 }
-input#execution_date {
+input, select {
     margin-bottom: 0px;
 }
 div#svg_container {

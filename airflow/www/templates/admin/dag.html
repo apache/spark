@@ -58,6 +58,9 @@
           <button id="btn_log" type="button" class="btn btn-primary">
             View Log
           </button>
+          <button id="btn_task" type="button" class="btn btn-primary">
+            Task Details
+          </button>
           <hr/>
           <button id="btn_clear" type="button" class="btn btn-primary">
             Clear
@@ -119,6 +122,13 @@
         "?task_id=" + task_id +
         "&dag_id=" + dag_id +
         "&execution_date=" + execution_date;
+      window.location = url;
+    });
+
+    $("#btn_task").click(function(){
+      url = "{{ url_for('airflow.task') }}" +
+        "?task_id=" + task_id +
+        "&dag_id=" + dag_id;
       window.location = url;
     });
 

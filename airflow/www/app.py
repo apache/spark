@@ -7,7 +7,7 @@ from flask import Flask, url_for, Markup, Blueprint, redirect, flash
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
 from flask.ext.admin.contrib.sqla import ModelView
 from flask import request
-from wtforms import Form, DateTimeField
+from wtforms import Form, DateTimeField, SelectField
 
 from pygments import highlight
 from pygments.lexers import PythonLexer
@@ -40,6 +40,15 @@ app.jinja_env.add_extension("chartkick.ext.charts")
 # Date filter form needed for gantt and graph view
 class DateTimeForm(Form):
     execution_date = DateTimeField("Execution date")
+
+class GraphForm(Form):
+    execution_date = DateTimeField("Execution date")
+    arrange = SelectField("Layout", choices=(
+        ('LR', "Left->Right"),
+        ('RL', "Right->Left"),
+        ('TB', "Top->Bottom"),
+        ('BT', "Bottom->Top"),
+    ))
 
 
 @app.route('/')
@@ -97,6 +106,28 @@ class Airflow(BaseView):
         log = "<pre><code>" + log + "</code></pre>"
         title = "Logs for {task_id} on {execution_date}".format(**locals())
         html_code = log
+
+        return self.render(
+            'admin/code.html', html_code=html_code, dag=dag, title=title)
+
+    @expose('/task')
+    def task(self):
+        dag_id = request.args.get('dag_id')
+        task_id = request.args.get('task_id')
+        dag = dagbag.dags[dag_id]
+        task = dag.get_task(task_id)
+
+        s = ''
+        for attr_name in dir(task):
+            if not attr_name.startswith('_'):
+                attr = getattr(task, attr_name)
+                if type(attr) != type(self.task):
+                     s += attr_name + ': ' + str(attr) + '\n'
+
+        s = s.replace('<', '&lt')
+        s = s.replace('>', '&gt')
+        html_code = "<pre><code>" + s + "</code></pre>"
+        title = "Task Details for {task_id}".format(**locals())
 
         return self.render(
             'admin/code.html', html_code=html_code, dag=dag, title=title)
@@ -205,6 +236,7 @@ class Airflow(BaseView):
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
+        arrange = request.args.get('arrange', "LR")
         dag = dagbag.dags[dag_id]
 
         nodes = []
@@ -234,7 +266,7 @@ class Airflow(BaseView):
         else:
             dttm = dag.latest_execution_date or datetime.now().date()
 
-        form = DateTimeForm(data={'execution_date': dttm})
+        form = GraphForm(data={'execution_date': dttm, 'arrange': arrange})
 
         task_instances = {
             ti.task_id: utils.alchemy_to_dict(ti)
@@ -252,6 +284,7 @@ class Airflow(BaseView):
             dag=dag,
             form=form,
             execution_date=dttm.isoformat(),
+            arrange=arrange,
             task_instances=json.dumps(task_instances, indent=2),
             tasks=json.dumps(tasks, indent=2),
             nodes=json.dumps(nodes, indent=2),
