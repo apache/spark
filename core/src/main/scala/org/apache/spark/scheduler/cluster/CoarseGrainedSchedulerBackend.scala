@@ -300,7 +300,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * Return whether the request is acknowledged.
    */
   final def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
-    logInfo(s"Requesting $numAdditionalExecutors additional executors from the cluster manager")
+    logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
     numPendingExecutors += numAdditionalExecutors
     // Account for executors pending to be added or removed

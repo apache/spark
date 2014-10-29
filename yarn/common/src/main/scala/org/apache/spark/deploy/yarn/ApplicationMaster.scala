@@ -505,7 +505,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         driver ! x
 
       case RequestExecutors(requestedTotal) =>
-        logInfo(s"Driver requested $requestedTotal total number of executors.")
+        logInfo(s"Driver requested a total number of executors of $requestedTotal.")
         Option(allocator) match {
           case Some(a) => a.requestTotalExecutors(requestedTotal)
           case None => logWarning("Container allocator is not ready to request executors yet.")
@@ -513,7 +513,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         sender ! true
 
       case KillExecutors(executorIds) =>
-        logInfo(s"Driver requested to kill executors ${executorIds.mkString(", ")}.")
+        logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
         Option(allocator) match {
           case Some(a) => executorIds.foreach(a.killExecutor)
           case None => logWarning("Container allocator is not ready to kill executors yet.")
