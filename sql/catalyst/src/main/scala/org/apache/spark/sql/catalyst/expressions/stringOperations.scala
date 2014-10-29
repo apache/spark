@@ -136,6 +136,36 @@ case class RLike(left: Expression, right: Expression)
 
 
 /**
+ * A function that strip whitespace (or other characters) from the beginning of a string
+ */
+case class Ltrim(child: Expression) extends UnaryExpression with CaseConversionExpression {
+
+    override def convert(v: String): String = v.replaceAll("^\\s+", "")
+
+    override def toString() = s"Ltrim($child)"
+}
+
+/**
+ * A function that strip whitespace (or other characters) from the end of a string
+ */
+case class Rtrim(child: Expression) extends UnaryExpression with CaseConversionExpression {
+
+    override def convert(v: String): String = v.replaceAll("\\s+$", "")
+
+    override def toString() = s"Rtrim($child)"
+}
+
+/**
+ * A function that calculate the length of a string
+ */
+case class Length(child: Expression) extends UnaryExpression with CaseConversionExpression {
+
+    override def convert(v: String): String = v.length()
+
+    override def toString() = s"Length($child)"
+}
+
+/**
  * A function that trim the characters of a string
  */
 case class Trim(child: Expression) extends UnaryExpression with CaseConversionExpression {
@@ -144,7 +174,6 @@ case class Trim(child: Expression) extends UnaryExpression with CaseConversionEx
 
     override def toString() = s"Trim($child)"
 }
-
 
 /**
  * A function that converts the characters of a string to uppercase.
