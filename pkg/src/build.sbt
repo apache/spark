@@ -6,6 +6,8 @@ import AssemblyKeys._
 
 assemblySettings
 
+net.virtualvoid.sbt.graph.Plugin.graphSettings
+
 name := "sparkr"
 
 version := "0.1"
@@ -26,20 +28,27 @@ libraryDependencies ++= Seq(
   val excludeAsm = ExclusionRule(organization = "asm")
   val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
   val sbtYarnFlag = scala.util.Properties.envOrElse("SBT_YARN_FLAG", "")
-  if (sbtYarnFlag == "yarn") {
-    val defaultYarnVersion = "2.4.0"
-    val yarnVersion = scala.util.Properties.envOrElse("SPARK_YARN_VERSION", defaultYarnVersion)
-    libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-api" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
-    libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-common" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
-    libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
-    libraryDependencies += "org.apache.hadoop" % "hadoop-yarn-client" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
-  }
   val defaultHadoopVersion = "1.0.4"
   val defaultSparkVersion = "1.1.0"
   val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", defaultHadoopVersion)
   val sparkVersion = scala.util.Properties.envOrElse("SPARK_VERSION", defaultSparkVersion)
-  libraryDependencies += "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
-  libraryDependencies += "org.apache.spark" % "spark-core_2.10" % sparkVersion
+  libraryDependencies ++= Seq(
+    "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+    "org.apache.spark" % "spark-core_2.10" % sparkVersion
+  ) ++ (if (sbtYarnFlag == "yarn") {
+          val defaultYarnVersion = "2.4.0"
+          val yarnVersion = scala.util.Properties.envOrElse("SPARK_YARN_VERSION", defaultYarnVersion)
+          Seq(
+            "org.apache.hadoop" % "hadoop-yarn-api" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+            "org.apache.hadoop" % "hadoop-yarn-common" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+            "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+            "org.apache.hadoop" % "hadoop-yarn-client" % yarnVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+            "org.apache.spark" % "spark-yarn_2.10" % sparkVersion
+          )
+        } else {
+          None.toSeq
+        }
+      )
 }
 
 resolvers ++= Seq(
