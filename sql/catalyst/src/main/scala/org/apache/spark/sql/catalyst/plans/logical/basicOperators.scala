@@ -149,10 +149,6 @@ case class WindowFunction(
     child: LogicalPlan)
   extends UnaryNode {
 
-  def references =
-    AttributeSet(
-      partitionExpressions.flatMap(_.references) ++ functionExpressions.flatMap(_.references))
-
   override def output = functionExpressions.map(_.toAttribute)
 }
 

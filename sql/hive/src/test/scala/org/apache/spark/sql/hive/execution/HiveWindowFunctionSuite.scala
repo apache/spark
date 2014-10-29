@@ -22,7 +22,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{Row, SchemaRDD}
 
-class HiveWindowFunctionSuit extends HiveComparisonTest {
+class HiveWindowFunctionSuite extends HiveComparisonTest {
 
   override def beforeAll() {
     sql("DROP TABLE IF EXISTS part").collect()
@@ -43,7 +43,10 @@ class HiveWindowFunctionSuit extends HiveComparisonTest {
 
     //remove duplicate data in part_tiny.txt for hive bug
     // https://issues.apache.org/jira/browse/HIVE-8569
-    sql("LOAD DATA LOCAL INPATH '../data/files/part_tiny_without_duplicate.txt' OVERWRITE INTO TABLE part").collect()
+    sql(s"""
+       |LOAD DATA LOCAL INPATH '${getHiveFile("data/files/part_tiny_without_duplicate.txt")}'
+       |OVERWRITE INTO TABLE part
+      """.stripMargin).collect()
   }
 
   createQueryTest("1.testWindowing",
