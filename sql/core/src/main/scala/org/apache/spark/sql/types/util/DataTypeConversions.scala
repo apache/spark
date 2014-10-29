@@ -20,6 +20,7 @@ package org.apache.spark.sql.types.util
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField, MetadataBuilder => JMetaDataBuilder}
 import org.apache.spark.sql.api.java.{DecimalType => JDecimalType}
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.collection.JavaConverters._
 
@@ -121,7 +122,7 @@ protected[sql] object DataTypeConversions {
 
   /** Converts Java objects to catalyst rows / types */
   def convertJavaToCatalyst(a: Any): Any = a match {
-    case d: java.math.BigDecimal => BigDecimal(d)
+    case d: java.math.BigDecimal => Decimal(BigDecimal(d))
     case other => other
   }
 

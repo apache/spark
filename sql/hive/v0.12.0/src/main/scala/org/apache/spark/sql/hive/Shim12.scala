@@ -31,8 +31,8 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
-import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo
+import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
@@ -155,9 +155,12 @@ private[hive] object HiveShim {
 
   def decimalMetastoreString(decimalType: DecimalType): String = "decimal"
 
-  def decimalTypeInfo(decimalType: DecimalType): DecimalTypeInfo = new DecimalTypeInfo()
+  def decimalTypeInfo(decimalType: DecimalType): TypeInfo =
+    TypeInfoFactory.decimalTypeInfo
 
-  def decimalTypeInfoToCatalyst(info: DecimalTypeInfo): DecimalType = DecimalType.Unlimited
+  def decimalTypeInfoToCatalyst(inspector: PrimitiveObjectInspector): DecimalType = {
+    DecimalType.Unlimited
+  }
 
   def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
     Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())

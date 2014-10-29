@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -281,10 +281,8 @@ private[hive] trait HiveInspectors {
     case _: JavaFloatObjectInspector => FloatType
     case _: WritableBinaryObjectInspector => BinaryType
     case _: JavaBinaryObjectInspector => BinaryType
-    case w: WritableHiveDecimalObjectInspector =>
-      HiveShim.decimalTypeInfoToCatalyst(w.getTypeInfo.asInstanceOf[DecimalTypeInfo])
-    case j: JavaHiveDecimalObjectInspector =>
-      HiveShim.decimalTypeInfoToCatalyst(j.getTypeInfo.asInstanceOf[DecimalTypeInfo])
+    case w: WritableHiveDecimalObjectInspector => HiveShim.decimalTypeInfoToCatalyst(w)
+    case j: JavaHiveDecimalObjectInspector => HiveShim.decimalTypeInfoToCatalyst(j)
     case _: WritableDateObjectInspector => DateType
     case _: JavaDateObjectInspector => DateType
     case _: WritableTimestampObjectInspector => TimestampType
