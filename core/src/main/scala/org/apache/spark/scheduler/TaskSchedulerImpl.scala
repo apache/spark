@@ -361,8 +361,7 @@ private[spark] class TaskSchedulerImpl(
   override def executorHeartbeatReceived(
       execId: String,
       taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
-      blockManagerId: BlockManagerId,
-      broadcastInfo: Map[BlockId, BlockStatus]): Boolean = {
+      blockManagerId: BlockManagerId): Boolean = {
     val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
       taskMetrics.flatMap { case (id, metrics) =>
         taskIdToTaskSetId.get(id)
@@ -370,8 +369,7 @@ private[spark] class TaskSchedulerImpl(
           .map(taskSetMgr => (id, taskSetMgr.stageId, taskSetMgr.taskSet.attempt, metrics))
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId,
-      broadcastInfo)
+    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {

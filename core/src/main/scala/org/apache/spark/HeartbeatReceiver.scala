@@ -35,8 +35,7 @@ import org.apache.spark.util.ActorLogReceive
 private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
-    blockManagerId: BlockManagerId,
-    broadcastBlocks: Map[BlockId, BlockStatus])
+    blockManagerId: BlockManagerId)
 
 private[spark] case object ExpireDeadHosts 
     
@@ -67,11 +66,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   }
   
   override def receiveWithLogging = {
-    case Heartbeat(executorId, taskMetrics, blockManagerId,
-      broadcastInfo) =>
+    case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val response = HeartbeatResponse(
-        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId,
-          broadcastInfo))
+        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
       sender ! response
     case ExpireDeadHosts =>
       expireDeadHosts()

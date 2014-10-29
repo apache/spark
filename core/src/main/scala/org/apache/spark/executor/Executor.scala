@@ -421,8 +421,7 @@ private[spark] class Executor(
             }
           }
 
-          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId,
-            env.blockManager.updatedBroadcastVars)
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
 
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
@@ -431,7 +430,6 @@ private[spark] class Executor(
               logWarning("Told to re-register on heartbeat")
               env.blockManager.reregister()
             }
-            env.blockManager.resetBroadcastVarsUpdateTrack
           } catch {
             case NonFatal(t) => logWarning("Issue communicating with driver in heartbeater", t)
           }

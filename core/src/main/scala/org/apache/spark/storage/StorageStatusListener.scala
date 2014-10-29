@@ -88,14 +88,6 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onExecutorMetricsUpdate(
-       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
-    if (executorMetricsUpdate.broadcastInfo != null) {
-      val validBroadcastInfo = executorMetricsUpdate.broadcastInfo
-      updateStorageStatus(executorMetricsUpdate.execId, validBroadcastInfo.toSeq)
-    }
-  }
-
   /**
    * In the local mode, there is a discrepancy between the executor ID according to the
    * task ("localhost") and that according to SparkEnv ("<driver>"). In the UI, this
