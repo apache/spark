@@ -328,7 +328,6 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      threadDump: Array[ThreadStackTrace],
       taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
       blockManagerId: BlockManagerId): Boolean = {
 
@@ -339,7 +338,11 @@ private[spark] class TaskSchedulerImpl(
           .map(taskSetMgr => (id, taskSetMgr.stageId, taskSetMgr.taskSet.attempt, metrics))
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, threadDump, metricsWithStageIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
+  }
+
+  override def executorThreadDumpReceived(execId: String, stackTraces: Array[ThreadStackTrace]) {
+    dagScheduler.executorThreadDumpReceived(execId, stackTraces)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {

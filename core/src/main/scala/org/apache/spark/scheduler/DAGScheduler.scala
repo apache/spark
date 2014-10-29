@@ -164,16 +164,21 @@ class DAGScheduler(
    */
   def executorHeartbeatReceived(
       execId: String,
-      threadStackTraces: Array[ThreadStackTrace],
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
-    listenerBus.post(SparkListenerExecutorThreadDump(execId, threadStackTraces))
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     implicit val timeout = Timeout(600 seconds)
 
     Await.result(
       blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),
       timeout.duration).asInstanceOf[Boolean]
+  }
+
+  /**
+   * Called by the TaskScheduler when a thread dump is received from an executor.
+   */
+  def executorThreadDumpReceived(execId: String, stackTraces: Array[ThreadStackTrace]) {
+    listenerBus.post(SparkListenerExecutorThreadDump(execId, stackTraces))
   }
 
   // Called by TaskScheduler when an executor fails.

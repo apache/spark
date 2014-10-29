@@ -29,11 +29,15 @@ import org.apache.spark.util.{ActorLogReceive, ThreadStackTrace}
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    threadDump: Array[ThreadStackTrace],
     taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
     blockManagerId: BlockManagerId)
 
 private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
+
+/**
+ * A thread dump sent from executors to the driver.
+ */
+private[spark] case class ThreadDump(executorId: String, threadStackTraces: Array[ThreadStackTrace])
 
 /**
  * Lives in the driver to receive heartbeats from executors.
@@ -42,9 +46,11 @@ private[spark] class HeartbeatReceiver(scheduler: TaskScheduler)
   extends Actor with ActorLogReceive with Logging {
 
   override def receiveWithLogging = {
-    case Heartbeat(executorId, threadDump, taskMetrics, blockManagerId) =>
+    case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val response = HeartbeatResponse(
-        ! scheduler.executorHeartbeatReceived(executorId, threadDump, taskMetrics, blockManagerId))
+        ! scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
       sender ! response
+    case ThreadDump(executorId, stackTraces: Array[ThreadStackTrace]) =>
+      scheduler.executorThreadDumpReceived(executorId, stackTraces)
   }
 }

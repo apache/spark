@@ -361,6 +361,8 @@ private[spark] class Executor(
         // Sleep a random interval so the heartbeats don't end up in sync
         Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
         while (!isStopped) {
+          // Send the thread-dump as a fire-and-forget, best-effort message:
+          heartbeatReceiverRef ! ThreadDump(executorId, Utils.getThreadDump())
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
             if (!taskRunner.attemptedTask.isEmpty) {
@@ -379,8 +381,7 @@ private[spark] class Executor(
               }
             }
           }
-          val message = Heartbeat(executorId, Utils.getThreadDump(), tasksMetrics.toArray,
-            env.blockManager.blockManagerId)
+          val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
           try {
             val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
               retryAttempts, retryIntervalMs, timeout)

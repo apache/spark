@@ -81,11 +81,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
     override def start() = {}
     override def stop() = {}
-    override def executorHeartbeatReceived(
-      execId: String,
-      threadStackTraces: Array[ThreadStackTrace],
-      taskMetrics: Array[(Long, TaskMetrics)],
+    override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
       blockManagerId: BlockManagerId): Boolean = true
+    override def executorThreadDumpReceived(execId: String, threadDump: Array[ThreadStackTrace]) {}
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -374,11 +372,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
       override def defaultParallelism() = 2
-      override def executorHeartbeatReceived(
-        execId: String,
-        threadStackTraces: Array[ThreadStackTrace],
-        taskMetrics: Array[(Long, TaskMetrics)],
+      override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
         blockManagerId: BlockManagerId): Boolean = true
+      override def executorThreadDumpReceived(execId: String, threadDump: Array[ThreadStackTrace]) {
+      }
     }
     val noKillScheduler = new DAGScheduler(
       sc,

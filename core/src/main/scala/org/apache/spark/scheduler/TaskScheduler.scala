@@ -65,12 +65,13 @@ private[spark] trait TaskScheduler {
    * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
    */
-  def executorHeartbeatReceived(
-      execId: String,
-      threadStackTraces: Array[ThreadStackTrace],
-      taskMetrics: Array[(Long, TaskMetrics)],
-      blockManagerId: BlockManagerId
-    ): Boolean
+  def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+                                blockManagerId: BlockManagerId): Boolean
+
+  /**
+   * Called when a thread dump has been received from an executor.
+   */
+  def executorThreadDumpReceived(execId: String, stackTraces: Array[ThreadStackTrace])
 
   /**
    * Get an application ID associated with the job.
