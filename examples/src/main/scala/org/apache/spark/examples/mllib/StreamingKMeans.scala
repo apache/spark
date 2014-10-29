@@ -18,6 +18,7 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.clustering.StreamingKMeans
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -27,9 +28,13 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  * on another stream, where the data streams arrive as text files
  * into two different directories.
  *
- * The rows of the text files must be vector data in the form
+ * The rows of the training text files must be vector data in the form
  * `[x1,x2,x3,...,xn]`
- * Where n is the number of dimensions. n must be the same for train and test.
+ * Where n is the number of dimensions.
+ *
+ * The rows of the test text files must be labeled data in the form
+ * `(y,[x1,x2,x3,...,xn])`
+ * Where y is some identifier. n must be the same for train and test.
  *
  * Usage: StreamingKmeans <trainingDir> <testDir> <batchDuration> <numClusters> <numDimensions>
  *
@@ -57,7 +62,7 @@ object StreamingKMeans {
     val ssc = new StreamingContext(conf, Seconds(args(2).toLong))
 
     val trainingData = ssc.textFileStream(args(0)).map(Vectors.parse)
-    val testData = ssc.textFileStream(args(1)).map(Vectors.parse)
+    val testData = ssc.textFileStream(args(1)).map(LabeledPoint.parse)
 
     val model = new StreamingKMeans()
       .setK(args(3).toInt)
@@ -65,7 +70,7 @@ object StreamingKMeans {
       .setRandomCenters(args(4).toInt)
 
     model.trainOn(trainingData)
-    model.predictOn(testData).print()
+    model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()
 
     ssc.start()
     ssc.awaitTermination()

@@ -180,6 +180,7 @@ First we import the neccessary classes.
 {% highlight scala %}
 
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.clustering.StreamingKMeans
 
 {% endhighlight %}
@@ -189,7 +190,7 @@ Then we make an input stream of vectors for training, as well as one for testing
 {% highlight scala %}
 
 val trainingData = ssc.textFileStream("/training/data/dir").map(Vectors.parse)
-val testData = ssc.textFileStream("/testing/data/dir").map(Vectors.parse)
+val testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
 
 {% endhighlight %}
 
@@ -211,7 +212,7 @@ Now register the streams for training and testing and start the job, printing th
 {% highlight scala %}
 
 model.trainOn(trainingData)
-model.predictOn(testData).print()
+model.predictOnValues(testData).print()
 
 ssc.start()
 ssc.awaitTermination()
