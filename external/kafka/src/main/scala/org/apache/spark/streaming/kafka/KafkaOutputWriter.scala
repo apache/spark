@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import kafka.producer.{ProducerConfig, KeyedMessage, Producer}
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 
@@ -79,7 +80,7 @@ object KafkaWriter {
  * @param dstream - The [[DStream]] to be written to Kafka
  *
  */
-class KafkaWriter[T: ClassTag](@transient dstream: DStream[T]) {
+class KafkaWriter[T: ClassTag](@transient dstream: DStream[T]) extends Logging {
 
   /**
    * To write data from a DStream to Kafka, call this function after creating the DStream. Once
@@ -103,23 +104,21 @@ class KafkaWriter[T: ClassTag](@transient dstream: DStream[T]) {
 
     def func = (rdd: RDD[T]) => {
       rdd.foreachPartition(events => {
-        // The ForEachDStream runs the function locally on the driver. So the
-        // ProducerCache from the driver is likely to get serialized and
-        // sent, which is fine - because at that point the Producer itself is
-        // not initialized, so a None is sent over the wire.
-        // Get the producer from that local executor and write!
-        val producer: Producer[K, V] = {
-          if (ProducerCache.isCached) {
-            ProducerCache.getCachedProducer
-              .asInstanceOf[Producer[K, V]]
-          } else {
-            val producer =
-              new Producer[K, V](new ProducerConfig(broadcastedConfig.value))
-            ProducerCache.cacheProducer(producer)
-            producer
-          }
+        // The ForEachDStream runs the function locally on the driver.
+        // This code can alternatively use sc.runJob, but this approach seemed cleaner.
+        val producer: Producer[K, V] =
+          new Producer[K, V](new ProducerConfig(broadcastedConfig.value))
+        try {
+          producer.send(events.map(serializerFunc).toArray: _*)
+          logDebug("Data sent successfully to Kafka")
+        } catch {
+          case e: Exception =>
+            logError("Failed to send data to Kafka", e)
+            throw e
+        } finally {
+          producer.close()
+          logDebug("Kafka Producer closed successfully.")
         }
-        producer.send(events.map(serializerFunc).toArray: _*)
       })
     }
     dstream.foreachRDD(func)
