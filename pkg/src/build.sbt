@@ -6,8 +6,6 @@ import AssemblyKeys._
 
 assemblySettings
 
-net.virtualvoid.sbt.graph.Plugin.graphSettings
-
 name := "sparkr"
 
 version := "0.1"
