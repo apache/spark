@@ -43,8 +43,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any(), any())).thenAnswer(new Answer[Unit] {
       override def answer(invocation: InvocationOnMock): Unit = {
-        val blocks = invocation.getArguments()(2).asInstanceOf[Seq[String]]
-        val listener = invocation.getArguments()(3).asInstanceOf[BlockFetchingListener]
+        val blocks = invocation.getArguments()(3).asInstanceOf[Array[String]]
+        val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
 
         for (blockId <- blocks) {
           if (data.contains(BlockId(blockId))) {
@@ -137,7 +137,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any(), any())).thenAnswer(new Answer[Unit] {
       override def answer(invocation: InvocationOnMock): Unit = {
-        val listener = invocation.getArguments()(3).asInstanceOf[BlockFetchingListener]
+        val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
         future {
           // Return the first two blocks, and wait till task completion before returning the 3rd one
           listener.onBlockFetchSuccess(
@@ -200,7 +200,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any(), any())).thenAnswer(new Answer[Unit] {
       override def answer(invocation: InvocationOnMock): Unit = {
-        val listener = invocation.getArguments()(3).asInstanceOf[BlockFetchingListener]
+        val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
         future {
           // Return the first block, and then fail.
           listener.onBlockFetchSuccess(

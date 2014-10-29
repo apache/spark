@@ -25,7 +25,8 @@ import org.apache.spark.network.util.{TransportConf, ConfigProvider}
  */
 object SparkTransportConf {
   def fromSparkConf(conf: SparkConf): TransportConf = {
-    new TransportConf(
-      new ConfigProvider { override def get(name: String): String = conf.get(name) })
+    new TransportConf(new ConfigProvider {
+      override def get(name: String): String = conf.get(name)
+    })
   }
 }

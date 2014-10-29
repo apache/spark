@@ -83,10 +83,12 @@ public class TransportClientFactory implements Closeable {
     // If it is not found or not active, create a new one.
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     TransportClient cachedClient = connectionPool.get(address);
-    if (cachedClient != null && cachedClient.isActive()) {
-      return cachedClient;
-    } else if (cachedClient != null) {
-      connectionPool.remove(address, cachedClient); // Remove inactive clients.
+    if (cachedClient != null) {
+      if (cachedClient.isActive()) {
+        return cachedClient;
+      } else {
+        connectionPool.remove(address, cachedClient); // Remove inactive clients.
+      }
     }
 
     logger.debug("Creating new connection to " + address);
@@ -121,7 +123,8 @@ public class TransportClientFactory implements Closeable {
       throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
     }
 
-    // Successful connection
+    // Successful connection -- in the event that two threads raced to create a client, we will
+    // use the first one that was put into the connectionPool and close the one we made here.
     assert client.get() != null : "Channel future completed successfully with null client";
     TransportClient oldClient = connectionPool.putIfAbsent(address, client.get());
     if (oldClient == null) {
