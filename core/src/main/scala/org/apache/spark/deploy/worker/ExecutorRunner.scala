@@ -19,6 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
+import scala.collection.JavaConversions._
+
 import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
@@ -121,17 +123,14 @@ private[spark] class ExecutorRunner(
   def fetchAndRunExecutor() {
     try {
       // Launch the process
-      val newCommand = CommandUtils.buildLocalCommand(appDesc.command, substituteVariables)
-      val command = CommandUtils.buildCommandSeq(newCommand, memory, sparkHome.getAbsolutePath)
-      logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
-      val builder = new ProcessBuilder(command: _*).directory(executorDir)
-      val env = builder.environment()
-      for ((key, value) <- newCommand.environment) {
-        env.put(key, value)
-      }
+      val builder = CommandUtils.buildProcessBuilder(appDesc.command, memory,
+        sparkHome.getAbsolutePath, substituteVariables)
+      val command = builder.command()
+
+      builder.directory(executorDir)
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
-      env.put("SPARK_LAUNCH_WITH_SCALA", "0")
+      builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         command.mkString("\"", "\" \"", "\""), "=" * 40)

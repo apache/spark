@@ -308,9 +308,14 @@ private[spark] trait ClientBase extends Logging {
     val localResources = prepareLocalResources(appStagingDir)
     val launchEnv = setupLaunchEnv(appStagingDir)
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
+    amContainer.setLocalResources(localResources)
+    amContainer.setEnvironment(launchEnv)
 
     val javaOpts = ListBuffer[String]()
-    val prefixEnv = ListBuffer[String]()
+
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    var prefixEnv: Option[String] = None
 
     // Add Xmx for AM memory
     javaOpts += "-Xmx" + args.amMemory + "m"
@@ -351,7 +356,7 @@ private[spark] trait ClientBase extends Logging {
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
-        prefixEnv += Utils.prefixLibraryPath(libraryPaths)
+        prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
       }
     }
 
@@ -396,8 +401,6 @@ private[spark] trait ClientBase extends Logging {
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
     amContainer.setCommands(printableCommands)
-    amContainer.setLocalResources(localResources)
-    amContainer.setEnvironment(launchEnv)
 
     logDebug("===============================================================================")
     logDebug("Yarn AM launch context:")

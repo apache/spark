@@ -23,8 +23,6 @@ import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
-import org.eclipse.jetty.util.MultiException
-
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -39,11 +37,11 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.eclipse.jetty.util.MultiException
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
-import org.apache.spark.util.SparkUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -1723,7 +1721,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return the current system LD_LIBRARY_PATH name
    */
-  def libraryPathName: String = {
+  def libraryPathEnvName: String = {
     if (isWindows) {
       "PATH"
     } else if (isMac) {
@@ -1733,19 +1731,25 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def prefixLibraryPath(libraryPaths: Seq[String]): String = {
+  /**
+   * Return the prefix of a command that appends the given library paths to the
+   * system-specific library path environment variable. On Unix, for instance,
+   * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   */
+  def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
     val libraryPathScriptVar = if (isWindows) {
-      s"%${libraryPathName}%"
+      s"%${libraryPathEnvName}%"
     } else {
-      "$" + libraryPathName
+      "$" + libraryPathEnvName
     }
-    val libraryPath = (libraryPaths :+ libraryPathScriptVar).mkString(File.pathSeparator)
+    val libraryPath = (libraryPaths :+ libraryPathScriptVar).mkString("\"",
+      File.pathSeparator, "\"")
     val ampersand = if (Utils.isWindows) {
       " &"
     } else {
       ""
     }
-    s"$libraryPathName=$libraryPath$ampersand"
+    s"$libraryPathEnvName=$libraryPath$ampersand"
   }
 
 }

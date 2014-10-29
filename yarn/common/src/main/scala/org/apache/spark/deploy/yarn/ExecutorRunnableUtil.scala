@@ -48,7 +48,11 @@ trait ExecutorRunnableUtil extends Logging {
       localResources: HashMap[String, LocalResource]): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
-    val prefixEnv = ListBuffer[String]()
+
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    var prefixEnv: Option[String] = None
+
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
     javaOpts += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
@@ -61,7 +65,7 @@ trait ExecutorRunnableUtil extends Logging {
       javaOpts += opts
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
-      prefixEnv += Utils.prefixLibraryPath(Seq(p))
+      prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(p)))
     }
 
     javaOpts += "-Djava.io.tmpdir=" +

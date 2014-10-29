@@ -31,7 +31,30 @@ import org.apache.spark.util.Utils
  */
 private[spark]
 object CommandUtils extends Logging {
-  def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
+
+  /**
+   * Build a ProcessBuilder based on the given parameters.
+   * The `env` argument is exposed for testing.
+   */
+  def buildProcessBuilder(
+    command: Command,
+    memory: Int,
+    sparkHome: String,
+    substituteArguments: String => String,
+    classPaths: Seq[String] = Seq[String](),
+    env: Map[String, String] = sys.env
+  ): ProcessBuilder = {
+    val localCommand = buildLocalCommand(command, substituteArguments, classPaths, env)
+    val commandSeq = buildCommandSeq(localCommand, memory, sparkHome)
+    val builder = new ProcessBuilder(commandSeq: _*)
+    val environment = builder.environment()
+    for ((key, value) <- localCommand.environment) {
+      environment.put(key, value)
+    }
+    builder
+  }
+
+  private def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val runner = sys.env.get("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()
@@ -40,12 +63,17 @@ object CommandUtils extends Logging {
       command.arguments
   }
 
-  def buildLocalCommand(
-    command: Command,
-    substituteArguments: String => String,
-    classPath: Seq[String] = Seq[String](),
-    env: Map[String, String] = sys.env): Command = {
-    val libraryPathName = Utils.libraryPathName
+  /**
+   * Build a command based on the given one, taking into account the local environment
+   * of where this command is expected to run, substitute any placeholders, and append
+   * any extra class paths.
+   */
+  private def buildLocalCommand(
+      command: Command,
+      substituteArguments: String => String,
+      classPath: Seq[String] = Seq[String](),
+      env: Map[String, String]): Command = {
+    val libraryPathName = Utils.libraryPathEnvName
     val libraryPathEntries = command.libraryPathEntries
     val cmdLibraryPath = command.environment.get(libraryPathName)
 
@@ -61,7 +89,7 @@ object CommandUtils extends Logging {
       command.arguments.map(substituteArguments),
       newEnvironment,
       command.classPathEntries ++ classPath,
-      Seq[String](),
+      Seq[String](), // library path already captured in environment variable
       command.javaOpts)
   }
 
@@ -69,7 +97,7 @@ object CommandUtils extends Logging {
    * Attention: this must always be aligned with the environment variables in the run scripts and
    * the way the JAVA_OPTS are assembled there.
    */
-  def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
+  private def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
 
     // Exists for backwards compatibility with older Spark versions

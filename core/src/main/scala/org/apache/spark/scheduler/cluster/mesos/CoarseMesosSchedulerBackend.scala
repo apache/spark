@@ -123,8 +123,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
     val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
-      Utils.prefixLibraryPath(Seq(p))
+      Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
 
     environment.addVariables(

@@ -84,7 +84,6 @@ private[spark] object SparkSubmitDriverBootstrapper {
 
     val newClasspath =
       if (submitClasspath.isDefined) {
-        // SPARK_SUBMIT_CLASSPATH is already captured in CLASSPATH
         classpath
       } else {
         classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
@@ -124,9 +123,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val env = builder.environment()
 
     if (submitLibraryPath.isEmpty && confLibraryPath.nonEmpty) {
-      // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
-      val libraryPaths = confLibraryPath ++ sys.env.get(Utils.libraryPathName)
-      env.put(Utils.libraryPathName, libraryPaths.mkString(sys.props("path.separator")))
+      val libraryPaths = confLibraryPath ++ sys.env.get(Utils.libraryPathEnvName)
+      env.put(Utils.libraryPathEnvName, libraryPaths.mkString(sys.props("path.separator")))
     }
 
     val process = builder.start()
