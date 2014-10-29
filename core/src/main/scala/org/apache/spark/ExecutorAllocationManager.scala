@@ -114,6 +114,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
     }
+    if (minNumExecutors == 0 || maxNumExecutors == 0) {
+      throw new SparkException("spark.dynamicAllocation.{min/max}Executors cannot be 0!")
+    }
     if (minNumExecutors > maxNumExecutors) {
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
         s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
