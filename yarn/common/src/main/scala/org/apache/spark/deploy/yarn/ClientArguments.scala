@@ -20,8 +20,8 @@ package org.apache.spark.deploy.yarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
@@ -33,7 +33,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var userArgs: Seq[String] = Seq[String]()
   var executorMemory = 1024 // MB
   var executorCores = 1
-  var numExecutors = 2
+  var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
@@ -41,16 +41,18 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   parseArgs(args.toList)
   loadEnvironmentArgs()
+  validateArgs()
 
   // Additional memory to allocate to containers
   // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead", 
+  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
-  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead", 
+  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
 
-  validateArgs()
+  private val isDynamicAllocationEnabled =
+    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
@@ -112,6 +114,11 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
           if (args(0) == "--num-workers") {
             println("--num-workers is deprecated. Use --num-executors instead.")
+          }
+          // Dynamic allocation is not compatible with this option
+          if (isDynamicAllocationEnabled) {
+            throw new IllegalArgumentException("Explicitly setting the number " +
+              "of executors is not compatible with spark.dynamicAllocation.enabled!")
           }
           numExecutors = value
           args = tail
