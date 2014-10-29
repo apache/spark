@@ -214,7 +214,7 @@ class StreamingKMeans(
    * @param data DStream containing vector data
    */
   def trainOn(data: DStream[Vector]) {
-    this.isInitialized
+    this.assertInitialized()
     data.foreachRDD { (rdd, time) =>
       model = model.update(rdd, this.a, this.units)
     }
@@ -227,7 +227,7 @@ class StreamingKMeans(
    * @return DStream containing predictions
    */
   def predictOn(data: DStream[Vector]): DStream[Int] = {
-    this.isInitialized
+    this.assertInitialized()
     data.map(model.predict)
   }
 
@@ -239,21 +239,14 @@ class StreamingKMeans(
    * @return DStream containing the input keys and the predictions as values
    */
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Int)] = {
-    this.isInitialized
+    this.assertInitialized()
     data.mapValues(model.predict)
   }
 
-  /**
-   * Check whether cluster centers have been initialized.
-   *
-   * @return Boolean, True if cluster centrs have been initialized
-   */
-  def isInitialized: Boolean = {
+  /** Check whether cluster centers have been initialized.*/
+  def assertInitialized(): Unit = {
     if (Option(model.clusterCenters) == None) {
-      logError("Initial cluster centers must be set before starting predictions")
-      throw new IllegalArgumentException
-    } else {
-      true
+      throw new IllegalStateException("Initial cluster centers must be set before starting predictions")
     }
   }
 
