@@ -113,7 +113,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.maxResultSize</code></td>
-  <td>0 (unlimited)</td>
+  <td>1g</td>
   <td>
     Limit of total size of serialized bytes of all partitions during collect, it should be at least 1M
     or 0 (means unlimited). The stage will be aborted if the total size go above this limit. 

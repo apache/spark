@@ -68,9 +68,9 @@ private[spark] class TaskSetManager(
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
-  // Limit of bytes for total size of results (default is 20MB)
-  var MAX_RESULT_SIZE =
-    Utils.memoryStringToMb(conf.get("spark.driver.maxResultSize", "0")) << 20
+  // Limit of bytes for total size of results (default is 1GB)
+  val MAX_RESULT_SIZE =
+    Utils.memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -534,7 +534,7 @@ private[spark] class TaskSetManager(
     if (MAX_RESULT_SIZE > 0 && totalResultSize > MAX_RESULT_SIZE) {
       abort(s"The size of results ${Utils.bytesToString(totalResultSize)}" +
             s" extends limit ${Utils.bytesToString(MAX_RESULT_SIZE)}, please increase" +
-            s" spark.driver.maxResultSize or void collect() if it's possible")
+            s" spark.driver.maxResultSize or avoid collect() if it's possible")
       return
     }
     val info = taskInfos(tid)
