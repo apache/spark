@@ -42,5 +42,4 @@ private[spark] class LiveListenerBus
         "the rate at which tasks are being started by the scheduler.")
     }
   }
-
 }

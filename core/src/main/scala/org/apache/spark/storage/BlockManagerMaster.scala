@@ -69,7 +69,7 @@ class BlockManagerMaster(
         true
       }
     }
-    logInfo("Updated info of block " + blockId)
+    logInfo("Updated info of block " + blockId + " storageLevel:" + storageLevel)
     res
   }
 

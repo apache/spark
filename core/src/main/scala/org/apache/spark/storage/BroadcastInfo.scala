@@ -18,40 +18,35 @@
 package org.apache.spark.storage
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
+import org.apache.spark.broadcast.{TorrentBroadcast, Broadcast}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils._
 
 @DeveloperApi
-class RDDInfo(
-    val id: Int,
+class BroadcastInfo(
+    val id: Long,
     val name: String,
-    val numPartitions: Int,
-    var storageLevel: StorageLevel) extends Ordered[RDDInfo]{
+    val numPartitions: Int) extends Ordered[BroadcastInfo] {
 
-  var numCachedPartitions = 0
   var memSize = 0L
   var diskSize = 0L
   var tachyonSize = 0L
 
-  def isCached: Boolean = (memSize + diskSize + tachyonSize > 0) && numCachedPartitions > 0
-
   override def toString = {
     import Utils.bytesToString
-    ("%s\" (%d) ; CachedPartitions: %d; TotalPartitions: %d; " +
+    ("%s\" (%d) ; " +
       "MemorySize: %s; TachyonSize: %s; DiskSize: %s").format(
-        name, id, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
+        name, id, bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
   }
 
-  override def compare(that: RDDInfo) = {
-    this.id - that.id
-  }
-}
-
-
-private[spark] object RDDInfo {
-  def fromRdd(rdd: RDD[_]): RDDInfo = {
-    val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
-    new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
+  override def compare(that: BroadcastInfo) = {
+    if (this.id > that.id) {
+      1
+    } else {
+      if (this.id == that.id) {
+        0
+      }
+      -1
+    }
   }
 }

@@ -31,6 +31,7 @@ private[ui] case class ExecutorSummaryInfo(
     id: String,
     hostPort: String,
     rddBlocks: Int,
+    broadcastBlocks: Int,
     memoryUsed: Long,
     diskUsed: Long,
     activeTasks: Int,
@@ -65,6 +66,7 @@ private[ui] class ExecutorsPage(
           <th>Executor ID</th>
           <th>Address</th>
           <th>RDD Blocks</th>
+          <th>Broadcast Blocks</th>
           <th>Memory Used</th>
           <th>Disk Used</th>
           <th>Active Tasks</th>
@@ -119,6 +121,7 @@ private[ui] class ExecutorsPage(
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
       <td>{info.rddBlocks}</td>
+      <td>{info.broadcastBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
         {Utils.bytesToString(memoryUsed)} /
         {Utils.bytesToString(maximumMemory)}
@@ -175,7 +178,8 @@ private[ui] class ExecutorsPage(
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
-    val rddBlocks = status.numBlocks
+    val rddBlocks = status.numRddBlocks
+    val broadcastBlocks = status.numBroadcastBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
@@ -193,6 +197,7 @@ private[ui] class ExecutorsPage(
       execId,
       hostPort,
       rddBlocks,
+      broadcastBlocks,
       memUsed,
       diskUsed,
       activeTasks,

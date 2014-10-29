@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, BlockStatus, RDDInfo}
+import org.apache.spark.storage.{BroadcastInfo, BlockId, BlockStatus, RDDInfo}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -33,7 +33,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     val rdds = listener.rddInfoList
 
     val rddContent = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    val broadcastContent = UIUtils.listingTable(broadcastHeader, blockRow, listener.broadcastVarSeq)
+    val broadcastContent = UIUtils.listingTable(broadcastHeader, broadcastRow,
+      listener.broadcastInfoList)
     UIUtils.headerSparkPageWithMultipleTables("Storage", parent, None,
       subTitleContentPair = ("RDDs", rddContent), ("Broadcast", broadcastContent))
   }
@@ -50,27 +51,23 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   private def broadcastHeader = Seq(
     "Variable Name",
-    "Storage Level",
     "Size in Memory",
     "Size in Tachyon",
     "Size on Disk")
 
   /** Render an HTML row representing an block variable */
-  private def blockRow(blockIdStatusPair: (BlockId, BlockStatus)): Seq[Node] = {
-    val blockId = blockIdStatusPair._1
-    val blockStatus = blockIdStatusPair._2
+  private def broadcastRow(broadcastInfo: BroadcastInfo): Seq[Node] = {
     // scalastyle:off
     <tr>
       <td>
-        <a href={"%s/storage/broadcast?id=%s".format(UIUtils.prependBaseUri(parent.basePath), blockId)}>
-          {blockId}
+        <a href={"%s/storage/broadcast?id=%s".format(UIUtils.prependBaseUri(parent.basePath),
+          broadcastInfo.id)}>
+          {broadcastInfo.id}
         </a>
       </td>
-      <td>{blockStatus.storageLevel.description}
-      </td>
-      <td sorttable_customkey={blockStatus.memSize.toString}>{Utils.bytesToString(blockStatus.memSize)}</td>
-      <td sorttable_customkey={blockStatus.tachyonSize.toString}>{Utils.bytesToString(blockStatus.tachyonSize)}</td>
-      <td sorttable_customkey={blockStatus.diskSize.toString} >{Utils.bytesToString(blockStatus.diskSize)}</td>
+      <td sorttable_customkey={broadcastInfo.memSize.toString}>{Utils.bytesToString(broadcastInfo.memSize)}</td>
+      <td sorttable_customkey={broadcastInfo.tachyonSize.toString}>{Utils.bytesToString(broadcastInfo.tachyonSize)}</td>
+      <td sorttable_customkey={broadcastInfo.diskSize.toString} >{Utils.bytesToString(broadcastInfo.diskSize)}</td>
     </tr>
     // scalastyle:on
   }

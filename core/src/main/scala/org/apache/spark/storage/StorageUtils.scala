@@ -57,7 +57,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * non-RDD blocks contains only the first 3 fields (in the same order).
    */
   private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, Long, StorageLevel)]
-  private val _broadcastStorageInfo = new mutable.HashMap[Long, (Long, Long, Long, StorageLevel)]
+  private val _broadcastStorageInfo = new mutable.HashMap[Long, (Long, Long, Long)]
   private var _nonRddNorBroadcastStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
   /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
@@ -99,6 +99,11 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /** Return the blocks that belong to the given RDD stored in this block manager. */
   def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = {
     _rddBlocks.get(rddId).getOrElse(Map.empty)
+  }
+
+  /** Return the blocks that belong to the given broadcast var stored in this block manager. */
+  def broadcastBlocksById(broadcastId: Long): Map[BlockId, BlockStatus] = {
+    _broadcastBlocks.get(broadcastId).getOrElse(Map.empty)
   }
 
   /** Add the given block to this storage status. If it already exists, overwrite it. */
@@ -186,7 +191,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * Return the number of blocks stored in this block manager in O(RDDs) time.
    * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
    */
-  def numBlocks: Int = _nonRddNorBroadcastBlocks.size + _broadcastBlocks.size + numRddBlocks
+  def numBlocks: Int = _nonRddNorBroadcastBlocks.size + numBroadcastBlocks + numRddBlocks
 
   /**
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
@@ -200,6 +205,22 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * O(blocks in this RDD) time.
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
+
+
+  /**
+   * Return the number of Broadcast blocks stored in this block manager in O(RDDs) time.
+   * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
+   */
+  def numBroadcastBlocks: Int = _broadcastBlocks.values.map(_.size).sum
+
+  /**
+   * Return the number of blocks that belong to the given Broadcast variable in O(1) time.
+   * Note that this is much faster than `this.rddBlocksById(rddId).size`, which is
+   * O(blocks in this RDD) time.
+   */
+  def numBroadcastBlocksById(broadcastId: Long): Int = _broadcastBlocks.get(broadcastId).
+    map(_.size).getOrElse(0)
+
 
   /** Return the memory remaining in this block manager. */
   def memRemaining: Long = maxMem - memUsed
@@ -268,7 +289,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
           .getOrElse((0L, 0L, 0L))
       case BroadcastBlockId(broadcastId, _) =>
         _broadcastStorageInfo.get(broadcastId)
-          .map { case (mem, disk, tachyon, _) => (mem, disk, tachyon) }
+          .map { case (mem, disk, tachyon) => (mem, disk, tachyon) }
           .getOrElse((0L, 0L, 0L))
       case _ =>
         _nonRddNorBroadcastStorageInfo
@@ -291,7 +312,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
         if (newMem + newDisk + newTachyon == 0) {
           _broadcastStorageInfo.remove(broadcastId)
         } else {
-          _broadcastStorageInfo(broadcastId) = (newMem, newDisk, newTachyon, level)
+          _broadcastStorageInfo(broadcastId) = (newMem, newDisk, newTachyon)
         }
       case _ =>
         _nonRddNorBroadcastStorageInfo = (newMem, newDisk, newTachyon)
@@ -302,6 +323,24 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
 /** Helper methods for storage-related objects. */
 private[spark] object StorageUtils {
+
+  /**
+   * Update the given BroadcastInfo with the given list of storage statuses.
+   * This method overwrites the old values stored in the BroadcastInfo's.
+   */
+  def updateBroadcastInfo(broadcastInfo: BroadcastInfo,
+                          statuses: Seq[StorageStatus]): Unit = {
+    val broadcastId = broadcastInfo.id
+    // Assume all blocks belonging to the same RDD have the same storage level
+    val numCachedPartitions = statuses.map(_.numBroadcastBlocksById(broadcastId)).sum
+    val memSize = statuses.map(_.memUsedByBroadcast(broadcastId)).sum
+    val diskSize = statuses.map(_.diskUsedByBroadcast(broadcastId)).sum
+    val tachyonSize = statuses.map(_.offHeapUsedByBroadcast(broadcastId)).sum
+
+    broadcastInfo.memSize = memSize
+    broadcastInfo.diskSize = diskSize
+    broadcastInfo.tachyonSize = tachyonSize
+  }
 
   /**
    * Update the given list of RDDInfo with the given list of storage statuses.
@@ -340,4 +379,19 @@ private[spark] object StorageUtils {
     blockLocations
   }
 
+
+  /**
+   * Return a mapping from block ID to its locations for each block that belongs to the given RDD.
+   */
+  def getBroadcastBlockLocation(broadcastId: Long,
+                                statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
+    val blockLocations = new mutable.HashMap[BlockId, mutable.ListBuffer[String]]
+    statuses.foreach { status =>
+      status.broadcastBlocksById(broadcastId).foreach { case (bid, _) =>
+        val location = status.blockManagerId.hostPort
+        blockLocations.getOrElseUpdate(bid, mutable.ListBuffer.empty) += location
+      }
+    }
+    blockLocations
+  }
 }

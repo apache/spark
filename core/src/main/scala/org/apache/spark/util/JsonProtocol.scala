@@ -93,6 +93,7 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
+      case SparkListenerBlockUpdate(_, _, _) => JNothing
     }
   }
 

@@ -68,6 +68,9 @@ case class SparkListenerJobStart(
   val stageIds: Seq[Int] = stageInfos.map(_.stageId)
 }
 
+case class SparkListenerBlockUpdate(blockManagerId: BlockManagerId, blockId: BlockId,
+                                    blockStatus: BlockStatus) extends SparkListenerEvent
+
 @DeveloperApi
 case class SparkListenerJobEnd(
     jobId: Int,
@@ -121,6 +124,28 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
  * This event is not meant to be posted to listeners downstream.
  */
 private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
+
+/**
+ * :: DeveloperApi ::
+ * Interface for filtering the events from the Spark scheduler.
+ */
+@DeveloperApi
+class DefaultSparkListenerEventFilter {
+
+  def validate(event: SparkListenerEvent): Boolean = {
+    event match {
+      case SparkListenerBlockUpdate(blockManagerId: BlockManagerId, blockId: BlockId,
+        blockStatus: BlockStatus) =>
+        if (blockId.isBroadcast) {
+          true
+        } else {
+          false
+        }
+      case _ =>
+        true
+    }
+  }
+}
 
 /**
  * :: DeveloperApi ::
@@ -210,6 +235,11 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
+
+  /**
+   * Called when the driver receives UpdateBlock from an BlockManagerSlaveActor.
+   */
+  def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) { }
 }
 
 /**

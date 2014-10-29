@@ -59,7 +59,8 @@ private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkLi
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
       case logStart: SparkListenerLogStart => // ignore event log metadata
+      case blockUpdate: SparkListenerBlockUpdate =>
+        listener.onBlockUpdate(blockUpdate)
     }
   }
-
 }

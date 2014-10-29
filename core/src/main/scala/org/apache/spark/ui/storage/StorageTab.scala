@@ -30,6 +30,7 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
 
   attachPage(new StoragePage(this))
   attachPage(new RDDPage(this))
+  attachPage(new BroadcastPage(this))
 }
 
 /**
@@ -39,14 +40,15 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
 @DeveloperApi
 class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
-  private[ui] val _broadcastInfoMap = mutable.Map[BlockId, BlockStatus]()
+  private[ui] val _broadcastInfoMap = mutable.Map[Long, BroadcastInfo]()
 
   def storageStatusList = storageStatusListener.storageStatusList
 
   /** Filter RDD info to include only those with cached partitions */
   def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
 
-  def broadcastVarSeq = storageStatusList.flatMap(_.blocks).toSeq
+  /** Filter broadcast info to include only those with cached partitions */
+  def broadcastInfoList = _broadcastInfoMap.values.toSeq
 
   /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
   private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {
@@ -81,5 +83,21 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
     _rddInfoMap.remove(unpersistRDD.rddId)
+  }
+
+  override def onBlockUpdate(blockUpdateEvent: SparkListenerBlockUpdate) = synchronized {
+    // only update broadcast for now, need to be modified if want to track other blocks
+    val broadcastId = blockUpdateEvent.blockId.asBroadcastId.get.broadcastId
+    val blocksToUpdate = blockUpdateEvent.blockStatus
+    val broadcastInfoToUpdate = _broadcastInfoMap.getOrElseUpdate(
+      broadcastId, new BroadcastInfo(broadcastId, "broadcast_%d".format(broadcastId), 0))
+    println("updating the broadcast variable:" +
+      blockUpdateEvent.blockId.asBroadcastId.get.broadcastId)
+    StorageUtils.updateBroadcastInfo(broadcastInfoToUpdate, storageStatusList)
+    println("current broadcastInfoMap:" + _broadcastInfoMap)
+    if (broadcastInfoToUpdate.memSize == 0 && broadcastInfoToUpdate.diskSize == 0 &&
+      broadcastInfoToUpdate.tachyonSize == 0) {
+      _broadcastInfoMap.remove(broadcastId)
+    }
   }
 }
