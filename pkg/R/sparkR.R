@@ -52,12 +52,12 @@ sparkR.init <- function(
     sparkEnvirMap$put(varname, sparkEnvir[[varname]])
   }
   
-  ExecutorEnv <- .jnew("java/util/HashMap")
+  sparkExecutorEnvMap <- .jnew("java/util/HashMap")
   if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
-    ExecutorEnv$put("LD_LIBRARY_PATH", paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH")))
+    sparkExecutorEnvMap$put("LD_LIBRARY_PATH", paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH")))
   }
   for (varname in names(sparkExecutorEnv)) {
-    ExecutorEnv$put(varname, sparkExecutorEnv[[varname]])
+    sparkExecutorEnvMap$put(varname, sparkExecutorEnv[[varname]])
   }
   
   jars=c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
@@ -71,7 +71,7 @@ sparkR.init <- function(
       as.character(sparkHome),
       .jarray(jars, "java/lang/String"),
       sparkEnvirMap,
-      ExecutorEnv),
+      sparkExecutorEnvMap),
     envir=.sparkREnv
   )
 
