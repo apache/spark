@@ -919,7 +919,8 @@ private[hive] object HiveQl {
     /* System functions about string operations */
     case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token(TRIM(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(TRIM(), Nil) :: arg :: Nil) => TRIM(nodeToExpr(arg))
+
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)
