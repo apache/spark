@@ -345,22 +345,26 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
 
-    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
-      val stageId = stageSubmitted.stageInfo.stageId
-      val numTasks = stageSubmitted.stageInfo.numTasks
-      stageIdToNumTasks(stageId) = numTasks
-      allocationManager.onSchedulerBacklogged()
+    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+      synchronized {
+        val stageId = stageSubmitted.stageInfo.stageId
+        val numTasks = stageSubmitted.stageInfo.numTasks
+        stageIdToNumTasks(stageId) = numTasks
+        allocationManager.onSchedulerBacklogged()
+      }
     }
 
-    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
-      val stageId = stageCompleted.stageInfo.stageId
-      stageIdToNumTasks -= stageId
-      stageIdToTaskIndices -= stageId
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+      synchronized {
+        val stageId = stageCompleted.stageInfo.stageId
+        stageIdToNumTasks -= stageId
+        stageIdToTaskIndices -= stageId
 
-      // If this is the last stage with pending tasks, mark the scheduler queue as empty
-      // This is needed in case the stage is aborted for any reason
-      if (stageIdToNumTasks.isEmpty) {
-        allocationManager.onSchedulerQueueEmpty()
+        // If this is the last stage with pending tasks, mark the scheduler queue as empty
+        // This is needed in case the stage is aborted for any reason
+        if (stageIdToNumTasks.isEmpty) {
+          allocationManager.onSchedulerQueueEmpty()
+        }
       }
     }
 
