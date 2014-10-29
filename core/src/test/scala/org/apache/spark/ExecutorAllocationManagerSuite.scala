@@ -560,12 +560,13 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       .setMaster("local")
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.minExecutors", minExecutors + "")
-      .set("spark.dynamicAllocation.maxExecutors", maxExecutors + "")
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout + "")
+      .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
+      .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
+      .set("spark.dynamicAllocation.schedulerBacklogTimeout", schedulerBacklogTimeout.toString)
       .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
-        sustainedSchedulerBacklogTimeout + "")
-      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout + "")
+        sustainedSchedulerBacklogTimeout.toString)
+      .set("spark.dynamicAllocation.executorIdleTimeout", executorIdleTimeout.toString)
+      .set("spark.dynamicAllocation.testing", "true")
     new SparkContext(conf)
   }
 

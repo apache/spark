@@ -103,6 +103,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
 
+  // Whether we are testing this class. This should only be used internally.
+  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
+
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
 
@@ -206,7 +209,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
         maxNumExecutors - numExistingExecutors
       }
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
-    val addRequestAcknowledged = sc.requestExecutors(actualNumExecutorsToAdd)
+    val addRequestAcknowledged = testing || sc.requestExecutors(actualNumExecutorsToAdd)
     if (addRequestAcknowledged) {
       logInfo(s"Requesting $actualNumExecutorsToAdd new executor(s) because " +
         s"tasks are backlogged (new desired total will be $newTotalExecutors)")
@@ -248,7 +251,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     }
 
     // Send a request to the backend to kill this executor
-    val removeRequestAcknowledged = sc.killExecutor(executorId)
+    val removeRequestAcknowledged = testing || sc.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$removeThresholdSeconds seconds (new desired total will be ${numExistingExecutors - 1})")
