@@ -18,6 +18,9 @@
 package org.apache.spark.executor
 
 import java.net.{URLClassLoader, URL}
+import java.util.Enumeration
+
+import scala.collection.JavaConversions._
 
 import org.apache.spark.util.ParentClassLoader
 
@@ -53,6 +56,23 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
         parentClassLoader.loadClass(name)
       }
     }
+  }
+
+  override def getResource(name: String): URL = {
+    val url = userClassLoader.findResource(name)
+    val res = if (url != null) url else parentClassLoader.getResource(name)
+    res
+  }
+
+  override def getResources(name: String): Enumeration[URL] = {
+    val urls = userClassLoader.findResources(name)
+    val res =
+      if (urls != null && urls.hasMoreElements()) {
+        urls
+      } else {
+        parentClassLoader.getResources(name)
+      }
+    res
   }
 
   def addURL(url: URL) {

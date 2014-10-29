@@ -22,14 +22,15 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.ByteStreams
 import com.google.common.io.Files
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -57,7 +58,7 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     logConfDir.mkdir()
 
     val logConfFile = new File(logConfDir, "log4j.properties")
-    Files.write(LOG4J_CONF, logConfFile, Charsets.UTF_8)
+    Files.write(LOG4J_CONF, logConfFile, UTF_8)
 
     val childClasspath = logConfDir.getAbsolutePath() + File.pathSeparator +
       sys.props("java.class.path")
@@ -113,37 +114,75 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     super.afterAll()
   }
 
-  test("run Spark in yarn-client mode") {
+  ignore("run Spark in yarn-client mode") {
     var result = File.createTempFile("result", null, tempDir)
     YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
     checkResult(result)
   }
 
-  test("run Spark in yarn-cluster mode") {
+  ignore("run Spark in yarn-cluster mode") {
     val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
     var result = File.createTempFile("result", null, tempDir)
-
-    val args = Array("--class", main,
-      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
-      "--arg", "yarn-cluster",
-      "--arg", result.getAbsolutePath(),
-      "--num-executors", "1")
-    Client.main(args)
+    runClusterMode(YarnClusterDriver.getClass, Seq(result.getAbsolutePath()))
     checkResult(result)
   }
 
-  test("run Spark in yarn-cluster mode unsuccessfully") {
-    val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
-
-    // Use only one argument so the driver will fail
-    val args = Array("--class", main,
-      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
-      "--arg", "yarn-cluster",
-      "--num-executors", "1")
+  ignore("run Spark in yarn-cluster mode unsuccessfully") {
+    // Don't provide arguments so the driver will fail.
     val exception = intercept[SparkException] {
-      Client.main(args)
+      runClusterMode(YarnClusterDriver.getClass)
     }
     assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
+  }
+
+  test("user class path isolation") {
+    // Create a jar file that contains a different version of "test.resource".
+    val jarFile = File.createTempFile("test", ".jar", tempDir)
+    val testResource = new File(tempDir, "test.resource")
+    Files.write("OVERRIDDEN", testResource, UTF_8)
+    TestUtils.createJar(Seq(testResource), jarFile)
+
+    // Run first without isolation. The original resource should be picked up.
+    val driverResult = File.createTempFile("driver", null, tempDir)
+    val executorResult = File.createTempFile("executor", null, tempDir)
+    runClusterMode(YarnClasspathTest.getClass,
+      Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
+      Seq(jarFile.getAbsolutePath()))
+    checkResult(driverResult, "ORIGINAL")
+    checkResult(executorResult, "ORIGINAL")
+
+    // Enable class path isolation. Results should now match the overridden resource.
+    val overriddenDriverResult = File.createTempFile("driver", null, tempDir)
+    val overriddenExecutorResult = File.createTempFile("executor", null, tempDir)
+    runClusterMode(YarnClasspathTest.getClass,
+      Seq(overriddenDriverResult.getAbsolutePath(), overriddenExecutorResult.getAbsolutePath()),
+      Seq(jarFile.getAbsolutePath()),
+      Map("spark.driver.enableClassPathIsolation" -> "true"))
+    checkResult(overriddenDriverResult, "OVERRIDDEN")
+    checkResult(overriddenExecutorResult, "OVERRIDDEN")
+  }
+
+  private def runClusterMode(
+      klass: Class[_],
+      args: Seq[String] = Nil,
+      extraJars: Seq[String] = Nil,
+      settings: Map[String, String] = Map()) = {
+    val main = klass.getName().stripSuffix("$")
+    val userJars = if (!extraJars.isEmpty()) Seq("--addJars", extraJars.mkString(",")) else Nil
+
+    val clientArgs = Array("--class", main,
+      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
+      "--arg", "yarn-cluster",
+      "--num-executors", "1") ++
+      userJars ++
+      args.flatMap { Seq("--arg", _) }
+
+    sys.props ++= settings
+    try {
+      Client.main(clientArgs)
+    } finally {
+      sys.props --= settings.keys
+    }
   }
 
   /**
@@ -152,9 +191,13 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
    * the tests enforce that something is written to a file after everything is ok to indicate
    * that the job succeeded.
    */
-  private def checkResult(result: File) = {
-    var resultString = Files.toString(result, Charsets.UTF_8)
-    resultString should be ("success")
+  private def checkResult(result: File): Unit = {
+    checkResult(result, "success")
+  }
+
+  private def checkResult(result: File, expected: String): Unit = {
+    var resultString = Files.toString(result, UTF_8)
+    resultString should be (expected)
   }
 
 }
@@ -182,7 +225,49 @@ private object YarnClusterDriver extends Logging with Matchers {
       result = "success"
     } finally {
       sc.stop()
-      Files.write(result, status, Charsets.UTF_8)
+      Files.write(result, status, UTF_8)
+    }
+  }
+
+}
+
+private object YarnClasspathTest {
+
+  def main(args: Array[String]) = {
+    if (args.length != 3) {
+      System.err.println(
+        s"""
+        |Invalid command line: ${args.mkString(" ")}
+        |
+        |Usage: YarnClasspathTest [master] [driver result file] [executor result file]
+        """.stripMargin)
+      System.exit(1)
+    }
+
+    readResource(args(1))
+    val sc = new SparkContext(new SparkConf().setMaster(args(0))
+      .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    val status = new File(args(1))
+    var result = "failure"
+    try {
+      sc.parallelize(Seq(1)).foreach { x => readResource(args(2)) }
+    } finally {
+      sc.stop()
+    }
+  }
+
+  private def readResource(resultPath: String) = {
+    var result = "failure"
+    try {
+      val ccl = Thread.currentThread().getContextClassLoader()
+      println(s"CCL: $ccl")
+      println(s"test.resource: ${ccl.getResource("test.resource")}")
+
+      val resource = ccl.getResourceAsStream("test.resource")
+      val bytes = ByteStreams.toByteArray(resource);
+      result = new String(bytes, 0, bytes.length, UTF_8)
+    } finally {
+      Files.write(result, new File(resultPath), UTF_8)
     }
   }
 

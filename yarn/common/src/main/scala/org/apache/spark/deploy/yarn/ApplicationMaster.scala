@@ -19,9 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import scala.util.control.NonFatal
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.Socket
+import java.net.{Socket, URI, URL}
 import java.util.concurrent.atomic.AtomicReference
 
 import akka.actor._
@@ -36,6 +36,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.executor.{ChildExecutorURLClassLoader, ExecutorURLClassLoader}
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -448,8 +449,22 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def startUserClass(): Thread = {
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
-    val mainMethod = Class.forName(args.userClass, false,
-      Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
+
+    // The list of URLs for the user class loader. Note that when class path isolation is disabled
+    // and `spark.yarn.user.classpath.first` is set to true, this is redundant, since user classes
+    // will already be in the JVM's classpath.
+    val classpath = ClientBase.getUserClasspath(null, sparkConf, new File(".").getAbsolutePath())
+    val urls = classpath.map { entry => new URL("file:" + new URI(entry.getPath()).getPath()) }
+
+    val userClassLoader =
+      if (sparkConf.getBoolean("spark.driver.enableClassPathIsolation", false)) {
+        new ChildExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      } else {
+        new ExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      }
+
+    val mainMethod = userClassLoader.loadClass(args.userClass)
+      .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
       override def run() {
@@ -474,6 +489,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         }
       }
     }
+    userThread.setContextClassLoader(userClassLoader)
     userThread.setName("Driver")
     userThread.start()
     userThread

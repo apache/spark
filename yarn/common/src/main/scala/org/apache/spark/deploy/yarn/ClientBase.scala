@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.io.File
+import java.net.{InetAddress, UnknownHostException, URI}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
@@ -91,8 +92,7 @@ private[spark] trait ClientBase extends Logging {
   def copyFileToRemote(
       destDir: Path,
       srcPath: Path,
-      replication: Short,
-      setPerms: Boolean = false): Path = {
+      replication: Short): Path = {
     val destFs = destDir.getFileSystem(hadoopConf)
     val srcFs = srcPath.getFileSystem(hadoopConf)
     var destPath = srcPath
@@ -101,9 +101,7 @@ private[spark] trait ClientBase extends Logging {
       logInfo(s"Uploading resource $srcPath -> $destPath")
       FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
       destFs.setReplication(destPath, replication)
-      if (setPerms) {
-        destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
-      }
+      destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
       logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
     }
@@ -172,14 +170,14 @@ private[spark] trait ClientBase extends Logging {
     List(
       (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR, false),
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR, true),
-      ("log4j.properties", oldLog4jConf.orNull, null, false)
-    ).foreach { case (destName, _localPath, confKey, setPermissions) =>
+      ("log4j.properties", oldLog4jConf.orNull, null, true)
+    ).foreach { case (destName, _localPath, confKey, isUserArtifact) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (localURI.getScheme != LOCAL_SCHEME) {
           val src = getQualifiedLocalPath(localURI)
-          val destPath = copyFileToRemote(dst, src, replication, setPermissions)
+          val destPath = copyFileToRemote(dst, src, replication)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(destFs, hadoopConf, destPath,
             localResources, LocalResourceType.FILE, destName, statCache)
@@ -587,7 +585,7 @@ private[spark] object ClientBase extends Logging {
    * Return the path to the given application's staging directory.
    */
   private def getAppStagingDir(appId: ApplicationId): String = {
-    SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
+    buildPath(SPARK_STAGING, appId.toString())
   }
 
   /**
@@ -662,7 +660,14 @@ private[spark] object ClientBase extends Logging {
 
   /**
    * Populate the classpath entry in the given environment map.
-   * This includes the user jar, Spark jar, and any extra application jars.
+   *
+   * This does different things depending on the job configuration.
+   * - if `spark.files.userClassPathFirst` is set to true, only Spark and other framework jars
+   *   (such as Hadoop/Yarn jars) are added to the classpath. User jars and files, and also the
+   *   extra class path, are handled by ChildExecutorURLClassLoader.
+   * - otherwise, user jars, files and the extra class path are added to the container's class path.
+   *   The position of the user classes in the classpath depends on the value of the
+   *   `spark.yarn.user.classpath.first` configuration.
    */
   def populateClasspath(
       args: ClientArguments,
@@ -670,48 +675,67 @@ private[spark] object ClientBase extends Logging {
       sparkConf: SparkConf,
       env: HashMap[String, String],
       extraClassPath: Option[String] = None): Unit = {
-    extraClassPath.foreach(addClasspathEntry(_, env))
-    addClasspathEntry(Environment.PWD.$(), env)
+    val enableIsolation =
+      if (args != null) {
+        sparkConf.getBoolean("spark.executor.enableClassPathIsolation",
+          sparkConf.getBoolean("spark.files.userClassPathFirst", false))
+      } else {
+        sparkConf.getBoolean("spark.driver.enableClassPathIsolation", false)
+      }
 
-    // Normally the users app.jar is last in case conflicts with spark jars
-    if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
-      addUserClasspath(args, sparkConf, env)
-      addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
+    extraClassPath.foreach(addClasspathEntry(_, env))
+    if (enableIsolation) {
+      addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)
     } else {
-      addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
-      populateHadoopClasspath(conf, env)
-      addUserClasspath(args, sparkConf, env)
-    }
+      addClasspathEntry(Environment.PWD.$(), env)
 
-    // Append all jar files under the working directory to the classpath.
-    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + "*", env)
+      // Normally the users app.jar is last in case it conflicts with spark jars.
+      if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
+        getUserClasspath(args, sparkConf, Environment.PWD.$()).foreach { x =>
+          addFileToClasspath(x, null, env)
+        }
+      }
+      addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+      populateHadoopClasspath(conf, env)
+
+      // Append all jar files under the directory holding cached files to the classpath.
+      addClasspathEntry(buildPath(Environment.PWD.$(), "*"), env)
+    }
   }
 
   /**
-   * Adds the user jars which have local: URIs (or alternate names, such as APP_JAR) explicitly
-   * to the classpath.
+   * Returns a list of URLs representing the user classpath.
    */
-  private def addUserClasspath(
+  def getUserClasspath(
       args: ClientArguments,
       conf: SparkConf,
-      env: HashMap[String, String]): Unit = {
-
+      workingDir: String): Array[URI] = {
     // If `args` is not null, we are launching an AM container.
     // Otherwise, we are launching executor containers.
     val (mainJar, secondaryJars) =
       if (args != null) {
         (args.userJar, args.addJars)
       } else {
-        (conf.get(CONF_SPARK_USER_JAR, null), conf.get(CONF_SPARK_YARN_SECONDARY_JARS, null))
+        (conf.get(CONF_SPARK_USER_JAR, null),
+          conf.get(CONF_SPARK_YARN_SECONDARY_JARS, null))
       }
 
-    addFileToClasspath(mainJar, APP_JAR, env)
-    if (secondaryJars != null) {
-      secondaryJars.split(",").filter(_.nonEmpty).foreach { jar =>
-        addFileToClasspath(jar, null, env)
+    val secondaryUris = Option(secondaryJars).map(_.split(",")).toSeq.flatten.map { jar =>
+      if (new URI(jar).getScheme() == LOCAL_SCHEME) {
+        jar
+      } else {
+        buildPath(workingDir, jar)
       }
     }
+
+    // Note: trailing separator is needed for directories (see java.net.URLClassLoader).
+    val classpath: Iterable[String] =
+      Some(workingDir + Path.SEPARATOR) ++
+      Option(mainJar).orElse(Some(buildPath(workingDir, APP_JAR))) ++
+      secondaryUris
+
+    classpath.map { new URI(_) }.toArray
   }
 
   /**
@@ -727,20 +751,13 @@ private[spark] object ClientBase extends Logging {
    * @param env       Map holding the environment variables.
    */
   private def addFileToClasspath(
-      path: String,
+      uri: URI,
       fileName: String,
       env: HashMap[String, String]): Unit = {
-    if (path != null) {
-      scala.util.control.Exception.ignoring(classOf[URISyntaxException]) {
-        val uri = new URI(path)
-        if (uri.getScheme == LOCAL_SCHEME) {
-          addClasspathEntry(uri.getPath, env)
-          return
-        }
-      }
-    }
-    if (fileName != null) {
-      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + fileName, env)
+    if (uri != null && uri.getScheme == LOCAL_SCHEME) {
+      addClasspathEntry(uri.getPath, env)
+    } else if (fileName != null) {
+      addClasspathEntry(buildPath(Environment.PWD.$(), fileName), env)
     }
   }
 
@@ -818,6 +835,10 @@ private[spark] object ClientBase extends Logging {
     }
 
     Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+  }
+
+  private def buildPath(components: String*) = {
+    components.mkString(Path.SEPARATOR)
   }
 
 }
