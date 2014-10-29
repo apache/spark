@@ -1,4 +1,0 @@
-concat_ws(separator, [string | array(string)]+) - returns the concatenation of the strings separated by the separator.
-Example:
-  > SELECT concat_ws('.', 'www', array('facebook', 'com')) FROM src LIMIT 1;
-  'www.facebook.com'

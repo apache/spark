@@ -156,7 +156,7 @@ public class JavaApplySchemaSuite implements Serializable {
     JavaSchemaRDD schemaRDD2 = javaSqlCtx.jsonRDD(jsonRDD, expectedSchema);
     StructType actualSchema2 = schemaRDD2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
-    schemaRDD1.registerTempTable("jsonTable2");
+    schemaRDD2.registerTempTable("jsonTable2");
     List<Row> actual2 = javaSqlCtx.sql("select * from jsonTable2").collect();
     Assert.assertEquals(expectedResult, actual2);
   }

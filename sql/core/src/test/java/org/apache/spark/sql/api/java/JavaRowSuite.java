@@ -18,6 +18,7 @@
 package org.apache.spark.sql.api.java;
 
 import java.math.BigDecimal;
+import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -39,6 +40,7 @@ public class JavaRowSuite {
   private boolean booleanValue;
   private String stringValue;
   private byte[] binaryValue;
+  private Date dateValue;
   private Timestamp timestampValue;
 
   @Before
@@ -53,6 +55,7 @@ public class JavaRowSuite {
     booleanValue = true;
     stringValue = "this is a string";
     binaryValue = stringValue.getBytes();
+    dateValue = Date.valueOf("2014-06-30");
     timestampValue = Timestamp.valueOf("2014-06-30 09:20:00.0");
   }
 
@@ -76,6 +79,7 @@ public class JavaRowSuite {
       new Boolean(booleanValue),
       stringValue,               // StringType
       binaryValue,               // BinaryType
+      dateValue,                 // DateType
       timestampValue,            // TimestampType
       null                       // null
     );
@@ -114,9 +118,10 @@ public class JavaRowSuite {
     Assert.assertEquals(stringValue, simpleRow.getString(15));
     Assert.assertEquals(stringValue, simpleRow.get(15));
     Assert.assertEquals(binaryValue, simpleRow.get(16));
-    Assert.assertEquals(timestampValue, simpleRow.get(17));
-    Assert.assertEquals(true, simpleRow.isNullAt(18));
-    Assert.assertEquals(null, simpleRow.get(18));
+    Assert.assertEquals(dateValue, simpleRow.get(17));
+    Assert.assertEquals(timestampValue, simpleRow.get(18));
+    Assert.assertEquals(true, simpleRow.isNullAt(19));
+    Assert.assertEquals(null, simpleRow.get(19));
   }
 
   @Test
