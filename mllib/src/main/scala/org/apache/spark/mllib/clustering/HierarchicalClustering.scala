@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV, norm => breezeNorm}
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -99,7 +99,7 @@ class HierarchicalClustering(
   /**
    * Constructs with the default configuration
    */
-  def this() = this(20, 20, 5, 10E-6, 1, 0.1)
+  def this() = this(20, 20, 10, 10E-4, 1, 0.1)
 
   /** Shows the parameters */
   override def toString(): String = {
@@ -134,27 +134,18 @@ class HierarchicalClustering(
     // If the followed conditions are satisfied, and then stop the training.
     //   1. There is no splittable cluster
     //   2. The number of the splitted clusters is greater than that of given clusters
-    //   3. The total variance of all clusters increases, when a cluster is splitted
     var totalVariance = Double.MaxValue
     var newTotalVariance = model.clusterTree.getVariance().get
     var step = 1
     while (node != None
-        && model.clusterTree.getTreeSize() < this.numClusters
-        && totalVariance >= newTotalVariance) {
+        && model.clusterTree.getTreeSize() < this.numClusters) {
 
       // split some times in order not to be wrong clustering result
       var isMerged = false
-      var isSingleCluster = false
-      for (retry <- 1 to this.numClusters) {
-        if (isMerged == false && isSingleCluster == false) {
+      for (i <- 1 to this.numRetries) {
+        if (node.get.getVariance().get > this.epsilon && isMerged == false) {
           var subNodes = split(node.get).map(subNode => statsUpdater(subNode))
-          // it seems that there is no splittable node
-          if (subNodes.size == 1) {
-            isSingleCluster = false
-          }
-          // add the sub nodes in to the tree
-          // if the sum of variance of sub nodes is greater than that of pre-splitted node
-          if (node.get.getVariance().get > subNodes.map(_.getVariance().get).sum) {
+          if (subNodes.size == 2) {
             // insert the nodes to the tree
             node.get.insert(subNodes.toList)
             // calculate the local dendrogram height
@@ -162,16 +153,14 @@ class HierarchicalClustering(
             node.get.height = Some(dist)
             // unpersist unnecessary cache because its children nodes are cached
             node.get.data.unpersist()
-            isMerged = true
             logInfo(s"the number of cluster is ${model.clusterTree.getTreeSize()} at step ${step}")
+            isMerged = true
           }
         }
       }
       node.get.isVisited = true
 
       // update the total variance and select the next splittable node
-      totalVariance = newTotalVariance
-      newTotalVariance = model.clusterTree.toSeq().filter(_.isLeaf()).map(_.getVariance().get).sum
       node = nextNode(model.clusterTree)
       step += 1
     }
@@ -243,7 +232,8 @@ class HierarchicalClustering(
         val map = scala.collection.mutable.Map.empty[Int, (BV[Double], Int)]
         iter.foreach { point =>
           val idx = ClusterTree.findClosestCenter(metric)(centers)(point)
-          val (sumBV, n) = map.get(idx).getOrElse((BV.zeros[Double](point.size), 0))
+          val (sumBV, n) = map.get(idx)
+              .getOrElse((new BSV[Double](Array(), Array(), point.size), 0))
           map(idx) = (sumBV + point, n + 1)
         }
         map.toIterator
@@ -535,7 +525,7 @@ object ClusterTree {
  * Calculates the sum of the variances of the cluster
  */
 private[clustering]
-class ClusterTreeStatsUpdater private (private var dimension: Option[Int])
+class ClusterTreeStatsUpdater private (private var first: Option[BV[Double]])
     extends Function1[ClusterTree, ClusterTree] with Serializable {
 
   def this() = this(None)
@@ -548,8 +538,15 @@ class ClusterTreeStatsUpdater private (private var dimension: Option[Int])
    */
   def apply(clusterTree: ClusterTree): ClusterTree = {
     val data = clusterTree.data
-    if (this.dimension == None) this.dimension = Some(data.first().size)
-    val zeroVector = () => Vectors.zeros(this.dimension.get).toBreeze
+    if (this.first == None) this.first = Some(data.first())
+    def zeroVector(): BV[Double] = {
+      val vector = first.get match {
+        case dense if first.get.isInstanceOf[BDV[Double]] => Vectors.zeros(first.get.size)
+        case sparse if first.get.isInstanceOf[BSV[Double]] => Vectors.sparse(first.get.size, Seq())
+        case _ => throw new UnsupportedOperationException(s"unexpected variable type")
+      }
+      vector.toBreeze
+    }
 
     // mapper for each partition
     val eachStats = data.mapPartitions { iter =>
@@ -580,7 +577,7 @@ class ClusterTreeStatsUpdater private (private var dimension: Option[Int])
       case n if n > 1 => (sumOfSquares.:*(n) - (sum :* sum)) :/ (n * (n - 1.0))
       case _ => zeroVector()
     }
-    clusterTree.variance = Some(variance.toArray.sum)
+    clusterTree.variance = Some(variance.toArray.sum / this.first.get.size)
 
     clusterTree
   }

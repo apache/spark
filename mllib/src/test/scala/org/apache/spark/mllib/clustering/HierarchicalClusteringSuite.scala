@@ -31,7 +31,7 @@ class HierarichicalClusteringConfSuite extends FunSuite {
     val algo = new HierarchicalClustering()
     assert(algo.getNumClusters === 20)
     assert(algo.getSubIterations === 20)
-    assert(algo.getEpsilon === 10E-6)
+    assert(algo.getEpsilon === 10E-4)
   }
 
   test("can replace numClusters") {
@@ -54,6 +54,8 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
 
   var vectors: Seq[Vector] = _
   var data: RDD[Vector] = _
+  var sparseVectors: Seq[Vector] = _
+  var sparseData: RDD[Vector] = _
 
   override def beforeEach() {
     vectors = Seq(
@@ -66,15 +68,32 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
       Vectors.dense(16.0, 17.0, 18.0)
     )
     data = sc.parallelize(vectors, 1)
+
+    sparseVectors = Seq(
+      Vectors.sparse(3, Seq((0, 0.0), (1, 0.0), (2, 0.0))),
+      Vectors.sparse(3, Seq((0, 1.0), (1, 2.0), (2, 3.0))),
+      Vectors.sparse(3, Seq((0, 4.0), (1, 5.0), (2, 6.0))),
+      Vectors.sparse(3, Seq((0, 7.0), (1, 8.0), (2, 9.0))),
+      Vectors.sparse(3, Seq((0, 10.0), (1, 11.0), (2, 12.0))),
+      Vectors.sparse(3, Seq((0, 13.0), (1, 14.0), (2, 14.0))),
+      Vectors.sparse(3, Seq((0, 16.0), (1, 17.0), (2, 18.0)))
+    )
+    sparseData = sc.parallelize(sparseVectors, 1)
   }
 
-  test("train method called by the companion object") {
+  test("train method called by the companion object with dense vectors") {
     val numClusters = 2
     val model = HierarchicalClustering.train(data, numClusters)
     assert(model.getClass.getSimpleName.toString === "HierarchicalClusteringModel")
   }
 
-  test("train") {
+  test("train method called by the companion object with sparse vectors") {
+    val numClusters = 2
+    val model = HierarchicalClustering.train(sparseData, numClusters)
+    assert(model.getClass.getSimpleName.toString === "HierarchicalClusteringModel")
+  }
+
+  test("traun") {
     val app = new HierarchicalClustering().setNumClusters(7)
     val model = app.run(data)
     assert(model.clusterTree.toSeq().filter(_.isLeaf()).size === 7)
@@ -197,9 +216,24 @@ class ClusterTreeSuite extends FunSuite with LocalSparkContext with SampleData {
     assert(child22.getDepth() === 2)
   }
 
-  test("assgin") {
+  test("should assign the correct cluster with dense vectors") {
     val data1 = Seq(Vectors.dense(1.0, 2.0, 3.0))
     val data2 = Seq(Vectors.dense(4.0, 5.0, 6.0))
+    val data0 = data1 ++ data2
+
+    val cluster0 = ClusterTree.fromRDD(sc.parallelize(data0))
+    val cluster1 = ClusterTree.fromRDD(sc.parallelize(data1))
+    val cluster2 = ClusterTree.fromRDD(sc.parallelize(data2))
+    cluster0.insert(List(cluster1, cluster2))
+
+    def metric(bv1: BV[Double], bv2: BV[Double]): Double = breezeNorm(bv1 - bv2, 2)
+    assert(cluster0.assignCluster(metric)(data1(0)) === cluster1)
+    assert(cluster0.assignCluster(metric)(data2(0)) === cluster2)
+  }
+
+  test("should assign the correct cluster with sparse vectors") {
+    val data1 = Seq(Vectors.sparse(3, Array(0, 1, 2), Array(1.0, 2.0, 3.0)))
+    val data2 = Seq(Vectors.sparse(3, Array(0, 1, 2), Array(4.0, 5.0, 6.0)))
     val data0 = data1 ++ data2
 
     val cluster0 = ClusterTree.fromRDD(sc.parallelize(data0))
@@ -271,6 +305,13 @@ class ClusteringStatsUpdaterSuite extends FunSuite with LocalSparkContext {
     updater(clusterTree)
     assert(clusterTree.getDataSize().get === 9999)
     assert(clusterTree.getVariance().get === 8332500)
+
+    val seed = (1 to 9999).map(i => Vectors.sparse(1, Seq((0, i.toDouble))))
+    val sparseData = sc.parallelize(seed, 4)
+    val sparseClusterTree = ClusterTree.fromRDD(sparseData)
+    updater(sparseClusterTree)
+    assert(sparseClusterTree.getDataSize().get === 9999)
+    assert(sparseClusterTree.getVariance().get === 8332500)
   }
 }
 

@@ -106,7 +106,7 @@ class HierarchicalClusteringModel(object):
     True
     >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
     True
-    >>> x = model.predict(array([0.0, 0.0]))
+    >>> x = model.predict(data[0])
     >>> type(x)
     <type 'int'>
     >>> predicted_rdd = model.predict(train_rdd)
@@ -121,7 +121,7 @@ class HierarchicalClusteringModel(object):
     ...     SparseVector(3, {2: 1.1})
     ... ]
     >>> train_rdd = sc.parallelize(sparse_data)
-    >>> model = HierarchicalClustering.train(train_rdd, 2)
+    >>> model = HierarchicalClustering.train(train_rdd, 2, numRetries=100)
     >>> model.predict(array([0., 1., 0.])) == model.predict(array([0, 1.1, 0.]))
     True
     >>> model.predict(array([0., 0., 1.])) == model.predict(array([0, 0, 1.1]))
@@ -136,7 +136,8 @@ class HierarchicalClusteringModel(object):
     >>> predicted_rdd = model.predict(train_rdd)
     >>> type(predicted_rdd)
     <class 'pyspark.rdd.RDD'>
-    >>> predicted_rdd.collect() == [1, 1, 0, 0]
+    >>> (predicted_rdd.collect() == [0,0,1,1] 
+    ...     or predicted_rdd.collect() == [1,1,0,0] )
     True
     >>> type(model.clusterCenters)
     <type 'list'>
@@ -202,7 +203,7 @@ class HierarchicalClustering(object):
 
     @classmethod
     def train(cls, rdd, k,
-              subIterations=20, numRetries=5, epsilon=1.0e-6, randomSeed=1, randomRange=0.1):
+              subIterations=20, numRetries=10, epsilon=1.0e-4, randomSeed=1, randomRange=0.1):
         """Train a hierarchical clustering model."""
         sc = rdd.context
         ser = PickleSerializer()
