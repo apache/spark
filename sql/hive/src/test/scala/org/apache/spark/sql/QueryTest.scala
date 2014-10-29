@@ -33,6 +33,25 @@ import org.apache.spark.sql.catalyst.util._
  */
 class QueryTest extends PlanTest {
   /**
+   * Runs the plan and makes sure the answer contains all of the keywords, or the
+   * none of keywords are listed in the answer
+   * @param rdd the [[SchemaRDD]] to be executed
+   * @param exists true for make sure the keywords are listed in the output, otherwise
+   *               to make sure none of the keyword are not listed in the output
+   * @param keywords keyword in string array
+   */
+  def checkExistence(rdd: SchemaRDD, exists: Boolean, keywords: String*) {
+    val outputs = rdd.collect().map(_.mkString).mkString
+    for (key <- keywords) {
+      if (exists) {
+        assert(outputs.contains(key), s"Failed for $rdd ($key doens't exist in result)")
+      } else {
+        assert(!outputs.contains(key), s"Failed for $rdd ($key existed in the result)")
+      }
+    }
+  }
+
+  /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
    * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
