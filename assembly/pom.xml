@@ -119,6 +119,7 @@
               <artifact>*:*</artifact>
               <excludes>
                 <exclude>org/datanucleus/**</exclude>
+                <exclude>org/mortbay/**</exclude>
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
