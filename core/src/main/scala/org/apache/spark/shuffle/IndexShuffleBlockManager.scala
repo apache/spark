@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.network.{ManagedBuffer, FileSegmentManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.storage._
 
 /**

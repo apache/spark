@@ -17,6 +17,10 @@
 
 package org.apache.spark.storage
 
+import java.util.concurrent.Semaphore
+
+import scala.concurrent.future
+import scala.concurrent.ExecutionContext.Implicits.global
 import org.apache.spark.{TaskContextImpl, TaskContext}
 import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
 
@@ -27,96 +31,64 @@ import org.mockito.stubbing.Answer
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.network._
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.serializer.TestSerializer
+
 
 class ShuffleBlockFetcherIteratorSuite extends FunSuite {
+  // Some of the tests are quite tricky because we are testing the cleanup behavior
+  // in the presence of faults.
 
-  test("handle local read failures in BlockManager") {
+  /** Creates a mock [[BlockTransferService]] that returns data from the given map. */
+  private def createMockTransfer(data: Map[BlockId, ManagedBuffer]): BlockTransferService = {
     val transfer = mock(classOf[BlockTransferService])
-    val blockManager = mock(classOf[BlockManager])
-    doReturn(BlockManagerId("test-client", "test-client", 1)).when(blockManager).blockManagerId
+    when(transfer.fetchBlocks(any(), any(), any(), any())).thenAnswer(new Answer[Unit] {
+      override def answer(invocation: InvocationOnMock): Unit = {
+        val blocks = invocation.getArguments()(2).asInstanceOf[Seq[String]]
+        val listener = invocation.getArguments()(3).asInstanceOf[BlockFetchingListener]
 
-    val blIds = Array[BlockId](
-      ShuffleBlockId(0,0,0),
-      ShuffleBlockId(0,1,0),
-      ShuffleBlockId(0,2,0),
-      ShuffleBlockId(0,3,0),
-      ShuffleBlockId(0,4,0))
-
-    val optItr = mock(classOf[Option[Iterator[Any]]])
-    val answer = new Answer[Option[Iterator[Any]]] {
-      override def answer(invocation: InvocationOnMock) = Option[Iterator[Any]] {
-        throw new Exception
+        for (blockId <- blocks) {
+          if (data.contains(BlockId(blockId))) {
+            listener.onBlockFetchSuccess(blockId, data(BlockId(blockId)))
+          } else {
+            listener.onBlockFetchFailure(blockId, new BlockNotFoundException(blockId))
+          }
+        }
       }
-    }
-
-    // 3rd block is going to fail
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(0)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(1)), any())
-    doAnswer(answer).when(blockManager).getLocalShuffleFromDisk(meq(blIds(2)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(3)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(4)), any())
-
-    val bmId = BlockManagerId("test-client", "test-client", 1)
-    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
-      (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
-    )
-
-    val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContextImpl(0, 0, 0),
-      transfer,
-      blockManager,
-      blocksByAddress,
-      null,
-      48 * 1024 * 1024)
-
-    // Without exhausting the iterator, the iterator should be lazy and not call
-    // getLocalShuffleFromDisk.
-    verify(blockManager, times(0)).getLocalShuffleFromDisk(any(), any())
-
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has no elements")
-    // the 2nd element of the tuple returned by iterator.next should be defined when
-    // fetching successfully
-    assert(iterator.next()._2.isDefined,
-      "1st element should be defined but is not actually defined")
-    verify(blockManager, times(1)).getLocalShuffleFromDisk(any(), any())
-
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 1 element")
-    assert(iterator.next()._2.isDefined,
-      "2nd element should be defined but is not actually defined")
-    verify(blockManager, times(2)).getLocalShuffleFromDisk(any(), any())
-
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 2 elements")
-    // 3rd fetch should be failed
-    intercept[Exception] {
-      iterator.next()
-    }
-    verify(blockManager, times(3)).getLocalShuffleFromDisk(any(), any())
+    })
+    transfer
   }
 
-  test("handle local read successes") {
-    val transfer = mock(classOf[BlockTransferService])
+  private val conf = new SparkConf
+
+  test("successful 3 local reads + 2 remote reads") {
     val blockManager = mock(classOf[BlockManager])
-    doReturn(BlockManagerId("test-client", "test-client", 1)).when(blockManager).blockManagerId
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
 
-    val blIds = Array[BlockId](
-      ShuffleBlockId(0,0,0),
-      ShuffleBlockId(0,1,0),
-      ShuffleBlockId(0,2,0),
-      ShuffleBlockId(0,3,0),
-      ShuffleBlockId(0,4,0))
+    // Make sure blockManager.getBlockData would return the blocks
+    val localBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer]))
+    localBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId))
+    }
 
-    val optItr = mock(classOf[Option[Iterator[Any]]])
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 3, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 4, 0) -> mock(classOf[ManagedBuffer])
+    )
 
-    // All blocks should be fetched successfully
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(0)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(1)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(2)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(3)), any())
-    doReturn(optItr).when(blockManager).getLocalShuffleFromDisk(meq(blIds(4)), any())
+    val transfer = createMockTransfer(remoteBlocks)
 
-    val bmId = BlockManagerId("test-client", "test-client", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
-      (bmId, blIds.map(blId => (blId, 1.asInstanceOf[Long])).toSeq)
+      (localBmId, localBlocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq),
+      (remoteBmId, remoteBlocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq)
     )
 
     val iterator = new ShuffleBlockFetcherIterator(
@@ -124,60 +96,145 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
       transfer,
       blockManager,
       blocksByAddress,
-      null,
+      new TestSerializer,
       48 * 1024 * 1024)
 
-    // Without exhausting the iterator, the iterator should be lazy and not call getLocalShuffleFromDisk.
-    verify(blockManager, times(0)).getLocalShuffleFromDisk(any(), any())
+    // 3 local blocks fetched in initialization
+    verify(blockManager, times(3)).getBlockData(any())
 
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has no elements")
-    assert(iterator.next()._2.isDefined,
-      "All elements should be defined but 1st element is not actually defined")
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 1 element")
-    assert(iterator.next()._2.isDefined,
-      "All elements should be defined but 2nd element is not actually defined")
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 2 elements")
-    assert(iterator.next()._2.isDefined,
-      "All elements should be defined but 3rd element is not actually defined")
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 3 elements")
-    assert(iterator.next()._2.isDefined,
-      "All elements should be defined but 4th element is not actually defined")
-    assert(iterator.hasNext, "iterator should have 5 elements but actually has 4 elements")
-    assert(iterator.next()._2.isDefined,
-      "All elements should be defined but 5th element is not actually defined")
+    for (i <- 0 until 5) {
+      assert(iterator.hasNext, s"iterator should have 5 elements but actually has $i elements")
+      val (blockId, subIterator) = iterator.next()
+      assert(subIterator.isDefined,
+        s"iterator should have 5 elements defined but actually has $i elements")
 
-    verify(blockManager, times(5)).getLocalShuffleFromDisk(any(), any())
+      // Make sure we release the buffer once the iterator is exhausted.
+      val mockBuf = localBlocks.getOrElse(blockId, remoteBlocks(blockId))
+      verify(mockBuf, times(0)).release()
+      subIterator.get.foreach(_ => Unit)  // exhaust the iterator
+      verify(mockBuf, times(1)).release()
+    }
+
+    // 3 local blocks, and 2 remote blocks
+    // (but from the same block manager so one call to fetchBlocks)
+    verify(blockManager, times(3)).getBlockData(any())
+    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any())
   }
 
-  test("handle remote fetch failures in BlockTransferService") {
+  test("release current unexhausted buffer in case the task completes early") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer])
+    )
+
+    // Semaphore to coordinate event sequence in two different threads.
+    val sem = new Semaphore(0)
+
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any())).thenAnswer(new Answer[Unit] {
       override def answer(invocation: InvocationOnMock): Unit = {
         val listener = invocation.getArguments()(3).asInstanceOf[BlockFetchingListener]
-        listener.onBlockFetchFailure(new Exception("blah"))
+        future {
+          // Return the first two blocks, and wait till task completion before returning the 3rd one
+          listener.onBlockFetchSuccess(
+            ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+          listener.onBlockFetchSuccess(
+            ShuffleBlockId(0, 1, 0).toString, blocks(ShuffleBlockId(0, 1, 0)))
+          sem.acquire()
+          listener.onBlockFetchSuccess(
+            ShuffleBlockId(0, 2, 0).toString, blocks(ShuffleBlockId(0, 2, 0)))
+        }
       }
     })
 
-    val blockManager = mock(classOf[BlockManager])
-
-    when(blockManager.blockManagerId).thenReturn(BlockManagerId("test-client", "test-client", 1))
-
-    val blId1 = ShuffleBlockId(0, 0, 0)
-    val blId2 = ShuffleBlockId(0, 1, 0)
-    val bmId = BlockManagerId("test-server", "test-server", 1)
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
-      (bmId, Seq((blId1, 1L), (blId2, 1L))))
+      (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
 
+    val taskContext = new TaskContextImpl(0, 0, 0)
     val iterator = new ShuffleBlockFetcherIterator(
-      new TaskContextImpl(0, 0, 0),
+      taskContext,
       transfer,
       blockManager,
       blocksByAddress,
-      null,
+      new TestSerializer,
       48 * 1024 * 1024)
 
-    iterator.foreach { case (_, iterOption) =>
-      assert(!iterOption.isDefined)
-    }
+    // Exhaust the first block, and then it should be released.
+    iterator.next()._2.get.foreach(_ => Unit)
+    verify(blocks(ShuffleBlockId(0, 0, 0)), times(1)).release()
+
+    // Get the 2nd block but do not exhaust the iterator
+    val subIter = iterator.next()._2.get
+
+    // Complete the task; then the 2nd block buffer should be exhausted
+    verify(blocks(ShuffleBlockId(0, 1, 0)), times(0)).release()
+    taskContext.markTaskCompleted()
+    verify(blocks(ShuffleBlockId(0, 1, 0)), times(1)).release()
+
+    // The 3rd block should not be retained because the iterator is already in zombie state
+    sem.release()
+    verify(blocks(ShuffleBlockId(0, 2, 0)), times(0)).retain()
+    verify(blocks(ShuffleBlockId(0, 2, 0)), times(0)).release()
+  }
+
+  test("fail all blocks if any of the remote request fails") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 1, 0) -> mock(classOf[ManagedBuffer]),
+      ShuffleBlockId(0, 2, 0) -> mock(classOf[ManagedBuffer])
+    )
+
+    // Semaphore to coordinate event sequence in two different threads.
+    val sem = new Semaphore(0)
+
+    val transfer = mock(classOf[BlockTransferService])
+    when(transfer.fetchBlocks(any(), any(), any(), any())).thenAnswer(new Answer[Unit] {
+      override def answer(invocation: InvocationOnMock): Unit = {
+        val listener = invocation.getArguments()(3).asInstanceOf[BlockFetchingListener]
+        future {
+          // Return the first block, and then fail.
+          listener.onBlockFetchSuccess(
+            ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+          listener.onBlockFetchFailure(
+            ShuffleBlockId(0, 1, 0).toString, new BlockNotFoundException("blah"))
+          listener.onBlockFetchFailure(
+            ShuffleBlockId(0, 2, 0).toString, new BlockNotFoundException("blah"))
+          sem.release()
+        }
+      }
+    })
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
+      (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq))
+
+    val taskContext = new TaskContextImpl(0, 0, 0)
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      new TestSerializer,
+      48 * 1024 * 1024)
+
+    // Continue only after the mock calls onBlockFetchFailure
+    sem.acquire()
+
+    // The first block should be defined, and the last two are not defined (due to failure)
+    assert(iterator.next()._2.isDefined === true)
+    assert(iterator.next()._2.isDefined === false)
+    assert(iterator.next()._2.isDefined === false)
   }
 }

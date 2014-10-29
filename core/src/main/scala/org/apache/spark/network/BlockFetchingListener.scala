@@ -19,19 +19,24 @@ package org.apache.spark.network
 
 import java.util.EventListener
 
+import org.apache.spark.network.buffer.ManagedBuffer
+
 
 /**
  * Listener callback interface for [[BlockTransferService.fetchBlocks]].
  */
+private[spark]
 trait BlockFetchingListener extends EventListener {
 
   /**
-   * Called once per successfully fetched block.
+   * Called once per successfully fetched block. After this call returns, data will be released
+   * automatically. If the data will be passed to another thread, the receiver should retain()
+   * and release() the buffer on their own, or copy the data to a new buffer.
    */
   def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit
 
   /**
-   * Called upon failures. For each failure, this is called only once (i.e. not once per block).
+   * Called at least once per block upon failures.
    */
-  def onBlockFetchFailure(exception: Throwable): Unit
+  def onBlockFetchFailure(blockId: String, exception: Throwable): Unit
 }
