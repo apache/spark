@@ -53,6 +53,9 @@ sparkR.init <- function(
   }
   
   ExecutorEnv <- .jnew("java/util/HashMap")
+  if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
+    ExecutorEnv$put("LD_LIBRARY_PATH", paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH")))
+  }
   for (varname in names(sparkExecutorEnv)) {
     ExecutorEnv$put(varname, sparkExecutorEnv[[varname]])
   }
