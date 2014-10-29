@@ -107,7 +107,7 @@ class ALS private (
   private var seed: Long = System.nanoTime()) extends Serializable with Logging {
   /**
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
-   * lambda: 0.01, lambdaL1: 0.0, implicitPrefs: false, alpha: 1.0}.
+   * userLambda: 0.01, productLambda: 0.01, implicitPrefs: false, alpha: 1.0}.
    */
 
   def this() = this(-1, -1, 10, 10, SMOOTH, SMOOTH, 0.01, 0.01, false, 1.0)
@@ -165,14 +165,14 @@ class ALS private (
   /* Set user constraint, Default: SMOOTH */
   def setUserConstraint(userConstraint: Constraint): ALS = {
     this.userConstraint = userConstraint
-    if (this.userConstraint == SPARSE) userBeta = 0.0
+    if (this.userConstraint == SPARSE) userBeta = 0.99
     this
   }
 
   /* Set product constraint, Default: SMOOTH */
   def setProductConstraint(productConstraint: Constraint): ALS = {
     this.productConstraint = productConstraint
-    if (this.productConstraint == SPARSE) productBeta = 0.0
+    if (this.productConstraint == SPARSE) productBeta = 0.99
     this
   }
 
@@ -198,11 +198,11 @@ class ALS private (
     this
   }
 
-  //beta for elastic net, 1.0 SMOOTH 0.0 SPARSE
+  //beta for elastic net, 1.0: SPARSE 0.0: SMOOTH 
   //User driven elastic net beta tuning not supported yet
-  private var userBeta = 1.0
-  private var productBeta = 1.0
-
+  private var userBeta = 0.0
+  private var productBeta = 0.0
+  
   /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
@@ -272,7 +272,7 @@ class ALS private (
 
         //product update
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          rank, productConstraint, productBeta * productLambda, alpha, YtY)
+          rank, productConstraint, productLambda, productBeta, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
@@ -283,7 +283,7 @@ class ALS private (
         val previousUsers = users
         //user update
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          rank, userConstraint, userBeta * userLambda, alpha, XtX)
+          rank, userConstraint, userLambda, userBeta, alpha, XtX)
         previousUsers.unpersist()
       }
     } else {
@@ -292,7 +292,7 @@ class ALS private (
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         //product update
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          rank, productConstraint, productBeta * productLambda, alpha, YtY = None)
+          rank, productConstraint, productLambda, productBeta, alpha, YtY = None)
         if (sc.checkpointDir.isDefined && (iter % 3 == 0)) {
           products.checkpoint()
         }
@@ -300,7 +300,7 @@ class ALS private (
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         //user update
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          rank, userConstraint, userBeta * userLambda, alpha, YtY = None)
+          rank, userConstraint, userLambda, userBeta, alpha, YtY = None)
         users.setName(s"users-$iter")
       }
     }
@@ -497,6 +497,7 @@ class ALS private (
     rank: Int,
     constraint: Constraint,
     lambda: Double,
+    beta: Double,
     alpha: Double,
     YtY: Option[Broadcast[DoubleMatrix]]): RDD[(Int, Array[Array[Double]])] = {
     productOutLinks.join(products).flatMap {
@@ -512,11 +513,12 @@ class ALS private (
       .join(userInLinks)
       .mapValues {
         case (messages, inLinkBlock) =>
-          updateBlock(messages, inLinkBlock, rank, constraint, lambda, alpha, YtY)
+          updateBlock(messages, inLinkBlock, rank, constraint, lambda, beta, alpha, YtY)
       }
   }
 
-  private def diagnose(H: DoubleMatrix, f: DoubleMatrix) {
+  private def diagnose(index: Int, H: DoubleMatrix, f: DoubleMatrix, lambdaL2: Double, lambdaL1: Double) {
+    logInfo(s"Diagnosing userOrProduct ${index} lambdaL2 ${lambdaL2} lambdaL1 ${lambdaL1}")
     logInfo("H")
     logInfo(H.toString())
     logInfo("f")
@@ -528,7 +530,8 @@ class ALS private (
    * it received from each product and its InLinkBlock.
    */
   private def updateBlock(messages: Iterable[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
-    rank: Int, constraint: Constraint, lambda: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]]): Array[Array[Double]] =
+    rank: Int, constraint: Constraint, lambda: Double, beta: Double, 
+    alpha: Double, YtY: Option[Broadcast[DoubleMatrix]]): Array[Array[Double]] =
     {
       // Sort the incoming block factor messages by block ID and make them an array
       val blockFactors = messages.toSeq.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
@@ -547,7 +550,11 @@ class ALS private (
 
       // Count the number of ratings each user gives to provide user-specific regularization
       val numRatings = Array.fill(numUsers)(0)
-
+      
+      //Elastic-net regularization
+      val lambdaL1 = lambda*beta
+      val lambdaL2 = lambda*(1.0 - beta)
+      
       // Compute the XtX and Xy values for each user by adding products it rated in each product
       // block
       for (productBlock <- 0 until numProductBlocks) {
@@ -589,37 +596,48 @@ class ALS private (
       //TO DO : Merge NNLS with QuadraticMinimizer for iterative version
       val ws = if (constraint == POSITIVE) NNLS.createWorkspace(rank) else null
 
-      val quadraticMinimizer = QuadraticMinimizer(rank, constraint, lambda)
+      val quadraticMinimizer = QuadraticMinimizer(rank, constraint, lambdaL1)
       var slowConvergence = 0
-
+      
       // Solve the least-squares problem for each user and return the new feature vectors
       val factors = Array.range(0, numUsers).map { index =>
         // Compute the full XtX matrix from the lower-triangular part we got above
         fillFullMatrix(userXtX(index), fullXtX)
-        // Add regularization
-        val regParam = numRatings(index) * lambda
+        // Add L2 regularization
+        val regParam = numRatings(index)*lambdaL2
+        // Add L1 regularization
+        quadraticMinimizer.setLambda(numRatings(index)*lambdaL1)
+        
         var i = 0
         while (i < rank) {
           fullXtX.data(i * rank + i) += regParam
           i += 1
         }
-
+        
         // Solve the resulting matrix, which is symmetric and positive-definite
         val result = if (implicitPrefs) {
           val H = fullXtX.add(YtY.get.value)
           val f = userXy(index).mul(-1)
           val (qmResult, converged) = quadraticMinimizer.solve(H, f)
           if (!converged) slowConvergence += 1
-          if (!converged && Random.nextDouble() < 0.2) diagnose(H, f)
-          if (ws != null) solveLeastSquares(constraint, fullXtX.addi(YtY.get.value), userXy(index), ws)
+          if (!converged && Random.nextDouble() < 0.2) diagnose(index, H, f, lambdaL2, lambdaL1)
+          if (ws != null) {
+            val nnlsResult = new DoubleMatrix(solveLeastSquares(constraint, fullXtX.addi(YtY.get.value), userXy(index), ws))
+            val norm = qmResult.sub(nnlsResult).norm2
+            if(norm > 1e-3) diagnose(index, H, f, lambdaL2, lambdaL1)
+          } 
           qmResult.data
         } else {
           val H = fullXtX
           val f = userXy(index).mul(-1)
           val (qmResult, converged) = quadraticMinimizer.solve(H, f)
           if (!converged) slowConvergence += 1
-          if (!converged && Random.nextDouble() < 0.2) diagnose(H, f)
-          if (ws != null) solveLeastSquares(constraint, fullXtX, userXy(index), ws)
+          if (!converged && Random.nextDouble() < 0.2) diagnose(index, H, f, lambdaL2, lambdaL1)
+          if (ws != null) {
+            val nnlsResult = new DoubleMatrix(solveLeastSquares(constraint, fullXtX, userXy(index), ws))
+            val norm = qmResult.sub(nnlsResult).norm2()
+            if(norm > 1e-3) diagnose(index, H, f, lambdaL2, lambdaL1)
+          }
           qmResult.data
         }
         result
@@ -695,7 +713,6 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     L2 smoothness regularization factor (recommended: 0.01)
-   * @param lambdaL1   L1 sparsity regularization factor (recommended: ???)
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed
    */
@@ -724,7 +741,6 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     L2 smoothness regularization factor (recommended: 0.01)
-   * @param lambdaL1   L1 sparsity regularization factor (recommended: ???)
    * @param blocks     level of parallelism to split computation into
    */
   def train(

@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 import org.apache.spark.Logging
 import org.apache.spark.mllib.optimization.Constraint
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -58,6 +59,7 @@ object MovieLensALS {
       userLambda: Double = 0.01,
       productLambda: Double = 0.01,
       rank: Int = 10,
+      delimiter: String = "::",
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
       implicitPrefs: Boolean = false)
@@ -87,7 +89,10 @@ object MovieLensALS {
         .action((x, c) => c.copy(userLambda = x))
       opt[Double]("lambdaProduct")
         .text(s"lambda for product regularization, default: ${defaultParams.productLambda}")
-        .action((x, c) => c.copy(productLambda = x))
+        .action((x, c) => c.copy(productLambda = x))   
+     opt[String]("delimiter")
+      .text(s"sparse dataset delimiter, default: ${defaultParams.delimiter}")
+      .action((x,c) => c.copy(delimiter = x))
       opt[Unit]("kryo")
         .text("use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
@@ -134,7 +139,8 @@ object MovieLensALS {
     Logger.getRootLogger.setLevel(Level.WARN)
 
     val ratings = sc.textFile(params.input).map { line =>
-      val fields = line.split("::")
+      val fields = line.split(params.delimiter)
+      
       if (params.implicitPrefs) {
         /*
          * MovieLens ratings are on a scale of 1-5:
@@ -217,6 +223,7 @@ object MovieLensALS {
     val predictionsAndRatings = predictions.map{ x =>
       ((x.user, x.product), mapPredictedRating(x.rating))
     }.join(data.map(x => ((x.user, x.product), x.rating))).values
+    
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
