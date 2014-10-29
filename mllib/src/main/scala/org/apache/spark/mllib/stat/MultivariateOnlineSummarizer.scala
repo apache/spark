@@ -101,7 +101,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       }
       case sv: SparseVector =>
         var j = 0
-        while (j < sv.size) {
+        while (j < sv.indices.size) {
           update(sv.indices(j), sv.values(j))
           j += 1
         }
