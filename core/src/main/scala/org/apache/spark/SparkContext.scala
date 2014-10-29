@@ -871,7 +871,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   /**
    * :: DeveloperApi ::
-   * Request the cluster manager to kill the specified executors.
+   * Request that the cluster manager kill the specified executors.
    */
   @DeveloperApi
   def killExecutors(executorIds: Seq[String]): Unit = {
@@ -883,7 +883,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   /**
    * :: DeveloperApi ::
-   * Request the cluster manager to kill the specified executor.
+   * Request that cluster manager the kill the specified executor.
    */
   @DeveloperApi
   def killExecutor(executorId: String): Unit = killExecutors(Seq(executorId))

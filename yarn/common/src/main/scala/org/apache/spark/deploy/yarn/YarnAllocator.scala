@@ -116,6 +116,7 @@ private[yarn] abstract class YarnAllocator(
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total.
+   * This takes into account executors already running or pending.
    */
   def requestTotalExecutors(requestedTotal: Int): Unit = synchronized {
     val currentTotal = numPendingAllocate.get + numExecutorsRunning.get
@@ -132,7 +133,7 @@ private[yarn] abstract class YarnAllocator(
   }
 
   /**
-   * Release the container running the given executor.
+   * Request that the ResourceManager release the container running the specified executor.
    */
   def killExecutor(executorId: String): Unit = synchronized {
     if (executorIdToContainer.contains(executorId)) {

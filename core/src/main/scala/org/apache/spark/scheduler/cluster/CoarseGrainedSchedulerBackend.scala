@@ -62,10 +62,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   private val executorDataMap = new HashMap[String, ExecutorData]
 
-  // Number of executors requested from the cluster manager but have not registered yet
+  // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
 
-  // Executors we have requested the cluster manager to kill but have not died yet
+  // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
@@ -94,11 +94,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
+          val (host, _) = Utils.parseHostPort(hostPort)
+          val data = new ExecutorData(sender, sender.path.address, host, cores, cores)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
-            executorDataMap.put(executorId, new ExecutorData(sender, sender.path.address,
-              Utils.parseHostPort(hostPort)._1, cores, cores))
+            executorDataMap.put(executorId, data)
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
@@ -296,7 +297,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   /**
    * Request an additional number of executors from the cluster manager.
-   * Return whether the request successfully reaches the cluster manager.
+   * Return whether the request is acknowledged.
    */
   final def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
     logInfo(s"Requesting $numAdditionalExecutors additional executors from the cluster manager")
@@ -308,7 +309,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
   }
 
   /**
-   * Request executors from the cluster manager by specifying the total number desired.
+   * Request executors from the cluster manager by specifying the total number desired,
+   * including existing pending and running executors.
    *
    * The semantics here guarantee that we do not over-allocate executors for this application,
    * since a later request overrides the value of any prior request. The alternative interface
@@ -316,13 +318,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * insufficient resources to satisfy the first request. We make the assumption here that the
    * cluster manager will eventually fulfill all requests when resources free up.
    *
-   * Return whether the request successfully reaches the cluster manager.
+   * Return whether the request is acknowledged.
    */
   protected def doRequestTotalExecutors(requestedTotal: Int): Boolean = false
 
   /**
-   * Kill the given list of executors through the cluster manager.
-   * Return whether the kill request successfully reaches the cluster manager.
+   * Request that the cluster manager kill the specified executors.
+   * Return whether the kill request is acknowledged.
    */
   final def killExecutors(executorIds: Seq[String]): Boolean = {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
@@ -340,7 +342,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   /**
    * Kill the given list of executors through the cluster manager.
-   * Return whether the kill request successfully reaches the cluster manager.
+   * Return whether the kill request is acknowledged.
    */
   protected def doKillExecutors(executorIds: Seq[String]): Boolean = false
 
