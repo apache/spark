@@ -120,34 +120,15 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
   /**
    * Start the main polling thread that keeps track of when to add and remove executors.
-   * During each loop interval, this thread checks if the time then has exceeded any of the
-   * add and remove times that are set. If so, it triggers the corresponding action.
    */
   private def startPolling(): Unit = {
     val t = new Thread {
       override def run(): Unit = {
         while (true) {
-          ExecutorAllocationManager.this.synchronized {
-            val now = System.currentTimeMillis
-            try {
-              // If the add time has expired, add executors and refresh the add time
-              if (addTime != NOT_SET && now >= addTime) {
-                addExecutors()
-                logDebug(s"Starting timer to add more executors (to " +
-                  s"expire in $sustainedSchedulerBacklogTimeout seconds)")
-                addTime += sustainedSchedulerBacklogTimeout * 1000
-              }
-
-              // If any remove time has expired, remove the corresponding executor
-              removeTimes.foreach { case (executorId, expireTime) =>
-                if (now > expireTime) {
-                  removeExecutor(executorId)
-                  removeTimes.remove(executorId)
-                }
-              }
-            } catch {
-              case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
-            }
+          try {
+            maybeAddAndRemove()
+          } catch {
+            case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
           }
           Thread.sleep(intervalMillis)
         }
@@ -156,6 +137,27 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     t.setName("spark-dynamic-executor-allocation")
     t.setDaemon(true)
     t.start()
+  }
+
+  /**
+   * If the add time has expired, request new executors and refresh the add time.
+   * If the remove time for an existing executor has expired, kill the executor.
+   * This is factored out into its own method for testing.
+   */
+  private def maybeAddAndRemove(now: Long = System.currentTimeMillis): Unit = synchronized {
+    if (addTime != NOT_SET && now >= addTime) {
+      addExecutors()
+      logDebug(s"Starting timer to add more executors (to " +
+        s"expire in $sustainedSchedulerBacklogTimeout seconds)")
+      addTime += sustainedSchedulerBacklogTimeout * 1000
+    }
+
+    removeTimes.foreach { case (executorId, expireTime) =>
+      if (now > expireTime) {
+        removeExecutor(executorId)
+        removeTimes.remove(executorId)
+      }
+    }
   }
 
   /**
@@ -244,7 +246,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   private def onExecutorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
-      executorIds.foreach(onExecutorIdle)
+      executorIds.foreach { id => onExecutorIdle(id) }
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
       if (numExecutorsPending > 0) {
         numExecutorsPending -= 1
@@ -276,11 +278,11 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * This sets a time in the future that decides when executors should be added
    * if it is not already set.
    */
-  private def onSchedulerBacklogged(): Unit = synchronized {
+  private def onSchedulerBacklogged(now: Long = System.currentTimeMillis): Unit = synchronized {
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeout seconds)")
-      addTime = System.currentTimeMillis + schedulerBacklogTimeout * 1000
+      addTime = now + schedulerBacklogTimeout * 1000
     }
   }
 
@@ -299,11 +301,13 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * This sets a time in the future that decides when this executor should be removed if
    * the executor is not already marked as idle.
    */
-  private def onExecutorIdle(executorId: String): Unit = synchronized {
+  private def onExecutorIdle(
+      executorId: String,
+      now: Long = System.currentTimeMillis): Unit = synchronized {
     if (!removeTimes.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
         s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
-      removeTimes(executorId) = System.currentTimeMillis + removeThresholdSeconds * 1000
+      removeTimes(executorId) = now + removeThresholdSeconds * 1000
     }
   }
 
