@@ -107,8 +107,7 @@ case class MultiWayBroadcastInnerHashJoin(
     private[this] var numTotalOutputForCurrentStreamRow = 0
 
     /**
-     * Index of the current output row for the current stream row.
-     * Equals the product of all values in currentMatchPositions.
+     * Number of rows we have already been produced for the current stream row.
      * When this is less than [[numTotalOutputForCurrentStreamRow]], we know we haven't exhausted
      * all the matches for the current stream row yet.
      */
