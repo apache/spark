@@ -19,6 +19,7 @@ package org.apache.spark.streaming.rdd
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
