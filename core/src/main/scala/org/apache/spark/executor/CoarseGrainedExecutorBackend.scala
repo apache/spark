@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.net.URL
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
@@ -40,6 +41,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostPort: String,
     cores: Int,
     sparkProperties: Seq[(String, String)],
+    userClassPath: Seq[URL],
     actorSystem: ActorSystem)
   extends Actor with ActorLogReceive with ExecutorBackend with Logging {
 
@@ -60,7 +62,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
       val (hostname, _) = Utils.parseHostPort(hostPort)
-      executor = new Executor(executorId, hostname, sparkProperties, isLocal = false, actorSystem)
+      executor = new Executor(executorId, hostname, sparkProperties, userClassPath,
+        isLocal = false, actorSystem)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -109,7 +112,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       hostname: String,
       cores: Int,
       appId: String,
-      workerUrl: Option[String]) {
+      workerUrl: Option[String],
+      userClassPath: Seq[URL]) {
 
     SignalLogger.register(log)
 
@@ -138,7 +142,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val sparkHostPort = hostname + ":" + boundPort
       actorSystem.actorOf(
         Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, props, actorSystem),
+          driverUrl, executorId, sparkHostPort, cores, props, userClassPath, actorSystem),
         name = "Executor")
       workerUrl.foreach { url =>
         actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
@@ -154,6 +158,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var cores: Int = 0
     var appId: String = null
     var workerUrl: Option[String] = None
+    val userClassPath = new mutable.ListBuffer[URL]()
 
     var argv = args.toList
     while (!argv.isEmpty) {
@@ -177,6 +182,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           // Worker url is used in spark standalone mode to enforce fate-sharing with worker
           workerUrl = Some(value)
           argv = tail
+        case ("--user-class-path") :: value :: tail =>
+          userClassPath += new URL(value)
+          argv = tail
         case Nil =>
         case tail =>
           System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
@@ -189,7 +197,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       printUsageAndExit()
     }
 
-    run(driverUrl, executorId, hostname, cores, appId, workerUrl)
+    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath)
   }
 
   private def printUsageAndExit() = {
@@ -204,6 +212,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --cores <cores>
       |   --app-id <appid>
       |   [--worker-id <workerUrl>]
+      |   [--user-class-path <url>]
       |""".stripMargin)
     System.exit(1)
   }

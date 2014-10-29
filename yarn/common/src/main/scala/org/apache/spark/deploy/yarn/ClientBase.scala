@@ -673,24 +673,15 @@ private[spark] object ClientBase extends Logging {
       sparkConf: SparkConf,
       env: HashMap[String, String],
       extraClassPath: Option[String] = None): Unit = {
-    val enableIsolation =
-      if (args != null) {
-        sparkConf.getBoolean("spark.executor.enableClassPathIsolation",
-          sparkConf.getBoolean("spark.files.userClassPathFirst", false))
-      } else {
-        sparkConf.getBoolean("spark.driver.enableClassPathIsolation", false)
-      }
-
     extraClassPath.foreach(addClasspathEntry(_, env))
-    if (enableIsolation) {
+    addClasspathEntry(Environment.PWD.$(), env)
+    if (isolateClassPath(sparkConf, args == null)) {
       addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)
     } else {
-      addClasspathEntry(Environment.PWD.$(), env)
-
       // Normally the users app.jar is last in case it conflicts with spark jars.
       if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-        getUserClasspath(args, sparkConf, Environment.PWD.$()).foreach { x =>
+        getUserClasspath(args, sparkConf).foreach { x =>
           addFileToClasspath(x, null, env)
         }
       }
@@ -703,12 +694,14 @@ private[spark] object ClientBase extends Logging {
   }
 
   /**
-   * Returns a list of URLs representing the user classpath.
+   * Returns a list of URIs representing the user classpath.
+   *
+   * @param args Client arguments (when starting the AM) or null (when starting executors).
+   * @param conf Spark configuration.
    */
   def getUserClasspath(
       args: ClientArguments,
-      conf: SparkConf,
-      workingDir: String): Array[URI] = {
+      conf: SparkConf): Array[URI] = {
     // If `args` is not null, we are launching an AM container.
     // Otherwise, we are launching executor containers.
     val (mainJar, secondaryJars) =
@@ -719,21 +712,9 @@ private[spark] object ClientBase extends Logging {
           conf.get(CONF_SPARK_YARN_SECONDARY_JARS, null))
       }
 
-    val secondaryUris = Option(secondaryJars).map(_.split(",")).toSeq.flatten.map { jar =>
-      if (new URI(jar).getScheme() == LOCAL_SCHEME) {
-        jar
-      } else {
-        buildPath(workingDir, jar)
-      }
-    }
-
-    // Note: trailing separator is needed for directories (see java.net.URLClassLoader).
-    val classpath: Iterable[String] =
-      Some(workingDir + Path.SEPARATOR) ++
-      Option(mainJar).orElse(Some(buildPath(workingDir, APP_JAR))) ++
-      secondaryUris
-
-    classpath.map { new URI(_) }.toArray
+    val mainUri = Option(mainJar).orElse(Some(APP_JAR)).map(new URI(_))
+    val secondaryUris = Option(secondaryJars).map(_.split(",")).toSeq.flatten.map(new URI(_))
+    (mainUri ++ secondaryUris).toArray
   }
 
   /**
@@ -807,6 +788,18 @@ private[spark] object ClientBase extends Logging {
   }
 
   /**
+   * Whether to isolate the user's jars in a different class loader for the given process.
+   */
+  def isolateClassPath(conf: SparkConf, isDriver: Boolean): Boolean = {
+    if (isDriver) {
+      conf.getBoolean("spark.driver.enableClassPathIsolation", false)
+    } else {
+      conf.getBoolean("spark.executor.enableClassPathIsolation",
+        conf.getBoolean("spark.files.userClassPathFirst", false))
+    }
+  }
+
+  /**
    * Return whether the two file systems are the same.
    */
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
@@ -835,7 +828,10 @@ private[spark] object ClientBase extends Logging {
     Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
   }
 
-  private def buildPath(components: String*) = {
+  /**
+   * Joins all the path components using Path.SEPARATOR.
+   */
+  def buildPath(components: String*) = {
     components.mkString(Path.SEPARATOR)
   }
 

@@ -19,6 +19,7 @@ package org.apache.spark.executor
 
 import java.io.File
 import java.lang.management.ManagementFactory
+import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent._
 
@@ -43,6 +44,7 @@ private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
     properties: Seq[(String, String)],
+    userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false,
     actorSystem: ActorSystem = null)
   extends Logging
@@ -291,13 +293,14 @@ private[spark] class Executor(
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = currentJars.keySet.map { uri =>
+    val urls = userClassPath ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
-    }.toArray
-    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
+    }
+    val userClassPathFirst = conf.getBoolean("spark.executor.enableClassPathIsolation",
+      conf.getBoolean("spark.files.userClassPathFirst", false))
     userClassPathFirst match {
-      case true => new ChildExecutorURLClassLoader(urls, currentLoader)
-      case false => new ExecutorURLClassLoader(urls, currentLoader)
+      case true => new ChildExecutorURLClassLoader(urls.toArray, currentLoader)
+      case false => new ExecutorURLClassLoader(urls.toArray, currentLoader)
     }
   }
 

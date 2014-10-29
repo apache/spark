@@ -157,7 +157,9 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     runClusterMode(YarnClasspathTest.getClass,
       Seq(overriddenDriverResult.getAbsolutePath(), overriddenExecutorResult.getAbsolutePath()),
       Seq(jarFile.getAbsolutePath()),
-      Map("spark.driver.enableClassPathIsolation" -> "true"))
+      Map(
+        "spark.driver.enableClassPathIsolation" -> "true",
+        "spark.executor.enableClassPathIsolation" -> "true"))
     checkResult(overriddenDriverResult, "OVERRIDDEN")
     checkResult(overriddenExecutorResult, "OVERRIDDEN")
   }
@@ -260,9 +262,6 @@ private object YarnClasspathTest {
     var result = "failure"
     try {
       val ccl = Thread.currentThread().getContextClassLoader()
-      println(s"CCL: $ccl")
-      println(s"test.resource: ${ccl.getResource("test.resource")}")
-
       val resource = ccl.getResourceAsStream("test.resource")
       val bytes = ByteStreams.toByteArray(resource);
       result = new String(bytes, 0, bytes.length, UTF_8)

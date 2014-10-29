@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 
 import scala.collection.JavaConversions._
@@ -110,6 +111,20 @@ trait ExecutorRunnableUtil extends Logging {
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
+    val userClassPath =
+      if (ClientBase.isolateClassPath(sparkConf, false)) {
+        ClientBase.getUserClasspath(null, sparkConf).flatMap { uri =>
+          val absPath =
+            if (new File(uri.getPath()).isAbsolute()) {
+              uri.getPath()
+            } else {
+              ClientBase.buildPath(Environment.PWD.$(), uri.getPath())
+            }
+          Seq("--user-class-path", "file:" + absPath)
+        }.toSeq
+      } else {
+        Nil
+      }
     val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java",
       "-server",
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
@@ -124,9 +139,11 @@ trait ExecutorRunnableUtil extends Logging {
         "--executor-id", slaveId.toString,
         "--hostname", hostname.toString,
         "--cores", executorCores.toString,
-        "--app-id", appId,
-      "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
-      "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
+        "--app-id", appId) ++
+      userClassPath ++
+      Seq(
+        "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
+        "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
     // TODO: it would be nicer to just make sure there are no null commands here
     commands.map(s => if (s == null) "null" else s).toList
