@@ -534,7 +534,7 @@ setMethod("mapPartitionsWithIndex",
 #' rdd <- parallelize(sc, 1:10)
 #' unlist(collect(Filter(function (x) { x < 3 }, rdd))) # c(1, 2)
 #'}
-setGeneric("Filter", function(f, x) { standardGeneric("Filter")})
+setGeneric("Filter", function(f, x) { standardGeneric("Filter") })
 
 #' @rdname Filter
 #' @aliases Filter,function,RDD-method

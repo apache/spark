@@ -3,11 +3,11 @@
 \alias{Filter}
 \alias{Filter,function,RDD}
 \alias{Filter,function,RDD-method}
-\title{Extract the elements that satisfy a filter}
+\title{Filters the elements that satisfy a predicate}
 \usage{
 Filter(f, x)
 
-\S4method{Filter}{function,RDD}(f,rdd)
+\S4method{Filter}{function,RDD}(f,x)
 }
 \arguments{
   \item{f}{A unary predicate function.}

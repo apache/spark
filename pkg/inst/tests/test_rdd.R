@@ -34,7 +34,7 @@ test_that("mapPartitions on RDD", {
 })
 
 test_that("Filter on RDD", {
-  filtered.rdd <- Filter(function(x) { x %% 2 == 0}, rdd)
+  filtered.rdd <- Filter(function(x) { x %% 2 == 0 }, rdd)
   actual <- collect(filtered.rdd)
   expect_equal(actual, list(2, 4, 6, 8, 10))
   
