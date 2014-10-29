@@ -16,19 +16,19 @@
  */
 package org.apache.spark.streaming.kafka
 
-object ProducerCache {
+private[kafka] object ProducerCache {
 
   private var producerOpt: Option[Any] = None
 
-  def getCachedProducer: Any = {
+  def getCachedProducer: Any = synchronized {
     producerOpt.get
   }
 
-  def cacheProducer(producer: Any): Unit = {
+  def cacheProducer(producer: Any): Unit = synchronized {
     producerOpt = Some(producer)
   }
 
-  def isCached: Boolean = {
+  def isCached: Boolean = synchronized {
     producerOpt.isDefined
   }
 }
