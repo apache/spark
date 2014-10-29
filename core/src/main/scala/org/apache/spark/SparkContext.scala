@@ -860,6 +860,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
+   * This is currently only supported in Yarn mode.
    */
   @DeveloperApi
   def requestExecutors(numAdditionalExecutors: Int): Unit = {
@@ -872,6 +873,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   /**
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
+   * This is currently only supported in Yarn mode.
    */
   @DeveloperApi
   def killExecutors(executorIds: Seq[String]): Unit = {
@@ -884,6 +886,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   /**
    * :: DeveloperApi ::
    * Request that cluster manager the kill the specified executor.
+   * This is currently only supported in Yarn mode.
    */
   @DeveloperApi
   def killExecutor(executorId: String): Unit = killExecutors(Seq(executorId))
