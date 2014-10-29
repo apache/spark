@@ -22,29 +22,38 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.export.ModelExportFactory
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.ModelExportType
+import org.dmg.pmml.ClusteringModel
+import javax.xml.parsers.DocumentBuilderFactory
+import java.io.ByteArrayOutputStream
 
 class KMeansPMMLModelExportSuite extends FunSuite{
 
    test("KMeansPMMLModelExport generate PMML format") {
     
+    //arrange model to test
     val clusterCenters = Array(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
     )
-    
     val kmeansModel = new KMeansModel(clusterCenters);
     
+    //act by exporting the model to the PMML format
     val modelExport = ModelExportFactory.createModelExport(kmeansModel, ModelExportType.PMML)
-         
-    assert(modelExport.isInstanceOf[PMMLModelExport])
     
-    //TODO: asserts
-    //compare pmml fields to strings
-    modelExport.asInstanceOf[PMMLModelExport].getPmml()
-    //use document builder to load the xml generated and validated the notes by looking for them
-    modelExport.asInstanceOf[PMMLModelExport].save(System.out)
-    //saveLocalFile too??? search how to unit test file creating in java
+    //assert that the PMML format is as expected
+    assert(modelExport.isInstanceOf[PMMLModelExport])
+    var pmml = modelExport.asInstanceOf[PMMLModelExport].getPmml()
+    assert(pmml.getHeader().getDescription() === "k-means clustering")
+    //check that the number of fields match the single vector size
+    assert(pmml.getDataDictionary().getNumberOfFields() === clusterCenters(0).size)
+    //this verify that there is a model attached to the pmml object and the model is a clustering one
+    //it also verifies that the pmml model has the same number of clusters of the spark model
+    assert(pmml.getModels().get(0).asInstanceOf[ClusteringModel].getNumberOfClusters() === clusterCenters.size)
+    
+    //manual checking
+    //modelExport.asInstanceOf[PMMLModelExport].save(System.out)
+    //modelExport.asInstanceOf[PMMLModelExport].saveLocalFile("/tmp/kmeans.xml")
    
    }
   

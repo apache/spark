@@ -26,25 +26,30 @@ class ModelExportFactorySuite extends FunSuite{
 
    test("ModelExportFactory create KMeansPMMLModelExport when passing a KMeansModel") {
     
+    //arrange
     val clusterCenters = Array(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
     )
-    
     val kmeansModel = new KMeansModel(clusterCenters);
     
+    //act
     val modelExport = ModelExportFactory.createModelExport(kmeansModel, ModelExportType.PMML)
          
+    //assert
     assert(modelExport.isInstanceOf[KMeansPMMLModelExport])
    
    }
    
-   test("ModelExportFactory throws IllegalArgumentException when passing an unsupported model") {
+   test("ModelExportFactory throw IllegalArgumentException when passing an unsupported model") {
     
+    //arrange
     val invalidModel = new Object;
     
+    //assert
     intercept[IllegalArgumentException] {
+        //act
     	ModelExportFactory.createModelExport(invalidModel, ModelExportType.PMML)
     }
    
