@@ -35,6 +35,7 @@ import static org.junit.Assert.*;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
@@ -64,7 +65,7 @@ public class RpcIntegrationSuite {
       }
 
       @Override
-      public StreamManager getStreamManager() { throw new UnsupportedOperationException(); }
+      public StreamManager getStreamManager() { return new OneForOneStreamManager(); }
     };
     TransportContext context = new TransportContext(conf, rpcHandler);
     server = context.createServer();
