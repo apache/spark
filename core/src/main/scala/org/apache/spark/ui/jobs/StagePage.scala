@@ -139,7 +139,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
         accumulables.values.toSeq)
 
-      val taskHeadersAndClasses: Seq[(String, String)] =
+      val taskHeadersAndCssClasses: Seq[(String, String)] =
         Seq(
           ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
           ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""), ("Accumulators", ""),
@@ -154,11 +154,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           else Nil} ++
         Seq(("Errors", ""))
 
-      val unzipped = taskHeadersAndClasses.unzip
+      val unzipped = taskHeadersAndCssClasses.unzip
 
       val taskTable = UIUtils.listingTable(
         unzipped._1, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks,
-        headerClasses=unzipped._2)
+        headerClasses = unzipped._2)
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
 

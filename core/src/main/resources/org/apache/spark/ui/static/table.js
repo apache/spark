@@ -17,7 +17,7 @@
 
 /* Adds background colors to stripe table rows. This is necessary (instead of using css or the
  * table striping provided by bootstrap) to appropriately stripe tables with hidden rows. */
-function stripeTables(){
+function stripeTables() {
     $("table.table-striped-custom").each(function() {
         $(this).find("tr:not(:hidden)").each(function (index) {
            if (index % 2 == 1) {
