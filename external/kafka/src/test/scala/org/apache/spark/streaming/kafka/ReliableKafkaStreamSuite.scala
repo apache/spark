@@ -139,7 +139,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
       .setAppName(framework)
       .set("spark.streaming.receiver.writeAheadLog.enable", "true")
     var ssc = new StreamingContext(
-      sparkConf.clone.set("spark.streaming.blockInterval", "4000"),
+      sparkConf.clone.set("spark.streaming.blockInterval", "10000"),
       batchDuration)
     val topics = Map("topic1" -> 1, "topic2" -> 1, "topic3" -> 1)
     val sent = Map("a" -> 10, "b" -> 10, "c" -> 10)
@@ -155,10 +155,11 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
       "auto.offset.reset" -> "smallest")
 
     KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc,
-      kafkaParams,
-      topics,
-      StorageLevel.MEMORY_ONLY).foreachRDD(_ => throw new Exception)
+        ssc,
+        kafkaParams,
+        topics,
+        StorageLevel.MEMORY_ONLY)
+      .foreachRDD(_ => throw new Exception)
     try {
       ssc.start()
       ssc.awaitTermination(1000)
@@ -175,10 +176,11 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
     // Restart to see if data is consumed from last checkpoint.
     ssc = new StreamingContext(sparkConf, batchDuration)
     KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc,
-      kafkaParams,
-      topics,
-      StorageLevel.MEMORY_ONLY).foreachRDD(_ => Unit)
+        ssc,
+        kafkaParams,
+        topics,
+        StorageLevel.MEMORY_ONLY)
+      .foreachRDD(_ => Unit)
     ssc.start()
     ssc.awaitTermination(3000)
     ssc.stop()

@@ -98,7 +98,7 @@ class ReliableKafkaReceiver[
 
   /** Manage the BlockGenerator in receiver itself for better managing block store and offset
     * commit */
-  private lazy val blockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
+  private var blockGenerator: BlockGenerator = null
 
   override def onStop(): Unit = {
     if (consumerConnector != null) {
@@ -116,6 +116,8 @@ class ReliableKafkaReceiver[
 
   override def onStart(): Unit = {
     logInfo(s"Starting Kafka Consumer Stream with group: $groupId")
+
+    blockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
 
     if (kafkaParams.contains(AUTO_OFFSET_COMMIT) && kafkaParams(AUTO_OFFSET_COMMIT) == "true") {
       logWarning(s"$AUTO_OFFSET_COMMIT should be set to false in ReliableKafkaReceiver, " +
