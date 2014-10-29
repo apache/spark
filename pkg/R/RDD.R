@@ -572,14 +572,7 @@ setGeneric("maximum", function(rdd) { standardGeneric("maximum") })
 setMethod("maximum",
           signature(rdd = "RDD"),
           function(rdd) {
-
-            maxInPartition <- function(part) {
-              max(unlist(part, recursive=FALSE))
-            }
-
-            partitionList <- collect(lapplyPartition(rdd, maxInPartition),
-                                     flatten=FALSE)
-            max(unlist(partitionList, recursive=FALSE))
+            reduce(rdd, max)
           })
 
 #' Get the minimum element of an RDD.
@@ -600,14 +593,7 @@ setGeneric("minimum", function(rdd) { standardGeneric("minimum") })
 setMethod("minimum",
           signature(rdd = "RDD"),
           function(rdd) {
-
-            minInPartition <- function(part) {
-              min(unlist(part, recursive=FALSE))
-            }
-
-            partitionList <- collect(lapplyPartition(rdd, minInPartition),
-                                     flatten=FALSE)
-            min(unlist(partitionList, recursive=FALSE))
+            reduce(rdd, min)
           })
 
 #' Take elements from an RDD.
