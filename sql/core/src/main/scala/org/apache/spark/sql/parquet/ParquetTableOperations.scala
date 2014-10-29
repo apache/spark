@@ -453,7 +453,7 @@ private[parquet] class FilteringParquetRowInputFormat
     getGlobalMetaData.setAccessible(true)
     val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
 
-    if (globalMetaData == null){
+    if (globalMetaData == null) {
      val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
      return splits
     }   
