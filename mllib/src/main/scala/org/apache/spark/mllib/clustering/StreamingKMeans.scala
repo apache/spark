@@ -243,10 +243,11 @@ class StreamingKMeans(
     data.mapValues(model.predict)
   }
 
-  /** Check whether cluster centers have been initialized.*/
+  /** Check whether cluster centers have been initialized. */
   def assertInitialized(): Unit = {
     if (Option(model.clusterCenters) == None) {
-      throw new IllegalStateException("Initial cluster centers must be set before starting predictions")
+      throw new IllegalStateException(
+        "Initial cluster centers must be set before starting predictions")
     }
   }
 
