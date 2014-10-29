@@ -92,7 +92,30 @@ class JavaSQLSuite extends FunSuite {
           |FROM allTypes
         """.stripMargin).collect.head.row ===
       Seq("", 0, 0L, 0F, 0.0, 0.toShort, 0.toByte, false, java.sql.Date.valueOf("2014-10-10"),
-        java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"), new java.math.BigDecimal(0)))
+        java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"), scala.math.BigDecimal(0)))
+  }
+
+  test("decimal types in JavaBeans") {
+    val bean = new AllTypesBean
+    bean.setStringField("")
+    bean.setIntField(0)
+    bean.setLongField(0)
+    bean.setFloatField(0.0F)
+    bean.setDoubleField(0.0)
+    bean.setShortField(0.toShort)
+    bean.setByteField(0.toByte)
+    bean.setBooleanField(false)
+    bean.setDateField(java.sql.Date.valueOf("2014-10-10"))
+    bean.setTimestampField(java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"))
+    bean.setBigDecimalField(new java.math.BigDecimal(0))
+
+    val rdd = javaCtx.parallelize(bean :: Nil)
+    val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
+    schemaRDD.registerTempTable("decimalTypes")
+
+    assert(javaSqlCtx.sql(
+      "select bigDecimalField + bigDecimalField from decimalTypes"
+    ).collect.head.row === Seq(scala.math.BigDecimal(0)))
   }
 
   test("all types null in JavaBeans") {
