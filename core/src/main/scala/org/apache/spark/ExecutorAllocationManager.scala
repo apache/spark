@@ -153,7 +153,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     }
 
     removeTimes.foreach { case (executorId, expireTime) =>
-      if (now > expireTime) {
+      if (now >= expireTime) {
         removeExecutor(executorId)
         removeTimes.remove(executorId)
       }
@@ -243,10 +243,12 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   /**
    * Callback invoked when the specified executor has been added.
    */
-  private def onExecutorAdded(executorId: String): Unit = synchronized {
+  private def onExecutorAdded(
+      executorId: String,
+      now: Long = System.currentTimeMillis): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
-      executorIds.foreach { id => onExecutorIdle(id) }
+      executorIds.foreach { id => onExecutorIdle(id, now) }
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
       if (numExecutorsPending > 0) {
         numExecutorsPending -= 1
@@ -304,7 +306,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   private def onExecutorIdle(
       executorId: String,
       now: Long = System.currentTimeMillis): Unit = synchronized {
-    if (!removeTimes.contains(executorId)) {
+    if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
         s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
       removeTimes(executorId) = now + removeThresholdSeconds * 1000
