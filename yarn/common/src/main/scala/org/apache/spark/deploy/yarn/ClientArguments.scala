@@ -39,10 +39,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var appName: String = "Spark"
   var priority = 0
 
-  parseArgs(args.toList)
-  loadEnvironmentArgs()
-  validateArgs()
-
   // Additional memory to allocate to containers
   // For now, use driver's memory overhead as our AM container's memory overhead
   val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
@@ -53,6 +49,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private val isDynamicAllocationEnabled =
     sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
+
+  parseArgs(args.toList)
+  loadEnvironmentArgs()
+  validateArgs()
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
