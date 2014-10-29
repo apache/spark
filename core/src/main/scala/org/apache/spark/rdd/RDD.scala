@@ -1220,8 +1220,6 @@ abstract class RDD[T: ClassTag](
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new RDDCheckpointData(this))
       checkpointData.get.markForCheckpoint()
-      // There is supposed to be doCheckpoint in the following, reset doCheckpointCalled first
-      doCheckpointCalled = false
     }
   }
 
@@ -1280,22 +1278,20 @@ abstract class RDD[T: ClassTag](
     this.mapPartitions(identity, preservesPartitioning = true)(classTag)
   }
 
-  // Avoid handling doCheckpoint multiple times to prevent excessive recursion
-  @transient private var doCheckpointCalled = false
-
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
+   * If the RDD is already checkPointed, just return.
    * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
-    if (!doCheckpointCalled && !isCheckpointed) {
-      doCheckpointCalled = true
-      if (checkpointData.isDefined) {
-        checkpointData.get.doCheckpoint()
-      } else {
-        dependencies.foreach(_.rdd.doCheckpoint())
-      }
+    if (isCheckpointed) {
+      return
+    }
+    if (checkpointData.isDefined) {
+      checkpointData.get.doCheckpoint()
+    } else {
+      dependencies.foreach(_.rdd.doCheckpoint())
     }
   }
 
