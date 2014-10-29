@@ -71,7 +71,7 @@ def _py2java(sc, obj, cache=False):
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj, cache)
     elif isinstance(obj, SparkContext):
-        obj = obj._sc
+        obj = obj._jsc
     elif isinstance(obj, dict):
         obj = MapConverter().convert(obj, sc._gateway._gateway_client)
     elif isinstance(obj, (list, tuple)):
