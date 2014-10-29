@@ -153,7 +153,20 @@ class Airflow(BaseView):
         for ti in dag.get_task_instances(from_date):
             task_instances[(ti.task_id, ti.execution_date)] = ti
 
+        expanded = []
+
         def recurse_nodes(task):
+            children = [recurse_nodes(t) for t in task.upstream_list]
+
+            # D3 tree uses children vs _children to define what is
+            # expanded or not. The following block makes it such that
+            # repeated nodes are collapsed by default.
+            children_key = 'children'
+            if task.task_id not in expanded:
+                expanded.append(task.task_id)
+            elif children:
+                children_key = "_children"
+
             return {
                 'name': task.task_id,
                 'instances': [
@@ -163,7 +176,7 @@ class Airflow(BaseView):
                             'task_id': task.task_id
                         }
                     for d in dates],
-                'children': [recurse_nodes(t) for t in task.upstream_list],
+                children_key: children,
                 'num_dep': len(task.upstream_list),
                 'operator': task.task_type,
                 'retries': task.retries,

@@ -20,8 +20,8 @@ run_this.set_downstream(run_this_last)
 for i in range(10):
     i = str(i)
     task = BashOperator(
-            task_id='runme_'+i, 
-            bash_command='echo "'+str(i)+': {{ ti.execution_date }}"', 
+            task_id='runme_'+i,
+            bash_command='echo "'+str(i)+': {{ ti.execution_date }}"',
             **default_args)
     task.set_downstream(run_this)
     dag.add_task(task)
@@ -29,6 +29,7 @@ for i in range(10):
 task = BashOperator(task_id='also_run_this', bash_command='ls -l', **default_args)
 dag.add_task(task)
 task.set_downstream(run_this_last)
+task.set_upstream(run_this)
 
 #dag.tree_view()
 #dag.db_merge()
