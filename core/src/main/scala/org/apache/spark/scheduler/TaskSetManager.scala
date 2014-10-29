@@ -29,7 +29,7 @@ import scala.math.min
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{Utils, Clock, SystemClock}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -68,6 +68,10 @@ private[spark] class TaskSetManager(
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
+  // Limit of bytes for total size of results (default is 20MB)
+  var MAX_RESULT_SIZE =
+    Utils.memoryStringToMb(conf.get("spark.driver.maxResultSize", "0")) << 20
+
   // Serializer for closures and tasks.
   val env = SparkEnv.get
   val ser = env.closureSerializer.newInstance()
@@ -89,6 +93,7 @@ private[spark] class TaskSetManager(
   var stageId = taskSet.stageId
   var name = "TaskSet_" + taskSet.stageId.toString
   var parent: Pool = null
+  var totalResultSize = 0L
 
   val runningTasksSet = new HashSet[Long]
   override def runningTasks = runningTasksSet.size
@@ -524,7 +529,14 @@ private[spark] class TaskSetManager(
   /**
    * Marks the task as successful and notifies the DAGScheduler that a task has ended.
    */
-  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]) = {
+  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
+    totalResultSize += result.metrics.resultSize
+    if (MAX_RESULT_SIZE > 0 && totalResultSize > MAX_RESULT_SIZE) {
+      abort(s"The size of results ${Utils.bytesToString(totalResultSize)}" +
+            s" extends limit ${Utils.bytesToString(MAX_RESULT_SIZE)}, please increase" +
+            s" spark.driver.maxResultSize or void collect() if it's possible")
+      return
+    }
     val info = taskInfos(tid)
     val index = info.index
     info.markSuccessful()

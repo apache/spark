@@ -112,6 +112,16 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.maxResultSize</code></td>
+  <td>0 (unlimited)</td>
+  <td>
+    Limit of total size of serialized bytes of all partitions during collect, it should be at least 1M
+    or 0 (means unlimited). The stage will be aborted if the total size go above this limit. 
+    Having high limit may cause OOM in driver (depends on spark.driver.memory and memory overhead
+    of objects in JVM). Set a proper limit for collect() can protect driver from OOM.
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>

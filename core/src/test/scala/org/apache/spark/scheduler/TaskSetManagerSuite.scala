@@ -563,6 +563,47 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.emittedTaskSizeWarning)
   }
 
+  test("abort the job if total size of results is too large") {
+    val conf = new SparkConf().set("spark.driver.maxResultSize", "2m")
+    sc = new SparkContext("local", "test", conf)
+
+    {
+      // multiple tiny result
+      val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+      val taskSet = FakeTask.createTaskSet(15)
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+      (0 until 15).foreach(_ => manager.resourceOffer("exec1", "host1", ANY))
+      (0 until 15).foreach(id => manager.handleSuccessfulTask(id, createTaskResult(id, 1024)))
+      assert(!sched.taskSetsFailed.contains(taskSet.id))
+    }
+
+    {
+      // single large result
+      val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+      val taskSet = FakeTask.createTaskSet(1)
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+      assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+      manager.handleSuccessfulTask(0, createTaskResult(0, 5 << 20))
+      assert(sched.taskSetsFailed.contains(taskSet.id))
+    }
+
+    {
+      // multiple small result
+      val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+      val taskSet = FakeTask.createTaskSet(5)
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+      (0 until 5).foreach(_ => manager.resourceOffer("exec1", "host1", ANY))
+      (0 until 5).foreach { id =>
+        manager.handleSuccessfulTask(id, createTaskResult(id, 1<<20))
+        if (id < 2) {
+          assert(!sched.taskSetsFailed.contains(taskSet.id))
+        } else {
+          assert(sched.taskSetsFailed.contains(taskSet.id))
+        }
+      }
+    }
+  }
+
   test("speculative and noPref task should be scheduled after node-local") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
@@ -665,8 +706,10 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
   }
 
-  def createTaskResult(id: Int): DirectTaskResult[Int] = {
+  def createTaskResult(id: Int, size: Int = 4): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
-    new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, new TaskMetrics)
+    val metrics = new TaskMetrics
+    metrics.resultSize = size
+    new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, metrics)
   }
 }
