@@ -103,7 +103,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
-  protected val WHERE = Keyword("TRIM")
+  protected val TRIM = Keyword("TRIM")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
