@@ -93,8 +93,9 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
             .withType(Type.REAL)
             .withN(clusterCenter.size)
             .withValue(model.clusterCenters(i).toArray.mkString(" ")))
-            //we don't have the size of the single cluster but only the centroids (withValue)
-            //.withSize(value)
+            // we don't have the size of the single cluster but only the centroids (withValue)
+            // .withSize(value)
+
          clusteringModel.withClusters(cluster)
        }
        
