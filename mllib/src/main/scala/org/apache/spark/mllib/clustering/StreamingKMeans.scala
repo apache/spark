@@ -17,10 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{Vector => BV}
-
 import scala.reflect.ClassTag
-import scala.util.Random._
+
+import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
@@ -29,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
