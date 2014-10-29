@@ -17,10 +17,10 @@
 
 package org.apache.spark.mllib.stat
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors, Vector}
 
 /**
  * :: DeveloperApi ::
@@ -91,18 +91,18 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       }
     }
 
-    sample.toBreeze match {
-      case dv: BDV[Double] => {
+    sample match {
+      case dv: DenseVector => {
         var j = 0
-        while (j < dv.length) {
-          update(j, dv(j))
+        while (j < dv.size) {
+          update(j, dv.values(j))
           j += 1
         }
       }
-      case sv: BSV[Double] =>
+      case sv: SparseVector =>
         var j = 0
-        while (j < sv.data.length) {
-          update(sv.index(j), sv.data(j))
+        while (j < sv.size) {
+          update(sv.indices(j), sv.values(j))
           j += 1
         }
       case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
