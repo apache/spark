@@ -26,8 +26,7 @@ import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
-  val executorsListener = parent.executorsListener
-  val jobProgressListener = parent.jobProgressListener
+  val listener = parent.executorsListener
   val threadDumpEnabled = parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
   val sc = parent.sc
 
