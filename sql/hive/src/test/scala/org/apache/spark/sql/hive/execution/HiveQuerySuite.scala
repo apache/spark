@@ -34,6 +34,14 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+  createQueryTest("constant array",
+  """
+    |SELECT sort_array(
+    |  sort_array(
+    |    array("hadoop distributed file system",
+    |          "enterprise databases", "hadoop map-reduce")))
+    |FROM src LIMIT 1;
+  """.stripMargin)
 
   createQueryTest("count distinct 0 values",
     """
