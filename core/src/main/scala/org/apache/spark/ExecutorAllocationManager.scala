@@ -275,6 +275,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
         numExecutorsPending -= 1
         logDebug(s"Decremented number of pending executors ($numExecutorsPending left)")
       }
+    } else {
+      logWarning(s"Duplicate executor $executorId has registered")
     }
   }
 
