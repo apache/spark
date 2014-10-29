@@ -83,7 +83,7 @@ class StreamingKMeansModel(
       (p1._1 += p2._1, p1._2 + p2._2)
     }
     val pointStats: Array[(Int, (BV[Double], Long))] =
-      closest.reduceByKey{mergeContribs}.collectAsMap().toArray
+      closest.reduceByKey(mergeContribs).collect()
 
     // implement update rule
     for (newP <- pointStats) {
