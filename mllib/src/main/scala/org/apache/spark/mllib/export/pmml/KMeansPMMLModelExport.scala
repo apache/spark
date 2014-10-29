@@ -62,30 +62,42 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
        var miningSchema = new MiningSchema()
        
        for ( i <- 0 to (clusterCenter.size - 1)) {
-         fields(i) = FieldName.create("field_"+i)
-         dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
-         miningSchema.withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
-       }
+         fields(i) = FieldName.create("field_" + i)
+         dataDictionary
+            .withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
+         miningSchema
+            .withMiningFields(new MiningField(fields(i))
+            .withUsageType(FieldUsageType.ACTIVE))
+         }
        
        var comparisonMeasure = new ComparisonMeasure()
-       	.withKind(Kind.DISTANCE)
-        .withMeasure(new SquaredEuclidean()
+            .withKind(Kind.DISTANCE)
+            .withMeasure(new SquaredEuclidean()
        );
        
        dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size());
-              
+       
        pmml.setDataDictionary(dataDictionary);
        
-       var clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
-       	.withModelName("k-means");
+       var clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
+        MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
+        .withModelName("k-means");
        
        for ( i <- 0 to (clusterCenter.size - 1)) {
-    	   clusteringModel.withClusteringFields(new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF))
-    	   var cluster = new Cluster().withName("cluster_"+i).withArray(new org.dmg.pmml.Array().withType(Type.REAL).withN(clusterCenter.size).withValue(model.clusterCenters(i).toArray.mkString(" ")))
-    	   //cluster.withSize(value) //we don't have the size of the single cluster but only the centroids (withValue)
-    	   clusteringModel.withClusters(cluster)
+         clusteringModel.withClusteringFields(
+             new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF)
+         )
+         var cluster = new Cluster()
+            .withName("cluster_" + i)
+            .withArray(new org.dmg.pmml.Array()
+            .withType(Type.REAL)
+            .withN(clusterCenter.size)
+            .withValue(model.clusterCenters(i).toArray.mkString(" ")))
+            //we don't have the size of the single cluster but only the centroids (withValue)
+            //.withSize(value)
+         clusteringModel.withClusters(cluster)
        }
-
+       
        pmml.withModels(clusteringModel);
        
      }

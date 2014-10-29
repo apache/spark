@@ -41,13 +41,14 @@ trait PMMLModelExport extends ModelExport{
   
   private def setHeader(pmml : PMML): Unit = {
     var version = getClass().getPackage().getImplementationVersion()
-	var app = new Application().withName("Apache Spark MLlib").withVersion(version)
-	var timestamp = new Timestamp().withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
-	var header = new Header()
-    	.withCopyright("www.dmg.org")
+    var app = new Application().withName("Apache Spark MLlib").withVersion(version)
+    var timestamp = new Timestamp()
+        .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
+    var header = new Header()
+        .withCopyright("www.dmg.org")
         .withApplication(app)
         .withTimestamp(timestamp);
-	pmml.setHeader(header);
+    pmml.setHeader(header);
   } 
   
   /**
