@@ -19,6 +19,7 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
+import scala.collection.mutable
 import scala.concurrent.Await
 
 import akka.actor.{Actor, ActorSelection, ActorSystem, Props}
@@ -147,20 +148,64 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   def main(args: Array[String]) {
-    args.length match {
-      case x if x < 5 =>
-        System.err.println(
-          // Worker url is used in spark standalone mode to enforce fate-sharing with worker
-          "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
-          "<cores> <appid> [<workerUrl>] ")
-        System.exit(1)
+    var driverUrl: String = null
+    var executorId: String = null
+    var hostname: String = null
+    var cores: Int = 0
+    var appId: String = null
+    var workerUrl: Option[String] = None
 
-      // NB: These arguments are provided by SparkDeploySchedulerBackend (for standalone mode)
-      // and CoarseMesosSchedulerBackend (for mesos mode).
-      case 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), None)
-      case x if x > 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), Some(args(5)))
+    var argv = args.toList
+    while (!argv.isEmpty) {
+      argv match {
+        case ("--driver-url") :: value :: tail =>
+          driverUrl = value
+          argv = tail
+        case ("--executor-id") :: value :: tail =>
+          executorId = value
+          argv = tail
+        case ("--hostname") :: value :: tail =>
+          hostname = value
+          argv = tail
+        case ("--cores") :: value :: tail =>
+          cores = value.toInt
+          argv = tail
+        case ("--app-id") :: value :: tail =>
+          appId = value
+          argv = tail
+        case ("--worker-url") :: value :: tail =>
+          // Worker url is used in spark standalone mode to enforce fate-sharing with worker
+          workerUrl = Some(value)
+          argv = tail
+        case Nil =>
+        case tail =>
+          System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
+          printUsageAndExit()
+      }
     }
+
+    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
+      appId == null) {
+      printUsageAndExit()
+    }
+
+    run(driverUrl, executorId, hostname, cores, appId, workerUrl)
   }
+
+  private def printUsageAndExit() = {
+    System.err.println(
+      """
+      |"Usage: CoarseGrainedExecutorBackend [options]
+      |
+      | Options are:
+      |   --driver-url <driverUrl>
+      |   --executor-id <executorId>
+      |   --hostname <hostname>
+      |   --cores <cores>
+      |   --app-id <appid>
+      |   [--worker-id <workerUrl>]
+      |""".stripMargin)
+    System.exit(1)
+  }
+
 }

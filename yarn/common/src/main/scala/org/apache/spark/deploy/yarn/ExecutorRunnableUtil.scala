@@ -120,11 +120,11 @@ trait ExecutorRunnableUtil extends Logging {
       "-XX:OnOutOfMemoryError='kill %p'") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      masterAddress.toString,
-      slaveId.toString,
-      hostname.toString,
-      executorCores.toString,
-      appId,
+        "--driver-url", masterAddress.toString,
+        "--executor-id", slaveId.toString,
+        "--hostname", hostname.toString,
+        "--cores", executorCores.toString,
+        "--app-id", appId,
       "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
       "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

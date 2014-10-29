@@ -661,13 +661,11 @@ private[spark] object ClientBase extends Logging {
   /**
    * Populate the classpath entry in the given environment map.
    *
-   * This does different things depending on the job configuration.
-   * - if `spark.files.userClassPathFirst` is set to true, only Spark and other framework jars
-   *   (such as Hadoop/Yarn jars) are added to the classpath. User jars and files, and also the
-   *   extra class path, are handled by ChildExecutorURLClassLoader.
-   * - otherwise, user jars, files and the extra class path are added to the container's class path.
-   *   The position of the user classes in the classpath depends on the value of the
-   *   `spark.yarn.user.classpath.first` configuration.
+   * Class path isolation, when enabled, makes the user-added jars be loaded from a different
+   * class loader than other class path entries. The extra class path and other uploaded files
+   * are still made available through the system class path.
+   *
+   * @param args Client arguments (when starting the AM) or null (when starting executors).
    */
   def populateClasspath(
       args: ClientArguments,
