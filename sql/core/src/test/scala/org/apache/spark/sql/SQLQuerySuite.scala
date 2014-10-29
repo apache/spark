@@ -500,6 +500,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         (2, "abc"),
         (3, null)))
   }
+  test("system function trim()") {
+    checkAnswer(
+      sql("SELECT N,TRIM(L) FROM untrimmedData"),
+      Seq(
+        (1, "Good"),
+        (2, "To"),
+        (3, "See"),
+        (4, "You !")
+        ))
+
+    checkAnswer(
+      sql("SELECT n, TRIM(s) FROM nullStrings"),
+        Seq(
+          (1, "abc"),
+          (2, "ABC"),
+          (3, null)))
+    }
 
   test("UNION") {
     checkAnswer(
@@ -882,5 +899,21 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
     sql("SELECT `key?number1` FROM records")
+  }
+
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(sql("SELECT key&1 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(sql("SELECT key|0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(sql("SELECT key^0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), -2)
   }
 }

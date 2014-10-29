@@ -448,14 +448,14 @@ private[hive] object HiveQl {
       }
 
     case Token("TOK_CREATETABLE", children)
-        if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      // TODO: Parse other clauses.
+        if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
       val (
           Some(tableNameParts) ::
           _ /* likeTable */ ::
-          Some(query) +:
-          notImplemented) =
+          Some(query) ::
+          allowExisting +:
+          ignores) =
         getClauses(
           Seq(
             "TOK_TABNAME",
@@ -479,14 +479,9 @@ private[hive] object HiveQl {
             "TOK_TABLELOCATION",
             "TOK_TABLEPROPERTIES"),
           children)
-      if (notImplemented.exists(token => !token.isEmpty)) {
-        throw new NotImplementedError(
-          s"Unhandled clauses: ${notImplemented.flatten.map(dumpTree(_)).mkString("\n")}")
-      }
-
       val (db, tableName) = extractDbNameTableName(tableNameParts)
 
-      CreateTableAsSelect(db, tableName, nodeToPlan(query))
+      CreateTableAsSelect(db, tableName, nodeToPlan(query), allowExisting != None, Some(node))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
@@ -874,6 +869,10 @@ private[hive] object HiveQl {
   val MIN = "(?i)MIN".r
   val UPPER = "(?i)UPPER".r
   val LOWER = "(?i)LOWER".r
+  val TRIM = "(?i)TRIM".r
+  val LTRIM = "(?i)LTRIM".r
+  val RTRIM = "(?i)RTRIM".r
+  val LENGTH = "(?i)LENGTH".r
   val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
@@ -923,6 +922,10 @@ private[hive] object HiveQl {
     /* System functions about string operations */
     case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(TRIM(), Nil) :: arg :: Nil) => Trim(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(LTRIM(), Nil) :: arg :: Nil) => Ltrim(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(RTRIM(), Nil) :: arg :: Nil) => Rtrim(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(LENGTH(), Nil) :: arg :: Nil) => Length(nodeToExpr(arg))
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -956,6 +959,7 @@ private[hive] object HiveQl {
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
+    case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
     case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
@@ -963,6 +967,9 @@ private[hive] object HiveQl {
     case Token(DIV(), left :: right:: Nil) =>
       Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
+    case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
+    case Token("|", left :: right:: Nil) => BitwiseOr(nodeToExpr(left), nodeToExpr(right))
+    case Token("^", left :: right:: Nil) => BitwiseXor(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */

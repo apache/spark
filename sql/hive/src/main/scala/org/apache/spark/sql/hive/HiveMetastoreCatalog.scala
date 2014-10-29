@@ -17,17 +17,27 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
+import java.util.{List => JList}
+
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, SerDeInfo, StorageDescriptor, Partition => TPartition, Table => TTable}
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
-import org.apache.hadoop.hive.ql.plan.TableDesc
-import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.util.ReflectionUtils
+import org.apache.hadoop.fs.Path
+
+import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
+import org.apache.hadoop.hive.ql.plan.{TableDesc, CreateTableDesc}
+import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.Catalog
+import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -66,37 +76,164 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       table.getTTable, partitions.map(part => part.getTPartition))(hive)
   }
 
+  /**
+   * Create table with specified database, table name, table description and schema
+   * @param databaseName Database Name
+   * @param tableName Table Name
+   * @param schema Schema of the new table, if not specified, will use the schema
+   *               specified in crtTbl
+   * @param allowExisting if true, ignore AlreadyExistsException
+   * @param desc CreateTableDesc object which contains the SerDe info. Currently
+   *               we support most of the features except the bucket.
+   */
   def createTable(
       databaseName: String,
       tableName: String,
       schema: Seq[Attribute],
-      allowExisting: Boolean = false): Unit = {
+      allowExisting: Boolean = false,
+      desc: Option[CreateTableDesc] = None) {
+    val hconf = hive.hiveconf
+
     val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    val table = new Table(dbName, tblName)
-    val hiveSchema =
+    val tbl = new Table(dbName, tblName)
+
+    val crtTbl: CreateTableDesc = desc.getOrElse(null)
+
+    // We should respect the passed in schema, unless it's not set
+    val hiveSchema: JList[FieldSchema] = if (schema == null || schema.isEmpty) {
+      crtTbl.getCols
+    } else {
       schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
-    table.setFields(hiveSchema)
+    }
+    tbl.setFields(hiveSchema)
 
-    val sd = new StorageDescriptor()
-    table.getTTable.setSd(sd)
-    sd.setCols(hiveSchema)
+    // Most of code are similar with the DDLTask.createTable() of Hive,
+    if (crtTbl != null && crtTbl.getTblProps() != null) {
+      tbl.getTTable().getParameters().putAll(crtTbl.getTblProps())
+    }
 
-    // TODO: THESE ARE ALL DEFAULTS, WE NEED TO PARSE / UNDERSTAND the output specs.
-    sd.setCompressed(false)
-    sd.setParameters(Map[String, String]())
-    sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat")
-    sd.setOutputFormat("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
-    val serDeInfo = new SerDeInfo()
-    serDeInfo.setName(tblName)
-    serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-    serDeInfo.setParameters(Map[String, String]())
-    sd.setSerdeInfo(serDeInfo)
+    if (crtTbl != null && crtTbl.getPartCols() != null) {
+      tbl.setPartCols(crtTbl.getPartCols())
+    }
 
+    if (crtTbl != null && crtTbl.getStorageHandler() != null) {
+      tbl.setProperty(
+        org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE,
+        crtTbl.getStorageHandler())
+    }
+
+    /*
+     * We use LazySimpleSerDe by default.
+     *
+     * If the user didn't specify a SerDe, and any of the columns are not simple
+     * types, we will have to use DynamicSerDe instead.
+     */
+    if (crtTbl == null || crtTbl.getSerName() == null) {
+      val storageHandler = tbl.getStorageHandler()
+      if (storageHandler == null) {
+        logInfo(s"Default to LazySimpleSerDe for table $dbName.$tblName")
+        tbl.setSerializationLib(classOf[LazySimpleSerDe].getName())
+
+        import org.apache.hadoop.mapred.TextInputFormat
+        import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+        import org.apache.hadoop.io.Text
+
+        tbl.setInputFormatClass(classOf[TextInputFormat])
+        tbl.setOutputFormatClass(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]])
+        tbl.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+      } else {
+        val serDeClassName = storageHandler.getSerDeClass().getName()
+        logInfo(s"Use StorageHandler-supplied $serDeClassName for table $dbName.$tblName")
+        tbl.setSerializationLib(serDeClassName)
+      }
+    } else {
+      // let's validate that the serde exists
+      val serdeName = crtTbl.getSerName()
+      try {
+        val d = ReflectionUtils.newInstance(hconf.getClassByName(serdeName), hconf)
+        if (d != null) {
+          logDebug("Found class for $serdeName")
+        }
+      } catch {
+        case e: SerDeException => throw new HiveException("Cannot validate serde: " + serdeName, e)
+      }
+      tbl.setSerializationLib(serdeName)
+    }
+
+    if (crtTbl != null && crtTbl.getFieldDelim() != null) {
+      tbl.setSerdeParam(serdeConstants.FIELD_DELIM, crtTbl.getFieldDelim())
+      tbl.setSerdeParam(serdeConstants.SERIALIZATION_FORMAT, crtTbl.getFieldDelim())
+    }
+    if (crtTbl != null && crtTbl.getFieldEscape() != null) {
+      tbl.setSerdeParam(serdeConstants.ESCAPE_CHAR, crtTbl.getFieldEscape())
+    }
+
+    if (crtTbl != null && crtTbl.getCollItemDelim() != null) {
+      tbl.setSerdeParam(serdeConstants.COLLECTION_DELIM, crtTbl.getCollItemDelim())
+    }
+    if (crtTbl != null && crtTbl.getMapKeyDelim() != null) {
+      tbl.setSerdeParam(serdeConstants.MAPKEY_DELIM, crtTbl.getMapKeyDelim())
+    }
+    if (crtTbl != null && crtTbl.getLineDelim() != null) {
+      tbl.setSerdeParam(serdeConstants.LINE_DELIM, crtTbl.getLineDelim())
+    }
+
+    if (crtTbl != null && crtTbl.getSerdeProps() != null) {
+      val iter = crtTbl.getSerdeProps().entrySet().iterator()
+      while (iter.hasNext()) {
+        val m = iter.next()
+        tbl.setSerdeParam(m.getKey(), m.getValue())
+      }
+    }
+
+    if (crtTbl != null && crtTbl.getComment() != null) {
+      tbl.setProperty("comment", crtTbl.getComment())
+    }
+
+    if (crtTbl != null && crtTbl.getLocation() != null) {
+      HiveShim.setLocation(tbl, crtTbl)
+    }
+
+    if (crtTbl != null && crtTbl.getSkewedColNames() != null) {
+      tbl.setSkewedColNames(crtTbl.getSkewedColNames())
+    }
+    if (crtTbl != null && crtTbl.getSkewedColValues() != null) {
+      tbl.setSkewedColValues(crtTbl.getSkewedColValues())
+    }
+
+    if (crtTbl != null) {
+      tbl.setStoredAsSubDirectories(crtTbl.isStoredAsSubDirectories())
+      tbl.setInputFormatClass(crtTbl.getInputFormat())
+      tbl.setOutputFormatClass(crtTbl.getOutputFormat())
+    }
+
+    tbl.getTTable().getSd().setInputFormat(tbl.getInputFormatClass().getName())
+    tbl.getTTable().getSd().setOutputFormat(tbl.getOutputFormatClass().getName())
+
+    if (crtTbl != null && crtTbl.isExternal()) {
+      tbl.setProperty("EXTERNAL", "TRUE")
+      tbl.setTableType(TableType.EXTERNAL_TABLE)
+    }
+
+    // set owner
+    try {
+      tbl.setOwner(hive.hiveconf.getUser)
+    } catch {
+      case e: IOException => throw new HiveException("Unable to get current user", e)
+    }
+
+    // set create time
+    tbl.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
+
+    // TODO add bucket support
+    // TODO set more info if Hive upgrade
+
+    // create the table
     synchronized {
-      try client.createTable(table) catch {
-        case e: org.apache.hadoop.hive.ql.metadata.HiveException
-          if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
-             allowExisting => // Do nothing.
+      try client.createTable(tbl, allowExisting) catch {
+        case e: org.apache.hadoop.hive.metastore.api.AlreadyExistsException
+          if allowExisting => // Do nothing
+        case e: Throwable => throw e
       }
     }
   }
@@ -110,11 +247,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case CreateTableAsSelect(db, tableName, child) =>
+      case CreateTableAsSelect(db, tableName, child, allowExisting, extra) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        CreateTableAsSelect(Some(databaseName), tableName, child)
+        CreateTableAsSelect(Some(databaseName), tableName, child, allowExisting, extra)
     }
   }
 

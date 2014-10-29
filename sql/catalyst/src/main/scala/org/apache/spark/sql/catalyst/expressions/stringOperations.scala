@@ -71,7 +71,7 @@ trait StringRegexExpression {
   }
 }
 
-trait CaseConversionExpression {
+trait StringTransformationExpression {
   self: UnaryExpression =>
 
   type EvaluatedType = Any
@@ -91,6 +91,29 @@ trait CaseConversionExpression {
     }
   }
 }
+
+
+trait StringCalculationExpression {
+    self: UnaryExpression =>
+
+    type EvaluatedType = Any
+
+    def calc(v: String): Int
+
+    override def foldable: Boolean = child.foldable
+    def nullable: Boolean = child.nullable
+    def dataType: DataType = StringType
+
+    override def eval(input: Row): Any = {
+        val evaluated = child.eval(input)
+        if (evaluated == null) {
+            null
+        } else {
+            calc(evaluated.toString)
+        }
+    }
+}
+
 
 /**
  * Simple RegEx pattern matching function
@@ -134,10 +157,51 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
 }
 
+
+/**
+ * A function that strip whitespace (or other characters) from the beginning of a string
+ */
+case class Ltrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
+
+    override def convert(v: String): String = v.replaceAll("^\\s+", "")
+
+    override def toString() = s"Ltrim($child)"
+}
+
+/**
+ * A function that strip whitespace (or other characters) from the end of a string
+ */
+case class Rtrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
+
+    override def convert(v: String): String = v.replaceAll("\\s+$", "")
+
+    override def toString() = s"Rtrim($child)"
+}
+
+/**
+ * A function that calculate the length of a string
+ */
+case class Length(child: Expression) extends UnaryExpression with StringCalculationExpression {
+
+    override def calc(v: String): Int = v.length()
+
+    override def toString() = s"Length($child)"
+}
+
+/**
+ * A function that trim the characters of a string
+ */
+case class Trim(child: Expression) extends UnaryExpression with StringTransformationExpression {
+
+    override def convert(v: String): String = v.trim()
+
+    override def toString() = s"Trim($child)"
+}
+
 /**
  * A function that converts the characters of a string to uppercase.
  */
-case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
+case class Upper(child: Expression) extends UnaryExpression with StringTransformationExpression {
   
   override def convert(v: String): String = v.toUpperCase()
 
@@ -147,7 +211,7 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
 /**
  * A function that converts the characters of a string to lowercase.
  */
-case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
+case class Lower(child: Expression) extends UnaryExpression with StringTransformationExpression {
   
   override def convert(v: String): String = v.toLowerCase()
 

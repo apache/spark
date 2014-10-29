@@ -19,6 +19,7 @@ package org.apache.spark.network.netty.server
 
 import java.net.InetSocketAddress
 
+import com.google.common.base.Charsets.UTF_8
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.channel.{ChannelFuture, ChannelInitializer, ChannelOption}
@@ -30,7 +31,6 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.channel.socket.oio.OioServerSocketChannel
 import io.netty.handler.codec.LineBasedFrameDecoder
 import io.netty.handler.codec.string.StringDecoder
-import io.netty.util.CharsetUtil
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.network.netty.NettyConfig
@@ -131,7 +131,7 @@ class BlockServer(conf: NettyConfig, dataProvider: BlockDataProvider) extends Lo
       override def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline
           .addLast("frameDecoder", new LineBasedFrameDecoder(1024))  // max block id length 1024
-          .addLast("stringDecoder", new StringDecoder(CharsetUtil.UTF_8))
+          .addLast("stringDecoder", new StringDecoder(UTF_8))
           .addLast("blockHeaderEncoder", new BlockHeaderEncoder)
           .addLast("handler", new BlockServerHandler(dataProvider))
       }

@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
@@ -89,6 +89,9 @@ private[hive] object HiveShim {
     "udf_concat"
   )
 
+  def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {
+    tbl.setDataLocation(new Path(crtTbl.getLocation()).toUri())
+  }
 }
 
 class ShimFileSinkDesc(var dir: String, var tableInfo: TableDesc, var compressed: Boolean)

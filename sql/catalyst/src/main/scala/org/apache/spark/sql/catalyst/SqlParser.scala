@@ -103,6 +103,10 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
+  protected val TRIM = Keyword("TRIM")
+  protected val LTRIM = Keyword("LTRIM")
+  protected val RTRIM = Keyword("RTRIM")
+  protected val LENGTH = Keyword("LENGTH")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -260,6 +264,9 @@ class SqlParser extends AbstractSparkSQLParser {
       ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
       | "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1, e2) }
       | "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1, e2) }
+      | "&" ^^^ { (e1: Expression, e2: Expression) => BitwiseAnd(e1, e2) }
+      | "|" ^^^ { (e1: Expression, e2: Expression) => BitwiseOr(e1, e2) }
+      | "^" ^^^ { (e1: Expression, e2: Expression) => BitwiseXor(e1, e2) }
       )
 
   protected lazy val function: Parser[Expression] =
@@ -279,6 +286,10 @@ class SqlParser extends AbstractSparkSQLParser {
     | MAX   ~ "(" ~> expression <~ ")" ^^ { case exp => Max(exp) }
     | UPPER ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
     | LOWER ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
+    | TRIM ~ "(" ~> expression <~ ")" ^^ { case exp => Trim(exp) }
+    | LTRIM ~ "(" ~> expression <~ ")" ^^ { case exp => Ltrim(exp) }
+    | RTRIM ~ "(" ~> expression <~ ")" ^^ { case exp => Rtrim(exp) }
+    | LENGTH ~ "(" ~> expression <~ ")" ^^ { case exp => Length(exp) }
     | IF ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
       { case c ~ t ~ f => If(c, t, f) }
     | CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
@@ -370,6 +381,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | dotExpressionHeader
     | ident ^^ UnresolvedAttribute
     | signedPrimary
+    | "~" ~> expression ^^ BitwiseNot
     )
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
