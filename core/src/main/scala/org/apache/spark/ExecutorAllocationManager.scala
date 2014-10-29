@@ -167,7 +167,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * This is factored out into its own method for testing.
    */
   private def schedule(): Unit = synchronized {
-    val now = clock.getTime
+    val now = clock.getTimeMillis
     if (addTime != NOT_SET && now >= addTime) {
       addExecutors()
       logDebug(s"Starting timer to add more executors (to " +
@@ -305,7 +305,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeout seconds)")
-      addTime = clock.getTime + schedulerBacklogTimeout * 1000
+      addTime = clock.getTimeMillis + schedulerBacklogTimeout * 1000
     }
   }
 
@@ -328,7 +328,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
         s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
-      removeTimes(executorId) = clock.getTime + removeThresholdSeconds * 1000
+      removeTimes(executorId) = clock.getTimeMillis + removeThresholdSeconds * 1000
     }
   }
 
@@ -434,12 +434,19 @@ private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
 }
 
+/**
+ * An abstract clock for measuring elapsed time.
+ */
 private trait Clock {
-  def getTime: Long
+  def getTimeMillis: Long
 }
 
+/**
+ * A clock backed by a monotonically increasing time source.
+ * The time returned by this clock does not correspond to any notion of wall-clock time.
+ */
 private class RealClock extends Clock {
-  override def getTime: Long = System.currentTimeMillis
+  override def getTimeMillis: Long = System.nanoTime / (1000 * 1000)
 }
 
 /**
@@ -448,6 +455,6 @@ private class RealClock extends Clock {
  */
 private class TestClock(startTimeMillis: Long) extends Clock {
   private var time: Long = startTimeMillis
-  override def getTime: Long = time
+  override def getTimeMillis: Long = time
   def tick(ms: Long): Unit = { time += ms }
 }
