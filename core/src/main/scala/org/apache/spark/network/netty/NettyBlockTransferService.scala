@@ -58,8 +58,14 @@ class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
       port: Int,
       blockIds: Seq[String],
       listener: BlockFetchingListener): Unit = {
-    val client = clientFactory.createClient(hostname, port)
-    new NettyBlockFetcher(serializer, client, blockIds, listener).start()
+    try {
+      val client = clientFactory.createClient(hostname, port)
+      new NettyBlockFetcher(serializer, client, blockIds, listener).start()
+    } catch {
+      case e: Exception =>
+        logError("Exception while beginning fetchBlocks", e)
+        blockIds.foreach(listener.onBlockFetchFailure(_, e))
+    }
   }
 
   override def hostName: String = Utils.localHostName()
