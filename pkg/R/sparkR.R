@@ -46,12 +46,12 @@ sparkR.init <- function(
 
   sparkEnvirMap <- .jnew("java/util/HashMap")
   for (varname in names(sparkEnvir)) {
-    hm$put(varname, sparkEnvir[[varname]])
+    sparkEnvirMap$put(varname, sparkEnvir[[varname]])
   }
   
   ExecutorEnv <- .jnew("java/util/HashMap")
   for (varname in names(sparkExecutorEnv)) {
-    ee$put(varname, sparkExecutorEnv[[varname]])
+    ExecutorEnv$put(varname, sparkExecutorEnv[[varname]])
   }
   
   jars=c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
