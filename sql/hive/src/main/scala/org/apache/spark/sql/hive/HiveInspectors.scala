@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
+import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -91,7 +91,7 @@ private[hive] trait HiveInspectors {
     case hvoi: HiveVarcharObjectInspector =>
       if (data == null) null else hvoi.getPrimitiveJavaObject(data).getValue
     case hdoi: HiveDecimalObjectInspector =>
-      if (data == null) null else Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+      if (data == null) null else HiveShim.toCatalystDecimal(hdoi, data)
     // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
     // if next timestamp is null, so Timestamp object is cloned
     case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
@@ -281,8 +281,10 @@ private[hive] trait HiveInspectors {
     case _: JavaFloatObjectInspector => FloatType
     case _: WritableBinaryObjectInspector => BinaryType
     case _: JavaBinaryObjectInspector => BinaryType
-    case _: WritableHiveDecimalObjectInspector => DecimalType.Unlimited // TODO: fixed precision
-    case _: JavaHiveDecimalObjectInspector => DecimalType.Unlimited // TODO: fixed precision
+    case w: WritableHiveDecimalObjectInspector =>
+      HiveShim.decimalTypeInfoToCatalyst(w.getTypeInfo.asInstanceOf[DecimalTypeInfo])
+    case j: JavaHiveDecimalObjectInspector =>
+      HiveShim.decimalTypeInfoToCatalyst(j.getTypeInfo.asInstanceOf[DecimalTypeInfo])
     case _: WritableDateObjectInspector => DateType
     case _: JavaDateObjectInspector => DateType
     case _: WritableTimestampObjectInspector => TimestampType
@@ -311,7 +313,7 @@ private[hive] trait HiveInspectors {
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
       case StringType => stringTypeInfo
-      case DecimalType() => decimalTypeInfo // TODO: fixed precision
+      case d: DecimalType => HiveShim.decimalTypeInfo(d)
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
