@@ -32,11 +32,10 @@ import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
- *
  * StreamingKMeansModel extends MLlib's KMeansModel for streaming
  * algorithms, so it can keep track of the number of points assigned
  * to each cluster, and also update the model by doing a single iteration
- * of the standard KMeans algorithm.
+ * of the standard k-means algorithm.
  *
  * The update algorithm uses the "mini-batch" KMeans rule,
  * generalized to incorporate forgetfullness (i.e. decay).
@@ -63,22 +62,13 @@ import org.apache.spark.util.Utils
  * if 'batches', behavior will be independent of the number of points per batch;
  * if 'points', the expected number of points per batch must be specified.
  *
- * Use a builder pattern to construct a streaming KMeans analysis
- * in an application, like:
- *
- *  val model = new StreamingKMeans()
- *    .setDecayFactor(0.5)
- *    .setK(3)
- *    .setRandomCenters(5)
- *    .trainOn(DStream)
- *
  */
 @DeveloperApi
 class StreamingKMeansModel(
     override val clusterCenters: Array[Vector],
     val clusterCounts: Array[Long]) extends KMeansModel(clusterCenters) with Logging {
 
-  // do a sequential KMeans update on a batch of data
+  /** Perform a k-means update on a batch of data. */
   def update(data: RDD[Vector], a: Double, units: String): StreamingKMeansModel = {
 
     val centers = clusterCenters
@@ -125,7 +115,22 @@ class StreamingKMeansModel(
   }
 
 }
-
+/**
+ * :: DeveloperApi ::
+ * StreamingKMeans provides methods for configuring a
+ * streaming k-means analysis, training the model on streaming,
+ * and using the model to make predictions on streaming data.
+ * See KMeansModel for details on algorithm and update rules.
+ *
+ * Use a builder pattern to construct a streaming k-means analysis
+ * in an application, like:
+ *
+ *  val model = new StreamingKMeans()
+ *    .setDecayFactor(0.5)
+ *    .setK(3)
+ *    .setRandomCenters(5)
+ *    .trainOn(DStream)
+ */
 @DeveloperApi
 class StreamingKMeans(
      var k: Int,
@@ -171,7 +176,7 @@ class StreamingKMeans(
     this
   }
 
-  /** Specify initial explicitly directly. */
+  /** Specify initial centers directly. */
   def setInitialCenters(initialCenters: Array[Vector]): this.type = {
     val clusterCounts = Array.fill(this.k)(0).map(_.toLong)
     this.model = new StreamingKMeansModel(initialCenters, clusterCounts)
