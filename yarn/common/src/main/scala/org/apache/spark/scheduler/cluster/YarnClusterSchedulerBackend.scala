@@ -25,13 +25,7 @@ import org.apache.spark.util.IntParam
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
-
-  var totalExpectedExecutors = 0
-
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
+  extends YarnSchedulerBackend(scheduler, sc) {
 
   override def start() {
     super.start()
@@ -42,10 +36,6 @@ private[spark] class YarnClusterSchedulerBackend(
     }
     // System property can override environment variable.
     totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
-  }
-
-  override def sufficientResourcesRegistered(): Boolean = {
-    totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
   override def applicationId(): String =
