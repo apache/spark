@@ -136,7 +136,7 @@ case class RLike(left: Expression, right: Expression)
 
 
 /**
- * A function that converts the characters of a string to uppercase.
+ * A function that trim the characters of a string
  */
 case class Trim(child: Expression) extends UnaryExpression with CaseConversionExpression {
 

@@ -283,7 +283,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | MAX   ~ "(" ~> expression <~ ")" ^^ { case exp => Max(exp) }
     | UPPER ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
     | LOWER ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
-    | TRIM ~ "(" ~> expression <~ ")" ^^ { case exp => TRIM(exp) }
+    | TRIM ~ "(" ~> expression <~ ")" ^^ { case exp => Trim(exp) }
     | IF ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
       { case c ~ t ~ f => If(c, t, f) }
     | CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
