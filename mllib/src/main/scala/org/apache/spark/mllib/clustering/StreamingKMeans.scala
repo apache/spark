@@ -178,7 +178,7 @@ class StreamingKMeans(
 
   /** Specify initial centers directly. */
   def setInitialCenters(initialCenters: Array[Vector]): this.type = {
-    val clusterCounts = Array.fill(this.k)(0).map(_.toLong)
+    val clusterCounts = new Array[Long](this.k)
     this.model = new StreamingKMeansModel(initialCenters, clusterCounts)
     this
   }
