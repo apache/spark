@@ -237,67 +237,76 @@ class ExecutorAllocationManagerSuite extends FunSuite {
 
   test("starting/canceling add timer") {
     val sc = createSparkContext(2, 10)
+    val clock = new TestClock(8888L)
     val manager = sc.executorAllocationManager.get
+    manager.setClock(clock)
 
     // Starting add timer is idempotent
     assert(addTime(manager) === NOT_SET)
-    val firstMockTime = 8888L
-    onSchedulerBacklogged(manager, firstMockTime)
+    onSchedulerBacklogged(manager)
     val firstAddTime = addTime(manager)
-    assert(firstAddTime === firstMockTime + schedulerBacklogTimeout * 1000)
-    onSchedulerBacklogged(manager, firstMockTime + 100L) // 100ms has elapsed
-    assert(addTime(manager) === firstAddTime)            // timer is already started
-    onSchedulerBacklogged(manager, firstMockTime + 200L)
+    assert(firstAddTime === clock.getTime + schedulerBacklogTimeout * 1000)
+    clock.tick(100L)
+    onSchedulerBacklogged(manager)
+    assert(addTime(manager) === firstAddTime) // timer is already started
+    clock.tick(200L)
+    onSchedulerBacklogged(manager)
     assert(addTime(manager) === firstAddTime)
     onSchedulerQueueEmpty(manager)
 
     // Restart add timer
+    clock.tick(1000L)
     assert(addTime(manager) === NOT_SET)
-    val secondMockTime = firstMockTime + 1000L // 1s has elapsed
-    onSchedulerBacklogged(manager, secondMockTime)
+    onSchedulerBacklogged(manager)
     val secondAddTime = addTime(manager)
-    assert(secondAddTime === secondMockTime + schedulerBacklogTimeout * 1000)
-    onSchedulerBacklogged(manager, secondMockTime + 100L) // 100ms has elapsed
-    assert(addTime(manager) === secondAddTime)            // timer is already started
+    assert(secondAddTime === clock.getTime + schedulerBacklogTimeout * 1000)
+    clock.tick(100L)
+    onSchedulerBacklogged(manager)
+    assert(addTime(manager) === secondAddTime) // timer is already started
     assert(addTime(manager) !== firstAddTime)
     assert(firstAddTime !== secondAddTime)
   }
 
   test("starting/canceling remove timers") {
     val sc = createSparkContext(2, 10)
+    val clock = new TestClock(14444L)
     val manager = sc.executorAllocationManager.get
+    manager.setClock(clock)
 
     // Starting remove timer is idempotent for each executor
     assert(removeTimes(manager).isEmpty)
-    val firstMockTime = 14444L
-    onExecutorIdle(manager, "1", firstMockTime)
+    onExecutorIdle(manager, "1")
     assert(removeTimes(manager).size === 1)
     assert(removeTimes(manager).contains("1"))
     val firstRemoveTime = removeTimes(manager)("1")
-    assert(firstRemoveTime === firstMockTime + executorIdleTimeout * 1000)
-    onExecutorIdle(manager, "1", firstMockTime + 100L)    // 100ms has elapsed
+    assert(firstRemoveTime === clock.getTime + executorIdleTimeout * 1000)
+    clock.tick(100L)
+    onExecutorIdle(manager, "1")
     assert(removeTimes(manager)("1") === firstRemoveTime) // timer is already started
-    onExecutorIdle(manager, "1", firstMockTime + 200L)
+    clock.tick(200L)
+    onExecutorIdle(manager, "1")
     assert(removeTimes(manager)("1") === firstRemoveTime)
-    onExecutorIdle(manager, "2", firstMockTime + 300L)
+    clock.tick(300L)
+    onExecutorIdle(manager, "2")
     assert(removeTimes(manager)("2") !== firstRemoveTime) // different executor
-    assert(removeTimes(manager)("2") === firstMockTime + 300L + executorIdleTimeout * 1000)
-    onExecutorIdle(manager, "3", firstMockTime + 400L)
+    assert(removeTimes(manager)("2") === clock.getTime + executorIdleTimeout * 1000)
+    clock.tick(400L)
+    onExecutorIdle(manager, "3")
     assert(removeTimes(manager)("3") !== firstRemoveTime)
-    assert(removeTimes(manager)("3") === firstMockTime + 400L + executorIdleTimeout * 1000)
+    assert(removeTimes(manager)("3") === clock.getTime + executorIdleTimeout * 1000)
     assert(removeTimes(manager).size === 3)
     assert(removeTimes(manager).contains("2"))
     assert(removeTimes(manager).contains("3"))
 
     // Restart remove timer
+    clock.tick(1000L)
     onExecutorBusy(manager, "1")
-    val secondMockTime = firstMockTime + 1000L // 1s has elapsed
     assert(removeTimes(manager).size === 2)
-    onExecutorIdle(manager, "1", secondMockTime)
+    onExecutorIdle(manager, "1")
     assert(removeTimes(manager).size === 3)
     assert(removeTimes(manager).contains("1"))
     val secondRemoveTime = removeTimes(manager)("1")
-    assert(secondRemoveTime === secondMockTime + executorIdleTimeout * 1000)
+    assert(secondRemoveTime === clock.getTime + executorIdleTimeout * 1000)
     assert(removeTimes(manager)("1") === secondRemoveTime) // timer is already started
     assert(removeTimes(manager)("1") !== firstRemoveTime)
     assert(firstRemoveTime !== secondRemoveTime)
@@ -305,115 +314,118 @@ class ExecutorAllocationManagerSuite extends FunSuite {
 
   test("mock polling loop with no events") {
     val sc = createSparkContext(1, 20)
-    var now = 2020L
     val manager = sc.executorAllocationManager.get
+    val clock = new TestClock(2020L)
+    manager.setClock(clock)
 
     // No events - we should not be adding or removing
     assert(numExecutorsPending(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
-    maybeAddAndRemove(manager, now)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
-    now += 100L
-    maybeAddAndRemove(manager, now)
+    clock.tick(100L)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
-    now += 1000L
-    maybeAddAndRemove(manager, now)
+    clock.tick(1000L)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
-    now += 10000L
-    maybeAddAndRemove(manager, now)
+    clock.tick(10000L)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
   test("mock polling loop add behavior") {
     val sc = createSparkContext(1, 20)
-    var now = 2020L
+    val clock = new TestClock(2020L)
     val manager = sc.executorAllocationManager.get
+    manager.setClock(clock)
 
     // Scheduler queue backlogged
-    onSchedulerBacklogged(manager, now)
-    now += schedulerBacklogTimeout * 1000 / 2
-    maybeAddAndRemove(manager, now)
+    onSchedulerBacklogged(manager)
+    clock.tick(schedulerBacklogTimeout * 1000 / 2)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 0) // timer not exceeded yet
-    now += schedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(schedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 1) // first timer exceeded
-    now += sustainedSchedulerBacklogTimeout * 1000 / 2
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000 / 2)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 1) // second timer not exceeded yet
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 1 + 2) // second timer exceeded
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 1 + 2 + 4) // third timer exceeded
 
     // Scheduler queue drained
     onSchedulerQueueEmpty(manager)
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 7) // timer is canceled
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 7)
 
     // Scheduler queue backlogged again
-    onSchedulerBacklogged(manager, now)
-    now += schedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    onSchedulerBacklogged(manager)
+    clock.tick(schedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 7 + 1) // timer restarted
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 7 + 1 + 2)
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 7 + 1 + 2 + 4)
-    now += sustainedSchedulerBacklogTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
     assert(numExecutorsPending(manager) === 20) // limit reached
   }
 
   test("mock polling loop remove behavior") {
     val sc = createSparkContext(1, 20)
-    var now = 2020L
+    val clock = new TestClock(2020L)
     val manager = sc.executorAllocationManager.get
+    manager.setClock(clock)
 
     // Remove idle executors on timeout
-    onExecutorAdded(manager, "executor-1", now)
-    onExecutorAdded(manager, "executor-2", now)
-    onExecutorAdded(manager, "executor-3", now)
+    onExecutorAdded(manager, "executor-1")
+    onExecutorAdded(manager, "executor-2")
+    onExecutorAdded(manager, "executor-3")
     assert(removeTimes(manager).size === 3)
     assert(executorsPendingToRemove(manager).isEmpty)
-    now += executorIdleTimeout * 1000 / 2
-    maybeAddAndRemove(manager, now)
+    clock.tick(executorIdleTimeout * 1000 / 2)
+    schedule(manager)
     assert(removeTimes(manager).size === 3) // idle threshold not reached yet
     assert(executorsPendingToRemove(manager).isEmpty)
-    now += executorIdleTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(executorIdleTimeout * 1000)
+    schedule(manager)
     assert(removeTimes(manager).isEmpty) // idle threshold exceeded
     assert(executorsPendingToRemove(manager).size === 2) // limit reached (1 executor remaining)
 
     // Mark a subset as busy - only idle executors should be removed
-    onExecutorAdded(manager, "executor-4", now)
-    onExecutorAdded(manager, "executor-5", now)
-    onExecutorAdded(manager, "executor-6", now)
-    onExecutorAdded(manager, "executor-7", now)
+    onExecutorAdded(manager, "executor-4")
+    onExecutorAdded(manager, "executor-5")
+    onExecutorAdded(manager, "executor-6")
+    onExecutorAdded(manager, "executor-7")
     assert(removeTimes(manager).size === 5)              // 5 active executors
     assert(executorsPendingToRemove(manager).size === 2) // 2 pending to be removed
     onExecutorBusy(manager, "executor-4")
     onExecutorBusy(manager, "executor-5")
     onExecutorBusy(manager, "executor-6") // 3 busy and 2 idle (of the 5 active ones)
-    maybeAddAndRemove(manager, now)
+    schedule(manager)
     assert(removeTimes(manager).size === 2) // remove only idle executors
     assert(!removeTimes(manager).contains("executor-4"))
     assert(!removeTimes(manager).contains("executor-5"))
     assert(!removeTimes(manager).contains("executor-6"))
     assert(executorsPendingToRemove(manager).size === 2)
-    now += executorIdleTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(executorIdleTimeout * 1000)
+    schedule(manager)
     assert(removeTimes(manager).isEmpty) // idle executors are removed
     assert(executorsPendingToRemove(manager).size === 4)
     assert(!executorsPendingToRemove(manager).contains("executor-4"))
@@ -421,17 +433,17 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(!executorsPendingToRemove(manager).contains("executor-6"))
 
     // Busy executors are now idle and should be removed
-    onExecutorIdle(manager, "executor-4", now)
-    onExecutorIdle(manager, "executor-5", now)
-    onExecutorIdle(manager, "executor-6", now)
-    maybeAddAndRemove(manager, now)
+    onExecutorIdle(manager, "executor-4")
+    onExecutorIdle(manager, "executor-5")
+    onExecutorIdle(manager, "executor-6")
+    schedule(manager)
     assert(removeTimes(manager).size === 3) // 0 busy and 3 idle
     assert(removeTimes(manager).contains("executor-4"))
     assert(removeTimes(manager).contains("executor-5"))
     assert(removeTimes(manager).contains("executor-6"))
     assert(executorsPendingToRemove(manager).size === 4)
-    now += executorIdleTimeout * 1000
-    maybeAddAndRemove(manager, now)
+    clock.tick(executorIdleTimeout * 1000)
+    schedule(manager)
     assert(removeTimes(manager).isEmpty)
     assert(executorsPendingToRemove(manager).size === 6) // limit reached (1 executor remaining)
   }
@@ -576,7 +588,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _executorIds = PrivateMethod[collection.Set[String]]('executorIds)
   private val _addTime = PrivateMethod[Long]('addTime)
   private val _removeTimes = PrivateMethod[collection.Map[String, Long]]('removeTimes)
-  private val _maybeAddAndRemove = PrivateMethod[Unit]('maybeAddAndRemove)
+  private val _schedule = PrivateMethod[Unit]('schedule)
   private val _addExecutors = PrivateMethod[Int]('addExecutors)
   private val _removeExecutor = PrivateMethod[Boolean]('removeExecutor)
   private val _onExecutorAdded = PrivateMethod[Unit]('onExecutorAdded)
@@ -611,10 +623,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _removeTimes()
   }
 
-  private def maybeAddAndRemove(
-      manager: ExecutorAllocationManager,
-      now: Long = System.currentTimeMillis): Unit = {
-    manager invokePrivate _maybeAddAndRemove(now)
+  private def schedule(manager: ExecutorAllocationManager): Unit = {
+    manager invokePrivate _schedule()
   }
 
   private def addExecutors(manager: ExecutorAllocationManager): Int = {
@@ -625,32 +635,24 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _removeExecutor(id)
   }
 
-  private def onExecutorAdded(
-      manager: ExecutorAllocationManager,
-      id: String,
-      now: Long = System.currentTimeMillis): Unit = {
-    manager invokePrivate _onExecutorAdded(id, now)
+  private def onExecutorAdded(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _onExecutorAdded(id)
   }
 
   private def onExecutorRemoved(manager: ExecutorAllocationManager, id: String): Unit = {
     manager invokePrivate _onExecutorRemoved(id)
   }
 
-  private def onSchedulerBacklogged(
-      manager: ExecutorAllocationManager,
-      now: Long = System.currentTimeMillis): Unit = {
-    manager invokePrivate _onSchedulerBacklogged(now)
+  private def onSchedulerBacklogged(manager: ExecutorAllocationManager): Unit = {
+    manager invokePrivate _onSchedulerBacklogged()
   }
 
   private def onSchedulerQueueEmpty(manager: ExecutorAllocationManager): Unit = {
     manager invokePrivate _onSchedulerQueueEmpty()
   }
 
-  private def onExecutorIdle(
-      manager: ExecutorAllocationManager,
-      id: String,
-      now: Long = System.currentTimeMillis): Unit = {
-    manager invokePrivate _onExecutorIdle(id, now)
+  private def onExecutorIdle(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _onExecutorIdle(id)
   }
 
   private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {

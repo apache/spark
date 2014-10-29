@@ -103,6 +103,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
 
+  // Clock used to schedule when executors should be added and removed
+  private var clock: Clock = new RealClock
+
   /**
    * Verify that the lower and upper bounds on the number of executors are valid.
    * If not, throw an appropriate exception.
@@ -115,6 +118,13 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
         s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
     }
+  }
+
+  /**
+   * Use a different clock for this allocation manager. This is mainly used for testing.
+   */
+  def setClock(newClock: Clock): Unit = {
+    clock = newClock
   }
 
   /**
@@ -135,7 +145,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       override def run(): Unit = {
         while (true) {
           try {
-            maybeAddAndRemove()
+            schedule()
           } catch {
             case e: Exception => logError("Exception in dynamic executor allocation thread!", e)
           }
@@ -153,7 +163,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * If the remove time for an existing executor has expired, kill the executor.
    * This is factored out into its own method for testing.
    */
-  private def maybeAddAndRemove(now: Long = System.currentTimeMillis): Unit = synchronized {
+  private def schedule(): Unit = synchronized {
+    val now = clock.getTime
     if (addTime != NOT_SET && now >= addTime) {
       addExecutors()
       logDebug(s"Starting timer to add more executors (to " +
@@ -252,12 +263,10 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   /**
    * Callback invoked when the specified executor has been added.
    */
-  private def onExecutorAdded(
-      executorId: String,
-      now: Long = System.currentTimeMillis): Unit = synchronized {
+  private def onExecutorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
-      executorIds.foreach { id => onExecutorIdle(id, now) }
+      executorIds.foreach(onExecutorIdle)
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
       if (numExecutorsPending > 0) {
         numExecutorsPending -= 1
@@ -289,11 +298,11 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * This sets a time in the future that decides when executors should be added
    * if it is not already set.
    */
-  private def onSchedulerBacklogged(now: Long = System.currentTimeMillis): Unit = synchronized {
+  private def onSchedulerBacklogged(): Unit = synchronized {
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeout seconds)")
-      addTime = now + schedulerBacklogTimeout * 1000
+      addTime = clock.getTime + schedulerBacklogTimeout * 1000
     }
   }
 
@@ -312,13 +321,11 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * This sets a time in the future that decides when this executor should be removed if
    * the executor is not already marked as idle.
    */
-  private def onExecutorIdle(
-      executorId: String,
-      now: Long = System.currentTimeMillis): Unit = synchronized {
+  private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
         s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
-      removeTimes(executorId) = now + removeThresholdSeconds * 1000
+      removeTimes(executorId) = clock.getTime + removeThresholdSeconds * 1000
     }
   }
 
@@ -422,4 +429,22 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
+}
+
+private trait Clock {
+  def getTime: Long
+}
+
+private class RealClock extends Clock {
+  override def getTime: Long = System.currentTimeMillis
+}
+
+/**
+ * A clock that allows the caller to customize the time.
+ * This is used mainly for testing.
+ */
+private class TestClock(startTimeMillis: Long) extends Clock {
+  private var time: Long = startTimeMillis
+  override def getTime: Long = time
+  def tick(ms: Long): Unit = { time += ms }
 }
