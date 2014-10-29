@@ -19,8 +19,6 @@ package org.apache.spark.sql.api.java;
 
 import java.util.*;
 
-import org.apache.spark.sql.catalyst.util.Metadata;
-
 /**
  * The base type of all Spark SQL data types.
  *
@@ -175,7 +173,7 @@ public abstract class DataType {
    * @see #createStructField(String, DataType, boolean, Metadata)
    */
   public static StructField createStructField(String name, DataType dataType, boolean nullable) {
-    return createStructField(name, dataType, nullable, Metadata.empty());
+    return createStructField(name, dataType, nullable, (new MetadataBuilder()).build());
   }
 
   /**
@@ -207,5 +205,4 @@ public abstract class DataType {
 
     return new StructType(fields);
   }
-
 }

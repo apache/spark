@@ -19,8 +19,6 @@ package org.apache.spark.sql.api.java;
 
 import java.util.Map;
 
-import org.apache.spark.sql.catalyst.util.Metadata;
-
 /**
  * A StructField object represents a field in a StructType object.
  * A StructField object comprises three fields, {@code String name}, {@code DataType dataType},
