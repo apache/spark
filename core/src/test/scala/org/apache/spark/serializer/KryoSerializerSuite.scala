@@ -201,12 +201,17 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     assert(control.sum === result)
   }
 
-  // TODO: this still doesn't work
-  ignore("kryo with fold") {
+  test("kryo with fold") {
     val control = 1 :: 2 :: Nil
+    // zeroValue must not be a ClassWithoutNoArgConstructor instance because it will be
+    // serialized by spark.closure.serializer but spark.closure.serializer only supports
+    // the default Java serializer.
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
-        .fold(new ClassWithoutNoArgConstructor(10))((t1, t2) => new ClassWithoutNoArgConstructor(t1.x + t2.x)).x
-    assert(10 + control.sum === result)
+      .fold(null)((t1, t2) => {
+      val t1x = if (t1 == null) 0 else t1.x
+      new ClassWithoutNoArgConstructor(t1x + t2.x)
+    }).x
+    assert(control.sum === result)
   }
 
   test("kryo with nonexistent custom registrator should fail") {
