@@ -73,17 +73,23 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   }
 
   parseOpts(args.toList)
-  mergeSparkProperties()
+  mergeDefaultSparkProperties()
   loadEnvironmentArguments()
   checkRequiredArguments()
 
   /**
-   * Fill in any undefined values based on the default properties file or options passed in through
-   * the '--conf' flag.
+   * Merge values from the default properties file with those specified through --conf.
+   * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
-  private def mergeSparkProperties(): Unit = {
+  private def mergeDefaultSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
     propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
+    // Honor --conf before the defaults file
+    defaultSparkProperties.foreach { case (k, v) =>
+      if (!sparkProperties.contains(k)) {
+        sparkProperties(k) = v
+      }
+    }
   }
 
   /**
@@ -179,7 +185,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
-    |  extraSparkProperties    $sparkProperties
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -198,8 +203,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  jars                    $jars
     |  verbose                 $verbose
     |
-    |Default properties from $propertiesFile:
-    |${defaultSparkProperties.mkString("  ", "\n  ", "\n")}
+    |Spark properties used, including those specified through --conf
+    |and those from the default properties file $propertiesFile:
+    |${sparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 
