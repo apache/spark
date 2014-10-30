@@ -80,7 +80,7 @@ object KafkaWriter {
  * @param dstream - The [[DStream]] to be written to Kafka
  *
  */
-class KafkaWriter[T: ClassTag](@transient dstream: DStream[T]) extends Logging {
+class KafkaWriter[T: ClassTag](@transient dstream: DStream[T]) extends Serializable with Logging {
 
   /**
    * To write data from a DStream to Kafka, call this function after creating the DStream. Once
