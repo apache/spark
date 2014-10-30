@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
+import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -27,10 +28,10 @@ import net.razorvine.pickle._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
-import org.apache.spark.mllib.feature.Word2Vec
-import org.apache.spark.mllib.feature.Word2VecModel
+import org.apache.spark.mllib.feature._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
@@ -290,6 +291,43 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Normalizer.transform()
+   */
+  def normalizeVector(p: Double, vector: Vector): Vector = {
+    new Normalizer(p).transform(vector)
+  }
+
+  /**
+   * Java stub for Normalizer.transform()
+   */
+  def normalizeVector(p: Double, rdd: JavaRDD[Vector]): JavaRDD[Vector] = {
+    new Normalizer(p).transform(rdd)
+  }
+
+  /**
+   * Java stub for IDF.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitStandardScaler(
+      withMean: Boolean,
+      withStd: Boolean,
+      data: JavaRDD[Vector]): StandardScalerModel = {
+    new StandardScaler(withMean, withStd).fit(data.rdd)
+  }
+
+  /**
+   * Java stub for IDF.fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   */
+  def fitIDF(minDocFreq: Int, dataset: JavaRDD[Vector]): IDFModel = {
+    new IDF(minDocFreq).fit(dataset)
+  }
+
+  /**
    * Java stub for Python mllib Word2Vec fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
@@ -324,6 +362,15 @@ class PythonMLLibAPI extends Serializable {
   private[python] class Word2VecModelWrapper(model: Word2VecModel) {
     def transform(word: String): Vector = {
       model.transform(word)
+    }
+
+    /**
+     * Transforms an RDD of words to its vector representation
+     * @param rdd an RDD of words
+     * @return an RDD of vector representations of words
+     */
+    def transform(rdd: JavaRDD[String]): JavaRDD[Vector] = {
+      rdd.rdd.map(model.transform)
     }
 
     def findSynonyms(word: String, num: Int): java.util.List[java.lang.Object] = {
@@ -639,13 +686,24 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  var initialized = false
+  // This should be called before trying to serialize any above classes
+  // In cluster mode, this should be put in the closure
   def initialize(): Unit = {
-    new DenseVectorPickler().register()
-    new DenseMatrixPickler().register()
-    new SparseVectorPickler().register()
-    new LabeledPointPickler().register()
-    new RatingPickler().register()
+    SerDeUtil.initialize()
+    synchronized {
+      if (!initialized) {
+        new DenseVectorPickler().register()
+        new DenseMatrixPickler().register()
+        new SparseVectorPickler().register()
+        new LabeledPointPickler().register()
+        new RatingPickler().register()
+        initialized = true
+      }
+    }
   }
+  // will not called in Executor automatically
+  initialize()
 
   def dumps(obj: AnyRef): Array[Byte] = {
     new Pickler().dumps(obj)
@@ -658,5 +716,39 @@ private[spark] object SerDe extends Serializable {
   /* convert object into Tuple */
   def asTupleRDD(rdd: RDD[Array[Any]]): RDD[(Int, Int)] = {
     rdd.map(x => (x(0).asInstanceOf[Int], x(1).asInstanceOf[Int]))
+  }
+
+  /* convert RDD[Tuple2[,]] to RDD[Array[Any]] */
+  def fromTuple2RDD(rdd: RDD[Tuple2[Any, Any]]): RDD[Array[Any]]  = {
+    rdd.map(x => Array(x._1, x._2))
+  }
+
+  /**
+   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      new PythonRDD.AutoBatchedPickler(iter)
+    }
+  }
+
+  /**
+   * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
+   */
+  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj.asInstanceOf[JArrayList[_]].asScala
+        } else {
+          Seq(obj)
+        }
+      }
+    }.toJavaRDD()
   }
 }

@@ -24,6 +24,7 @@ import scala.collection.mutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.Utils
 
 /**
  * A data type that can be accumulated, ie has an commutative and associative "add" operation,
@@ -126,7 +127,7 @@ class Accumulable[R, T] (
   }
 
   // Called by Java when deserializing an object
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     value_ = zero
     deserialized = true

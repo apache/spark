@@ -34,6 +34,14 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+  createQueryTest("constant array",
+  """
+    |SELECT sort_array(
+    |  sort_array(
+    |    array("hadoop distributed file system",
+    |          "enterprise databases", "hadoop map-reduce")))
+    |FROM src LIMIT 1;
+  """.stripMargin)
 
   createQueryTest("count distinct 0 values",
     """
@@ -508,19 +516,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a partition is a native command
     assertResult(
       Array(
-        Array("key", "int", "None"),
-        Array("value", "string", "None"),
-        Array("dt", "string", "None"),
-        Array("", "", ""),
-        Array("# Partition Information", "", ""),
+        Array("key", "int"),
+        Array("value", "string"),
+        Array("dt", "string"),
+        Array(""),
+        Array("# Partition Information"),
         Array("# col_name", "data_type", "comment"),
-        Array("", "", ""),
-        Array("dt", "string", "None"))
+        Array(""),
+        Array("dt", "string"))
     ) {
       sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
         .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
+        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
     }
 
     // Describe a registered temporary table.
@@ -561,11 +569,15 @@ class HiveQuerySuite extends HiveComparisonTest {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    sql(s"ADD JAR $testJar")
-    sql(
-      """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-        |WITH serdeproperties('s1'='9')
-      """.stripMargin)
+    // Now only verify 0.12.0, and ignore other versions due to binary compatability
+    // current TestSerDe.jar is from 0.12.0
+    if (HiveShim.version == "0.12.0") {
+      sql(s"ADD JAR $testJar")
+      sql(
+        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+          |WITH serdeproperties('s1'='9')
+        """.stripMargin)
+    }
     sql("DROP TABLE alter1")
   }
 

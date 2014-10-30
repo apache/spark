@@ -25,7 +25,7 @@ echo -e "q\n" | sbt/sbt -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.9 yarn-
 echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 yarn/scalastyle \
   >> scalastyle.txt
 
-ERRORS=$(cat scalastyle.txt | grep -e "\<error\>")
+ERRORS=$(cat scalastyle.txt | awk '{if($1~/error/)print}')
 rm scalastyle.txt
 
 if test ! -z "$ERRORS"; then
