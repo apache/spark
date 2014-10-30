@@ -4,7 +4,10 @@ set -x
 set -e
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
-SHA=$(git rev-parse HEAD)
+GIT_SHA=$(git rev-parse HEAD)
+GIT_BRANCH=$(git name-rev HEAD)
+GIT_DESC=$(git describe HEAD)
+GIT_HUMAN=$(git log --pretty=format:"%s (%an)" HEAD...HEAD~1)
 
 # Compile spark jars into dist folder
 export LOCAL_SBT_DIR=1
@@ -33,3 +36,6 @@ find * -maxdepth 0 -name 'dist' -o -name 'conf' -prune -o -exec rm -rf '{}' ';'
 # Copy everything out of dist that doesn't exist already
 mv -n dist/* .
 echo $SHA > ./GIT_SHA
+echo $GIT_BRANCH >> ./GIT_DESC
+echo $GIT_DESC >> ./GIT_DESC
+echo $GIT_HUMAN >> ./GIT_DESC
