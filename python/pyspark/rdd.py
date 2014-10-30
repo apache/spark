@@ -1872,6 +1872,7 @@ class RDD(object):
         'RDD1'
         """
         self._jrdd.setName(name)
+        return self
 
     def toDebugString(self):
         """
