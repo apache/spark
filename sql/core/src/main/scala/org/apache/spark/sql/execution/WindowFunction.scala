@@ -172,7 +172,7 @@ case class WindowFunction(
         }
       if (end > rows.size - 1) end = rows.size - 1
 
-      //new aggregate function
+      // new aggregate function
       val aggr = base.newInstance()
       (start to end).foreach(i => aggr.update(rows(i)))
 
@@ -244,7 +244,7 @@ case class WindowFunction(
           followingIndex += 1
         }
       }
-      //new aggregate function
+      // new aggregate function
       val aggr = base.newInstance()
       (precedingIndex to followingIndex).foreach(i => aggr.update(rows(i)))
       rangeResults += aggr.eval(EmptyRow)

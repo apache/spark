@@ -41,7 +41,7 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
         |)
       """.stripMargin).collect()
 
-    //remove duplicate data in part_tiny.txt for hive bug
+    // remove duplicate data in part_tiny.txt for hive bug
     // https://issues.apache.org/jira/browse/HIVE-8569
     sql(s"""
        |LOAD DATA LOCAL INPATH '${getHiveFile("data/files/part_tiny_without_duplicate.txt")}'
