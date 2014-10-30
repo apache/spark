@@ -24,7 +24,7 @@ import warnings
 from py4j.protocol import Py4JJavaError
 
 from pyspark import RDD, SparkContext
-from pyspark.mllib.common import callAPI, JavaModelWrapper
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Vectors
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
@@ -87,7 +87,7 @@ class Normalizer(VectorTransformer):
         """
         sc = SparkContext._active_spark_context
         assert sc is not None, "SparkContext should be initialized first"
-        return callAPI("normalizeVector", self.p, vector)
+        return callMLlibFunc("normalizeVector", self.p, vector)
 
 
 class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
@@ -154,7 +154,7 @@ class StandardScaler(object):
                     the transformation model.
         :return: a StandardScalarModel
         """
-        jmodel = callAPI("fitStandardScaler", self.withMean, self.withStd, dataset)
+        jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
         return StandardScalerModel(jmodel)
 
 
@@ -255,7 +255,7 @@ class IDF(object):
 
         :param dataset: an RDD of term frequency vectors
         """
-        jmodel = callAPI("fitIDF", self.minDocFreq, dataset)
+        jmodel = callMLlibFunc("fitIDF", self.minDocFreq, dataset)
         return IDFModel(jmodel)
 
 
@@ -377,9 +377,9 @@ class Word2Vec(object):
         :param data: training data. RDD of subtype of Iterable[String]
         :return: Word2VecModel instance
         """
-        jmodel = callAPI("trainWord2Vec", data, int(self.vectorSize),
-                         float(self.learningRate), int(self.numPartitions),
-                         int(self.numIterations), long(self.seed))
+        jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
+                               float(self.learningRate), int(self.numPartitions),
+                               int(self.numIterations), long(self.seed))
         return Word2VecModel(jmodel)
 
 

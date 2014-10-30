@@ -20,7 +20,7 @@ from math import exp
 import numpy
 from numpy import array
 
-from pyspark.mllib.common import callAPI
+from pyspark.mllib.common import callMLlibFunc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
@@ -103,8 +103,8 @@ class LogisticRegressionWithSGD(object):
                                   are activated or not).
         """
         def train(rdd, i):
-            return callAPI("trainLogisticRegressionModelWithSGD", rdd, iterations, step,
-                           miniBatchFraction, i, regParam, regType, intercept)
+            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, iterations, step,
+                                 miniBatchFraction, i, regParam, regType, intercept)
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -172,8 +172,8 @@ class SVMWithSGD(object):
                                   are activated or not).
         """
         def train(rdd, i):
-            return callAPI("trainSVMModelWithSGD", rdd, iterations, step, regParam,
-                           miniBatchFraction, i, regType, intercept)
+            return callMLlibFunc("trainSVMModelWithSGD", rdd, iterations, step, regParam,
+                                 miniBatchFraction, i, regType, intercept)
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
@@ -238,7 +238,7 @@ class NaiveBayes(object):
                (e.g. a count vector).
         :param lambda_: The smoothing parameter
         """
-        labels, pi, theta = callAPI("trainNaiveBayes", data, lambda_)
+        labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 

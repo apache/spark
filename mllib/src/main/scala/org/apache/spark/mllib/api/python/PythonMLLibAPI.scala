@@ -258,8 +258,8 @@ class PythonMLLibAPI extends Serializable {
   private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorizationModel)
     extends MatrixFactorizationModel(model.rank, model.userFeatures, model.productFeatures) {
 
-    def predict(usersProducts: JavaRDD[Array[Any]]): RDD[Rating] =
-      predict(SerDe.asTupleRDD(usersProducts.rdd))
+    def predict(userAndProducts: JavaRDD[Array[Any]]): RDD[Rating] =
+      predict(SerDe.asTupleRDD(userAndProducts.rdd))
 
     def getUserFeatures = SerDe.fromTuple2RDD(userFeatures.asInstanceOf[RDD[(Any, Any)]])
 

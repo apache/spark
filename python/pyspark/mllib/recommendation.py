@@ -17,7 +17,7 @@
 
 from pyspark import SparkContext
 from pyspark.rdd import RDD
-from pyspark.mllib.common import JavaModelWrapper, callAPIWithCache
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, _to_java_object_rdd
 
 __all__ = ['MatrixFactorizationModel', 'ALS']
 
@@ -98,18 +98,18 @@ class ALS(object):
                 ratings = ratings.map(lambda x: Rating(*x))
             else:
                 raise ValueError("rating should be RDD of Rating or tuple/list")
-        return ratings
+        return _to_java_object_rdd(ratings, True)
 
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
-        model = callAPIWithCache("trainALSModel", cls._prepare(ratings), rank, iterations,
-                                 lambda_, blocks)
+        model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
+                              lambda_, blocks)
         return MatrixFactorizationModel(model)
 
     @classmethod
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
-        model = callAPIWithCache("trainImplicitALSModel", cls._prepare(ratings), rank,
-                                 iterations, lambda_, blocks, alpha)
+        model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
+                              iterations, lambda_, blocks, alpha)
         return MatrixFactorizationModel(model)
 
 

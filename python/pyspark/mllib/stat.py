@@ -19,7 +19,7 @@
 Python package for statistical functions in MLlib.
 """
 
-from pyspark.mllib.common import callAPI, JavaModelWrapper
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 
 
@@ -76,7 +76,7 @@ class Statistics(object):
         >>> cStats.min()
         array([ 2.,  0.,  0., -2.])
         """
-        cStats = callAPI("colStats", rdd.map(_convert_to_vector))
+        cStats = callMLlibFunc("colStats", rdd.map(_convert_to_vector))
         return MultivariateStatisticalSummary(cStats)
 
     @staticmethod
@@ -131,9 +131,9 @@ class Statistics(object):
             raise TypeError("Use 'method=' to specify method name.")
 
         if not y:
-            return callAPI("corr", x.map(_convert_to_vector), method).toArray()
+            return callMLlibFunc("corr", x.map(_convert_to_vector), method).toArray()
         else:
-            return callAPI("corr", x.map(float), y.map(float), method)
+            return callMLlibFunc("corr", x.map(float), y.map(float), method)
 
 
 def _test():

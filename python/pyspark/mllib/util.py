@@ -18,7 +18,7 @@
 import numpy as np
 import warnings
 
-from pyspark.mllib.common import callAPI
+from pyspark.mllib.common import callMLlibFunc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
@@ -172,7 +172,7 @@ class MLUtils(object):
         (0.0,[1.01,2.02,3.03])
         """
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
-        return callAPI("loadLabeledPoints", sc, path, minPartitions)
+        return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
 
 def _test():

@@ -18,7 +18,7 @@
 import numpy as np
 from numpy import array
 
-from pyspark.mllib.common import callAPI, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc, _to_java_object_rdd
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
 __all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
@@ -162,8 +162,8 @@ class LinearRegressionWithSGD(object):
                                   are activated or not).
         """
         def train(rdd, i):
-            return callAPI("trainLinearRegressionModelWithSGD", rdd, iterations, step,
-                           miniBatchFraction, i, regParam, regType, intercept)
+            return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, iterations, step,
+                                 miniBatchFraction, i, regParam, regType, intercept)
 
         return _regression_train_wrapper(train, LinearRegressionModel,
                                          data, initialWeights)
@@ -209,8 +209,8 @@ class LassoWithSGD(object):
               miniBatchFraction=1.0, initialWeights=None):
         """Train a Lasso regression model on the given data."""
         def train(rdd, i):
-            return callAPI("trainLassoModelWithSGD", rdd, iterations, step, regParam,
-                           miniBatchFraction, i)
+            return callMLlibFunc("trainLassoModelWithSGD", rdd, iterations, step, regParam,
+                                 miniBatchFraction, i)
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
 
@@ -254,8 +254,8 @@ class RidgeRegressionWithSGD(object):
               miniBatchFraction=1.0, initialWeights=None):
         """Train a ridge regression model on the given data."""
         def train(rdd, i):
-            return callAPI("trainRidgeModelWithSGD", rdd, iterations, step, regParam,
-                           miniBatchFraction, i)
+            return callMLlibFunc("trainRidgeModelWithSGD", rdd, iterations, step, regParam,
+                                 miniBatchFraction, i)
 
         return _regression_train_wrapper(train, RidgeRegressionModel,
                                          data, initialWeights)

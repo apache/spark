@@ -16,7 +16,7 @@
 #
 
 from pyspark import SparkContext, RDD
-from pyspark.mllib.common import callAPI, JavaModelWrapper
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
@@ -75,8 +75,8 @@ class DecisionTree(object):
                minInstancesPerNode=1, minInfoGain=0.0):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
-        model = callAPI("trainDecisionTreeModel", data, type, numClasses, features,
-                        impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        model = callMLlibFunc("trainDecisionTreeModel", data, type, numClasses, features,
+                              impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
         return DecisionTreeModel(model)
 
     @staticmethod

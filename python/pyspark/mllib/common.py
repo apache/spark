@@ -66,10 +66,10 @@ def _to_java_object_rdd(rdd, cache=False):
     return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
-def _py2java(sc, obj, cache=False):
+def _py2java(sc, obj):
     """ Convert Python object into Java """
     if isinstance(obj, RDD):
-        obj = _to_java_object_rdd(obj, cache)
+        obj = _to_java_object_rdd(obj)
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
     elif isinstance(obj, dict):
@@ -112,24 +112,11 @@ def callJavaFunc(sc, func, *args):
     return _java2py(sc, func(*args))
 
 
-def callAPI(name, *args):
+def callMLlibFunc(name, *args):
     """ Call API in PythonMLLibAPI """
     sc = SparkContext._active_spark_context
     api = getattr(sc._jvm.PythonMLLibAPI(), name)
     return callJavaFunc(sc, api, *args)
-
-
-def callJavaFuncWithCache(sc, func, *args):
-    """ Call Java Function """
-    args = [_py2java(sc, a, cache=True) for a in args]
-    return _java2py(sc, func(*args))
-
-
-def callAPIWithCache(name, *args):
-    """ Call API in PythonMLLibAPI with cached RDD """
-    sc = SparkContext._active_spark_context
-    api = getattr(sc._jvm.PythonMLLibAPI(), name)
-    return callJavaFuncWithCache(sc, api, *args)
 
 
 class JavaModelWrapper(object):

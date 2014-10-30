@@ -21,7 +21,7 @@ Python package for random data generation.
 
 from functools import wraps
 
-from pyspark.mllib.common import callAPI
+from pyspark.mllib.common import callMLlibFunc
 
 
 __all__ = ['RandomRDDs', ]
@@ -63,7 +63,7 @@ class RandomRDDs(object):
         >>> parts == sc.defaultParallelism
         True
         """
-        return callAPI("uniformRDD", sc._jsc, size, numPartitions, seed)
+        return callMLlibFunc("uniformRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
     def normalRDD(sc, size, numPartitions=None, seed=None):
@@ -85,7 +85,7 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - 1.0) < 0.1
         True
         """
-        return callAPI("normalRDD", sc._jsc, size, numPartitions, seed)
+        return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
@@ -104,7 +104,7 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - sqrt(mean)) < 0.5
         True
         """
-        return callAPI("poissonRDD", sc._jsc, mean, size, numPartitions, seed)
+        return callMLlibFunc("poissonRDD", sc._jsc, mean, size, numPartitions, seed)
 
     @staticmethod
     @toArray
@@ -122,7 +122,7 @@ class RandomRDDs(object):
         >>> RandomRDDs.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
         4
         """
-        return callAPI("uniformVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
+        return callMLlibFunc("uniformVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
 
     @staticmethod
     @toArray
@@ -140,7 +140,7 @@ class RandomRDDs(object):
         >>> abs(mat.std() - 1.0) < 0.1
         True
         """
-        return callAPI("normalVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
+        return callMLlibFunc("normalVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
 
     @staticmethod
     @toArray
@@ -161,7 +161,8 @@ class RandomRDDs(object):
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        return callAPI("poissonVectorRDD", sc._jsc, mean, numRows, numCols, numPartitions, seed)
+        return callMLlibFunc("poissonVectorRDD", sc._jsc, mean, numRows, numCols,
+                             numPartitions, seed)
 
 
 def _test():
