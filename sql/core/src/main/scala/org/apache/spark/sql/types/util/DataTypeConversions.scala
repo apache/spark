@@ -114,4 +114,16 @@ protected[sql] object DataTypeConversions {
     case udtType: org.apache.spark.sql.api.java.UserDefinedType[_] =>
       UDTWrappers.wrapAsScala(udtType)
   }
+
+  /** Converts Java objects to catalyst rows / types */
+  def convertJavaToCatalyst(a: Any): Any = a match {
+    case d: java.math.BigDecimal => BigDecimal(d)
+    case other => other
+  }
+
+  /** Converts Java objects to catalyst rows / types */
+  def convertCatalystToJava(a: Any): Any = a match {
+    case d: scala.math.BigDecimal => d.underlying()
+    case other => other
+  }
 }

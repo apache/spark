@@ -294,7 +294,8 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   executorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
+  private[spark] var (schedulerBackend, taskScheduler) =
+    SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
     Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
   @volatile private[spark] var dagScheduler: DAGScheduler = _
@@ -328,6 +329,15 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
       Some(logger)
     } else None
   }
+
+  // Optionally scale number of executors dynamically based on workload. Exposed for testing.
+  private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      Some(new ExecutorAllocationManager(this))
+    } else {
+      None
+    }
+  executorAllocationManager.foreach(_.start())
 
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
@@ -855,6 +865,46 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
   }
+
+  /**
+   * :: DeveloperApi ::
+   * Request an additional number of executors from the cluster manager.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
+   */
+  @DeveloperApi
+  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.requestExecutors(numAdditionalExecutors)
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+        false
+    }
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Request that the cluster manager kill the specified executors.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
+   */
+  @DeveloperApi
+  def killExecutors(executorIds: Seq[String]): Boolean = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(executorIds)
+      case _ =>
+        logWarning("Killing executors is only supported in coarse-grained mode")
+        false
+    }
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Request that cluster manager the kill the specified executor.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
+   */
+  @DeveloperApi
+  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
@@ -1438,8 +1488,13 @@ object SparkContext extends Logging {
     res
   }
 
-  /** Creates a task scheduler based on a given master URL. Extracted for testing. */
-  private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
+  /**
+   * Create a task scheduler based on a given master URL.
+   * Return a 2-tuple of the scheduler backend and the task scheduler.
+   */
+  private def createTaskScheduler(
+      sc: SparkContext,
+      master: String): (SchedulerBackend, TaskScheduler) = {
     // Regular expression used for local[N] and local[*] master formats
     val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -1461,7 +1516,7 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount = Runtime.getRuntime.availableProcessors()
@@ -1470,7 +1525,7 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         def localCpuCount = Runtime.getRuntime.availableProcessors()
@@ -1480,14 +1535,14 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
@@ -1507,7 +1562,7 @@ object SparkContext extends Logging {
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
-        scheduler
+        (backend, scheduler)
 
       case "yarn-standalone" | "yarn-cluster" =>
         if (master == "yarn-standalone") {
@@ -1536,7 +1591,7 @@ object SparkContext extends Logging {
           }
         }
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case "yarn-client" =>
         val scheduler = try {
@@ -1563,7 +1618,7 @@ object SparkContext extends Logging {
         }
 
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
@@ -1576,13 +1631,13 @@ object SparkContext extends Logging {
           new MesosSchedulerBackend(scheduler, sc, url)
         }
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case SIMR_REGEX(simrUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
