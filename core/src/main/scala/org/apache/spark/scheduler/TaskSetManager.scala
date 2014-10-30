@@ -23,13 +23,12 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.math.max
-import scala.math.min
+import scala.math.{min, max}
 
 import org.apache.spark._
-import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{Utils, Clock, SystemClock}
+import org.apache.spark.TaskState.TaskState
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -93,6 +92,7 @@ private[spark] class TaskSetManager(
   var name = "TaskSet_" + taskSet.stageId.toString
   var parent: Pool = null
   var totalResultSize = 0L
+  var calculatedTasks = 0
 
   val runningTasksSet = new HashSet[Long]
   override def runningTasks = runningTasksSet.size
@@ -530,8 +530,11 @@ private[spark] class TaskSetManager(
    */
   def canFetchMoreResult(size: Long): Boolean = synchronized {
     totalResultSize += size
+    calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
-      logError(s"Total size of results is too big: ${Utils.bytesToString(totalResultSize)}")
+      logError(s"Total number of bytes of serialized results (${calculatedTasks} tasks) is " +
+        s"bigger than maxResultSize: ${Utils.bytesToString(totalResultSize)} > " +
+        s"${Utils.bytesToString(maxResultSize)}")
       false
     } else {
       true

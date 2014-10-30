@@ -215,8 +215,9 @@ private[spark] class Executor(
         // directSend = sending directly back to the driver
         val serializedResult = {
           if (resultSize > maxResultSize) {
-            logInfo(s"Finished $taskName (TID $taskId). result is too large (${resultSize} bytes),"
-              + " drop it")
+            logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
+              s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
+              s"drop it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
