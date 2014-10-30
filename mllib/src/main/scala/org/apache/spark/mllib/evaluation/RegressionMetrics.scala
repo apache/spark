@@ -47,7 +47,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
 
   /**
    * Returns the explained variance regression score.
-   * explainedVarianceScore = 1 - variance(y - \hat{y}) / variance(y)
+   * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    */
   def explainedVariance: Double = {
