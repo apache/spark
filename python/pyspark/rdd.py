@@ -317,8 +317,23 @@ class RDD(object):
         Return a sampled subset of this RDD (relies on numpy and falls back
         on default random generator if numpy is unavailable).
 
-        >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
-        [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
+        >>> rdd = sc.parallelize(range(0, 100), 4)
+        >>> wo = rdd.sample(False, 0.1, 2).collect()
+        >>> wo_dup = rdd.sample(False, 0.1, 2).collect()
+        >>> set(wo) == set(wo_dup)
+        True
+        >>> wr = rdd.sample(True, 0.2, 5).collect()
+        >>> wr_dup = rdd.sample(True, 0.2, 5).collect()
+        >>> set(wr) == set(wr_dup)
+        True
+        >>> wo_s10 = rdd.sample(False, 0.3, 10).collect()
+        >>> wo_s20 = rdd.sample(False, 0.3, 20).collect()
+        >>> set(wo_s10) != set(wo_s20)
+        True
+        >>> wr_s11 = rdd.sample(True, 0.4, 11).collect()
+        >>> wr_s21 = rdd.sample(True, 0.4, 21).collect()
+        >>> set(wr_s11) != set(wr_s21)
+        True
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
