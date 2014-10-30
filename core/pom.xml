@@ -90,7 +90,6 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
@@ -394,7 +393,7 @@
               <overWriteSnapshots>false</overWriteSnapshots>
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
-              <includeArtifactIds>guava,commons-math3</includeArtifactIds>
+              <includeArtifactIds>guava</includeArtifactIds>
               <silent>true</silent>
             </configuration>
           </execution>

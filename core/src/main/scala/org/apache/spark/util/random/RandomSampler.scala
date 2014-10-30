@@ -86,15 +86,15 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
 @DeveloperApi
 class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
 
-  private[this] val rng: AnyRef = new PoissonDistribution(mean)
+  private[random] var rng = new PoissonDistribution(mean)
 
   override def setSeed(seed: Long) {
-    rng.asInstanceOf[PoissonDistribution].reseedRandomGenerator(seed)
+    rng.reseedRandomGenerator(seed)
   }
 
   override def sample(items: Iterator[T]): Iterator[T] = {
     items.flatMap { item =>
-      val count = rng.asInstanceOf[PoissonDistribution].sample()
+      val count = rng.sample()
       if (count == 0) {
         Iterator.empty
       } else {

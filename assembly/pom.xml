@@ -50,11 +50,6 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-math3</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -150,10 +145,6 @@
                     <exclude>com/google/common/base/Optional*</exclude>
                     <exclude>com/google/common/base/Present*</exclude>
                   </excludes>
-                </relocation>
-                <relocation>
-                  <pattern>org.apache.commons.math3</pattern>
-                  <shadedPattern>org.spark-project.commons.math3</shadedPattern>
                 </relocation>
               </relocations>
               <transformers>
