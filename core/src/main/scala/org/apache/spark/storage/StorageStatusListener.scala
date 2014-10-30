@@ -60,10 +60,9 @@ class StorageStatusListener extends SparkListener {
     val info = taskEnd.taskInfo
     val metrics = taskEnd.taskMetrics
     if (info != null && metrics != null) {
-      val execId = formatExecutorId(info.executorId)
       val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
       if (updatedBlocks.length > 0) {
-        updateStorageStatus(execId, updatedBlocks)
+        updateStorageStatus(info.executorId, updatedBlocks)
       }
     }
   }
@@ -89,13 +88,4 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  /**
-   * In the local mode, there is a discrepancy between the executor ID according to the
-   * task ("localhost") and that according to SparkEnv (`SparkContext.DRIVER_IDENTIFIER`).
-   * In the UI, this results in duplicate rows for the same executor. Thus, in this mode,
-   * we aggregate these two rows and use the latter executor ID to be consistent.
-   */
-  def formatExecutorId(execId: String): String = {
-    if (execId == "localhost") SparkContext.DRIVER_IDENTIFIER else execId
-  }
 }
