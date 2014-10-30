@@ -182,7 +182,7 @@ private[spark] class WholeTextFileRDD(
       case _ =>
     }
     val jobContext = newJobContext(conf, jobId)
-    inputFormat.setMaxSplitSize(jobContext, minPartitions)
+    inputFormat.setMinPartitions(jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
