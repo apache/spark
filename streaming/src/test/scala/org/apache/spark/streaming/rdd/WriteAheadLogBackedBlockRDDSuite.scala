@@ -86,7 +86,7 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
       testStoreInBM: Boolean = false
     ) {
     val numBlocks = numPartitionssInBM + numPartitionsInWAL
-    val data = Seq.tabulate(numBlocks) { _ => Seq.fill(10) { scala.util.Random.nextString(50) } }
+    val data = Seq.fill(numBlocks, 10)(scala.util.Random.nextString(50))
 
     // Put the necessary blocks in the block manager
     val blockIds = Array.fill(numBlocks)(StreamBlockId(Random.nextInt(), Random.nextInt()))
