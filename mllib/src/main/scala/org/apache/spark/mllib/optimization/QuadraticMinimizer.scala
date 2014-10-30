@@ -348,13 +348,12 @@ class QuadraticMinimizer(nGram: Int,
   private def computeRho(H: DoubleMatrix): Double = {
     constraint match {
       case SMOOTH => 0.0
-      case _ => if (addEqualityToGram) {
-        normColumn(H) 
-      } else {
+      case SPARSE => {
         val eigenMax = normColumn(H)
         val eigenMin = 1 / normColumn(Solve.solvePositive(H, DoubleMatrix.eye(H.rows)))
-        sqrt(eigenMin * eigenMax)
+        sqrt(eigenMin*eigenMax)
       }
+      case _ => sqrt(normColumn(H)) 
     }
   }
   
@@ -472,15 +471,18 @@ object QuadraticMinimizer {
   }
 
   def main(args: Array[String]) {
-    if (args.length < 2) {
-      println("Usage: QpSolver n m")
-      println("Test QpSolver with a simple quadratic function of dimension n and m equalities")
+    if (args.length < 4) {
+      println("Usage: QpSolver n m lambda beta")
+      println("Test QpSolver with a simple quadratic function of dimension n and m equalities lambda beta for elasticNet")
       sys.exit(1)
     }
 
     val problemSize = args(0).toInt
     val nequalities = args(1).toInt
-
+    
+    val lambda = args(2).toDouble
+    val beta = args(3).toDouble
+    
     println(s"Test QuadraticMinimizer, breeze LBFGS and jblas solvePositive with n $problemSize m $nequalities")
 
     val lbfgs = new BreezeLBFGS[DenseVector[Double]](problemSize, 4)
@@ -509,9 +511,7 @@ object QuadraticMinimizer {
     val dposvStart = System.nanoTime()
     val dposvResult = Solve.solvePositive(jblasH, jblasf).data
     val dposvTime = System.nanoTime() - dposvStart
-
-    println("dposvResult " + DenseVector(dposvResult))
-
+    
     val H = DoubleMatrix.eye(problemSize).mul(2.0)
     val f = DoubleMatrix.zeros(problemSize, 1).add(-6.0)
 
@@ -519,8 +519,7 @@ object QuadraticMinimizer {
     val qpStart = System.nanoTime()
     val result = qpSolver.solve(H, f)
     val qpTime = System.nanoTime() - qpStart
-
-    println(result.toString)
+    
     assert(result._1.subi(3.0).norm2() < 1E-4)
 
     println("dim " + problemSize + " bfgs " + bfgsTime / 1e3 + " dposv " + dposvTime / 1e3 + " directqp " + qpTime / 1e3)
@@ -659,25 +658,40 @@ object QuadraticMinimizer {
       println(s"Positive QP iters ${qpSparse.iterations}")
     }
 
-    qpSparse.setProximal(SPARSE).setLambda(0.065)
-
+    qpSparse.setProximal(SPARSE).setLambda(0.06435)
+    
     for (i <- 0 until 10) {
       val (qpSparseResult, convergedSparse) = qpSparse.solve(Psparse, qsparse)
       println(s"sparseQpIters ${qpSparse.iterations} solveTime ${qpSparse.solveTime / 1e6}")
       assert(qpSparseResult.sub(qpSparseGold).norm2() < 1E-8)
     }
 
-    println(s"Randomized test")
+    println(s"Generating randomized QPs with rank ${problemSize} equalities ${nequalities}")
     val (aeq, b, bl, bu, q, h) = QpGenerator.generate(problemSize, nequalities)
-
-    val directQpTest = new QuadraticMinimizer(h.rows, Some(bl), Some(bu)).setProximal(BOUNDS)
-    val (randomQpResult, randomConverged) = directQpTest.solve(h, q)
-
-    println(s"Qp Test ${directQpTest.solveTime}ns ${directQpTest.solveTime / 1e6} ms iterations ${directQpTest.iterations}")
-
+    
+    val lambdaL1 = lambda*beta
+    val lambdaL2 = lambda*(1-beta)
+    
+    val L2regularization = DoubleMatrix.eye(h.rows).muli(lambdaL2)
+    
+    val sparseQp = QuadraticMinimizer(h.rows, SPARSE, lambdaL1)
+    val (sparseQpResult, sparseQpConverged) = sparseQp.solve(h.add(L2regularization), q)
+    
+    println(s"sparseQp ${sparseQp.solveTime/1e6} ms iterations ${sparseQp.iterations} converged $sparseQpConverged")
+    
+    val posQp = new QuadraticMinimizer(h.rows).setProximal(POSITIVE)
+    val (posQpResult, posQpConverged) = posQp.solve(h,q)
+    
+    println(s"posQp ${posQp.solveTime/1e6} ms iterations ${posQp.iterations} converged $posQpConverged")
+    
+    val boundsQp = new QuadraticMinimizer(h.rows, Some(bl), Some(bu)).setProximal(BOUNDS)
+    val (boundsQpResult, boundsQpConverged) = boundsQp.solve(h, q)
+    
+    println(s"boundsQp ${boundsQp.solveTime/1e6} ms iterations ${boundsQp.iterations} converged $boundsQpConverged")
+    
     val qpEquality = new QuadraticMinimizer(h.rows, None, None, Some(Aeq), Some(beq), true).setProximal(POSITIVE)
     val (qpEqualityResult, qpEqualityConverged) = qpEquality.solve(h, q)
-
-    println(s"Qp Equality ${qpEquality.solveTime / 1e6} ms iterations ${qpEquality.iterations}")
+    
+    println(s"Qp Equality ${qpEquality.solveTime / 1e6} ms iterations ${qpEquality.iterations} converged $qpEqualityConverged")
   }
 }
