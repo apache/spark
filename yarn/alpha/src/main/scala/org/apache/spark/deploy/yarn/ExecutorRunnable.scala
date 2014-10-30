@@ -37,7 +37,7 @@ import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
 
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 
-
+@deprecated("use yarn/stable", "1.2.0")
 class ExecutorRunnable(
     container: Container,
     conf: Configuration,
@@ -47,6 +47,7 @@ class ExecutorRunnable(
     hostname: String,
     executorMemory: Int,
     executorCores: Int,
+    appAttemptId: String,
     securityMgr: SecurityManager)
   extends Runnable with ExecutorRunnableUtil with Logging {
 
@@ -83,7 +84,7 @@ class ExecutorRunnable(
     ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
 
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
-      localResources)
+      appAttemptId, localResources)
     logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)
 

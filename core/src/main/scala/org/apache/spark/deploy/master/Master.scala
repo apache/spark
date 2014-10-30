@@ -33,8 +33,8 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState,
-  SparkHadoopUtil}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
+  ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -341,7 +341,14 @@ private[spark] class Master(
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
-          logWarning("Got heartbeat from unregistered worker " + workerId)
+          if (workers.map(_.id).contains(workerId)) {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " Asking it to re-register.")
+            sender ! ReconnectWorker(masterUrl)
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
+          }
       }
     }
 
@@ -489,23 +496,24 @@ private[spark] class Master(
     // First schedule drivers, they take strict precedence over applications
     // Randomization helps balance drivers
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
-    val aliveWorkerNum = shuffledAliveWorkers.size
+    val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
+    
     for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
       // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
       // start from the last worker that was assigned a driver, and continue onwards until we have
       // explored all alive workers.
-      curPos = (curPos + 1) % aliveWorkerNum
-      val startPos = curPos
       var launched = false
-      while (curPos != startPos && !launched) {
+      var numWorkersVisited = 0
+      while (numWorkersVisited < numWorkersAlive && !launched) {
         val worker = shuffledAliveWorkers(curPos)
+        numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
           launched = true
         }
-        curPos = (curPos + 1) % aliveWorkerNum
+        curPos = (curPos + 1) % numWorkersAlive
       }
     }
 
@@ -692,16 +700,18 @@ private[spark] class Master(
       app.desc.appUiUrl = notFoundBasePath
       return false
     }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir,
+
+    val appEventLogDir = EventLoggingListener.getLogDirPath(eventLogDir, app.id)
+    val fileSystem = Utils.getHadoopFileSystem(appEventLogDir,
       SparkHadoopUtil.get.newConfiguration(conf))
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
+    val eventLogInfo = EventLoggingListener.parseLoggingInfo(appEventLogDir, fileSystem)
     val eventLogPaths = eventLogInfo.logPaths
     val compressionCodec = eventLogInfo.compressionCodec
 
     if (eventLogPaths.isEmpty) {
       // Event logging is enabled for this application, but no event logs are found
       val title = s"Application history not found (${app.id})"
-      var msg = s"No event logs found for application $appName in $eventLogDir."
+      var msg = s"No event logs found for application $appName in $appEventLogDir."
       logWarning(msg)
       msg += " Did you specify the correct logging directory?"
       msg = URLEncoder.encode(msg, "UTF-8")
@@ -711,8 +721,8 @@ private[spark] class Master(
 
     try {
       val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)",
-        HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       replayBus.replay()
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)

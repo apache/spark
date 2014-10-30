@@ -23,9 +23,11 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
+
+import org.apache.spark.SparkConf
 
 class UtilsSuite extends FunSuite {
 
@@ -112,11 +114,11 @@ class UtilsSuite extends FunSuite {
   }
 
   test("reading offset bytes of a file") {
-    val tmpDir2 = Files.createTempDir()
+    val tmpDir2 = Utils.createTempDir()
     tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(Charsets.UTF_8))
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
     f1.close()
 
     // Read first few bytes
@@ -141,12 +143,12 @@ class UtilsSuite extends FunSuite {
   }
 
   test("reading offset bytes across multiple files") {
-    val tmpDir = Files.createTempDir()
+    val tmpDir = Utils.createTempDir()
     tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), Charsets.UTF_8)
-    Files.write("abcdefghij", files(1), Charsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), Charsets.UTF_8)
+    Files.write("0123456789", files(0), UTF_8)
+    Files.write("abcdefghij", files(1), UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), UTF_8)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
@@ -189,17 +191,28 @@ class UtilsSuite extends FunSuite {
     assert(Utils.getIteratorSize(iterator) === 5L)
   }
 
-  test("findOldFiles") {
+  test("doesDirectoryContainFilesNewerThan") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
     val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
     val child2: File = Utils.createTempDir(parent.getCanonicalPath)
-    // set the last modified time of child1 to 10 secs old
-    child1.setLastModified(System.currentTimeMillis() - (1000 * 10))
+    val child3: File = Utils.createTempDir(child1.getCanonicalPath)
+    // set the last modified time of child1 to 30 secs old
+    child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
-    val result = Utils.findOldFiles(parent, 5) // find files older than 5 secs
-    assert(result.size.equals(1))
-    assert(result(0).getCanonicalPath.equals(child1.getCanonicalPath))
+    // although child1 is old, child2 is still new so return true
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    child2.setLastModified(System.currentTimeMillis - (1000 * 30))
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    parent.setLastModified(System.currentTimeMillis - (1000 * 30))
+    // although parent and its immediate children are new, child3 is still old
+    // we expect a full recursive search for new files.
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+
+    child3.setLastModified(System.currentTimeMillis - (1000 * 30))
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
   }
 
   test("resolveURI") {
@@ -313,4 +326,56 @@ class UtilsSuite extends FunSuite {
     }
   }
 
+  test("deleteRecursively") {
+    val tempDir1 = Utils.createTempDir()
+    assert(tempDir1.exists())
+    Utils.deleteRecursively(tempDir1)
+    assert(!tempDir1.exists())
+
+    val tempDir2 = Utils.createTempDir()
+    val tempFile1 = new File(tempDir2, "foo.txt")
+    Files.touch(tempFile1)
+    assert(tempFile1.exists())
+    Utils.deleteRecursively(tempFile1)
+    assert(!tempFile1.exists())
+
+    val tempDir3 = new File(tempDir2, "subdir")
+    assert(tempDir3.mkdir())
+    val tempFile2 = new File(tempDir3, "bar.txt")
+    Files.touch(tempFile2)
+    assert(tempFile2.exists())
+    Utils.deleteRecursively(tempDir2)
+    assert(!tempDir2.exists())
+    assert(!tempDir3.exists())
+    assert(!tempFile2.exists())
+  }
+
+  test("loading properties from file") {
+    val outFile = File.createTempFile("test-load-spark-properties", "test")
+    try {
+      System.setProperty("spark.test.fileNameLoadB", "2")
+      Files.write("spark.test.fileNameLoadA true\n" +
+        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+      val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
+      properties
+        .filter { case (k, v) => k.startsWith("spark.")}
+        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
+      val sparkConf = new SparkConf
+      assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
+      assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
+    } finally {
+      outFile.delete()
+    }
+  }
+
+  test("timeIt with prepare") {
+    var cnt = 0
+    val prepare = () => {
+      cnt += 1
+      Thread.sleep(1000)
+    }
+    val time = Utils.timeIt(2)({}, Some(prepare))
+    require(cnt === 2, "prepare should be called twice")
+    require(time < 500, "preparation time should not count")
+  }
 }

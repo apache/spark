@@ -76,7 +76,7 @@ object MLUtils {
       .map { line =>
         val items = line.split(' ')
         val label = items.head.toDouble
-        val (indices, values) = items.tail.map { item =>
+        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
           val value = indexAndValue(1).toDouble
@@ -196,8 +196,8 @@ object MLUtils {
 
   /**
    * Load labeled data from a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param sc SparkContext
    * @param dir Directory to the input data files.
@@ -219,8 +219,8 @@ object MLUtils {
 
   /**
    * Save labeled data to a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.

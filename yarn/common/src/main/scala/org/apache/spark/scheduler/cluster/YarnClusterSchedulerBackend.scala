@@ -25,13 +25,7 @@ import org.apache.spark.util.IntParam
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
-
-  var totalExpectedExecutors = 0
-
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
+  extends YarnSchedulerBackend(scheduler, sc) {
 
   override def start() {
     super.start()
@@ -44,10 +38,13 @@ private[spark] class YarnClusterSchedulerBackend(
     totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
   }
 
-  override def sufficientResourcesRegistered(): Boolean = {
-    totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
-  }
-
-  override def applicationId(): Option[String] = sc.getConf.getOption("spark.yarn.app.id")
+  override def applicationId(): String =
+    // In YARN Cluster mode, spark.yarn.app.id is expect to be set
+    // before user application is launched.
+    // So, if spark.yarn.app.id is not set, it is something wrong.
+    sc.getConf.getOption("spark.yarn.app.id").getOrElse {
+      logError("Application ID is not set.")
+      super.applicationId
+    }
 
 }

@@ -24,22 +24,27 @@ import java.util.concurrent._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.control.NonFatal
+
+import akka.actor.ActorSystem
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
+ * In coarse-grained mode, an existing actor system is provided.
  */
 private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
     properties: Seq[(String, String)],
-    isLocal: Boolean = false)
+    isLocal: Boolean = false,
+    actorSystem: ActorSystem = null)
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -67,16 +72,18 @@ private[spark] class Executor(
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
     // executor process to avoid surprising stalls.
-    Thread.setDefaultUncaughtExceptionHandler(ExecutorUncaughtExceptionHandler)
+    Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
   }
 
   val executorSource = new ExecutorSource(this, executorId)
 
   // Initialize Spark environment (using system properties read above)
+  conf.set("spark.executor.id", "executor." + executorId)
   private val env = {
     if (!isLocal) {
-      val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
-        isDriver = false, isLocal = false)
+      val port = conf.getInt("spark.executor.port", 0)
+      val _env = SparkEnv.createExecutorEnv(
+        conf, executorId, slaveHostname, port, isLocal, actorSystem)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
       _env
@@ -146,7 +153,6 @@ private[spark] class Executor(
 
     override def run() {
       val startTime = System.currentTimeMillis()
-      SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -156,7 +162,6 @@ private[spark] class Executor(
       val startGCTime = gcTime
 
       try {
-        SparkEnv.set(env)
         Accumulators.clear()
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
@@ -253,7 +258,7 @@ private[spark] class Executor(
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
           if (Utils.isFatalError(t)) {
-            ExecutorUncaughtExceptionHandler.uncaughtException(t)
+            SparkUncaughtExceptionHandler.uncaughtException(t)
           }
         }
       } finally {
@@ -322,14 +327,16 @@ private[spark] class Executor(
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
-          hadoopConf)
+        // Fetch file with useCache mode, close cache for local mode.
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
+          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager,
-          hadoopConf)
+        // Fetch file with useCache mode, close cache for local mode.
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
+          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
@@ -375,12 +382,17 @@ private[spark] class Executor(
           }
 
           val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
-          val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
-            retryAttempts, retryIntervalMs, timeout)
-          if (response.reregisterBlockManager) {
-            logWarning("Told to re-register on heartbeat")
-            env.blockManager.reregister()
+          try {
+            val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
+              retryAttempts, retryIntervalMs, timeout)
+            if (response.reregisterBlockManager) {
+              logWarning("Told to re-register on heartbeat")
+              env.blockManager.reregister()
+            }
+          } catch {
+            case NonFatal(t) => logWarning("Issue communicating with driver in heartbeater", t)
           }
+
           Thread.sleep(interval)
         }
       }

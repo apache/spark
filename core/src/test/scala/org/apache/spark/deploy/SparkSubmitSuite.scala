@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintWriter, PrintStream}
+import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -154,6 +154,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.shuffle.spill") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
+    sysProps.keys should not contain ("spark.jars")
   }
 
   test("handles YARN client mode") {
@@ -354,10 +355,10 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 
   test("resolves config paths correctly") {
-    val jars = "/jar1,/jar2"                 // spark.jars
-    val files = "hdfs:/file1,file2"          // spark.files / spark.yarn.dist.files
+    val jars = "/jar1,/jar2" // spark.jars
+    val files = "hdfs:/file1,file2" // spark.files / spark.yarn.dist.files
     val archives = "file:/archive1,archive2" // spark.yarn.dist.archives
-    val pyFiles = "py-file1,py-file2"        // spark.submit.pyFiles
+    val pyFiles = "py-file1,py-file2" // spark.submit.pyFiles
 
     // Test jars and files
     val f1 = File.createTempFile("test-submit-jars-files", "")
@@ -373,8 +374,8 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     )
     val appArgs = new SparkSubmitArguments(clArgs)
     val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
-    sysProps("spark.jars") should be (Utils.resolveURIs(jars + ",thejar.jar"))
-    sysProps("spark.files") should be (Utils.resolveURIs(files))
+    sysProps("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
+    sysProps("spark.files") should be(Utils.resolveURIs(files))
 
     // Test files and archives (Yarn)
     val f2 = File.createTempFile("test-submit-files-archives", "")
@@ -390,8 +391,8 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     )
     val appArgs2 = new SparkSubmitArguments(clArgs2)
     val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
-    sysProps2("spark.yarn.dist.files") should be (Utils.resolveURIs(files))
-    sysProps2("spark.yarn.dist.archives") should be (Utils.resolveURIs(archives))
+    sysProps2("spark.yarn.dist.files") should be(Utils.resolveURIs(files))
+    sysProps2("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
 
     // Test python files
     val f3 = File.createTempFile("test-submit-python-files", "")
@@ -405,8 +406,23 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
     val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
-    sysProps3("spark.submit.pyFiles") should be (
+    sysProps3("spark.submit.pyFiles") should be(
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+  }
+
+  test("SPARK_CONF_DIR overrides spark-defaults.conf") {
+    forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local",
+        unusedJar.toString)
+      val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
+      assert(appArgs.propertiesFile != null)
+      assert(appArgs.propertiesFile.startsWith(path))
+      appArgs.executorMemory should  be ("2.3g")
+    }
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
@@ -416,6 +432,22 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+  }
+
+  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
+    val tmpDir = Utils.createTempDir()
+
+    val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
+    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
+    for ((key, value) <- defaults) writer.write(s"$key $value\n")
+
+    writer.close()
+
+    try {
+      f(tmpDir.getAbsolutePath)
+    } finally {
+      Utils.deleteRecursively(tmpDir)
+    }
   }
 }
 

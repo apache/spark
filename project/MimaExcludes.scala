@@ -37,6 +37,46 @@ object MimaExcludes {
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("graphx")
+          ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Matrix") ++
+          MimaBuild.excludeSparkClass("mllib.linalg.Vector") ++
+          Seq(
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.TaskLocation"),
+            // Added normL1 and normL2 to trait MultivariateStatisticalSummary
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.stat.MultivariateStatisticalSummary.normL2"),
+            // MapStatus should be private[spark]
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.scheduler.MapStatus"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.PathResolver"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.network.netty.client.BlockClientListener"),
+
+            // TaskContext was promoted to Abstract class
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.TaskContext"),
+            ProblemFilters.exclude[IncompatibleTemplateDefProblem](
+              "org.apache.spark.util.collection.SortDataFormat")
+          ) ++ Seq(
+            // Adding new methods to the JavaRDDLike trait:
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.takeAsync"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachPartitionAsync"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.countAsync"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.collectAsync")
+          ) ++ Seq(
+            // SPARK-3822
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
           )
 
         case v if v.startsWith("1.1") =>
