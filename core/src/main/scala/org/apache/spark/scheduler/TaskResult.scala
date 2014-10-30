@@ -34,9 +34,6 @@ private[spark] sealed trait TaskResult[T]
 private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
   extends TaskResult[T] with Serializable
 
-/** A TaskResult which is larger than maxResultSize, dropped. */
-private[spark] case class TooLargeTaskResult[T](size: Int) extends TaskResult[T] with Serializable
-
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark]
 class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],

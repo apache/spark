@@ -217,7 +217,7 @@ private[spark] class Executor(
           if (resultSize > maxResultSize) {
             logInfo(s"Finished $taskName (TID $taskId). result is too large (${resultSize} bytes),"
               + " drop it")
-            ser.serialize(new TooLargeTaskResult(resultSize))
+            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(

@@ -57,6 +57,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (directResult, serializedData.limit())
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResult(size)) {
+                // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)
                 throw new BigResultException
               }
@@ -75,9 +76,6 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                 serializedTaskResult.get)
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
-            case TooLargeTaskResult(size) =>
-              logError(s"Result of task ${tid} is too big: ${Utils.bytesToString(size)}")
-              throw new BigResultException
           }
 
           result.metrics.resultSize = size

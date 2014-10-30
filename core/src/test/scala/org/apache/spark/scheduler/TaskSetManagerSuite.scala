@@ -567,25 +567,22 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val conf = new SparkConf().set("spark.driver.maxResultSize", "2m")
     sc = new SparkContext("local", "test", conf)
 
-    // multiple tiny result
-    val r = sc.makeRDD(0 until (1 << 10), 10).collect()
-    assert((1 << 10) === r.size )
-
-    // single large result
-    try {
-      sc.makeRDD(0 until (1<<20), 1).collect()
-      throw new Exception("single large result should fail")
-    } catch {
-      case e: SparkException =>
+    // make it serializable
+    val genBytes = (size: Int) => { (x: Int) =>
+      val bytes = Array.ofDim[Byte](size)
+      scala.util.Random.nextBytes(bytes)
+      bytes
     }
 
-    // multiple small result
-    try {
-      sc.makeRDD(0 until (1<<20), 10).collect()
-      throw new Exception("should fail")
-    } catch {
-      case e: SparkException =>
-    }
+    // multiple 1k result
+    val r = sc.makeRDD(0 until 10, 10).map(genBytes(1024)).collect()
+    assert(10 === r.size )
+
+    // single 10M result
+    intercept[SparkException] {sc.makeRDD(genBytes(10 << 20)(0), 1).collect()}
+
+    // multiple 1M results
+    intercept[SparkException] {sc.makeRDD(0 until 10, 10).map(genBytes(1 << 20)).collect()}
   }
 
   test("speculative and noPref task should be scheduled after node-local") {
