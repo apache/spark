@@ -37,12 +37,12 @@ object CommandUtils extends Logging {
    * The `env` argument is exposed for testing.
    */
   def buildProcessBuilder(
-    command: Command,
-    memory: Int,
-    sparkHome: String,
-    substituteArguments: String => String,
-    classPaths: Seq[String] = Seq[String](),
-    env: Map[String, String] = sys.env): ProcessBuilder = {
+      command: Command,
+      memory: Int,
+      sparkHome: String,
+      substituteArguments: String => String,
+      classPaths: Seq[String] = Seq[String](),
+      env: Map[String, String] = sys.env): ProcessBuilder = {
     val localCommand = buildLocalCommand(command, substituteArguments, classPaths, env)
     val commandSeq = buildCommandSeq(localCommand, memory, sparkHome)
     val builder = new ProcessBuilder(commandSeq: _*)
