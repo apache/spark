@@ -649,6 +649,7 @@ class RDD(object):
         self.mapPartitions(func).count()  # Force evaluation
 
     def collect(self):
+        print "in collect() of rdd.py"
         """
         Return a list that contains all of the elements in this RDD.
         """
@@ -657,6 +658,7 @@ class RDD(object):
         return list(self._collect_iterator_through_file(bytesInJava))
 
     def _collect_iterator_through_file(self, iterator):
+        print "in _collect_iterator_through_file() of rdd.py"
         # Transferring lots of data through Py4J can be slow because
         # socket.readline() is inefficient.  Instead, we'll dump the data to a
         # file and read it back.
@@ -2082,6 +2084,7 @@ class PipelinedRDD(RDD):
 
     @property
     def _jrdd(self):
+        print "in _jrdd of rdd.py"
         if self._jrdd_val:
             return self._jrdd_val
         if self._bypass_serializer:

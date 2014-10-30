@@ -18,22 +18,66 @@
 """
 Python bindings for GraphX.
 """
+from pyspark import PickleSerializer, RDD, StorageLevel
+from pyspark.graphx import VertexRDD, EdgeRDD
 
-__all__ = ["Graph", "vertexRDD", "edgeRDD"]
+from pyspark.graphx.partitionstrategy import PartitionStrategy
+from pyspark.rdd import PipelinedRDD
+from pyspark.serializers import BatchedSerializer
+
+__all__ = ["Graph"]
 
 class Graph(object):
-    def __init__(self, vertexRDD, edgeRDD):
-        self._vertexRDD = vertexRDD
-        self._edgeRDD = edgeRDD
+    def __init__(self, vertex_jrdd, edge_jrdd, partition_strategy=PartitionStrategy.EdgePartition1D):
+        self._vertex_jrdd = VertexRDD(vertex_jrdd, vertex_jrdd.context, BatchedSerializer(PickleSerializer()))
+        self._edge_jrdd = EdgeRDD(edge_jrdd, edge_jrdd.context, BatchedSerializer(PickleSerializer()))
+        self._partition_strategy = partition_strategy
 
     def persist(self, storageLevel):
+        self._vertex_jrdd.persist(storageLevel)
+        self._edge_jrdd.persist(storageLevel)
         return
 
     def cache(self):
+        self._vertex_jrdd.cache()
+        self._edge_jrdd.cache()
         return
 
+    def vertices(self):
+        return self._vertex_jrdd
+
+    def edges(self):
+        return self._edge_jrdd
+
     def partitionBy(self, partitionStrategy):
+
         return
 
     def subgraph(self, condition):
         return
+
+    def pagerank(self, num_iterations, reset_probability = 0.15):
+        """
+        Pagerank on the graph depends on valid vertex and edge RDDs
+        Users can specify terminating conditions as number of
+        iterations or the Random reset probability or alpha
+
+        :param num_iterations:    Number of iterations for the
+                                  algorithm to terminate
+        :param reset_probability: Random reset probability
+        :return:
+        """
+
+        return
+
+    def connected_components(self):
+        return
+
+    def reverse(self):
+        return
+
+    def apply(self, f):
+
+        return
+
+

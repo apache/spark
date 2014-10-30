@@ -68,10 +68,8 @@ from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 
-# for back compatibility
-from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
-
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
+    "Vertex", "Edge", "Graph",
 ]

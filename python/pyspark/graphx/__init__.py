@@ -16,11 +16,11 @@
 #
 
 """
-Python bindings for MLlib.
+Python bindings for GraphX.
 """
 
-# MLlib currently needs and NumPy 1.4+, so complain if lower
+from pyspark.graphx.vertex import VertexRDD, Vertex, VertexId
+from pyspark.graphx.edge import Edge, EdgeRDD
+from pyspark.graphx.graph import Graph
 
-import numpy
-if numpy.version.version < '1.4':
-    raise Exception("MLlib requires NumPy 1.4+")
+__all__ = ["PartitioningStrategy", "VertexRDD", "EdgeRDD", "Graph", "Vertex", "Edge"]
