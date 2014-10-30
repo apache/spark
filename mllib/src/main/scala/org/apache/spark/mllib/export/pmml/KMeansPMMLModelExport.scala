@@ -61,6 +61,15 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
        
        var miningSchema = new MiningSchema()
        
+       var comparisonMeasure = new ComparisonMeasure()
+            .withKind(Kind.DISTANCE)
+            .withMeasure(new SquaredEuclidean()
+       );
+       
+       var clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
+        MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
+        .withModelName("k-means");
+       
        for ( i <- 0 to (clusterCenter.size - 1)) {
          fields(i) = FieldName.create("field_" + i)
          dataDictionary
@@ -68,25 +77,14 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
          miningSchema
             .withMiningFields(new MiningField(fields(i))
             .withUsageType(FieldUsageType.ACTIVE))
-         }
-       
-       var comparisonMeasure = new ComparisonMeasure()
-            .withKind(Kind.DISTANCE)
-            .withMeasure(new SquaredEuclidean()
-       );
+         clusteringModel.withClusteringFields(
+             new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF)
+         )     
+       }
        
        dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size());
        
-       pmml.setDataDictionary(dataDictionary);
-       
-       var clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
-        MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
-        .withModelName("k-means");
-       
-       for ( i <- 0 to (clusterCenter.size - 1)) {
-         clusteringModel.withClusteringFields(
-             new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF)
-         )
+       for ( i <- 0 to (model.clusterCenters.size - 1)) {
          var cluster = new Cluster()
             .withName("cluster_" + i)
             .withArray(new org.dmg.pmml.Array()
@@ -95,10 +93,10 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
             .withValue(model.clusterCenters(i).toArray.mkString(" ")))
             // we don't have the size of the single cluster but only the centroids (withValue)
             // .withSize(value)
-
          clusteringModel.withClusters(cluster)
        }
        
+       pmml.setDataDictionary(dataDictionary);
        pmml.withModels(clusteringModel);
        
      }
