@@ -306,6 +306,7 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>3.3</version>
+	<scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.google.code.findbugs</groupId>
@@ -1114,6 +1115,11 @@
         <dependency>
           <groupId>com.google.guava</groupId>
           <artifactId>guava</artifactId>
+          <scope>compile</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-math3</artifactId>
           <scope>compile</scope>
         </dependency>
       </dependencies>
