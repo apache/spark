@@ -202,8 +202,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  jars                    $jars
     |  verbose                 $verbose
     |
-    |Spark properties used, including those specified through --conf
-    |and those from the default properties file $propertiesFile:
+    |Spark properties used, including those specified through
+    | --conf and those from the properties file $propertiesFile:
     |${sparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
