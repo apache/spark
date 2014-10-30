@@ -25,16 +25,13 @@ import scala.concurrent.Await
 
 import akka.actor.{Actor, Props}
 import akka.pattern.ask
-
 import com.google.common.base.Throwables
-
-import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.hadoop.conf.Configuration
+import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.scheduler.DeregisterReceiver
-import org.apache.spark.streaming.scheduler.AddBlock
-import org.apache.spark.streaming.scheduler.RegisterReceiver
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.streaming.util.WriteAheadLogFileSegment
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -44,12 +41,26 @@ import org.apache.spark.streaming.scheduler.RegisterReceiver
  */
 private[streaming] class ReceiverSupervisorImpl(
     receiver: Receiver[_],
-    env: SparkEnv
+    env: SparkEnv,
+    hadoopConf: Configuration,
+    checkpointDirOption: Option[String]
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
-  private val blockManager = env.blockManager
+  private val receivedBlockHandler: ReceivedBlockHandler = {
+    if (env.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+      if (checkpointDirOption.isEmpty) {
+        throw new SparkException(
+          "Cannot enable receiver write-ahead log without checkpoint directory set. " +
+            "Please use streamingContext.checkpoint() to set the checkpoint directory. " +
+            "See documentation for more details.")
+      }
+      new WriteAheadLogBasedBlockHandler(env.blockManager, receiver.streamId,
+        receiver.storageLevel, env.conf, hadoopConf, checkpointDirOption.get)
+    } else {
+      new BlockManagerBasedBlockHandler(env.blockManager, receiver.storageLevel)
+    }
+  }
 
-  private val storageLevel = receiver.storageLevel
 
   /** Remote Akka actor for the ReceiverTracker */
   private val trackerActor = {
@@ -105,47 +116,50 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.putArray(blockId, arrayBuffer.toArray[Any], storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
+    pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
   }
 
   /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.putIterator(blockId, iterator, storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, -1, optionalMetadata)
+    pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption)
   }
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
     ) {
-    val blockId = optionalBlockId.getOrElse(nextBlockId)
-    val time = System.currentTimeMillis
-    blockManager.putBytes(blockId, bytes, storageLevel, tellMaster = true)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, -1, optionalMetadata)
+    pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption)
   }
 
-  /** Report pushed block */
-  def reportPushedBlock(blockId: StreamBlockId, numRecords: Long, optionalMetadata: Option[Any]) {
-    val blockInfo = ReceivedBlockInfo(streamId, blockId, numRecords, optionalMetadata.orNull)
-    trackerActor ! AddBlock(blockInfo)
-    logDebug("Reported block " + blockId)
+  /** Store block and report it to driver */
+  def pushAndReportBlock(
+      receivedBlock: ReceivedBlock,
+      metadataOption: Option[Any],
+      blockIdOption: Option[StreamBlockId]
+    ) {
+    val blockId = blockIdOption.getOrElse(nextBlockId)
+    val numRecords = receivedBlock match {
+      case ArrayBufferBlock(arrayBuffer) => arrayBuffer.size
+      case _ => -1
+    }
+
+    val time = System.currentTimeMillis
+    val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
+    logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
+
+    val blockInfo = ReceivedBlockInfo(streamId, numRecords, blockStoreResult)
+    val future = trackerActor.ask(AddBlock(blockInfo))(askTimeout)
+    Await.result(future, askTimeout)
+    logDebug(s"Reported block $blockId")
   }
 
   /** Report error to the receiver tracker */
