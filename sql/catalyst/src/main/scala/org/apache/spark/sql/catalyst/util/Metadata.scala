@@ -204,6 +204,9 @@ class MetadataBuilder {
 
   private val map: mutable.Map[String, Any] = mutable.Map.empty
 
+  /** Returns the immutable version of this map.  Used for java interop. */
+  protected def getMap = map.toMap
+
   /** Include the content of an existing [[Metadata]] instance. */
   def withMetadata(metadata: Metadata): this.type = {
     map ++= metadata.map
