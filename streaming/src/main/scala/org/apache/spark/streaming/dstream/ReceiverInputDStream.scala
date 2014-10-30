@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.rdd.HDFSBackedBlockRDD
+import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{Receiver, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
@@ -67,7 +67,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
           val logSegments = blockStoreResults.map {
             _.asInstanceOf[WriteAheadLogBasedStoreResult].segment
           }.toArray
-          new HDFSBackedBlockRDD[T](ssc.sparkContext, ssc.sparkContext.hadoopConfiguration,
+          new WriteAheadLogBackedBlockRDD[T](ssc.sparkContext,
             blockIds, logSegments, storeInBlockManager = false, StorageLevel.MEMORY_ONLY_SER)
         } else {
           new BlockRDD[T](ssc.sc, blockIds)
