@@ -876,11 +876,11 @@ private[hive] object HiveQl {
   }
 
   // store the window def of current sql
-  //use thread id as key to avoid mistake when muti sqls parse at the same time
+  // use thread id as key to avoid mistake when muti sqls parse at the same time
   protected val windowDefMap = new ConcurrentHashMap[Long,Map[String, Seq[ASTNode]]]()
 
   // store the window spec of current sql
-  //use thread id as key to avoid mistake when muti sqls parse at the same time
+  // use thread id as key to avoid mistake when muti sqls parse at the same time
   protected val windowPartitionsMap = new ConcurrentHashMap[Long, ArrayBuffer[Node]]()
 
   protected def initWindow() = {
@@ -897,7 +897,7 @@ private[hive] object HiveQl {
           winDefs += alias -> ws
         }
       }
-      case None => //do nothing
+      case None => // do nothing
     }
 
     windowDefMap.put(Thread.currentThread().getId, winDefs)
@@ -950,7 +950,7 @@ private[hive] object HiveQl {
       case Some(partition) => {
         if (partitionUnits.isEmpty) partitionUnits += partition
         else {
-          //only add different window partitions
+          // only add different window partitions
           try {
             partition zip partitionUnits.head foreach {
               case (l,r) => l checkEquals r
@@ -960,10 +960,10 @@ private[hive] object HiveQl {
           }
         }
       }
-      case None => //do nothing
+      case None => // do nothing
     }
 
-    //check whether all window partitions are same, we just support same window partition now
+    // check whether all window partitions are same, we just support same window partition now
     if (partitionUnits.size == 0 && getWindowPartitions.size > 0) {
       Some(Seq())
     } else if (partitionUnits.size == 1) {
