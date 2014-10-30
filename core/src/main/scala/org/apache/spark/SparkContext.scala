@@ -330,6 +330,15 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     } else None
   }
 
+  // Optionally scale number of executors dynamically based on workload. Exposed for testing.
+  private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      Some(new ExecutorAllocationManager(this))
+    } else {
+      None
+    }
+  executorAllocationManager.foreach(_.start())
+
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
 
@@ -860,36 +869,42 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in Yarn mode.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def requestExecutors(numAdditionalExecutors: Int): Unit = {
+  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend => b.requestExecutors(numAdditionalExecutors)
-      case _ => logWarning("Requesting executors is only supported in coarse-grained mode")
+      case b: CoarseGrainedSchedulerBackend =>
+        b.requestExecutors(numAdditionalExecutors)
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+        false
     }
   }
 
   /**
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
-   * This is currently only supported in Yarn mode.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutors(executorIds: Seq[String]): Unit = {
+  def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend => b.killExecutors(executorIds)
-      case _ => logWarning("Killing executors is only supported in coarse-grained mode")
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(executorIds)
+      case _ =>
+        logWarning("Killing executors is only supported in coarse-grained mode")
+        false
     }
   }
 
   /**
    * :: DeveloperApi ::
    * Request that cluster manager the kill the specified executor.
-   * This is currently only supported in Yarn mode.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutor(executorId: String): Unit = killExecutors(Seq(executorId))
+  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
