@@ -505,7 +505,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         driver ! x
 
       case RequestExecutors(requestedTotal) =>
-        logInfo(s"Driver requested a total number of executors of $requestedTotal.")
+        logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
         Option(allocator) match {
           case Some(a) => a.requestTotalExecutors(requestedTotal)
           case None => logWarning("Container allocator is not ready to request executors yet.")
