@@ -11,6 +11,7 @@ exportMethods(
               "count",
               "distinct",
               "Filter",
+              "filter",
               "flatMap",
               "groupByKey",
               "length",

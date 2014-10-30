@@ -534,10 +534,10 @@ setMethod("mapPartitionsWithIndex",
 #' rdd <- parallelize(sc, 1:10)
 #' unlist(collect(Filter(function (x) { x < 3 }, rdd))) # c(1, 2)
 #'}
-setGeneric("Filter", function(f, x) { standardGeneric("Filter") })
+#setGeneric("Filter", function(f, x) { standardGeneric("Filter") })
 
 #' @rdname Filter
-#' @aliases Filter,function,RDD-method
+#' @aliases Filter,function,RDD-method filter,function,RDD-method
 setMethod("Filter",
           signature(f = "function", x = "RDD"),
           function(f, x) {
@@ -545,6 +545,18 @@ setMethod("Filter",
               Filter(f, part)
             }
             lapplyPartition(x, filter.func)
+          })
+
+#' @rdname Filter
+#' @export
+setGeneric("filter", function(f, x) { standardGeneric("filter") })
+
+#' @rdname Filter
+#' @aliases filter,function,RDD-method
+setMethod("filter",
+          signature(f = "function", x = "RDD"),
+          function(f, x) {
+            Filter(f, x)
           })
 
 #' Reduce across elements of an RDD.
