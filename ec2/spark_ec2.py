@@ -40,6 +40,7 @@ from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBS
 from boto import ec2
 
 DEFAULT_SPARK_VERSION = "1.1.0"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
@@ -586,7 +587,14 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
     ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git -b v4")
 
     print "Deploying files to master..."
-    deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes, modules)
+    deploy_files(
+        conn=conn,
+        root_dir=SPARK_EC2_DIR + "/" + "deploy.generic",
+        opts=opts,
+        master_nodes=master_nodes,
+        slave_nodes=slave_nodes,
+        modules=modules
+    )
 
     print "Running setup on master..."
     setup_spark_cluster(master, opts)
@@ -718,12 +726,16 @@ def get_num_disks(instance_type):
         return 1
 
 
-# Deploy the configuration file templates in a given local directory to
-# a cluster, filling in any template parameters with information about the
-# cluster (e.g. lists of masters and slaves). Files are only deployed to
-# the first master instance in the cluster, and we expect the setup
-# script to be run on that instance to copy them to other nodes.
 def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
+    """
+    Deploy the configuration file templates in a given local directory to
+    a cluster, filling in any template parameters with information about the
+    cluster (e.g. lists of masters and slaves). Files are only deployed to
+    the first master instance in the cluster, and we expect the setup
+    script to be run on that instance to copy them to other nodes.
+
+    root_dir should be an absolute path to the directory with the files we want to deploy.
+    """
     active_master = master_nodes[0].public_dns_name
 
     num_disks = get_num_disks(opts.instance_type)
