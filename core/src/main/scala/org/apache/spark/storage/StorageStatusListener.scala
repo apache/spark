@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
@@ -90,11 +91,11 @@ class StorageStatusListener extends SparkListener {
 
   /**
    * In the local mode, there is a discrepancy between the executor ID according to the
-   * task ("localhost") and that according to SparkEnv ("<driver>"). In the UI, this
-   * results in duplicate rows for the same executor. Thus, in this mode, we aggregate
-   * these two rows and use the executor ID of "<driver>" to be consistent.
+   * task ("localhost") and that according to SparkEnv (`SparkContext.DRIVER_IDENTIFIER`).
+   * In the UI, this results in duplicate rows for the same executor. Thus, in this mode,
+   * we aggregate these two rows and use the latter executor ID to be consistent.
    */
   def formatExecutorId(execId: String): String = {
-    if (execId == "localhost") "<driver>" else execId
+    if (execId == "localhost") SparkContext.DRIVER_IDENTIFIER else execId
   }
 }
