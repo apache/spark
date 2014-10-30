@@ -30,6 +30,7 @@ trait SparkHadoopMapRedUtil {
   }
 
   def newTaskAttemptContext(conf: JobConf, attemptId: TaskAttemptID): TaskAttemptContext = {
+    println(attemptId.toString)
     val klass = firstAvailableClass("org.apache.hadoop.mapred.TaskAttemptContextImpl",
       "org.apache.hadoop.mapred.TaskAttemptContext")
     val ctor = klass.getDeclaredConstructor(classOf[JobConf], classOf[TaskAttemptID])
