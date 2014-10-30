@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package org.apache.spark.mapred
 
-private[apache]
+import org.apache.hadoop.mapred.{TaskAttemptID, JobID, JobConf, JobContext, TaskAttemptContext}
+
+private[spark]
 trait SparkHadoopMapRedUtil {
   def newJobContext(conf: JobConf, jobId: JobID): JobContext = {
     val klass = firstAvailableClass("org.apache.hadoop.mapred.JobContextImpl",
