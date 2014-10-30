@@ -98,36 +98,38 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val showAdditionalMetrics =
         <div>
-          <span class="expand-additional-metrics-arrow arrow-closed"></span>
-          <span class="expand-additional-metrics"><strong>Show additional metrics</strong></span>
+          <span class="expand-additional-metrics">
+            <span class="expand-additional-metrics-arrow arrow-closed"></span>
+            <strong>Show additional metrics</strong>
+          </span>
           <div class="additional-metrics collapsed">
             <ul style="list-style-type:none">
               <li>
                 <span data-toggle="tooltip"
                       title={ToolTips.SCHEDULER_DELAY} data-placement="right">
                   <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/>
-                  Scheduler Delay
+                  <span class="additional-metric-title">Scheduler Delay</span>
                 </span>
               </li>
               <li>
                 <span data-toggle="tooltip"
                       title={ToolTips.GC_TIME} data-placement="right">
                   <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
-                  GC Time
+                  <span class="additional-metric-title">GC Time</span>
                 </span>
               </li>
               <li>
                 <span data-toggle="tooltip"
                       title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
                   <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
-                  Result Serialization Time
+                  <span class="additional-metric-title">Result Serialization Time</span>
                 </span>
               </li>
               <li>
                 <span data-toggle="tooltip"
                       title={ToolTips.GETTING_RESULT_TIME} data-placement="right">
                   <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
-                  Getting Result Time
+                  <span class="additional-metric-title">Getting Result Time</span>
                 </span>
               </li>
             </ul>

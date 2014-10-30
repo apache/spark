@@ -124,6 +124,10 @@ span.expand-additional-metrics {
   cursor: pointer;
 }
 
+span.additional-metric-title {
+  cursor: pointer;
+}
+
 .additional-metrics.collapsed {
   display: none;
 }

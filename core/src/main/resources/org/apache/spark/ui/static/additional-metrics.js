@@ -24,8 +24,8 @@ $(function() {
         $(additionalMetricsDiv).toggleClass('collapsed');
 
         // Switch the class of the arrow from open to closed.
-        $(this).parent().find('.expand-additional-metrics-arrow').toggleClass('arrow-open');
-        $(this).parent().find('.expand-additional-metrics-arrow').toggleClass('arrow-closed');
+        $(this).find('.expand-additional-metrics-arrow').toggleClass('arrow-open');
+        $(this).find('.expand-additional-metrics-arrow').toggleClass('arrow-closed');
 
         // If clicking caused the metrics to expand, automatically check all options for additional
         // metrics (don't trigger a click when collapsing metrics, because it leads to weird
@@ -40,9 +40,13 @@ $(function() {
         $(column).hide();
     });
 
-    $("input:checkbox").click(function(){
+    $("input:checkbox").click(function() {
         var column = "table ." + $(this).attr("name");
         $(column).toggle();
         stripeTables();
+    });
+
+    $("span.additional-metric-title").click(function() {
+        $(this).parent().find('input:checkbox').trigger('click');
     });
 });
