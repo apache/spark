@@ -23,18 +23,19 @@ import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * Trait for adding "pluggable" loss functions for the gradient boosting algorithm.
  */
+@DeveloperApi
 trait Loss extends Serializable {
 
   /**
-   * Method to calculate the loss gradients for the gradient boosting calculation.
+   * Method to calculate the gradients for the gradient boosting calculation.
    * @param model Model of the weak learner.
    * @param point Instance of the training dataset.
    * @return Loss gradient.
    */
-  @DeveloperApi
-  def lossGradient(
+  def gradient(
       model: WeightedEnsembleModel,
       point: LabeledPoint): Double
 
@@ -46,7 +47,6 @@ trait Loss extends Serializable {
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return
    */
-  @DeveloperApi
   def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double
 
 }

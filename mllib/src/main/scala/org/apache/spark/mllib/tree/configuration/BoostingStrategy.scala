@@ -37,7 +37,6 @@ import org.apache.spark.mllib.tree.loss.{SquaredError, Loss}
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
  * @param subsample  Fraction of the training data used for learning the decision tree.
- * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
  * @param numClassesForClassification Number of classes for classification.
  *                                    (Ignored for regression.)
  *                                    Default value is 2 (binary classification).
@@ -72,7 +71,6 @@ case class BoostingStrategy(
     // Optional boosting parameters
     learningRate: Double = 0.1,
     subsample: Double = 1,
-    checkpointPeriod: Int = 20,
     numClassesForClassification: Int = 2,
     // Optional tree parametes
     maxBins: Int = 32,

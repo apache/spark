@@ -24,26 +24,27 @@ import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * Class for least absolute error loss calculation.
  * The features x and the corresponding label y is predicted using the function F.
  * For each instance:
  * Loss: |y - F|
  * Negative gradient: sign(y - F)
  */
+@DeveloperApi
 object AbsoluteError extends Loss {
 
   /**
-   * Method to calculate the loss gradients for the gradient boosting calculation for least
+   * Method to calculate the gradients for the gradient boosting calculation for least
    * absolute error calculation.
    * @param model Model of the weak learner
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
-  @DeveloperApi
-  override def lossGradient(
+  override def gradient(
       model: WeightedEnsembleModel,
       point: LabeledPoint): Double = {
-    if ((point.label - model.predict(point.features)) > 0) 1.0 else -1.0
+    if ((point.label - model.predict(point.features)) < 0) 1.0 else -1.0
   }
 
   /**
@@ -54,7 +55,6 @@ object AbsoluteError extends Loss {
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return
    */
-  @DeveloperApi
   override def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
     val sumOfAbsolutes = data.map { y =>
       val err = model.predict(y.features) - y.label

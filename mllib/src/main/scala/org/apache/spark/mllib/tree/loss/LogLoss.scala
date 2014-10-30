@@ -23,6 +23,7 @@ import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * Class for least squares error loss calculation.
  *
  * The features x and the corresponding label y is predicted using the function F.
@@ -30,6 +31,7 @@ import org.apache.spark.rdd.RDD
  * Loss: log(1 + exp(-2yF)), y in {-1, 1}
  * Negative gradient: 2y / ( 1 + exp(2yF))
  */
+@DeveloperApi
 object LogLoss extends Loss {
 
   /**
@@ -39,12 +41,11 @@ object LogLoss extends Loss {
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
-  @DeveloperApi
-  override def lossGradient(
+  override def gradient(
       model: WeightedEnsembleModel,
       point: LabeledPoint): Double = {
     val prediction = model.predict(point.features)
-    point.label - 1.0 / (1.0 + math.exp(-prediction))
+    1.0 / (1.0 + math.exp(-prediction)) - point.label
   }
 
   /**
@@ -55,7 +56,6 @@ object LogLoss extends Loss {
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return
    */
-  @DeveloperApi
   override def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
     val wrongPredictions = data.filter(lp => model.predict(lp.features) != lp.label).count()
     wrongPredictions / data.count

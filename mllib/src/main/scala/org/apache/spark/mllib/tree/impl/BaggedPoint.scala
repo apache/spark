@@ -28,7 +28,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * particularly for bagging (e.g., for random forests).
  *
  * This holds one instance, as well as an array of weights which represent the (weighted)
- * number of times which this instance appears in each subsample.
+ * number of times which this instance appears in each subsamplingRate.
  * E.g., (datum, [1, 0, 4]) indicates that there are 3 subsamples of the dataset and that
  * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
  *
@@ -45,11 +45,11 @@ private[tree] object BaggedPoint {
 
   /**
    * Convert an input dataset into its BaggedPoint representation,
-   * choosing subsample counts for each instance.
-   * Each subsample has the same number of instances as the original dataset,
+   * choosing subsamplingRate counts for each instance.
+   * Each subsamplingRate has the same number of instances as the original dataset,
    * and is created by subsampling without replacement.
    * @param input Input dataset.
-   * @param subsample Fraction of the training data used for learning decision tree.
+   * @param subsamplingRate Fraction of the training data used for learning decision tree.
    * @param numSubsamples Number of subsamples of this RDD to take.
    * @param withReplacement Sampling with/without replacement.
    * @param seed Random seed.
@@ -57,24 +57,24 @@ private[tree] object BaggedPoint {
    */
   def convertToBaggedRDD[Datum] (
       input: RDD[Datum],
-      subsample: Double,
+      subsamplingRate: Double,
       numSubsamples: Int,
       withReplacement: Boolean,
       seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
     if (withReplacement) {
-      convertToBaggedRDDSamplingWithReplacement(input, subsample, numSubsamples, seed)
+      convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
     } else {
-      if (numSubsamples == 1 && subsample == 1.0) {
+      if (numSubsamples == 1 && subsamplingRate == 1.0) {
         convertToBaggedRDDWithoutSampling(input)
       } else {
-        convertToBaggedRDDSamplingWithoutReplacement(input, subsample, numSubsamples, seed)
+        convertToBaggedRDDSamplingWithoutReplacement(input, subsamplingRate, numSubsamples, seed)
       }
     }
   }
 
   private def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
       input: RDD[Datum],
-      subsample: Double,
+      subsamplingRate: Double,
       numSubsamples: Int,
       seed: Int): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
@@ -87,7 +87,7 @@ private[tree] object BaggedPoint {
         while (subsampleIndex < numSubsamples) {
           val x = rng.nextDouble()
           subsampleWeights(subsampleIndex) = {
-            if (x < subsample) 1.0 else 0.0
+            if (x < subsamplingRate) 1.0 else 0.0
           }
           subsampleIndex += 1
         }

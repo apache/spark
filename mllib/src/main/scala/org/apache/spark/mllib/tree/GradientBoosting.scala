@@ -44,7 +44,7 @@ class GradientBoosting (
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def train(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
     val algo = boostingStrategy.algo
@@ -66,16 +66,16 @@ object GradientBoosting extends Logging {
   /**
    * Method to train a gradient boosting model.
    *
-   * Note: Using [[org.apache.spark.mllib.tree.GradientBoosting#trainRegressor]]
+   * Note: Using [[org.apache.spark.mllib.tree.GradientBoosting$#trainRegressor]]
    *       is recommended to clearly specify regression.
-   *       Using [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
+   *       Using [[org.apache.spark.mllib.tree.GradientBoosting$#trainClassifier]]
    *       is recommended to clearly specify regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
@@ -97,13 +97,12 @@ object GradientBoosting extends Logging {
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
    * @param subsample  Fraction of the training data used for learning the decision tree.
-   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
@@ -112,12 +111,10 @@ object GradientBoosting extends Logging {
       maxDepth: Int,
       learningRate: Double,
       subsample: Double,
-      checkpointPeriod: Int,
       categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample, checkpointPeriod, 2,
-      categoricalFeaturesInfo = categoricalFeaturesInfo)
+      maxDepth, learningRate, subsample, 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -136,7 +133,6 @@ object GradientBoosting extends Logging {
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
    * @param subsample  Fraction of the training data used for learning the decision tree.
-   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
    * @param numClassesForClassification Number of classes for classification.
    *                                    (Ignored for regression.)
    *                                    Default value is 2 (binary classification).
@@ -145,7 +141,7 @@ object GradientBoosting extends Logging {
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
@@ -154,18 +150,17 @@ object GradientBoosting extends Logging {
       maxDepth: Int,
       learningRate: Double,
       subsample: Double,
-      checkpointPeriod: Int,
       numClassesForClassification: Int,
       categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample, checkpointPeriod, numClassesForClassification,
+      maxDepth, learningRate, subsample, numClassesForClassification,
       categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting#trainRegressor]]
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#trainRegressor]]
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -184,7 +179,7 @@ object GradientBoosting extends Logging {
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
       input: JavaRDD[LabeledPoint],
@@ -204,7 +199,7 @@ object GradientBoosting extends Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting#trainClassifier]]
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#trainClassifier]]
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -226,7 +221,7 @@ object GradientBoosting extends Logging {
    *                                an entry (n -> k) implies the feature n is categorical with k
    *                                categories 0, 1, 2, ... , k-1. It's important to note that
    *                                features are zero-indexed.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
@@ -261,7 +256,7 @@ object GradientBoosting extends Logging {
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
    * @param subsample  Fraction of the training data used for learning the decision tree.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
@@ -290,7 +285,7 @@ object GradientBoosting extends Logging {
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
    * @param subsample  Fraction of the training data used for learning the decision tree.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
@@ -312,7 +307,7 @@ object GradientBoosting extends Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
@@ -329,7 +324,7 @@ object GradientBoosting extends Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return GradientBoostingModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
@@ -350,10 +345,8 @@ object GradientBoosting extends Logging {
       boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
 
     val timer = new TimeTracker()
-
     timer.start("total")
     timer.start("init")
-
 
     // Initialize gradient boosting parameters
     val numEstimators = boostingStrategy.numEstimators
@@ -361,7 +354,6 @@ object GradientBoosting extends Logging {
     val baseLearnerWeights = new Array[Double](numEstimators)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
-    val checkpointingPeriod = boostingStrategy.checkpointPeriod
     val strategy = boostingStrategy.strategy
 
     // Cache input
@@ -386,7 +378,7 @@ object GradientBoosting extends Logging {
     timer.stop("building tree 0")
 
     // psuedo-residual for second iteration
-    data = input.map(point => LabeledPoint(loss.lossGradient(startingModel, point),
+    data = input.map(point => LabeledPoint(loss.gradient(startingModel, point),
       point.features))
 
     var m = 1
@@ -405,7 +397,7 @@ object GradientBoosting extends Logging {
         baseLearnerWeights.slice(0, m + 1), Regression, Sum)
       logDebug("error of gbt = " + loss.computeError(partialModel, input))
       // Update data with pseudo-residuals
-      data = input.map(point => LabeledPoint(loss.lossGradient(partialModel, point),
+      data = input.map(point => LabeledPoint(-loss.gradient(partialModel, point),
         point.features))
       m += 1
     }

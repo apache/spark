@@ -24,6 +24,7 @@ import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * Class for least squares error loss calculation.
  *
  * The features x and the corresponding label y is predicted using the function F.
@@ -31,20 +32,20 @@ import org.apache.spark.rdd.RDD
  * Loss: (y - F)**2/2
  * Negative gradient: y - F
  */
+@DeveloperApi
 object SquaredError extends Loss {
 
   /**
-   * Method to calculate the loss gradients for the gradient boosting calculation for least
+   * Method to calculate the gradients for the gradient boosting calculation for least
    * squares error calculation.
    * @param model Model of the weak learner
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
-  @DeveloperApi
-  override def lossGradient(
+  override def gradient(
     model: WeightedEnsembleModel,
     point: LabeledPoint): Double = {
-    point.label - model.predict(point.features)
+    model.predict(point.features) - point.label
   }
 
   /**
@@ -55,7 +56,6 @@ object SquaredError extends Loss {
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return
    */
-  @DeveloperApi
   override def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
     data.map { y =>
       val err = model.predict(y.features) - y.label

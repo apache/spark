@@ -56,7 +56,7 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
         assert(gbt.baseLearners.size === numEstimators)
         val gbtTree = gbt.baseLearners(0)
 
-        EnsembleTestHelper.validateRegressor(gbt, arr, 0.01)
+        EnsembleTestHelper.validateRegressor(gbt, arr, 0.02)
 
         // Make sure trees are the same.
         assert(gbtTree.toString == dt.toString)
@@ -99,6 +99,6 @@ object GradientBoostingSuite {
 
   // Combinations for estimators, learning rates and subsamplingRate
   val testCombinations
-    = Array((20, 1.0, 1.0), (20, 0.1, 1.0), (20, 1.0, 0.75), (20, 0.1, 0.75))
+    = Array((10, 1.0, 1.0), (10, 0.1, 1.0), (10, 1.0, 0.75), (10, 0.1, 0.75))
 
 }
