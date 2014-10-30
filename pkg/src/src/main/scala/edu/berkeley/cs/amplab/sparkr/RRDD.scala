@@ -249,6 +249,8 @@ object RRDD {
     val tempDir =
       System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
     val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
+    val tempFileIn = File.createTempFile("rSpark", "in", new File(tempDir))
+
     val tempFileName = tempFile.getAbsolutePath()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val env = SparkEnv.get
@@ -257,12 +259,18 @@ object RRDD {
     new Thread("stdin writer for R") {
       override def run() {
         SparkEnv.set(env)
-        val stream = new BufferedOutputStream(proc.getOutputStream, bufferSize)
+        val streamStd = new BufferedOutputStream(proc.getOutputStream, bufferSize)
+        val printOutStd = new PrintStream(streamStd)
+        printOutStd.println(tempFileName)
+        printOutStd.println(rLibDir)
+        printOutStd.println(tempFileIn.getAbsolutePath())
+        printOutStd.flush()
+
+        streamStd.close()
+
+        val stream = new BufferedOutputStream(new FileOutputStream(tempFileIn), bufferSize)
         val printOut = new PrintStream(stream)
         val dataOut = new DataOutputStream(stream)
-
-        printOut.println(tempFileName)
-        printOut.println(rLibDir)
 
         dataOut.writeInt(splitIndex)
 
@@ -304,6 +312,10 @@ object RRDD {
             printOut.println(elem)
           }
         }
+
+        printOut.flush()
+        dataOut.flush()
+        stream.flush()
         stream.close()
       }
     }.start()

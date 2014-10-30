@@ -9,18 +9,22 @@ source_local <- function(fname) {
 source_local("serialize.R")
 
 # NOTE: We use "stdin" to get the process stdin instead of the command line
-inputCon  <- file("stdin", open = "rb")
+inputConStdin  <- file("stdin", open = "rb")
 
-outputFileName <- readLines(inputCon, n = 1)
+outputFileName <- readLines(inputConStdin, n = 1)
 outputCon <- file(outputFileName, open="wb")
 
 # Set libPaths to include SparkR package as loadNamespace needs this
 # TODO: Figure out if we can avoid this by not loading any objects that require
 # SparkR namespace
-rLibDir <- readLines(inputCon, n = 1)
+rLibDir <- readLines(inputConStdin, n = 1)
 .libPaths(c(rLibDir, .libPaths()))
 
 suppressPackageStartupMessages(library(SparkR))
+
+inFileName <- readLines(inputConStdin, n = 1)
+
+inputCon <- file(inFileName, open = "rb")
 
 # read the index of the current partition inside the RDD
 splitIndex <- readInt(inputCon)
