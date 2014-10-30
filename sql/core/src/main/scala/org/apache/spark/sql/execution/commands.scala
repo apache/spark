@@ -68,7 +68,7 @@ case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
 
   override def output = cmd.output
 
-  def children = Nil
+  override def children = Nil
 
   override def executeCollect(): Array[Row] = sideEffectResult.toArray
 
