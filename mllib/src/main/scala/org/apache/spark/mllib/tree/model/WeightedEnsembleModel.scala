@@ -145,7 +145,6 @@ class WeightedEnsembleModel(
     }.fold("")(_ + _)
   }
 
-
   // TODO: Remove these helpers methods once class is generalized to support any base learning
   // algorithms.
 
@@ -158,6 +157,5 @@ class WeightedEnsembleModel(
    * Get total number of nodes, summed over all trees in the forest.
    */
   def totalNumNodes: Int = weakHypotheses.map(tree => tree.numNodes).sum
-
 
 }
