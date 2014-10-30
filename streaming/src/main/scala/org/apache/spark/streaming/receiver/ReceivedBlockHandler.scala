@@ -17,9 +17,6 @@
 
 package org.apache.spark.streaming.receiver
 
-import java.nio.ByteBuffer
-
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
@@ -30,24 +27,35 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage._
-import org.apache.spark.streaming.util.{Clock, SystemClock, WriteAheadLogManager}
+import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, Clock, SystemClock, WriteAheadLogManager}
 import org.apache.spark.util.Utils
 
-private[streaming] sealed trait ReceivedBlock
-private[streaming] case class ArrayBufferBlock(arrayBuffer: ArrayBuffer[_]) extends ReceivedBlock
-private[streaming] case class IteratorBlock(iterator: Iterator[_]) extends ReceivedBlock
-private[streaming] case class ByteBufferBlock(byteBuffer: ByteBuffer) extends ReceivedBlock
 
+
+/** Trait that represents the metadata related to storage of blocks */
+private[streaming] trait ReceivedBlockStoreResult {
+  def blockId: StreamBlockId  // Any implementation of this trait will store a block id
+}
 
 /** Trait that represents a class that handles the storage of blocks received by receiver */
 private[streaming] trait ReceivedBlockHandler {
 
-  /** Store a received block with the given block id */
-  def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): Option[Any]
+  /** Store a received block with the given block id and return related metadata */
+  def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
 
   /** Cleanup old blocks older than the given threshold time */
   def cleanupOldBlock(threshTime: Long)
 }
+
+
+/**
+ * Implementation of [[org.apache.spark.streaming.receiver.ReceivedBlockStoreResult]]
+ * that stores the metadata related to storage of blocks using
+ * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
+ */
+private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId)
+  extends ReceivedBlockStoreResult
+
 
 /**
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
@@ -57,8 +65,8 @@ private[streaming] class BlockManagerBasedBlockHandler(
     blockManager: BlockManager, storageLevel: StorageLevel)
   extends ReceivedBlockHandler with Logging {
   
-  def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): Option[Any] = {
-    val putResult: Seq[(BlockId, BlockStatus)] = receivedBlock match {
+  def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
+    val putResult: Seq[(BlockId, BlockStatus)] = block match {
       case ArrayBufferBlock(arrayBuffer) =>
         blockManager.putIterator(blockId, arrayBuffer.iterator, storageLevel, tellMaster = true)
       case IteratorBlock(iterator) =>
@@ -73,7 +81,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
       throw new SparkException(
         s"Could not store $blockId to block manager with storage level $storageLevel")
     }
-    None
+    BlockManagerBasedStoreResult(blockId)
   }
 
   def cleanupOldBlock(threshTime: Long) {
@@ -81,6 +89,18 @@ private[streaming] class BlockManagerBasedBlockHandler(
     // of BlockRDDs.
   }
 }
+
+
+/**
+ * Implementation of [[org.apache.spark.streaming.receiver.ReceivedBlockStoreResult]]
+ * that stores the metadata related to storage of blocks using
+ * [[org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler]]
+ */
+private[streaming] case class WriteAheadLogBasedStoreResult(
+    blockId: StreamBlockId,
+    segment: WriteAheadLogFileSegment
+  ) extends ReceivedBlockStoreResult
+
 
 /**
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
@@ -112,18 +132,19 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
   )
 
   // For processing futures used in parallel block storing into block manager and write ahead log
+  // # threads = 2, so that both writing to BM and WAL can proceed in parallel
   implicit private val executionContext = ExecutionContext.fromExecutorService(
     Utils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
-
 
   /**
    * This implementation stores the block into the block manager as well as a write ahead log.
    * It does this in parallel, using Scala Futures, and returns only after the block has
    * been stored in both places.
    */
-  def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): Option[Any] = {
+  def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
+
     // Serialize the block so that it can be inserted into both
-    val serializedBlock = receivedBlock match {
+    val serializedBlock = block match {
       case ArrayBufferBlock(arrayBuffer) =>
         blockManager.dataSerialize(blockId, arrayBuffer.iterator)
       case IteratorBlock(iterator) =>
@@ -154,7 +175,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       _ <- storeInBlockManagerFuture
       fileSegment <- storeInWriteAheadLogFuture
     } yield fileSegment
-    Some(Await.result(combinedFuture, blockStoreTimeout))
+    val segment = Await.result(combinedFuture, blockStoreTimeout)
+    WriteAheadLogBasedStoreResult(blockId, segment)
   }
 
   def cleanupOldBlock(threshTime: Long) {

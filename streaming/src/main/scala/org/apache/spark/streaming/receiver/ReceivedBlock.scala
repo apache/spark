@@ -15,14 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.scheduler
+package org.apache.spark.streaming.receiver
 
-import org.apache.spark.streaming.receiver.ReceivedBlockStoreResult
+import java.nio.ByteBuffer
 
-/** Information about blocks received by the receiver */
-private[streaming] case class ReceivedBlockInfo(
-    streamId: Int,
-    numRecords: Long,
-    blockStoreResult: ReceivedBlockStoreResult
-  )
+import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
+/** Trait representing a received block */
+private[streaming] sealed trait ReceivedBlock
+
+/** class representing a block received as an ArrayBuffer */
+private[streaming] case class ArrayBufferBlock(arrayBuffer: ArrayBuffer[_]) extends ReceivedBlock
+
+/** class representing a block received as an Iterator */
+private[streaming] case class IteratorBlock(iterator: Iterator[_]) extends ReceivedBlock
+
+/** class representing a block received as an ByteBuffer */
+private[streaming] case class ByteBufferBlock(byteBuffer: ByteBuffer) extends ReceivedBlock

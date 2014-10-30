@@ -144,7 +144,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
   def addBlocks(receivedBlockInfo: ReceivedBlockInfo) {
     getReceivedBlockInfoQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     logDebug("Stream " + receivedBlockInfo.streamId + " received new blocks: " +
-      receivedBlockInfo.blockId)
+      receivedBlockInfo.blockStoreResult.blockId)
   }
 
   /** Report error sent by a receiver */

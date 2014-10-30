@@ -153,14 +153,13 @@ private[streaming] class ReceiverSupervisorImpl(
     }
 
     val time = System.currentTimeMillis
-    val persistenceInfoOption = receivedBlockHandler.storeBlock(blockId, receivedBlock)
-    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time) + " ms")
+    val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
+    logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
 
-    val blockInfo = ReceivedBlockInfo(streamId,
-      blockId, numRecords, metadataOption.orNull, persistenceInfoOption)
+    val blockInfo = ReceivedBlockInfo(streamId, numRecords, blockStoreResult)
     val future = trackerActor.ask(AddBlock(blockInfo))(askTimeout)
     Await.result(future, askTimeout)
-    logDebug("Reported block " + blockId)
+    logDebug(s"Reported block $blockId")
   }
 
   /** Report error to the receiver tracker */

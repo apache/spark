@@ -107,8 +107,11 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
         }.toList
         storedData shouldEqual data
 
-        // Verify the store results were None
-        storeResults.foreach { _ shouldEqual None }
+        // Verify that the store results are instances of BlockManagerBasedStoreResult
+        assert(
+          storeResults.forall { _.isInstanceOf[BlockManagerBasedStoreResult] },
+          "Unexpected store result type"
+        )
       }
     }
   }
@@ -128,9 +131,13 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
         }.toList
         storedData shouldEqual data
 
+        // Verify that the store results are instances of WriteAheadLogBasedStoreResult
+        assert(
+          storeResults.forall { _.isInstanceOf[WriteAheadLogBasedStoreResult] },
+          "Unexpected store result type"
+        )
         // Verify the data in write ahead log files is correct
-        storeResults.foreach { s => assert(s.nonEmpty) }
-        val fileSegments = storeResults.map { _.asInstanceOf[Some[WriteAheadLogFileSegment]].get }
+        val fileSegments = storeResults.map { _.asInstanceOf[WriteAheadLogBasedStoreResult].segment}
         val loggedData = fileSegments.flatMap { segment =>
           val reader = new WriteAheadLogRandomReader(segment.path, hadoopConf)
           val bytes = reader.read(segment)
@@ -172,13 +179,17 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
    * using the given verification function
    */
   private def testBlockStoring(receivedBlockHandler: ReceivedBlockHandler)
-      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[Option[Any]]) => Unit) {
+      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit) {
     val data = Seq.tabulate(100) { _.toString }
 
     def storeAndVerify(blocks: Seq[ReceivedBlock]) {
       blocks should not be empty
       val (blockIds, storeResults) = storeBlocks(receivedBlockHandler, blocks)
       withClue(s"Testing with ${blocks.head.getClass.getSimpleName}s:") {
+        // Verify returns store results have correct block ids
+        (storeResults.map { _.blockId }) shouldEqual blockIds
+
+        // Call handler-specific verification function
         verifyFunc(data, blockIds, storeResults)
       }
     }
@@ -227,7 +238,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   private def storeBlocks(
       receivedBlockHandler: ReceivedBlockHandler,
       blocks: Seq[ReceivedBlock]
-    ): (Seq[StreamBlockId], Seq[Option[Any]]) = {
+    ): (Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) = {
     val blockIds = Seq.fill(blocks.size)(generateBlockId())
     val storeResults = blocks.zip(blockIds).map {
       case (block, id) =>
