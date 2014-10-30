@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.util.jar.{JarEntry, JarOutputStream}
 
-import com.google.common.io.Files
+import com.google.common.io.ByteStreams
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
@@ -41,8 +41,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   override def beforeAll() {
     super.beforeAll()
 
-    tmpDir = Files.createTempDir()
-    tmpDir.deleteOnExit()
+    tmpDir = Utils.createTempDir()
     val testTempDir = new File(tmpDir, "test")
     testTempDir.mkdir()
 
@@ -60,12 +59,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     jar.putNextEntry(jarEntry)
 
     val in = new FileInputStream(textFile)
-    val buffer = new Array[Byte](10240)
-    var nRead = 0
-    while (nRead <= 0) {
-      nRead = in.read(buffer, 0, buffer.length)
-      jar.write(buffer, 0, nRead)
-    }
+    ByteStreams.copy(in, jar)
 
     in.close()
     jar.close()

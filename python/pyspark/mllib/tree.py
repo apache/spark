@@ -19,7 +19,7 @@ from py4j.java_collections import MapConverter
 
 from pyspark import SparkContext, RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
-from pyspark.mllib.linalg import Vector, _convert_to_vector
+from pyspark.mllib.linalg import Vector, _convert_to_vector, _to_java_object_rdd
 from pyspark.mllib.regression import LabeledPoint
 
 __all__ = ['DecisionTreeModel', 'DecisionTree']
@@ -61,8 +61,8 @@ class DecisionTreeModel(object):
                 return self._sc.parallelize([])
             if not isinstance(first[0], Vector):
                 x = x.map(_convert_to_vector)
-            jPred = self._java_model.predict(x._to_java_object_rdd()).toJavaRDD()
-            jpyrdd = self._sc._jvm.PythonRDD.javaToPython(jPred)
+            jPred = self._java_model.predict(_to_java_object_rdd(x)).toJavaRDD()
+            jpyrdd = self._sc._jvm.SerDe.javaToPython(jPred)
             return RDD(jpyrdd, self._sc, BatchedSerializer(ser, 1024))
 
         else:
@@ -104,7 +104,7 @@ class DecisionTree(object):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
         sc = data.context
-        jrdd = data._to_java_object_rdd()
+        jrdd = _to_java_object_rdd(data)
         cfiMap = MapConverter().convert(categoricalFeaturesInfo,
                                         sc._gateway._gateway_client)
         model = sc._jvm.PythonMLLibAPI().trainDecisionTreeModel(
@@ -153,9 +153,9 @@ class DecisionTree(object):
         DecisionTreeModel classifier of depth 1 with 3 nodes
         >>> print model.toDebugString(),  # it already has newline
         DecisionTreeModel classifier of depth 1 with 3 nodes
-          If (feature 0 <= 0.5)
+          If (feature 0 <= 0.0)
            Predict: 0.0
-          Else (feature 0 > 0.5)
+          Else (feature 0 > 0.0)
            Predict: 1.0
         >>> model.predict(array([1.0])) > 0
         True

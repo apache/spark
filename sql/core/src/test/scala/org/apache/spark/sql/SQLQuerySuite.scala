@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{ShuffledHashJoin, BroadcastHashJoin}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.test._
 import org.scalatest.BeforeAndAfterAll
 import java.util.TimeZone
@@ -42,6 +43,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     TimeZone.setDefault(origZone)
   }
 
+  test("grouping on nested fields") {
+    jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
+     .registerTempTable("rows")
+
+    checkAnswer(
+      sql(
+        """
+          |select attribute, sum(cnt)
+          |from (
+          |  select nested.attribute, count(*) as cnt
+          |  from rows
+          |  group by nested.attribute) a
+          |group by attribute
+        """.stripMargin),
+      Row(1, 1) :: Nil)
+  }
 
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
@@ -60,7 +77,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT LAST(n) FROM lowerCaseData"),
       4)
   }
-
 
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
@@ -680,9 +696,207 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       ("true", "false") :: Nil)
   }
-  
+
   test("SPARK-3371 Renaming a function expression with group by gives error") {
     registerFunction("len", (s: String) => s.length)
     checkAnswer(
-      sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"), 1)}    
+      sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"), 1)
+  }
+
+  test("SPARK-3813 CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END") {
+    checkAnswer(
+      sql("SELECT CASE key WHEN 1 THEN 1 ELSE 0 END FROM testData WHERE key = 1 group by key"), 1)
+  }
+
+  test("SPARK-3813 CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END") {
+    checkAnswer(
+      sql("SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"), 1)
+  }
+
+  test("throw errors for non-aggregate attributes with aggregation") {
+    def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
+      val logicalPlan = sql(query).queryExecution.logical
+
+      if (isInvalidQuery) {
+        val e = intercept[TreeNodeException[LogicalPlan]](sql(query).queryExecution.analyzed)
+        assert(
+          e.getMessage.startsWith("Expression not in GROUP BY"),
+          "Non-aggregate attribute(s) not detected\n" + logicalPlan)
+      } else {
+        // Should not throw
+        sql(query).queryExecution.analyzed
+      }
+    }
+
+    checkAggregation("SELECT key, COUNT(*) FROM testData")
+    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", false)
+
+    checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
+    checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)
+
+    checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
+    checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
+  }
+
+  test("Test to check we can use Long.MinValue") {
+    checkAnswer(
+      sql(s"SELECT ${Long.MinValue} FROM testData ORDER BY key LIMIT 1"), Long.MinValue
+    )
+
+    checkAnswer(
+      sql(s"SELECT key FROM testData WHERE key > ${Long.MinValue}"), (1 to 100).map(Row(_)).toSeq
+    )
+  }
+
+  test("Floating point number format") {
+    checkAnswer(
+      sql("SELECT 0.3"), 0.3
+    )
+
+    checkAnswer(
+      sql("SELECT -0.8"), -0.8
+    )
+
+    checkAnswer(
+      sql("SELECT .5"), 0.5
+    )
+
+    checkAnswer(
+      sql("SELECT -.18"), -0.18
+    )
+  }
+
+  test("Auto cast integer type") {
+    checkAnswer(
+      sql(s"SELECT ${Int.MaxValue + 1L}"), Int.MaxValue + 1L
+    )
+
+    checkAnswer(
+      sql(s"SELECT ${Int.MinValue - 1L}"), Int.MinValue - 1L
+    )
+
+    checkAnswer(
+      sql("SELECT 9223372036854775808"), BigDecimal("9223372036854775808")
+    )
+
+    checkAnswer(
+      sql("SELECT -9223372036854775809"), BigDecimal("-9223372036854775809")
+    )
+  }
+
+  test("Test to check we can apply sign to expression") {
+
+    checkAnswer(
+      sql("SELECT -100"), -100
+    )
+
+    checkAnswer(
+      sql("SELECT +230"), 230
+    )
+
+    checkAnswer(
+      sql("SELECT -5.2"), -5.2
+    )
+
+    checkAnswer(
+      sql("SELECT +6.8"), 6.8
+    )
+
+    checkAnswer(
+      sql("SELECT -key FROM testData WHERE key = 2"), -2
+    )
+
+    checkAnswer(
+      sql("SELECT +key FROM testData WHERE key = 3"), 3
+    )
+
+    checkAnswer(
+      sql("SELECT -(key + 1) FROM testData WHERE key = 1"), -2
+    )
+
+    checkAnswer(
+      sql("SELECT - key + 1 FROM testData WHERE key = 10"), -9
+    )
+
+    checkAnswer(
+      sql("SELECT +(key + 5) FROM testData WHERE key = 5"), 10
+    )
+
+    checkAnswer(
+      sql("SELECT -MAX(key) FROM testData"), -100
+    )
+
+    checkAnswer(
+      sql("SELECT +MAX(key) FROM testData"), 100
+    )
+
+    checkAnswer(
+      sql("SELECT - (-10)"), 10
+    )
+
+    checkAnswer(
+      sql("SELECT + (-key) FROM testData WHERE key = 32"), -32
+    )
+
+    checkAnswer(
+      sql("SELECT - (+Max(key)) FROM testData"), -100
+    )
+
+    checkAnswer(
+      sql("SELECT - - 3"), 3
+    )
+
+    checkAnswer(
+      sql("SELECT - + 20"), -20
+    )
+
+    checkAnswer(
+      sql("SELEcT - + 45"), -45
+    )
+
+    checkAnswer(
+      sql("SELECT + + 100"), 100
+    )
+
+    checkAnswer(
+      sql("SELECT - - Max(key) FROM testData"), 100
+    )
+
+    checkAnswer(
+      sql("SELECT + - key FROM testData WHERE key = 33"), -33
+    )
+  }
+
+  test("Multiple join") {
+    checkAnswer(
+      sql(
+        """SELECT a.key, b.key, c.key
+          |FROM testData a
+          |JOIN testData b ON a.key = b.key
+          |JOIN testData c ON a.key = c.key
+        """.stripMargin),
+      (1 to 100).map(i => Seq(i, i, i)))
+  }
+
+  test("SPARK-3483 Special chars in column names") {
+    val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
+    jsonRDD(data).registerTempTable("records")
+    sql("SELECT `key?number1` FROM records")
+  }
+
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(sql("SELECT key&1 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(sql("SELECT key|0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(sql("SELECT key^0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), -2)
+  }
 }

@@ -82,9 +82,9 @@ class RandomForestModel(val trees: Array[DecisionTreeModel], val algo: Algo) ext
    */
   override def toString: String = algo match {
     case Classification =>
-      s"RandomForestModel classifier with $numTrees trees"
+      s"RandomForestModel classifier with $numTrees trees and $totalNumNodes total nodes"
     case Regression =>
-      s"RandomForestModel regressor with $numTrees trees"
+      s"RandomForestModel regressor with $numTrees trees and $totalNumNodes total nodes"
     case _ => throw new IllegalArgumentException(
       s"RandomForestModel given unknown algo parameter: $algo.")
   }

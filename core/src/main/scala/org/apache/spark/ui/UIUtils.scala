@@ -20,7 +20,8 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.Node
+import scala.xml.{Text, Node}
+
 import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
@@ -169,6 +170,7 @@ private[spark] object UIUtils extends Logging {
       refreshInterval: Option[Int] = None): Seq[Node] = {
 
     val appName = activeTab.appName
+    val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix)}>{tab.name}</a>
@@ -187,7 +189,9 @@ private[spark] object UIUtils extends Logging {
               <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
             <ul class="nav">{header}</ul>
-            <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
+            <p class="navbar-text pull-right">
+              <strong title={appName}>{shortAppName}</strong> application UI
+            </p>
           </div>
         </div>
         <div class="container-fluid">
@@ -216,8 +220,10 @@ private[spark] object UIUtils extends Logging {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
-                     style="margin-right: 15px;" />
+                <a style="text-decoration: none" href={prependBaseUri("/")}>
+                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
+                       style="margin-right: 15px;" />
+                </a>
                 {title}
               </h3>
             </div>
@@ -233,7 +239,8 @@ private[spark] object UIUtils extends Logging {
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
       data: Iterable[T],
-      fixedWidth: Boolean = false): Seq[Node] = {
+      fixedWidth: Boolean = false,
+      id: Option[String] = None): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
     if (fixedWidth) {
@@ -257,7 +264,7 @@ private[spark] object UIUtils extends Logging {
         }
       }
     }
-    <table class={listingTableClass}>
+    <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}
