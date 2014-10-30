@@ -217,14 +217,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
   private def generateJobs(time: Time) {
+    SparkEnv.set(ssc.env)
     Try(graph.generateJobs(time)) match {
       case Success(jobs) =>
         val receivedBlockInfo = graph.getReceiverInputStreams.map { stream =>
           val streamId = stream.id
-          val receivedBlockInfo = stream.getReceivedBlockInfo(time)
+          val receivedBlockInfo = stream.getReceivedBlockInfo(time).toArray
           (streamId, receivedBlockInfo)
         }.toMap
-        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfo))
+        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfo.toMap))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
