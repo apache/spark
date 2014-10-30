@@ -419,7 +419,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
     override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
       val executorId = blockManagerAdded.blockManagerId.executorId
-      if (executorId != "<driver>") {
+      if (executorId != SparkContext.DRIVER_IDENTIFIER) {
         allocationManager.onExecutorAdded(executorId)
       }
     }
