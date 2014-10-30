@@ -126,6 +126,7 @@ private[spark] class ExecutorRunner(
       val builder = CommandUtils.buildProcessBuilder(appDesc.command, memory,
         sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
+      logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
 
       builder.directory(executorDir)
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
