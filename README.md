@@ -89,6 +89,19 @@ You can also run the unit-tests for SparkR by running
 Instructions for running SparkR on EC2 can be found in the
 [SparkR wiki](https://github.com/amplab-extras/SparkR-pkg/wiki/SparkR-on-EC2).
 
+## Running on YARN
+Currently, SparkR supports running on YARN with the `yarn-client` mode. These steps show how to build SparkR with YARN support and run SparkR programs on a YARN cluster:
+
+```
+# assumes Java, R, rJava, yarn, spark etc. are installed on the whole cluster.
+cd SparkR-pkg/
+USE_YARN=1 SPARK_YARN_VERSION=2.4.0 SPARK_HADOOP_VERSION=2.4.0 ./install-dev.sh
+# make sure each worker node has lib/SparkR/sparkr-assembly-0.1.jar
+~/spark-ec2/copy-dir ./
+YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ MASTER=yarn-client ./sparkR
+YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ ./sparkR examples/pi.R yarn-client
+```
+
 ## Report Issues/Feedback 
 
 For better tracking and collaboration, issues and TODO items are reported to a dedicated [SparkR JIRA](https://sparkr.atlassian.net/browse/SPARKR/).
