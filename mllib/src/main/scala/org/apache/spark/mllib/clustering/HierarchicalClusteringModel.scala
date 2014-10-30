@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
+import org.apache.spark.Logging
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
@@ -27,20 +28,14 @@ import org.apache.spark.rdd.RDD
  *
  * @param clusterTree a cluster as a tree node
  * @param trainTime the milliseconds for executing a training
- * @param predictTime the milliseconds for executing a prediction
  * @param isTrained if the model has been trained, the flag is true
  */
 class HierarchicalClusteringModel private (
   val clusterTree: ClusterTree,
   private[mllib] var trainTime: Int,
-  private[mllib] var predictTime: Int,
-  private[mllib] var isTrained: Boolean) extends Serializable {
+  private[mllib] var isTrained: Boolean) extends Serializable with Logging {
 
-  def this(clusterTree: ClusterTree) = this(clusterTree, 0, 0, false)
-
-  def getClusters(): Array[ClusterTree] = clusterTree.getClusters().toArray
-
-  def getCenters(): Array[Vector] = getClusters().map(_.center)
+  def this(clusterTree: ClusterTree) = this(clusterTree, 0, false)
 
   /**
    * Predicts the closest cluster of each point
@@ -56,15 +51,18 @@ class HierarchicalClusteringModel private (
    */
   def predict(data: RDD[Vector]): RDD[(Int, Vector)] = {
     val startTime = System.currentTimeMillis() // to measure the execution time
+    val sc = data.sparkContext
 
     // TODO Supports distance metrics other Euclidean distance metric
     val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    val centers = getClusters().map(_.center.toBreeze)
     val treeRoot = this.clusterTree
-    val closestClusterIndexFinder = treeRoot.assignClusterIndex(metric) _
-    data.sparkContext.broadcast(closestClusterIndexFinder)
-    val predicted = data.map(point => (closestClusterIndexFinder(point), point))
-    this.predictTime = (System.currentTimeMillis() - startTime).toInt
+    sc.broadcast(metric)
+    sc.broadcast(treeRoot)
+    val predicted = data.map(point => (treeRoot.assignClusterIndex(metric)(point), point))
+
+    val predictTime = System.currentTimeMillis() - startTime
+    logInfo(s"Predicting Time: ${predictTime.toDouble / 1000} [sec]")
+
     predicted
   }
 
@@ -75,5 +73,11 @@ class HierarchicalClusteringModel private (
   /**
    * Computes the sum of total variance of all cluster
    */
-  def computeCost(): Double =  this.getClusters().map(_.getVariance().get).sum
+  def computeCost(): Double = this.getClusters().map(_.getVariance().get).sum
+
+  def getClusters(): Array[ClusterTree] = clusterTree.getClusters().toArray
+
+  def getCenters(): Array[Vector] = getClusters().map(_.center)
+
+  def getTrainTime() = this.trainTime
 }
