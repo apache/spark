@@ -21,6 +21,9 @@ import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.google.common.base.Charsets.UTF_8
+import com.google.common.io.ByteStreams
+
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, TestUtils}
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
@@ -410,6 +413,19 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
 
+  test("driver user classpath isolation") {
+    val systemJar = TestUtils.createJarWithFiles(Map("test.resource" -> "SYSTEM"))
+    val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"))
+    val args = Seq(
+      "--class", ClassPathIsolationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local",
+      "--conf", "spark.driver.extraClassPath=" + systemJar,
+      "--conf", "spark.driver.enableClassPathIsolation=true",
+      userJar.toString)
+    runSparkSubmit(args)
+  }
+
   test("SPARK_CONF_DIR overrides spark-defaults.conf") {
     forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
       val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
@@ -494,6 +510,18 @@ object SimpleApplicationTest {
         throw new SparkException(
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
+    }
+  }
+}
+
+object ClassPathIsolationTest {
+  def main(args: Array[String]) {
+    val ccl = Thread.currentThread().getContextClassLoader()
+    val resource = ccl.getResourceAsStream("test.resource")
+    val bytes = ByteStreams.toByteArray(resource)
+    val contents = new String(bytes, 0, bytes.length, UTF_8)
+    if (contents != "USER") {
+      throw new SparkException("Should have read user resource, but instead read: " + contents)
     }
   }
 }

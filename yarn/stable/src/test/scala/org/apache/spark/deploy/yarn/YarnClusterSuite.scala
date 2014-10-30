@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
@@ -114,76 +115,103 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     super.afterAll()
   }
 
-  ignore("run Spark in yarn-client mode") {
+  test("run Spark in yarn-client mode") {
     var result = File.createTempFile("result", null, tempDir)
     YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
     checkResult(result)
   }
 
-  ignore("run Spark in yarn-cluster mode") {
+  test("run Spark in yarn-cluster mode") {
     val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
     var result = File.createTempFile("result", null, tempDir)
-    runClusterMode(YarnClusterDriver.getClass, Seq(result.getAbsolutePath()))
+    runSpark(false, YarnClusterDriver.getClass, Seq(result.getAbsolutePath()))
     checkResult(result)
   }
 
-  ignore("run Spark in yarn-cluster mode unsuccessfully") {
+  test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
     val exception = intercept[SparkException] {
-      runClusterMode(YarnClusterDriver.getClass)
+      runSpark(false, YarnClusterDriver.getClass)
     }
     assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
   }
 
-  test("user class path isolation") {
-    // Create a jar file that contains a different version of "test.resource".
-    val jarFile = File.createTempFile("test", ".jar", tempDir)
-    val testResource = new File(tempDir, "test.resource")
-    Files.write("OVERRIDDEN", testResource, UTF_8)
-    TestUtils.createJar(Seq(testResource), jarFile)
+  test("user class path isolation in client mode") {
+    testClassPathIsolation(true)
+  }
 
-    // Run first without isolation. The original resource should be picked up.
+  test("user class path isolation in cluster mode") {
+    testClassPathIsolation(false)
+  }
+
+  private def testClassPathIsolation(clientMode: Boolean) = {
+    // Create a jar file that contains a different version of "test.resource".
+    val jarFile = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
-    runClusterMode(YarnClasspathTest.getClass,
+    runSpark(clientMode, YarnClasspathTest.getClass,
       Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
-      Seq(jarFile.getAbsolutePath()))
-    checkResult(driverResult, "ORIGINAL")
-    checkResult(executorResult, "ORIGINAL")
-
-    // Enable class path isolation. Results should now match the overridden resource.
-    val overriddenDriverResult = File.createTempFile("driver", null, tempDir)
-    val overriddenExecutorResult = File.createTempFile("executor", null, tempDir)
-    runClusterMode(YarnClasspathTest.getClass,
-      Seq(overriddenDriverResult.getAbsolutePath(), overriddenExecutorResult.getAbsolutePath()),
-      Seq(jarFile.getAbsolutePath()),
+      Seq("local:" + jarFile.getPath()),
       Map(
         "spark.driver.enableClassPathIsolation" -> "true",
         "spark.executor.enableClassPathIsolation" -> "true"))
-    checkResult(overriddenDriverResult, "OVERRIDDEN")
-    checkResult(overriddenExecutorResult, "OVERRIDDEN")
+    checkResult(driverResult, "OVERRIDDEN")
+    checkResult(executorResult, "OVERRIDDEN")
   }
 
-  private def runClusterMode(
+  // Note: calling this method in client mode requires the Spark assembly to have been built,
+  // since it uses spark-submit.
+  private def runSpark(
+      clientMode: Boolean,
       klass: Class[_],
       args: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       settings: Map[String, String] = Map()) = {
-    val main = klass.getName().stripSuffix("$")
-    val userJars = if (!extraJars.isEmpty()) Seq("--addJars", extraJars.mkString(",")) else Nil
+    if (clientMode) {
+      val main = klass.getName().stripSuffix("$")
+      val userJars = extraJars.mkString(",")
 
-    val clientArgs = Array("--class", main,
-      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
-      "--arg", "yarn-cluster",
-      "--num-executors", "1") ++
-      userJars ++
-      args.flatMap { Seq("--arg", _) }
+      val props = new Properties()
+      sys.props
+        .filter { case (k, v) => k.startsWith("spark.") }
+        .foreach { case (k, v) => props.setProperty(k, v) }
+      settings.foreach { case (k, v) => props.setProperty(k, v) }
 
-    sys.props ++= settings
-    try {
-      Client.main(clientArgs)
-    } finally {
-      sys.props --= settings.keys
+      val propsFile = File.createTempFile("client", ".properties", tempDir)
+      val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
+      props.store(writer, "Client mode properties.")
+      writer.close()
+
+      val argv = Seq(
+        new File(sys.props("spark.test.home"), "bin/spark-submit").getAbsolutePath(),
+        "--master", "yarn-client",
+        "--class", main,
+        "--jars", extraJars.mkString(","),
+        "--num-executors", "1",
+        "--properties-file", propsFile.getAbsolutePath(),
+        fakeSparkJar.getAbsolutePath()) ++
+        Seq("yarn-client") ++
+        args
+
+      Utils.executeAndGetOutput(argv,
+        extraEnvironment = Map("YARN_CONF_DIR" -> tempDir.getAbsolutePath()))
+    } else {
+      val main = klass.getName().stripSuffix("$")
+      val userJars = if (!extraJars.isEmpty()) Seq("--addJars", extraJars.mkString(",")) else Nil
+
+      val clientArgs = Array("--class", main,
+        "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
+        "--arg", "yarn-cluster",
+        "--num-executors", "1") ++
+        userJars ++
+        args.flatMap { Seq("--arg", _) }
+
+      sys.props ++= settings
+      try {
+        Client.main(clientArgs)
+      } finally {
+        sys.props --= settings.keys
+      }
     }
   }
 
@@ -263,7 +291,7 @@ private object YarnClasspathTest {
     try {
       val ccl = Thread.currentThread().getContextClassLoader()
       val resource = ccl.getResourceAsStream("test.resource")
-      val bytes = ByteStreams.toByteArray(resource);
+      val bytes = ByteStreams.toByteArray(resource)
       result = new String(bytes, 0, bytes.length, UTF_8)
     } finally {
       Files.write(result, new File(resultPath), UTF_8)

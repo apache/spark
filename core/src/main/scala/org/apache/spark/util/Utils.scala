@@ -912,7 +912,7 @@ private[spark] object Utils extends Logging {
     new Thread("read stdout for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getInputStream).getLines()) {
-          System.err.println(line)
+          logInfo("CHILD STDERR: " + line)
         }
       }
     }.start()
@@ -939,7 +939,7 @@ private[spark] object Utils extends Logging {
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
-          System.err.println(line)
+          logInfo("CHILD STDERR: " + line)
         }
       }
     }.start()
