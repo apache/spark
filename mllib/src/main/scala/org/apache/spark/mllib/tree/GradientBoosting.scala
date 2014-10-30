@@ -96,7 +96,7 @@ object GradientBoosting extends Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
-   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
@@ -110,11 +110,11 @@ object GradientBoosting extends Logging {
       loss: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double,
+      subsamplingRate: Double,
       categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample, 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+      maxDepth, learningRate, subsamplingRate, 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -132,7 +132,7 @@ object GradientBoosting extends Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
-   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
    * @param numClassesForClassification Number of classes for classification.
    *                                    (Ignored for regression.)
    *                                    Default value is 2 (binary classification).
@@ -149,12 +149,12 @@ object GradientBoosting extends Logging {
       loss: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double,
+      subsamplingRate: Double,
       numClassesForClassification: Int,
       categoricalFeaturesInfo: Map[Int, Int]): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample, numClassesForClassification,
+      maxDepth, learningRate, subsamplingRate, numClassesForClassification,
       categoricalFeaturesInfo = categoricalFeaturesInfo)
     new GradientBoosting(boostingStrategy).train(input)
   }
@@ -172,8 +172,7 @@ object GradientBoosting extends Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
-   * @param subsample  Fraction of the training data used for learning the decision tree.
-   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
+   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
    *                                the number of discrete values they take. For example,
    *                                an entry (n -> k) implies the feature n is categorical with k
@@ -187,13 +186,12 @@ object GradientBoosting extends Logging {
       loss: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double,
-      checkpointPeriod: Int,
+      subsamplingRate: Double,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
       : WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample, checkpointPeriod, 2, categoricalFeaturesInfo =
+      maxDepth, learningRate, subsamplingRate, 2, categoricalFeaturesInfo =
         categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
   }
@@ -211,8 +209,7 @@ object GradientBoosting extends Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
-   * @param subsample  Fraction of the training data used for learning the decision tree.
-   * @param checkpointPeriod Checkpointing the dataset in memory to avoid long lineage chains.
+   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
    * @param numClassesForClassification Number of classes for classification.
    *                                    (Ignored for regression.)
    *                                    Default value is 2 (binary classification).
@@ -229,16 +226,15 @@ object GradientBoosting extends Logging {
       loss: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double,
-      checkpointPeriod: Int,
+      subsamplingRate: Double,
       numClassesForClassification: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer])
       : WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample, checkpointPeriod,
-      numClassesForClassification, categoricalFeaturesInfo =
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+      maxDepth, learningRate, subsamplingRate, numClassesForClassification,
+      categoricalFeaturesInfo = categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int,
+        Int]].asScala.toMap)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -255,7 +251,7 @@ object GradientBoosting extends Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
-   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
    * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
@@ -264,10 +260,10 @@ object GradientBoosting extends Logging {
       loss: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double): WeightedEnsembleModel = {
+      subsamplingRate: Double): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample)
+      maxDepth, learningRate, subsamplingRate)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
@@ -284,7 +280,7 @@ object GradientBoosting extends Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param learningRate Learning rate for shrinking the contribution of each estimator. The
    *                     learning rate should be between in the interval (0, 1]
-   * @param subsample  Fraction of the training data used for learning the decision tree.
+   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
    * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
@@ -293,10 +289,10 @@ object GradientBoosting extends Logging {
       loss: String,
       maxDepth: Int,
       learningRate: Double,
-      subsample: Double): WeightedEnsembleModel = {
+      subsamplingRate: Double): WeightedEnsembleModel = {
     val lossType = Losses.fromString(loss)
     val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      maxDepth, learningRate, subsample)
+      maxDepth, learningRate, subsamplingRate)
     new GradientBoosting(boostingStrategy).train(input)
   }
 
