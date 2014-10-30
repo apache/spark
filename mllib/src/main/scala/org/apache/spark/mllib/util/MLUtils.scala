@@ -76,7 +76,7 @@ object MLUtils {
       .map { line =>
         val items = line.split(' ')
         val label = items.head.toDouble
-        val (indices, values) = items.tail.map { item =>
+        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
           val value = indexAndValue(1).toDouble
