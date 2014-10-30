@@ -15,26 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.worker
+package org.apache.spark.deploy
 
-import java.io.File
+import org.apache.spark.deploy.worker.CommandUtils
+import org.apache.spark.util.Utils
 
-import scala.collection.JavaConversions._
+import org.scalatest.{FunSuite, Matchers}
 
-import org.scalatest.FunSuite
+class CommandUtilsSuite extends FunSuite with Matchers {
 
-import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
-import org.apache.spark.SparkConf
-
-class ExecutorRunnerTest extends FunSuite {
-  test("command includes appId") {
+  test("set libraryPath correctly") {
     val appId = "12345-worker321-9876"
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val appDesc = new ApplicationDescription("app name", Some(8), 500,
-      Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl")
-    val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321",
-      new File(sparkHome), new File("ooga"), "blah", new SparkConf, ExecutorState.RUNNING)
-    val builder = CommandUtils.buildProcessBuilder(appDesc.command, 512, sparkHome, er.substituteVariables)
-    assert(builder.command().last === appId)
+    val cmd = new Command("mainClass", Seq(), Map(), Seq(), Seq("libraryPathToB"), Seq())
+    val builder = CommandUtils.buildProcessBuilder(cmd, 512, sparkHome, t => t)
+    val libraryPath = Utils.libraryPathEnvName
+    val env = builder.environment
+    env.keySet should contain(libraryPath)
+    assert(env.get(libraryPath).startsWith("libraryPathToB"))
   }
 }

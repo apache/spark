@@ -82,17 +82,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
       .orElse(confDriverMemory)
       .getOrElse(defaultDriverMemory)
 
-    val newLibraryPath =
-      if (submitLibraryPath.isDefined) {
-        // SPARK_SUBMIT_LIBRARY_PATH is already captured in JAVA_OPTS
-        ""
-      } else {
-        confLibraryPath.map("-Djava.library.path=" + _).getOrElse("")
-      }
-
     val newClasspath =
       if (submitClasspath.isDefined) {
-        // SPARK_SUBMIT_CLASSPATH is already captured in CLASSPATH
         classpath
       } else {
         classpath + confClasspath.map(sys.props("path.separator") + _).getOrElse("")
@@ -114,7 +105,6 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val command: Seq[String] =
       Seq(runner) ++
       Seq("-cp", newClasspath) ++
-      Seq(newLibraryPath) ++
       filteredJavaOpts ++
       Seq(s"-Xms$newDriverMemory", s"-Xmx$newDriverMemory") ++
       Seq("org.apache.spark.deploy.SparkSubmit") ++
@@ -130,6 +120,13 @@ private[spark] object SparkSubmitDriverBootstrapper {
     // Start the driver JVM
     val filteredCommand = command.filter(_.nonEmpty)
     val builder = new ProcessBuilder(filteredCommand)
+    val env = builder.environment()
+
+    if (submitLibraryPath.isEmpty && confLibraryPath.nonEmpty) {
+      val libraryPaths = confLibraryPath ++ sys.env.get(Utils.libraryPathEnvName)
+      env.put(Utils.libraryPathEnvName, libraryPaths.mkString(sys.props("path.separator")))
+    }
+
     val process = builder.start()
 
     // Redirect stdout and stderr from the child JVM
