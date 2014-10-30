@@ -86,10 +86,9 @@ object PythonRunner {
 
     // Strip the URI scheme from the path
     formattedPath =
-      new URI(formattedPath).getScheme match {
+      Option(new URI(formattedPath).getScheme).getOrElse(formattedPath) match {
         case Utils.windowsDrive(d) if windows => formattedPath
-        case null => formattedPath
-        case _ => new URI(formattedPath).getPath
+        case x if x != null => new URI(formattedPath).getPath
       }
 
     // Guard against malformed paths potentially throwing NPE

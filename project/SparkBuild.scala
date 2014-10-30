@@ -37,9 +37,9 @@ object BuildCommons {
       "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
       "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl, sparkKinesisAsl) =
-    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl", "kinesis-asl")
-      .map(ProjectRef(buildLocation, _))
+  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, 
+    sparkGangliaLgpl, sparkKinesisAsl) = Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", 
+      "ganglia-lgpl", "kinesis-asl").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples) = Seq("assembly", "examples")
     .map(ProjectRef(buildLocation, _))
@@ -90,13 +90,21 @@ object SparkBuild extends PomBuild {
     profiles
   }
 
-  override val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+  override val profiles = {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
     case None => backwardCompatibility
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
         println("Note: We ignore environment variables, when use of profile is detected in " +
           "conjunction with environment variable.")
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
+    }
+    if(profiles.exists(_.contains("scala-"))) {
+      profiles
+    } else {
+      println("Enabled default scala profile")
+      profiles ++ Seq("scala-2.10")
+    }
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -297,9 +305,11 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst,
+        streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, 
+        streamingFlumeSink, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -340,6 +350,7 @@ object TestSettings {
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
+    fork in Test := true,
     fork := true,
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
@@ -348,10 +359,10 @@ object TestSettings {
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
-    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
+    javaOptions in Test ++= "-Xmx4g -XX:PermSize=512M -XX:MaxNewSize=512m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
-    javaOptions += "-Xmx3g",
-
+    javaOptions += "-Xmx4g",
+    retrievePattern := "[conf]/[artifact](-[revision]).[ext]",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
