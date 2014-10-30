@@ -53,8 +53,8 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
           subsample = subsamplingRate, learningRate = learningRate)
 
         val gbt = GradientBoosting.trainRegressor(rdd, boostingStrategy)
-        assert(gbt.baseLearners.size === numEstimators)
-        val gbtTree = gbt.baseLearners(0)
+        assert(gbt.weakHypotheses.size === numEstimators)
+        val gbtTree = gbt.weakHypotheses(0)
 
         EnsembleTestHelper.validateRegressor(gbt, arr, 0.02)
 
@@ -83,8 +83,8 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
           subsample = sumSamplingRate, learningRate = learningRate)
 
         val gbt = GradientBoosting.trainClassifier(rdd, boostingStrategy)
-        assert(gbt.baseLearners.size === numEstimators)
-        val gbtTree = gbt.baseLearners(0)
+        assert(gbt.weakHypotheses.size === numEstimators)
+        val gbtTree = gbt.weakHypotheses(0)
 
         EnsembleTestHelper.validateClassifier(gbt, arr, 0.9)
 

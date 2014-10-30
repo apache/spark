@@ -119,7 +119,7 @@ private class RandomForest (
       if (isRandomForest) {
         (1.0, true)
       } else {
-        (strategy.subsample, false)
+        (strategy.subsamplingRate, false)
       }
     }
 

@@ -97,5 +97,4 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
         expectedStddev, epsilon = 0.01)
     }
   }
-
 }

@@ -48,8 +48,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val rf = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
-    assert(rf.baseLearners.size === 1)
-    val rfTree = rf.baseLearners(0)
+    assert(rf.weakHypotheses.size === 1)
+    val rfTree = rf.weakHypotheses(0)
 
     val dt = DecisionTree.train(rdd, strategy)
 
@@ -74,8 +74,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
-    assert(rf.baseLearners.size === 1)
-    val rfTree = rf.baseLearners(0)
+    assert(rf.weakHypotheses.size === 1)
+    val rfTree = rf.weakHypotheses(0)
 
     val dt = DecisionTree.train(rdd, strategy)
 
