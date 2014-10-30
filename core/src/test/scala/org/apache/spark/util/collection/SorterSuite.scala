@@ -157,7 +157,7 @@ class SorterSuite extends FunSuite {
    * here is mainly to have the code. Running multiple tests within the same JVM session would
    * prevent JIT inlining overridden methods and hence hurt the performance.
    */
-  test("Sorter benchmark for primitive int array") {
+  ignore("Sorter benchmark for primitive int array") {
     val numElements = 25000000 // 25 mil
     val rand = new XORShiftRandom(123)
 
