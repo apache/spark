@@ -66,7 +66,4 @@ private[spark] class HashShuffleReader[K, C](
         aggregatedIter
     }
   }
-
-  /** Close this reader */
-  override def stop(): Unit = ???
 }

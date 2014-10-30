@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN.
@@ -55,6 +56,7 @@ private[spark] trait ClientBase extends Logging {
   protected val amMemoryOverhead = args.amMemoryOverhead // MB
   protected val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
+  private val isLaunchingDriver = args.userClass != null
 
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
@@ -267,7 +269,6 @@ private[spark] trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
@@ -312,6 +313,10 @@ private[spark] trait ClientBase extends Logging {
 
     val javaOpts = ListBuffer[String]()
 
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    var prefixEnv: Option[String] = None
+
     // Add Xmx for AM memory
     javaOpts += "-Xmx" + args.amMemory + "m"
 
@@ -344,20 +349,22 @@ private[spark] trait ClientBase extends Logging {
     }
 
     // Include driver-specific java options if we are launching a driver
-    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
-      sparkConf.getOption("spark.driver.libraryPath")
-        .foreach(p => javaOpts += s"-Djava.library.path=$p")
+      val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
+        sys.props.get("spark.driver.libraryPath")).flatten
+      if (libraryPaths.nonEmpty) {
+        prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
+      }
     }
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val userClass =
-      if (args.userClass != null) {
+      if (isLaunchingDriver) {
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
       } else {
         Nil
@@ -380,12 +387,12 @@ private[spark] trait ClientBase extends Logging {
     val amArgs =
       Seq(amClass) ++ userClass ++ userJar ++ userArgs ++
       Seq(
-        "--executor-memory", args.executorMemory.toString,
+        "--executor-memory", args.executorMemory.toString + "m",
         "--executor-cores", args.executorCores.toString,
         "--num-executors ", args.numExecutors.toString)
 
     // Command for the ApplicationMaster
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+    val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
       javaOpts ++ amArgs ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
