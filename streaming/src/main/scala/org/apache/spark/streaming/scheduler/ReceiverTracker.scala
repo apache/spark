@@ -179,6 +179,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
         sender ! true
       case AddBlock(receivedBlockInfo) =>
         addBlocks(receivedBlockInfo)
+        sender ! true
       case ReportError(streamId, message, error) =>
         reportError(streamId, message, error)
       case DeregisterReceiver(streamId, message, error) =>
