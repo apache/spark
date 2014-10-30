@@ -46,6 +46,7 @@ $(function() {
         stripeTables();
     });
 
+    // Trigger a click on the checkbox if a user clicks the label next to it.
     $("span.additional-metric-title").click(function() {
         $(this).parent().find('input:checkbox').trigger('click');
     });
