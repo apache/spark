@@ -119,6 +119,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
             logError(s"Failed to start Hive Thrift server within $timeout", cause)
           case _ =>
         }
+
         logError(
           s"""
              |=====================================
