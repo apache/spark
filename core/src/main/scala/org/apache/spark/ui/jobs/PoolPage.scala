@@ -26,7 +26,6 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: JobProgressTab) extends WebUIPage("pool") {
-  private val live = parent.live
   private val sc = parent.sc
   private val listener = parent.listener
 
@@ -42,7 +41,7 @@ private[ui] class PoolPage(parent: JobProgressTab) extends WebUIPage("pool") {
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse, parent)
 
       // For now, pool information is only accessible in live UIs
-      val pools = if (live) Seq(sc.getPoolForName(poolName).get) else Seq[Schedulable]()
+      val pools = sc.map(_.getPoolForName(poolName).get).toSeq
       val poolTable = new PoolTable(pools, parent)
 
       val content =

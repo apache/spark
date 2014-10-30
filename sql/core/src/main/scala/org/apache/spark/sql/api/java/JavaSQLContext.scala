@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.parquet.ParquetRelation
@@ -97,7 +98,9 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
 
       iter.map { row =>
-        new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
+        new GenericRow(
+          extractors.map(e => DataTypeConversions.convertJavaToCatalyst(e.invoke(row))).toArray[Any]
+        ): ScalaRow
       }
     }
     new JavaSchemaRDD(sqlContext, LogicalRDD(schema, rowRdd)(sqlContext))
@@ -148,8 +151,12 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    * It goes through the entire dataset once to determine the schema.
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
-    val appliedScalaSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))
-    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+    val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
+    val appliedScalaSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json.rdd, 1.0, columnNameOfCorruptJsonRecord))
+    val scalaRowRDD =
+      JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
       LogicalRDD(appliedScalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
@@ -162,10 +169,14 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    */
   @Experimental
   def jsonRDD(json: JavaRDD[String], schema: StructType): JavaSchemaRDD = {
+    val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
     val appliedScalaSchema =
       Option(asScalaDataType(schema)).getOrElse(
-        JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))).asInstanceOf[SStructType]
-    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(
+            json.rdd, 1.0, columnNameOfCorruptJsonRecord))).asInstanceOf[SStructType]
+    val scalaRowRDD = JsonRDD.jsonStringToRow(
+      json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
       LogicalRDD(appliedScalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
@@ -218,6 +229,12 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
           (org.apache.spark.sql.FloatType, true)
         case c: Class[_] if c == classOf[java.lang.Boolean] =>
           (org.apache.spark.sql.BooleanType, true)
+        case c: Class[_] if c == classOf[java.math.BigDecimal] =>
+          (org.apache.spark.sql.DecimalType, true)
+        case c: Class[_] if c == classOf[java.sql.Date] =>
+          (org.apache.spark.sql.DateType, true)
+        case c: Class[_] if c == classOf[java.sql.Timestamp] =>
+          (org.apache.spark.sql.TimestampType, true)
       }
       AttributeReference(property.getName, dataType, nullable)()
     }

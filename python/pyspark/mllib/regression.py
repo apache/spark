@@ -19,10 +19,10 @@ import numpy as np
 from numpy import array
 
 from pyspark import SparkContext
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
+__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
 
 
@@ -31,8 +31,8 @@ class LabeledPoint(object):
     """
     The features and labels of a data point.
 
-    @param label: Label for this data point.
-    @param features: Vector of features for this point (NumPy array, list,
+    :param label: Label for this data point.
+    :param features: Vector of features for this point (NumPy array, list,
         pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
     """
 
@@ -65,6 +65,9 @@ class LinearModel(object):
     @property
     def intercept(self):
         return self._intercept
+
+    def __repr__(self):
+        return "(weights=%s, intercept=%s)" % (self._coeff, self._intercept)
 
 
 class LinearRegressionModelBase(LinearModel):
@@ -128,7 +131,7 @@ def _regression_train_wrapper(sc, train_func, modelClass, data, initial_weights)
     # use AutoBatchedSerializer before cache to reduce the memory
     # overhead in JVM
     cached = data._reserialize(AutoBatchedSerializer(ser)).cache()
-    ans = train_func(cached._to_java_object_rdd(), initial_bytes)
+    ans = train_func(_to_java_object_rdd(cached), initial_bytes)
     assert len(ans) == 2, "JVM call result had unexpected length"
     weights = ser.loads(str(ans[0]))
     return modelClass(weights, ans[1])
@@ -142,21 +145,24 @@ class LinearRegressionWithSGD(object):
         """
         Train a linear regression model on the given data.
 
-        @param data:              The training data.
-        @param iterations:        The number of iterations (default: 100).
-        @param step:              The step parameter used in SGD
+        :param data:              The training data.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        @param miniBatchFraction: Fraction of data to be used for each SGD
+        :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
-        @param initialWeights:    The initial weights (default: None).
-        @param regParam:          The regularizer parameter (default: 1.0).
-        @param regType:           The type of regularizer used for training
+        :param initialWeights:    The initial weights (default: None).
+        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater,
+                                     - "l2" for using SquaredL2Updater,
+                                     - "none" for no regularizer.
+
+                                     (default: "none")
+
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features

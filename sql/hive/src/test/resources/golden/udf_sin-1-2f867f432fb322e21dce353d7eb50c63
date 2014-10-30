@@ -1,4 +1,0 @@
-sin(x) - returns the sine of x (x is in radians)
-Example:
-   > SELECT sin(0) FROM src LIMIT 1;
-  0

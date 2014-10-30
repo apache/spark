@@ -39,7 +39,11 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext.addSparkListener(new StatsReportListener())
 
       hiveContext = new HiveContext(sparkContext) {
-        @transient override lazy val sessionState = SessionState.get()
+        @transient override lazy val sessionState = {
+          val state = SessionState.get()
+          setConf(state.getConf.getAllProperties)
+          state
+        }
         @transient override lazy val hiveconf = sessionState.getConf
       }
     }

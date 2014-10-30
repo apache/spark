@@ -23,6 +23,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
+import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -38,6 +39,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN.
@@ -54,6 +56,7 @@ private[spark] trait ClientBase extends Logging {
   protected val amMemoryOverhead = args.amMemoryOverhead // MB
   protected val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
+  private val isLaunchingDriver = args.userClass != null
 
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
@@ -64,12 +67,12 @@ private[spark] trait ClientBase extends Logging {
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem = args.executorMemory + executorMemoryOverhead
     if (executorMem > maxMem) {
-      throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" + 
+      throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
-      throw new IllegalArgumentException(s"Required AM memory (${args.amMemory}" + 
+      throw new IllegalArgumentException(s"Required AM memory (${args.amMemory}" +
         s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
     }
     logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
@@ -142,7 +145,8 @@ private[spark] trait ClientBase extends Logging {
     val nns = getNameNodesToAccess(sparkConf) + dst
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
 
-    val replication = sparkConf.getInt("spark.yarn.submit.file.replication", 3).toShort
+    val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
+      fs.getDefaultReplication(dst)).toShort
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
@@ -265,7 +269,6 @@ private[spark] trait ClientBase extends Logging {
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
@@ -310,6 +313,10 @@ private[spark] trait ClientBase extends Logging {
 
     val javaOpts = ListBuffer[String]()
 
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    var prefixEnv: Option[String] = None
+
     // Add Xmx for AM memory
     javaOpts += "-Xmx" + args.amMemory + "m"
 
@@ -342,20 +349,22 @@ private[spark] trait ClientBase extends Logging {
     }
 
     // Include driver-specific java options if we are launching a driver
-    val isLaunchingDriver = args.userClass != null
     if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .foreach(opts => javaOpts += opts)
-      sparkConf.getOption("spark.driver.libraryPath")
-        .foreach(p => javaOpts += s"-Djava.library.path=$p")
+      val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
+        sys.props.get("spark.driver.libraryPath")).flatten
+      if (libraryPaths.nonEmpty) {
+        prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
+      }
     }
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val userClass =
-      if (args.userClass != null) {
+      if (isLaunchingDriver) {
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
       } else {
         Nil
@@ -378,12 +387,12 @@ private[spark] trait ClientBase extends Logging {
     val amArgs =
       Seq(amClass) ++ userClass ++ userJar ++ userArgs ++
       Seq(
-        "--executor-memory", args.executorMemory.toString,
+        "--executor-memory", args.executorMemory.toString + "m",
         "--executor-cores", args.executorCores.toString,
         "--num-executors ", args.numExecutors.toString)
 
     // Command for the ApplicationMaster
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+    val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
       javaOpts ++ amArgs ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
@@ -415,17 +424,19 @@ private[spark] trait ClientBase extends Logging {
 
   /**
    * Report the state of an application until it has exited, either successfully or
-   * due to some failure, then return the application state.
+   * due to some failure, then return a pair of the yarn application state (FINISHED, FAILED,
+   * KILLED, or RUNNING) and the final application state (UNDEFINED, SUCCEEDED, FAILED,
+   * or KILLED).
    *
    * @param appId ID of the application to monitor.
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
-   * @return state of the application, one of FINISHED, FAILED, KILLED, and RUNNING.
+   * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
-      logApplicationReport: Boolean = true): YarnApplicationState = {
+      logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     var lastState: YarnApplicationState = null
     while (true) {
@@ -466,11 +477,11 @@ private[spark] trait ClientBase extends Logging {
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
-        return state
+        return (state, report.getFinalApplicationStatus)
       }
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
-        return state
+        return (state, report.getFinalApplicationStatus)
       }
 
       lastState = state
@@ -483,8 +494,23 @@ private[spark] trait ClientBase extends Logging {
   /**
    * Submit an application to the ResourceManager and monitor its state.
    * This continues until the application has exited for any reason.
+   * If the application finishes with a failed, killed, or undefined status,
+   * throw an appropriate SparkException.
    */
-  def run(): Unit = monitorApplication(submitApplication())
+  def run(): Unit = {
+    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
+    if (yarnApplicationState == YarnApplicationState.FAILED ||
+      finalApplicationStatus == FinalApplicationStatus.FAILED) {
+      throw new SparkException("Application finished with failed status")
+    }
+    if (yarnApplicationState == YarnApplicationState.KILLED ||
+      finalApplicationStatus == FinalApplicationStatus.KILLED) {
+      throw new SparkException("Application is killed")
+    }
+    if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
+      throw new SparkException("The final status of application is undefined")
+    }
+  }
 
   /* --------------------------------------------------------------------------------------- *
    |  Methods that cannot be implemented here due to API differences across hadoop versions  |
@@ -771,15 +797,17 @@ private[spark] object ClientBase extends Logging {
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
     val srcUri = srcFs.getUri()
     val dstUri = destFs.getUri()
-    if (srcUri.getScheme() == null) {
+    if (srcUri.getScheme() == null || srcUri.getScheme() != dstUri.getScheme()) {
       return false
     }
-    if (!srcUri.getScheme().equals(dstUri.getScheme())) {
-      return false
-    }
+
     var srcHost = srcUri.getHost()
     var dstHost = dstUri.getHost()
-    if ((srcHost != null) && (dstHost != null)) {
+
+    // In HA or when using viewfs, the host part of the URI may not actually be a host, but the
+    // name of the HDFS namespace. Those names won't resolve, so avoid even trying if they
+    // match.
+    if (srcHost != null && dstHost != null && srcHost != dstHost) {
       try {
         srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
         dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
@@ -787,19 +815,9 @@ private[spark] object ClientBase extends Logging {
         case e: UnknownHostException =>
           return false
       }
-      if (!srcHost.equals(dstHost)) {
-        return false
-      }
-    } else if (srcHost == null && dstHost != null) {
-      return false
-    } else if (srcHost != null && dstHost == null) {
-      return false
     }
-    if (srcUri.getPort() != dstUri.getPort()) {
-      false
-    } else {
-      true
-    }
+
+    Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
   }
 
 }

@@ -61,7 +61,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
 
           // If the task is running locally, do not persist the result
-          if (context.runningLocally) {
+          if (context.isRunningLocally) {
             return computedValues
           }
 
@@ -168,8 +168,6 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           arr.iterator.asInstanceOf[Iterator[T]]
         case Right(it) =>
           // There is not enough space to cache this partition in memory
-          logWarning(s"Not enough space to cache partition $key in memory! " +
-            s"Free memory is ${blockManager.memoryStore.freeMemory} bytes.")
           val returnValues = it.asInstanceOf[Iterator[T]]
           if (putLevel.useDisk) {
             logWarning(s"Persisting partition $key to disk instead.")

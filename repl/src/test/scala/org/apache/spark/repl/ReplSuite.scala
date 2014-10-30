@@ -22,7 +22,6 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
 import org.apache.commons.lang3.StringEscapeUtils
@@ -190,8 +189,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("interacting with files") {
-    val tempDir = Files.createTempDir()
-    tempDir.deleteOnExit()
+    val tempDir = Utils.createTempDir()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")

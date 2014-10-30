@@ -754,7 +754,7 @@ class RDD(object):
         """
         Find the maximum item in this RDD.
 
-        @param key: A function used to generate key for comparing
+        :param key: A function used to generate key for comparing
 
         >>> rdd = sc.parallelize([1.0, 5.0, 43.0, 10.0])
         >>> rdd.max()
@@ -770,7 +770,7 @@ class RDD(object):
         """
         Find the minimum item in this RDD.
 
-        @param key: A function used to generate key for comparing
+        :param key: A function used to generate key for comparing
 
         >>> rdd = sc.parallelize([2.0, 5.0, 43.0, 10.0])
         >>> rdd.min()
@@ -1072,10 +1072,13 @@ class RDD(object):
                 # If we didn't find any rows after the previous iteration,
                 # quadruple and retry.  Otherwise, interpolate the number of
                 # partitions we need to try, but overestimate it by 50%.
+                # We also cap the estimation in the end.
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    numPartsToTry = int(1.5 * num * partsScanned / len(items))
+                    # the first paramter of max is >=1 whenever partsScanned >= 2
+                    numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
+                    numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
 
             left = num - len(items)
 
@@ -1117,9 +1120,9 @@ class RDD(object):
         converted for output using either user specified converters or, by default,
         L{org.apache.spark.api.python.JavaToWritableConverter}.
 
-        @param conf: Hadoop job configuration, passed in as a dict
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1137,16 +1140,16 @@ class RDD(object):
         C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
-        @param path: path to Hadoop file
-        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+        :param path: path to Hadoop file
+        :param outputFormatClass: fully qualified classname of Hadoop OutputFormat
                (e.g. "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.IntWritable", None by default)
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.Text", None by default)
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop job configuration, passed in as a dict (None by default)
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1163,9 +1166,9 @@ class RDD(object):
         converted for output using either user specified converters or, by default,
         L{org.apache.spark.api.python.JavaToWritableConverter}.
 
-        @param conf: Hadoop job configuration, passed in as a dict
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1184,17 +1187,17 @@ class RDD(object):
         C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
-        @param path: path to Hadoop file
-        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+        :param path: path to Hadoop file
+        :param outputFormatClass: fully qualified classname of Hadoop OutputFormat
                (e.g. "org.apache.hadoop.mapred.SequenceFileOutputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.IntWritable", None by default)
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.Text", None by default)
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: (None by default)
-        @param compressionCodecClass: (None by default)
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: (None by default)
+        :param compressionCodecClass: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._toPickleSerialization()
@@ -1210,11 +1213,12 @@ class RDD(object):
         Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
         system, using the L{org.apache.hadoop.io.Writable} types that we convert from the
         RDD's key and value types. The mechanism is as follows:
+
             1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
-        @param path: path to sequence file
-        @param compressionCodecClass: (None by default)
+        :param path: path to sequence file
+        :param compressionCodecClass: (None by default)
         """
         pickledRDD = self._toPickleSerialization()
         batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
@@ -2010,7 +2014,7 @@ class RDD(object):
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
 
-        @param relativeSD Relative accuracy. Smaller values create
+        :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
                            It must be greater than 0.000017.
 
