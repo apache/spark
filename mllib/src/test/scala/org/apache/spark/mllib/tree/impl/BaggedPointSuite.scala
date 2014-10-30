@@ -98,6 +98,4 @@ class BaggedPointSuite extends FunSuite with LocalSparkContext  {
     }
   }
 
-
-
 }
