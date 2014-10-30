@@ -264,39 +264,6 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.binaryFiles(path,defaultMinPartitions))
 
   /**
-   * Read a directory of files as DataInputStream from HDFS,
-   * a local file system (available on all nodes), or any Hadoop-supported file system URI
-   * as a byte array. Each file is read as a single record and returned in a
-   * key-value pair, where the key is the path of each file, the value is the content of each.
-   *
-   * <p> For example, if you have the following files:
-   * {{{
-   *   hdfs://a-hdfs-path/part-00000
-   *   hdfs://a-hdfs-path/part-00001
-   *   ...
-   *   hdfs://a-hdfs-path/part-nnnnn
-   * }}}
-   *
-   * Do
-   * `JavaPairRDD<String,DataInputStream> rdd = sparkContext.binaryFiles("hdfs://a-hdfs-path")`,
-   *
-   * <p> then `rdd` contains
-   * {{{
-   *   (a-hdfs-path/part-00000, its content)
-   *   (a-hdfs-path/part-00001, its content)
-   *   ...
-   *   (a-hdfs-path/part-nnnnn, its content)
-   * }}}
-   *
-   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
-   *
-   * @param minPartitions A suggestion value of the minimal splitting number for input data.
-   */
-  def binaryArrays(path: String, minPartitions: Int = defaultMinPartitions):
-    JavaPairRDD[String, Array[Byte]] =
-    new JavaPairRDD(sc.binaryFiles(path,minPartitions).mapValues(_.toArray()))
-
-  /**
    * Load data from a flat binary file, assuming each record is a set of numbers
    * with the specified numerical format (see ByteBuffer), and the number of
    * bytes per record is constant (see FixedLengthBinaryInputFormat)

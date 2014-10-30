@@ -243,7 +243,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     file.close()
 
     val inRdd = sc.binaryFiles(outFileName)
-    val (infile: String, indata: PortableDataStream) = inRdd.first
+    val (infile: String, indata: PortableDataStream) = inRdd.collect.head
 
     // Make sure the name and array match
     assert(infile.contains(outFileName)) // a prefix may get added
@@ -274,7 +274,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
       curData: (String, PortableDataStream) =>
         (curData._2.getPath(),curData._2)
     }
-    val (infile: String, indata: PortableDataStream) = mappedRdd.first
+    val (infile: String, indata: PortableDataStream) = mappedRdd.collect.head
 
     // Try reading the output back as an object file
 
@@ -305,7 +305,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
       curData: (String, PortableDataStream) =>
         (curData._2.getPath(),curData._2)
     }
-    val (infile: String, indata: PortableDataStream) = mappedRdd.first
+    val (infile: String, indata: PortableDataStream) = mappedRdd.collect.head
 
     // Try reading the output back as an object file
 
@@ -376,7 +376,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(inRdd.count == testOutputCopies)
 
     // now just compare the first one
-    val indata: Array[Byte] = inRdd.first
+    val indata: Array[Byte] = inRdd.collect.head
     assert(indata === testOutput)
   }
 

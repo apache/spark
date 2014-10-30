@@ -35,9 +35,10 @@ private[spark] abstract class StreamFileInputFormat[T]
   extends CombineFileInputFormat[String, T] {
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
   /**
-   * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API.
+   * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API
+   * which is set through setMaxSplitSize
    */
-  def setMaxSplitSize(context: JobContext, minPartitions: Int) {
+  def setMinPartitions(context: JobContext, minPartitions: Int) {
     val files = listStatus(context)
     val totalLen = files.map { file =>
       if (file.isDir) 0L else file.getLen

@@ -518,7 +518,6 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    *
-   * @note Care must be taken to close the files afterwards
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    */
   @DeveloperApi
