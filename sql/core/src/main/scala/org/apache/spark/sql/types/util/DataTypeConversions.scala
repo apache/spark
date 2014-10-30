@@ -18,7 +18,8 @@
 package org.apache.spark.sql.types.util
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField, MetadataBuilder => JMetaDataBuilder}
+import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField,
+  MetadataBuilder => JMetaDataBuilder, UDTWrappers, JavaToScalaUDTWrapper}
 import org.apache.spark.sql.api.java.{DecimalType => JDecimalType}
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
@@ -63,6 +64,8 @@ protected[sql] object DataTypeConversions {
         mapType.valueContainsNull)
     case structType: StructType => JDataType.createStructType(
         structType.fields.map(asJavaStructField).asJava)
+    case udtType: UserDefinedType[_] =>
+      UDTWrappers.wrapAsJava(udtType)
   }
 
   /**
@@ -118,6 +121,8 @@ protected[sql] object DataTypeConversions {
         mapType.isValueContainsNull)
     case structType: org.apache.spark.sql.api.java.StructType =>
       StructType(structType.getFields.map(asScalaStructField))
+    case udtType: org.apache.spark.sql.api.java.UserDefinedType[_] =>
+      UDTWrappers.wrapAsScala(udtType)
   }
 
   /** Converts Java objects to catalyst rows / types */

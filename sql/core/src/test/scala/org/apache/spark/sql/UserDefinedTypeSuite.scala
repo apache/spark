@@ -18,8 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
@@ -31,7 +29,13 @@ class MyDenseVector(val data: Array[Double]) extends Serializable {
   }
 }
 
-case class MyLabeledPoint(label: Double, features: MyDenseVector)
+case class MyLabeledPoint(label: Double, features: MyDenseVector) {
+  override def equals(other: Any): Boolean = other match {
+    case lp: MyLabeledPoint =>
+      label == lp.label && features.equals(lp.features)
+    case _ => false
+  }
+}
 
 class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
@@ -50,6 +54,8 @@ class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
         new MyDenseVector(data.asInstanceOf[Seq[Double]].toArray)
     }
   }
+
+  override def userClass = classOf[MyDenseVector]
 }
 
 /*

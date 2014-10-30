@@ -200,4 +200,19 @@ public abstract class DataType {
 
     return new StructType(fields);
   }
+/*
+  public static <UserType> org.apache.spark.sql.UserDefinedType<UserType>
+  wrapAsScala(UserDefinedType<UserType> udtType) {
+    // TODO: Check if we can unwrap instead of wrapping.
+    return new JavaToScalaUDTWrapper<UserType>(udtType);
+  }
+
+// EDITING HERE: Does this method need to be implemented in Scala in order to avoid exposing Catalyst?
+  public static <UserType> UserDefinedType<UserType>
+  wrapAsJava(org.apache.spark.sql.UserDefinedType<UserType> udtType) {
+    // TODO: Check if we can unwrap instead of wrapping.
+    return new ScalaToJavaUDTWrapper(udtType);
+  }
+*/
+
 }
