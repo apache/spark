@@ -49,7 +49,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 
 
 __all__ = [
-    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
+    "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
     "SQLContext", "HiveContext", "SchemaRDD", "Row"]
@@ -138,6 +138,14 @@ class BooleanType(PrimitiveType):
     """Spark SQL BooleanType
 
     The data type representing bool values.
+    """
+
+
+class DateType(PrimitiveType):
+
+    """Spark SQL DateType
+
+    The data type representing datetime.date values.
     """
 
 
@@ -447,7 +455,7 @@ def _parse_datatype_json_value(json_value):
         return _all_complex_types[json_value["type"]].fromJson(json_value)
 
 
-# Mapping Python types to Spark SQL DateType
+# Mapping Python types to Spark SQL DataType
 _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
@@ -458,8 +466,8 @@ _type_mappings = {
     unicode: StringType,
     bytearray: BinaryType,
     decimal.Decimal: DecimalType,
+    datetime.date: DateType,
     datetime.datetime: TimestampType,
-    datetime.date: TimestampType,
     datetime.time: TimestampType,
 }
 
@@ -699,10 +707,10 @@ def _infer_schema_type(obj, dataType):
     """
     Fill the dataType with types infered from obj
 
-    >>> schema = _parse_schema_abstract("a b c")
-    >>> row = (1, 1.0, "str")
+    >>> schema = _parse_schema_abstract("a b c d")
+    >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
     >>> _infer_schema_type(row, schema)
-    StructType...IntegerType...DoubleType...StringType...
+    StructType...IntegerType...DoubleType...StringType...DateType...
     >>> row = [[1], {"key": (1, 2.0)}]
     >>> schema = _parse_schema_abstract("a[] b{c d}")
     >>> _infer_schema_type(row, schema)
@@ -746,6 +754,7 @@ _acceptable_types = {
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
     BinaryType: (bytearray,),
+    DateType: (datetime.date,),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
@@ -783,7 +792,7 @@ def _verify_type(obj, dataType):
 
     # subclass of them can not be deserialized in JVM
     if type(obj) not in _acceptable_types[_type]:
-        raise TypeError("%s can not accept abject in type %s"
+        raise TypeError("%s can not accept object in type %s"
                         % (dataType, type(obj)))
 
     if isinstance(dataType, ArrayType):
@@ -810,7 +819,7 @@ def _restore_object(dataType, obj):
     """ Restore object during unpickling. """
     # use id(dataType) as key to speed up lookup in dict
     # Because of batched pickling, dataType will be the
-    # same object in mose cases.
+    # same object in most cases.
     k = id(dataType)
     cls = _cached_cls.get(k)
     if cls is None:
@@ -825,6 +834,10 @@ def _restore_object(dataType, obj):
 
 def _create_object(cls, v):
     """ Create an customized object with class `cls`. """
+    # datetime.date would be deserialized as datetime.datetime
+    # from java type, so we need to set it back.
+    if cls is datetime.date and isinstance(v, datetime.datetime):
+        return v.date()
     return cls(v) if v is not None else v
 
 
@@ -838,14 +851,16 @@ def _create_getter(dt, i):
     return getter
 
 
-def _has_struct(dt):
-    """Return whether `dt` is or has StructType in it"""
+def _has_struct_or_date(dt):
+    """Return whether `dt` is or has StructType/DateType in it"""
     if isinstance(dt, StructType):
         return True
     elif isinstance(dt, ArrayType):
-        return _has_struct(dt.elementType)
+        return _has_struct_or_date(dt.elementType)
     elif isinstance(dt, MapType):
-        return _has_struct(dt.valueType)
+        return _has_struct_or_date(dt.valueType)
+    elif isinstance(dt, DateType):
+        return True
     return False
 
 
@@ -858,7 +873,7 @@ def _create_properties(fields):
                 or keyword.iskeyword(name)):
             warnings.warn("field name %s can not be accessed in Python,"
                           "use position to access it instead" % name)
-        if _has_struct(f.dataType):
+        if _has_struct_or_date(f.dataType):
             # delay creating object until accessing it
             getter = _create_getter(f.dataType, i)
         else:
@@ -912,6 +927,9 @@ def _create_cls(dataType):
             return dict((k, _create_object(cls, v)) for k, v in d.items())
 
         return Dict
+
+    elif isinstance(dataType, DateType):
+        return datetime.date
 
     elif not isinstance(dataType, StructType):
         raise Exception("unexpected data type: %s" % dataType)
@@ -1128,8 +1146,9 @@ class SQLContext(object):
         >>> srdd2.collect()
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
 
-        >>> from datetime import datetime
+        >>> from datetime import date, datetime
         >>> rdd = sc.parallelize([(127, -128L, -32768, 32767, 2147483647L, 1.0,
+        ...     date(2010, 1, 1),
         ...     datetime(2010, 1, 1, 1, 1, 1),
         ...     {"a": 1}, (2,), [1, 2, 3], None)])
         >>> schema = StructType([
@@ -1139,6 +1158,7 @@ class SQLContext(object):
         ...     StructField("short2", ShortType(), False),
         ...     StructField("int", IntegerType(), False),
         ...     StructField("float", FloatType(), False),
+        ...     StructField("date", DateType(), False),
         ...     StructField("time", TimestampType(), False),
         ...     StructField("map",
         ...         MapType(StringType(), IntegerType(), False), False),
@@ -1148,10 +1168,11 @@ class SQLContext(object):
         ...     StructField("null", DoubleType(), True)])
         >>> srdd = sqlCtx.applySchema(rdd, schema)
         >>> results = srdd.map(
-        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.time,
-        ...         x.map["a"], x.struct.b, x.list, x.null))
-        >>> results.collect()[0]
-        (127, -128, -32768, 32767, 2147483647, 1.0, ...(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
+        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.date,
+        ...         x.time, x.map["a"], x.struct.b, x.list, x.null))
+        >>> results.collect()[0] # doctest: +NORMALIZE_WHITESPACE
+        (127, -128, -32768, 32767, 2147483647, 1.0, datetime.date(2010, 1, 1),
+             datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
 
         >>> srdd.registerTempTable("table2")
         >>> sqlCtx.sql(

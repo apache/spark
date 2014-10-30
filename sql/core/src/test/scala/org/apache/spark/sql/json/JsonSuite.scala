@@ -25,7 +25,7 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 class JsonSuite extends QueryTest {
   import TestJsonData._
@@ -58,8 +58,11 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(new Timestamp(intNumber), enforceCorrectType(intNumber, TimestampType))
     checkTypePromotion(new Timestamp(intNumber.toLong), 
         enforceCorrectType(intNumber.toLong, TimestampType))
-    val strDate = "2014-09-30 12:34:56"
-    checkTypePromotion(Timestamp.valueOf(strDate), enforceCorrectType(strDate, TimestampType))
+    val strTime = "2014-09-30 12:34:56"
+    checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
+
+    val strDate = "2014-10-15"
+    checkTypePromotion(Date.valueOf(strDate), enforceCorrectType(strDate, DateType))
   }
 
   test("Get compatible type") {
@@ -208,7 +211,7 @@ class JsonSuite extends QueryTest {
   }
 
   test("Complex field and type inferring") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType)
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType1)
 
     val expectedSchema = StructType(
       StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
@@ -305,7 +308,7 @@ class JsonSuite extends QueryTest {
   }
 
   ignore("Complex field and type inferring (Ignored)") {
-    val jsonSchemaRDD = jsonRDD(complexFieldAndType)
+    val jsonSchemaRDD = jsonRDD(complexFieldAndType1)
     jsonSchemaRDD.registerTempTable("jsonTable")
 
     // Right now, "field1" and "field2" are treated as aliases. We should fix it.
@@ -380,6 +383,12 @@ class JsonSuite extends QueryTest {
       92233720368547758071.2
     )
 
+    // Number and String conflict: resolve the type as number in this query.
+    checkAnswer(
+      sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
+      BigDecimal("92233720368547758061.2").toDouble
+    )
+
     // String and Boolean conflict: resolve the type as string.
     checkAnswer(
       sql("select * from jsonTable where str_bool = 'str1'"),
@@ -413,13 +422,6 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select str_bool from jsonTable where str_bool"),
       false
-    )
-
-    // Right now, we have a parsing error.
-    // Number and String conflict: resolve the type as number in this query.
-    checkAnswer(
-      sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
-      BigDecimal("92233720368547758061.2")
     )
 
     // The plan of the following DSL is
@@ -706,5 +708,36 @@ class JsonSuite extends QueryTest {
     )
 
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
+  }
+
+  test("SPARK-4068: nulls in arrays") {
+    val jsonSchemaRDD = jsonRDD(nullsInArrays)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    val schema = StructType(
+      StructField("field1",
+        ArrayType(ArrayType(ArrayType(ArrayType(StringType, false), false), true), false), true) ::
+      StructField("field2",
+        ArrayType(ArrayType(
+          StructType(StructField("Test", IntegerType, true) :: Nil), false), true), true) ::
+      StructField("field3",
+        ArrayType(ArrayType(
+          StructType(StructField("Test", StringType, true) :: Nil), true), false), true) ::
+      StructField("field4",
+        ArrayType(ArrayType(ArrayType(IntegerType, false), true), false), true) :: Nil)
+
+    assert(schema === jsonSchemaRDD.schema)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT field1, field2, field3, field4
+          |FROM jsonTable
+        """.stripMargin),
+      Seq(Seq(Seq(null), Seq(Seq(Seq("Test")))), null, null, null) ::
+      Seq(null, Seq(null, Seq(Seq(1))), null, null) ::
+      Seq(null, null, Seq(Seq(null), Seq(Seq("2"))), null) ::
+      Seq(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil
+    )
   }
 }

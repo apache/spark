@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
-import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
@@ -51,6 +50,7 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
 /**
@@ -61,7 +61,7 @@ import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, Metadat
  *   this config overrides the default configs as well as system properties.
  */
 
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -224,10 +224,15 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
-  // Initialize the Spark UI, registering all associated listeners
+
+  private[spark] val jobProgressListener = new JobProgressListener(conf)
+  listenerBus.addListener(jobProgressListener)
+
+  // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
-      Some(new SparkUI(this))
+      Some(SparkUI.createLiveUI(this, conf, listenerBus, jobProgressListener,
+        env.securityManager,appName))
     } else {
       // For tests, do not enable the UI
       None
@@ -289,7 +294,8 @@ class SparkContext(config: SparkConf) extends Logging {
   executorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
+  private[spark] var (schedulerBackend, taskScheduler) =
+    SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
     Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
   @volatile private[spark] var dagScheduler: DAGScheduler = _
@@ -851,71 +857,42 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.addListener(listener)
   }
 
-  /** The version of Spark on which this application is running. */
-  def version = SPARK_VERSION
-
   /**
-   * Return a map from the slave to the max memory available for caching and the remaining
-   * memory available for caching.
+   * :: DeveloperApi ::
+   * Request an additional number of executors from the cluster manager.
+   * This is currently only supported in Yarn mode.
    */
-  def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
-    env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
-      (blockManagerId.host + ":" + blockManagerId.port, mem)
+  @DeveloperApi
+  def requestExecutors(numAdditionalExecutors: Int): Unit = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend => b.requestExecutors(numAdditionalExecutors)
+      case _ => logWarning("Requesting executors is only supported in coarse-grained mode")
     }
   }
 
   /**
    * :: DeveloperApi ::
-   * Return information about what RDDs are cached, if they are in mem or on disk, how much space
-   * they take, etc.
+   * Request that the cluster manager kill the specified executors.
+   * This is currently only supported in Yarn mode.
    */
   @DeveloperApi
-  def getRDDStorageInfo: Array[RDDInfo] = {
-    val rddInfos = persistentRdds.values.map(RDDInfo.fromRdd).toArray
-    StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
-    rddInfos.filter(_.isCached)
-  }
-
-  /**
-   * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
-   */
-  def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
-
-  /**
-   * :: DeveloperApi ::
-   * Return information about blocks stored in all of the slaves
-   */
-  @DeveloperApi
-  def getExecutorStorageStatus: Array[StorageStatus] = {
-    env.blockManager.master.getStorageStatus
+  def killExecutors(executorIds: Seq[String]): Unit = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend => b.killExecutors(executorIds)
+      case _ => logWarning("Killing executors is only supported in coarse-grained mode")
+    }
   }
 
   /**
    * :: DeveloperApi ::
-   * Return pools for fair scheduler
+   * Request that cluster manager the kill the specified executor.
+   * This is currently only supported in Yarn mode.
    */
   @DeveloperApi
-  def getAllPools: Seq[Schedulable] = {
-    // TODO(xiajunluan): We should take nested pools into account
-    taskScheduler.rootPool.schedulableQueue.toSeq
-  }
+  def killExecutor(executorId: String): Unit = killExecutors(Seq(executorId))
 
-  /**
-   * :: DeveloperApi ::
-   * Return the pool associated with the given name, if one exists
-   */
-  @DeveloperApi
-  def getPoolForName(pool: String): Option[Schedulable] = {
-    Option(taskScheduler.rootPool.schedulableNameToSchedulable.get(pool))
-  }
-
-  /**
-   * Return current scheduling mode
-   */
-  def getSchedulingMode: SchedulingMode.SchedulingMode = {
-    taskScheduler.schedulingMode
-  }
+  /** The version of Spark on which this application is running. */
+  def version = SPARK_VERSION
 
   /**
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
@@ -1496,8 +1473,13 @@ object SparkContext extends Logging {
     res
   }
 
-  /** Creates a task scheduler based on a given master URL. Extracted for testing. */
-  private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
+  /**
+   * Create a task scheduler based on a given master URL.
+   * Return a 2-tuple of the scheduler backend and the task scheduler.
+   */
+  private def createTaskScheduler(
+      sc: SparkContext,
+      master: String): (SchedulerBackend, TaskScheduler) = {
     // Regular expression used for local[N] and local[*] master formats
     val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -1519,7 +1501,7 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount = Runtime.getRuntime.availableProcessors()
@@ -1528,7 +1510,7 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         def localCpuCount = Runtime.getRuntime.availableProcessors()
@@ -1538,14 +1520,14 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
@@ -1565,7 +1547,7 @@ object SparkContext extends Logging {
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
-        scheduler
+        (backend, scheduler)
 
       case "yarn-standalone" | "yarn-cluster" =>
         if (master == "yarn-standalone") {
@@ -1594,7 +1576,7 @@ object SparkContext extends Logging {
           }
         }
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case "yarn-client" =>
         val scheduler = try {
@@ -1621,7 +1603,7 @@ object SparkContext extends Logging {
         }
 
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
@@ -1634,13 +1616,13 @@ object SparkContext extends Logging {
           new MesosSchedulerBackend(scheduler, sc, url)
         }
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case SIMR_REGEX(simrUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
-        scheduler
+        (backend, scheduler)
 
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")

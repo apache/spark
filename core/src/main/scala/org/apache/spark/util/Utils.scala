@@ -33,7 +33,7 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -43,7 +43,6 @@ import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
-import org.apache.spark.util.SparkUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -739,11 +738,15 @@ private[spark] object Utils extends Logging {
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
-    val files = file.listFiles()
-    if (files == null) {
-      throw new IOException("Failed to list files for dir: " + file)
+    if (file.exists()) {
+      val files = file.listFiles()
+      if (files == null) {
+        throw new IOException("Failed to list files for dir: " + file)
+      }
+      files
+    } else {
+      List()
     }
-    files
   }
 
   /**
@@ -984,11 +987,27 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
+   * exceptions as IOException. This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
+    }
+  }
+
   /** Default filtering function for finding call sites using `getCallSite`. */
   private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
     // finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SPARK_CORE_CLASS_REGEX =
+      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
     val SCALA_CLASS_REGEX = """^scala""".r
     val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
@@ -1057,8 +1076,8 @@ private[spark] object Utils extends Logging {
     val stream = new FileInputStream(file)
 
     try {
-      stream.skip(effectiveStart)
-      stream.read(buff)
+      ByteStreams.skipFully(stream, effectiveStart)
+      ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()
     }
@@ -1252,12 +1271,28 @@ private[spark] object Utils extends Logging {
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
    * @param numIters number of iterations
-   * @param f function to be executed
+   * @param f function to be executed. If prepare is not None, the running time of each call to f
+   *          must be an order of magnitude longer than one millisecond for accurate timing.
+   * @param prepare function to be executed before each call to f. Its running time doesn't count.
+   * @return the total time across all iterations (not couting preparation time)
    */
-  def timeIt(numIters: Int)(f: => Unit): Long = {
-    val start = System.currentTimeMillis
-    times(numIters)(f)
-    System.currentTimeMillis - start
+  def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
+    if (prepare.isEmpty) {
+      val start = System.currentTimeMillis
+      times(numIters)(f)
+      System.currentTimeMillis - start
+    } else {
+      var i = 0
+      var sum = 0L
+      while (i < numIters) {
+        prepare.get.apply()
+        val start = System.currentTimeMillis
+        f
+        sum += System.currentTimeMillis - start
+        i += 1
+      }
+      sum
+    }
   }
 
   /**
@@ -1666,6 +1701,17 @@ private[spark] object Utils extends Logging {
     pro.put("log4j.appender.console.layout.ConversionPattern",
       "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
     PropertyConfigurator.configure(pro)
+  }
+
+  def invoke(
+      clazz: Class[_],
+      obj: AnyRef,
+      methodName: String,
+      args: (Class[_], AnyRef)*): AnyRef = {
+    val (types, values) = args.unzip
+    val method = clazz.getDeclaredMethod(methodName, types: _*)
+    method.setAccessible(true)
+    method.invoke(obj, values.toSeq: _*)
   }
 
 }
