@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
@@ -1282,16 +1282,22 @@ abstract class RDD[T: ClassTag](
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
    * If the RDD is already checkPointed, just return.
-   * doCheckpoint() is called recursively on the parent RDDs.
+   * doCheckpoint() is called recursively on the parent RDDs. If the parent RDDs has already done
+   * checkpoint, just return. This is to avoid one RDD traversed for multiple times. Especially for
+   * lineage like A -- B -- C -- D, A and B might be visited for twice when doCheckpoint on D.
+   *                    \       /
+   *                     `- E -'
+   * O(n) for each call, n is RDD number in lineage.
    */
-  private[spark] def doCheckpoint() {
-    if (isCheckpointed) {
+  private[spark] def doCheckpoint(visited: HashSet[RDD[_]]) {
+    if (visited.contains(this) || isCheckpointed) {
       return
     }
+    visited.add(this)
     if (checkpointData.isDefined) {
       checkpointData.get.doCheckpoint()
     } else {
-      dependencies.foreach(_.rdd.doCheckpoint())
+      dependencies.foreach(_.rdd.doCheckpoint(visited))
     }
   }
 
