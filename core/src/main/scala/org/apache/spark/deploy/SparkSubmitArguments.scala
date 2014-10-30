@@ -19,7 +19,6 @@ package org.apache.spark.deploy
 
 import java.util.jar.JarFile
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.util.Utils
