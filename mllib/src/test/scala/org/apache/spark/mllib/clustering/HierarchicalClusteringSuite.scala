@@ -93,7 +93,7 @@ class HierarchicalClusteringSuite extends FunSuite with LocalSparkContext with B
     assert(model.getClass.getSimpleName.toString === "HierarchicalClusteringModel")
   }
 
-  test("traun") {
+  test("earned height should be nearly equal to 32.50567") {
     val app = new HierarchicalClustering().setNumClusters(7)
     val model = app.run(data)
     assert(model.clusterTree.toSeq().filter(_.isLeaf()).size === 7)

@@ -69,11 +69,16 @@ class HierarchicalClusteringModelSuite
     val predictedData = denseModel.predict(denseData)
     // the number of contained vectors in each cluster is 10
     predictedData.map { case (i, vector) => (i, 1)}.reduceByKey(_ + _)
-        .collect().foreach { case (idx, n) => assert(n === 10)}
+        .collect().foreach { case (idx, n) => assert(n === 33)}
 
     val predictedData2 = sparseModel.predict(sparseData)
     predictedData2.map { case (i, vector) => (i, 1)}.reduceByKey(_ + _)
         .collect().foreach { case (idx, n) => assert(n === 33)}
+  }
+
+  test("predicted result should be 1") {
+    assert(denseModel.predict(Vectors.dense(1.0, 1.0, 1.0)) === 1)
+    assert(sparseModel.predict(Vectors.sparse(3, Seq((1, 1.0)))) === 1)
   }
 
   test("predicted result should be same the seed data") {
