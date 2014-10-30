@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.catalyst.UDTRegistry
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
@@ -229,5 +230,15 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
       }
       AttributeReference(property.getName, dataType, nullable)()
     }
+  }
+}
+
+object JavaSQLContext {
+  /**
+   * Registers a User-Defined Type (UDT) so that schemas can include this type.
+   * UDTs can override built-in types.
+   */
+  def registerUDT(udt: UserDefinedType[_]): Unit = {
+    UDTRegistry.registerType(UDTWrappers.wrapAsScala(udt))
   }
 }

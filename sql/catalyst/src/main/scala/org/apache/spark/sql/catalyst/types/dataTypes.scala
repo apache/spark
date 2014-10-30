@@ -505,29 +505,19 @@ case class MapType(
 /**
  * ::DeveloperApi::
  * The data type for User Defined Types (UDTs).
- *
- * This interface allows a user to make their own classes more interoperable with SparkSQL;
- * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create a SchemaRDD
- * which has class X in the schema.
- *
- * For SparkSQL to recognize UDTs, the UDT must be registered in
- * [[org.apache.spark.sql.catalyst.UDTRegistry]].  This registration can be done either
- * explicitly by calling [[org.apache.spark.sql.catalyst.UDTRegistry.registerType()]] before using
- * the UDT with SparkSQL, or implicitly by annotating the UDT with
- * [[org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType]].
- *
- * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
- * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
  */
 @DeveloperApi
 abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
-  /** Underlying storage type for this UDT used by SparkSQL */
+  /** Underlying storage type for this UDT */
   def sqlType: DataType
 
-  /** Convert the user type to a SQL datum */
-  // TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
-  //       where we need to convert Any to UserType.
+  /**
+   * Convert the user type to a SQL datum
+   *
+   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
+   *       where we need to convert Any to UserType.
+   */
   def serialize(obj: Any): Any
 
   /** Convert a SQL datum to the user type */
@@ -537,4 +527,6 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
     ("type" -> "udt") ~
       ("class" -> this.getClass.getName)
   }
+
+  def userClass: java.lang.Class[UserType]
 }
