@@ -89,6 +89,7 @@ class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
   private[random] var rng = new PoissonDistribution(mean)
 
   override def setSeed(seed: Long) {
+    rng = new PoissonDistribution(mean)
     rng.reseedRandomGenerator(seed)
   }
 
