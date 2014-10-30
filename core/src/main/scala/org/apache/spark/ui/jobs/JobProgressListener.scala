@@ -70,9 +70,13 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   def blockManagerIds = executorIdToBlockManagerId.values.toSeq
 
   override def onJobStart(jobStart: SparkListenerJobStart) = synchronized {
-    val jobGroup = Option(jobStart.properties).map(_.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+    val jobGroup = for (
+      props <- Option(jobStart.properties);
+      group <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+    ) yield group
     val jobData: JobUIData =
-      new JobUIData(jobStart.jobId, jobStart.stageIds, jobGroup, JobExecutionStatus.RUNNING)
+      new JobUIData(jobStart.jobId, Some(System.currentTimeMillis), None, jobStart.stageIds,
+        jobGroup, JobExecutionStatus.RUNNING)
     jobIdToData(jobStart.jobId) = jobData
     activeJobs(jobStart.jobId) = jobData
   }
@@ -82,6 +86,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       logWarning(s"Job completed for unknown job ${jobEnd.jobId}")
       new JobUIData(jobId = jobEnd.jobId)
     }
+    jobData.endTime = Some(System.currentTimeMillis())
     jobEnd.jobResult match {
       case JobSucceeded =>
         completedJobs += jobData

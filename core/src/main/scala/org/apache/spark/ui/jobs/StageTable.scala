@@ -29,11 +29,10 @@ import org.apache.spark.util.Utils
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTableBase(
     stages: Seq[StageInfo],
-    parent: StagesTab,
+    basePath: String,
+    listener: JobProgressListener,
+    isFairScheduler: Boolean,
     killEnabled: Boolean = false) {
-
-  private val listener = parent.listener
-  protected def isFairScheduler = parent.isFairScheduler
 
   protected def columns: Seq[Node] = {
     <th>Stage Id</th> ++
@@ -88,7 +87,7 @@ private[ui] class StageTableBase(
     // scalastyle:off
     val killLink = if (killEnabled) {
       val killLinkUri = "%s/stages/stage/kill?id=%s&terminate=true"
-        .format(UIUtils.prependBaseUri(parent.basePath), s.stageId)
+        .format(UIUtils.prependBaseUri(basePath), s.stageId)
       val confirm = "return window.confirm('Are you sure you want to kill stage %s ?');"
         .format(s.stageId)
       <span class="kill-link">
@@ -98,7 +97,7 @@ private[ui] class StageTableBase(
     // scalastyle:on
 
     val nameLinkUri ="%s/stages/stage?id=%s&attempt=%s"
-      .format(UIUtils.prependBaseUri(parent.basePath), s.stageId, s.attemptId)
+      .format(UIUtils.prependBaseUri(basePath), s.stageId, s.attemptId)
     val nameLink = <a href={nameLinkUri}>{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
@@ -112,7 +111,7 @@ private[ui] class StageTableBase(
           Text("RDD: ") ++
           // scalastyle:off
           cachedRddInfos.map { i =>
-            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(parent.basePath), i.id)}>{i.name}</a>
+            <a href={"%s/storage/rdd?id=%d".format(UIUtils.prependBaseUri(basePath), i.id)}>{i.name}</a>
           }
           // scalastyle:on
         }}
@@ -162,7 +161,7 @@ private[ui] class StageTableBase(
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(parent.basePath), stageData.schedulingPool)}>
+          .format(UIUtils.prependBaseUri(basePath), stageData.schedulingPool)}>
           {stageData.schedulingPool}
         </a>
       </td>
@@ -187,9 +186,11 @@ private[ui] class StageTableBase(
 
 private[ui] class FailedStageTable(
     stages: Seq[StageInfo],
-    parent: StagesTab,
+    basePath: String,
+    listener: JobProgressListener,
+    isFairScheduler: Boolean,
     killEnabled: Boolean = false)
-  extends StageTableBase(stages, parent, killEnabled) {
+  extends StageTableBase(stages, basePath, listener, isFairScheduler, killEnabled) {
 
   override protected def columns: Seq[Node] = super.columns ++ <th>Failure Reason</th>
 

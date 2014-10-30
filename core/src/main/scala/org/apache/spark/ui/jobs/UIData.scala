@@ -39,6 +39,8 @@ private[jobs] object UIData {
 
   class JobUIData(
     var jobId: Int = -1,
+    var startTime: Option[Long] = None,
+    var endTime: Option[Long] = None,
     var stageIds: Seq[Int] = Seq.empty,
     var jobGroup: Option[String] = None,
     var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN

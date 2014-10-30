@@ -23,7 +23,7 @@ import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
-import org.apache.spark.ui.jobs.{JobProgressListener, StagesTab}
+import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 
 /**
@@ -45,19 +45,22 @@ private[spark] class SparkUI private (
 
   /** Initialize all components of the server. */
   def initialize() {
-    val jobProgressTab = new StagesTab(this)
-    attachTab(jobProgressTab)
+    attachTab(new JobsTab(this))
+    val stagesTab = new StagesTab(this)
+    attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(createRedirectHandler("/", "/stages", basePath = basePath))
+    attachHandler(createRedirectHandler("/", "/jobs", basePath = basePath))
     attachHandler(
-      createRedirectHandler("/stages/stage/kill", "/stages", jobProgressTab.handleKillRequest))
+      createRedirectHandler("/stages/stage/kill", "/stages", stagesTab.handleKillRequest))
     // If the UI is live, then serve
     sc.foreach { _.env.metricsSystem.getServletHandlers.foreach(attachHandler) }
   }
   initialize()
+
+  val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
   def getAppName = appName
 
