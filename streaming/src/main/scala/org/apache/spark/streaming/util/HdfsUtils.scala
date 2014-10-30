@@ -54,12 +54,12 @@ private[streaming] object HdfsUtils {
 
   /** Get the locations of the HDFS blocks containing the given file segment. */
   def getFileSegmentLocations(
-      path: String, offset: Long, length: Long, conf: Configuration): Option[Seq[String]] = {
+      path: String, offset: Long, length: Long, conf: Configuration): Array[String] = {
     val dfsPath = new Path(path)
     val dfs = getFileSystemForPath(dfsPath, conf)
     val fileStatus = dfs.getFileStatus(dfsPath)
     val blockLocs = Option(dfs.getFileBlockLocations(fileStatus, offset, length))
-    blockLocs.map(_.flatMap(_.getHosts))
+    blockLocs.map(_.flatMap(_.getHosts)).getOrElse(Array.empty)
   }
 
   def getFileSystemForPath(path: Path, conf: Configuration): FileSystem = {
