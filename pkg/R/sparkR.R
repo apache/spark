@@ -23,6 +23,8 @@ sparkR.onLoad <- function(libname, pkgname) {
 #' @param appName Application name to register with cluster manager
 #' @param sparkHome Spark Home directory
 #' @param sparkEnvir Named list of environment variables to set on worker nodes.
+#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
+#' @param sparkJars Character string vector of jar files to pass to the worker nodes.
 #' @export
 #' @examples
 #'\dontrun{
@@ -36,8 +38,8 @@ sparkR.init <- function(
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),
   sparkEnvir = list(),
-  sparkJars = "",
-  sparkExecutorEnv = list()) {
+  sparkExecutorEnv = list(),
+  sparkJars = "") {
 
   if (exists(".sparkRjsc", envir=.sparkREnv)) {
     return(get(".sparkRjsc", envir=.sparkREnv))
@@ -60,6 +62,7 @@ sparkR.init <- function(
     sparkExecutorEnvMap$put(varname, sparkExecutorEnv[[varname]])
   }
   
+  .jaddClassPath(sparkJars)
   jars=c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
   
   assign(
