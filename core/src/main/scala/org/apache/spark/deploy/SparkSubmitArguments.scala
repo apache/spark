@@ -71,9 +71,13 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     defaultProperties
   }
 
+  // Set parameters from command line arguments
   parseOpts(args.toList)
+  // Populate `sparkProperties` map from properties file
   mergeDefaultSparkProperties()
+  // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
+
   checkRequiredArguments()
 
   /**
