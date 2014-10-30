@@ -274,14 +274,8 @@ object SparkSubmit {
       }
     }
 
-    // Properties given with --conf are superceded by other options, but take precedence over
-    // properties in the defaults file.
+    // Load any properties specified through --conf and the default properties file
     for ((k, v) <- args.sparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
-    }
-
-    // Read from default spark properties, if any
-    for ((k, v) <- args.defaultSparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
 
