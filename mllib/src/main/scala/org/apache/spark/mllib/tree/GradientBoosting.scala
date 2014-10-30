@@ -366,10 +366,6 @@ object GradientBoosting extends Logging {
 
     // Cache input
     input.persist(StorageLevel.MEMORY_AND_DISK)
-    // Dataset reference for keeping track of last cached dataset in memory.
-    var lastCachedData = input
-    // Dataset reference for noting dataset marked for unpersisting.
-    var unpersistData = lastCachedData
 
     timer.stop("init")
 
@@ -380,15 +376,18 @@ object GradientBoosting extends Logging {
 
     // 1. Initialize tree
     timer.start("building tree 0")
-    val firstModel = new DecisionTree(strategy).train(data)
-    timer.stop("building tree 0")
-    baseLearners(0) = firstModel
+    val firstTreeModel = new DecisionTree(strategy).train(data)
+    baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
-    logDebug("error of tree = " + loss.computeError(firstModel, data))
+    val startingModel = new WeightedEnsembleModel(Array(firstTreeModel), Array(1.0), Regression,
+      Sum)
+    logDebug("error of gbt = " + loss.computeError(startingModel, input))
+    // Note: A model of type regression is used since we require raw prediction
+    timer.stop("building tree 0")
 
     // psuedo-residual for second iteration
-    data = data.map(point => LabeledPoint(loss.lossGradient(firstModel, point,
-      learningRate), point.features))
+    data = input.map(point => LabeledPoint(loss.lossGradient(startingModel, point),
+      point.features))
 
     var m = 1
     while (m < numEstimators) {
@@ -398,24 +397,16 @@ object GradientBoosting extends Logging {
       logDebug("###################################################")
       val model = new DecisionTree(strategy).train(data)
       timer.stop(s"building tree $m")
+      // Create partial model
       baseLearners(m) = model
       baseLearnerWeights(m) = learningRate
-      logDebug("error of tree = " + loss.computeError(model, data))
+      // Note: A model of type regression is used since we require raw prediction
+      val partialModel = new WeightedEnsembleModel(baseLearners.slice(0, m + 1),
+        baseLearnerWeights.slice(0, m + 1), Regression, Sum)
+      logDebug("error of gbt = " + loss.computeError(partialModel, input))
       // Update data with pseudo-residuals
-      data = data.map(point => LabeledPoint(loss.lossGradient(model, point, learningRate),
+      data = input.map(point => LabeledPoint(loss.lossGradient(partialModel, point),
         point.features))
-      // Unpersist last cached dataset since a newer one has been cached in the previous iteration.
-      if (m % checkpointingPeriod == 1 && m != 1) {
-        logDebug(s"Unpersisting old cached dataset in iteration $m.")
-        unpersistData.unpersist()
-      }
-      // Checkpoint
-      if (m % checkpointingPeriod == 0) {
-        logDebug(s"Persisting new dataset in iteration $m.")
-        unpersistData = lastCachedData
-        data = data.persist(StorageLevel.MEMORY_AND_DISK)
-        lastCachedData = data
-      }
       m += 1
     }
 

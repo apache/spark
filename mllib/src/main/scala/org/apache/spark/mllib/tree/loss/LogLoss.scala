@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree.loss
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
@@ -37,17 +37,14 @@ object LogLoss extends Loss {
    * classification
    * @param model Model of the weak learner
    * @param point Instance of the training dataset
-   * @param learningRate Learning rate parameter for regularization
    * @return Loss gradient
    */
   @DeveloperApi
   override def lossGradient(
-      model: DecisionTreeModel,
-      point: LabeledPoint,
-      learningRate: Double): Double = {
+      model: WeightedEnsembleModel,
+      point: LabeledPoint): Double = {
     val prediction = model.predict(point.features)
-    val logLoss = 1.0 / (1.0 + math.exp(-prediction))
-    point.label - logLoss * learningRate
+    point.label - 1.0 / (1.0 + math.exp(-prediction))
   }
 
   /**
@@ -59,7 +56,7 @@ object LogLoss extends Loss {
    * @return
    */
   @DeveloperApi
-  override def computeError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+  override def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
     val wrongPredictions = data.filter(lp => model.predict(lp.features) != lp.label).count()
     wrongPredictions / data.count
   }

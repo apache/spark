@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
@@ -37,15 +37,13 @@ object AbsoluteError extends Loss {
    * absolute error calculation.
    * @param model Model of the weak learner
    * @param point Instance of the training dataset
-   * @param learningRate Learning rate parameter for regularization
    * @return Loss gradient
    */
   @DeveloperApi
   override def lossGradient(
-      model: DecisionTreeModel,
-      point: LabeledPoint,
-      learningRate: Double): Double = {
-    if ((point.label - model.predict(point.features) * learningRate) > 0) 1.0 else -1.0
+      model: WeightedEnsembleModel,
+      point: LabeledPoint): Double = {
+    if ((point.label - model.predict(point.features)) > 0) 1.0 else -1.0
   }
 
   /**
@@ -57,7 +55,7 @@ object AbsoluteError extends Loss {
    * @return
    */
   @DeveloperApi
-  override def computeError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+  override def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
     val sumOfAbsolutes = data.map { y =>
       val err = model.predict(y.features) - y.label
       math.abs(err)

@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree.loss
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
 import org.apache.spark.rdd.RDD
 
 /**
@@ -31,14 +31,12 @@ trait Loss extends Serializable {
    * Method to calculate the loss gradients for the gradient boosting calculation.
    * @param model Model of the weak learner.
    * @param point Instance of the training dataset.
-   * @param learningRate Learning rate parameter for regularization.
    * @return Loss gradient.
    */
   @DeveloperApi
   def lossGradient(
-      model: DecisionTreeModel,
-      point: LabeledPoint,
-      learningRate: Double): Double
+      model: WeightedEnsembleModel,
+      point: LabeledPoint): Double
 
   /**
    * Method to calculate error of the base learner for the gradient boosting calculation.
@@ -49,6 +47,6 @@ trait Loss extends Serializable {
    * @return
    */
   @DeveloperApi
-  def computeError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double
+  def computeError(model: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double
 
 }
