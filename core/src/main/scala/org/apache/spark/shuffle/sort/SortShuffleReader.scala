@@ -23,7 +23,7 @@ import java.util.Comparator
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.{Logging, InterruptibleIterator, SparkEnv, TaskContext}
-import org.apache.spark.network.ManagedBuffer
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleReader, BaseShuffleHandle}
 import org.apache.spark.shuffle.hash.BlockStoreShuffleFetcher
@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.{MergeUtil, TieredDiskMerger}
  * SortShuffleReader merges and aggregates shuffle data that has already been sorted within each
  * map output block.
  *
- * As blocks are fetched, we store them in memory until we fail to acquire space frm the
+ * As blocks are fetched, we store them in memory until we fail to acquire space from the
  * ShuffleMemoryManager. When this occurs, we merge the in-memory blocks to disk and go back to
  * fetching.
  *
@@ -108,7 +108,7 @@ private[spark] class SortShuffleReader[K, C](
           MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
         // Write merged blocks to disk
-        val (tmpBlockId, file) = blockManager.diskBlockManager.createTempBlock()
+        val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
         val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
         blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedIter, ser)
         tieredMerger.registerOnDiskBlock(tmpBlockId, file)

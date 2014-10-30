@@ -21,7 +21,6 @@ import java.io._
 import java.util.Comparator
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable
 
 import com.google.common.io.ByteStreams
 
@@ -29,7 +28,6 @@ import org.apache.spark._
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockObjectWriter, BlockId}
-import org.apache.spark.network.ManagedBuffer
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -187,20 +185,6 @@ private[spark] class ExternalSorter[K, V, C](
     serializerBatchSizes: Array[Long],
     elementsPerPartition: Array[Long])
   private val spills = new ArrayBuffer[SpilledFile]
-
-  def insertInMemoryBlock(buffer: ManagedBuffer) {
-    // try to acquire memory
-    val granted = shuffleMemoryManager.tryToAcquire(buffer.size)
-    if (granted < buffer.size) {
-      if (!spillingEnabled) {
-        throw new IllegalStateException()
-      }
-      // spill in-memory partitions
-    }
-    // maybe spill
-
-    // spilling should probably tell our background merger thread to try stuff
-  }
 
   def insertAll(records: Iterator[_ <: Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high

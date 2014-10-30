@@ -190,7 +190,7 @@ private[spark] class TieredDiskMerger[K, C](
           val partialMergedIter =
             MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
           // Write merged blocks to disk
-          val (tmpBlockId, file) = blockManager.diskBlockManager.createTempBlock()
+          val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
           val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
           blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedIter, ser)
           logInfo(s"Merged ${blocksToMerge.size} on-disk blocks into file ${file.getName}")
