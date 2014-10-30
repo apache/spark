@@ -158,8 +158,9 @@ object SparkSubmit {
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
       args.files = mergeFileLists(args.files, args.pyFiles)
-      // Format python file paths properly before adding them to the PYTHONPATH
-      sysProps("spark.submit.pyFiles") = PythonRunner.formatPaths(args.pyFiles).mkString(",")
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -282,6 +283,29 @@ object SparkSubmit {
     // Read from default spark properties, if any
     for ((k, v) <- args.defaultSparkProperties) {
       sysProps.getOrElseUpdate(k, v)
+    }
+
+    // Resolve paths in certain spark properties
+    val pathConfigs = Seq(
+      "spark.jars",
+      "spark.files",
+      "spark.yarn.jar",
+      "spark.yarn.dist.files",
+      "spark.yarn.dist.archives")
+    pathConfigs.foreach { config =>
+      // Replace old URIs with resolved URIs, if they exist
+      sysProps.get(config).foreach { oldValue =>
+        sysProps(config) = Utils.resolveURIs(oldValue)
+      }
+    }
+
+    // Resolve and format python file paths properly before adding them to the PYTHONPATH.
+    // The resolving part is redundant in the case of --py-files, but necessary if the user
+    // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
+    sysProps.get("spark.submit.pyFiles").foreach { pyFiles =>
+      val resolvedPyFiles = Utils.resolveURIs(pyFiles)
+      val formattedPyFiles = PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)

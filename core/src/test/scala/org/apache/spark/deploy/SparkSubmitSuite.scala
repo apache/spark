@@ -292,7 +292,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     runSparkSubmit(args)
   }
 
-  test("spark submit includes jars passed in through --jar") {
+  test("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
@@ -304,6 +304,110 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--jars", jarsString,
       unusedJar.toString)
     runSparkSubmit(args)
+  }
+
+  test("resolves command line argument paths correctly") {
+    val jars = "/jar1,/jar2"                 // --jars
+    val files = "hdfs:/file1,file2"          // --files
+    val archives = "file:/archive1,archive2" // --archives
+    val pyFiles = "py-file1,py-file2"        // --py-files
+
+    // Test jars and files
+    val clArgs = Seq(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--jars", jars,
+      "--files", files,
+      "thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
+    appArgs.jars should be (Utils.resolveURIs(jars))
+    appArgs.files should be (Utils.resolveURIs(files))
+    sysProps("spark.jars") should be (Utils.resolveURIs(jars + ",thejar.jar"))
+    sysProps("spark.files") should be (Utils.resolveURIs(files))
+
+    // Test files and archives (Yarn)
+    val clArgs2 = Seq(
+      "--master", "yarn-client",
+      "--class", "org.SomeClass",
+      "--files", files,
+      "--archives", archives,
+      "thejar.jar"
+    )
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
+    appArgs2.files should be (Utils.resolveURIs(files))
+    appArgs2.archives should be (Utils.resolveURIs(archives))
+    sysProps2("spark.yarn.dist.files") should be (Utils.resolveURIs(files))
+    sysProps2("spark.yarn.dist.archives") should be (Utils.resolveURIs(archives))
+
+    // Test python files
+    val clArgs3 = Seq(
+      "--master", "local",
+      "--py-files", pyFiles,
+      "mister.py"
+    )
+    val appArgs3 = new SparkSubmitArguments(clArgs3)
+    val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
+    appArgs3.pyFiles should be (Utils.resolveURIs(pyFiles))
+    sysProps3("spark.submit.pyFiles") should be (
+      PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+  }
+
+  test("resolves config paths correctly") {
+    val jars = "/jar1,/jar2" // spark.jars
+    val files = "hdfs:/file1,file2" // spark.files / spark.yarn.dist.files
+    val archives = "file:/archive1,archive2" // spark.yarn.dist.archives
+    val pyFiles = "py-file1,py-file2" // spark.submit.pyFiles
+
+    // Test jars and files
+    val f1 = File.createTempFile("test-submit-jars-files", "")
+    val writer1 = new PrintWriter(f1)
+    writer1.println("spark.jars " + jars)
+    writer1.println("spark.files " + files)
+    writer1.close()
+    val clArgs = Seq(
+      "--master", "local",
+      "--class", "org.SomeClass",
+      "--properties-file", f1.getPath,
+      "thejar.jar"
+    )
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
+    sysProps("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
+    sysProps("spark.files") should be(Utils.resolveURIs(files))
+
+    // Test files and archives (Yarn)
+    val f2 = File.createTempFile("test-submit-files-archives", "")
+    val writer2 = new PrintWriter(f2)
+    writer2.println("spark.yarn.dist.files " + files)
+    writer2.println("spark.yarn.dist.archives " + archives)
+    writer2.close()
+    val clArgs2 = Seq(
+      "--master", "yarn-client",
+      "--class", "org.SomeClass",
+      "--properties-file", f2.getPath,
+      "thejar.jar"
+    )
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
+    sysProps2("spark.yarn.dist.files") should be(Utils.resolveURIs(files))
+    sysProps2("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
+
+    // Test python files
+    val f3 = File.createTempFile("test-submit-python-files", "")
+    val writer3 = new PrintWriter(f3)
+    writer3.println("spark.submit.pyFiles " + pyFiles)
+    writer3.close()
+    val clArgs3 = Seq(
+      "--master", "local",
+      "--properties-file", f3.getPath,
+      "mister.py"
+    )
+    val appArgs3 = new SparkSubmitArguments(clArgs3)
+    val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
+    sysProps3("spark.submit.pyFiles") should be(
+      PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
 
   test("SPARK_CONF_DIR overrides spark-defaults.conf") {
