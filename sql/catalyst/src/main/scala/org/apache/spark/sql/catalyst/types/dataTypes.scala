@@ -389,7 +389,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
  */
-case class StructField(name: String, dataType: DataType, nullable: Boolean) {
+case class StructField(name: String, dataType: DataType, nullable: Boolean = true) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")

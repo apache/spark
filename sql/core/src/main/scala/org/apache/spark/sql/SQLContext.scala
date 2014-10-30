@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources.{BaseRelation, DDLParser, LogicalRelation}
 
 /**
  * :: AlphaComponent ::
@@ -70,12 +71,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
+  protected[sql] val ddlParser = new DDLParser
+
+  @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
     new catalyst.SparkSQLParser(fallback(_))
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = {
+    ddlParser(sql).getOrElse(sqlParser(sql))
+  }
+
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -103,6 +110,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     SparkPlan.currentContext.set(self)
     new SchemaRDD(this,
       LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+  }
+
+  implicit def baseRelationToSchemaRDD(baseRelation: BaseRelation): SchemaRDD = {
+    logicalPlanToSparkQuery(LogicalRelation(baseRelation))
   }
 
   /**
@@ -295,6 +306,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
+      DataSources ::
       TakeOrdered ::
       HashAggregation ::
       LeftSemiJoin ::
