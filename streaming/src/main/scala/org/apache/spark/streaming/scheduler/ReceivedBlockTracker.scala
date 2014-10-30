@@ -149,15 +149,17 @@ class ReceivedBlockTracker(
     // Insert the recovered block information
     def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
-      //println(s"Recovery: Inserting added block $receivedBlockInfo")
+      // println(s"Recovery: Inserting added block $receivedBlockInfo")
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     }
 
     // Insert the recovered block-to-batch allocations and clear the queue of received blocks
     // (when the blocks were originally allocated to the batch, the queue must have been cleared).
     def insertAllocatedBatch(time: Time, allocatedBlocks: AllocatedBlocks) {
-      logTrace(s"Recovery: Inserting allocated batch for time $time to ${allocatedBlocks.streamIdToAllocatedBlocks}")
-      //println(s"Recovery: Inserting allocated batch for time $time to ${allocatedBlocks.streamIdToAllocatedBlocks}")
+      logTrace(s"Recovery: Inserting allocated batch for time $time to " +
+        s"${allocatedBlocks.streamIdToAllocatedBlocks}")
+      // println(s"Recovery: Inserting allocated batch for time $time to " +
+      // s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       streamIdToUnallocatedBlockInfo.values.foreach { _.clear() }
       timeToAllocatedBlockInfo.put(time, allocatedBlocks)
     }
