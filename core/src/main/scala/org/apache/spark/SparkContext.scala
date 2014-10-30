@@ -1333,6 +1333,8 @@ object SparkContext extends Logging {
 
   private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
 
+  private[spark] val DRIVER_IDENTIFIER = "<driver>"
+
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
