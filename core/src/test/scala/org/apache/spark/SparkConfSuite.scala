@@ -185,6 +185,14 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
     serializer.newInstance().serialize(new StringBuffer())
   }
 
+  test("deprecated key renaming") {
+    val conf = new SparkConf().set("spark.files.userClassPathFirst", "true")
+    assert(conf.contains("spark.files.userClassPathFirst"))
+    assert(conf.contains("spark.executor.userClassPathFirst"))
+    assert(conf.getBoolean("spark.files.userClassPathFirst", false))
+    assert(conf.getBoolean("spark.executor.userClassPathFirst", false))
+  }
+
 }
 
 class Class1 {}

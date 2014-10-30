@@ -51,7 +51,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   if (loadDefaults) {
     // Load any spark.* system properties
     for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
-      settings(k) = v
+      settings(getConfKey(k)) = v
     }
   }
 
@@ -63,7 +63,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     if (value == null) {
       throw new NullPointerException("null value")
     }
-    settings(key) = value
+    settings(getConfKey(key)) = value
     this
   }
 
@@ -135,8 +135,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set a parameter if it isn't already configured */
   def setIfMissing(key: String, value: String): SparkConf = {
-    if (!settings.contains(key)) {
-      settings(key) = value
+    val realKey = getConfKey(key)
+    if (!settings.contains(realKey)) {
+      settings(realKey) = value
     }
     this
   }
@@ -173,7 +174,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    settings.get(key)
+    settings.get(getConfKey(key))
   }
 
   /** Get all parameters as a list of pairs */
@@ -224,7 +225,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.contains(key)
+  def contains(key: String): Boolean = settings.contains(getConfKey(key))
 
   /** Copy this object */
   override def clone: SparkConf = {
@@ -281,7 +282,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Validate memory fractions
     val memoryKeys = Seq(
       "spark.storage.memoryFraction",
-      "spark.shuffle.memoryFraction", 
+      "spark.shuffle.memoryFraction",
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
@@ -347,9 +348,18 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def toDebugString: String = {
     settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
+
 }
 
-private[spark] object SparkConf {
+private[spark] object SparkConf extends Logging {
+
+  private val deprecatedConfigs = {
+    val configs = Seq(
+      DeprecatedConfig("spark.files.userClassPathFirst", "spark.executor.userClassPathFirst",
+        "1.3"))
+    configs.map { x => (x.oldName, x) }.toMap
+  }
+
   /**
    * Return whether the given config is an akka config (e.g. akka.actor.provider).
    * Note that this does not include spark-specific akka configs (e.g. spark.akka.timeout).
@@ -373,4 +383,62 @@ private[spark] object SparkConf {
    * Return whether the given config is a Spark port config.
    */
   def isSparkPortConf(name: String): Boolean = name.startsWith("spark.") && name.endsWith(".port")
+
+  /**
+   * Returns the configuration key to use for the given user-provided key, translating
+   * deprecated keys.
+   */
+  def getConfKey(userKey: String): String = {
+    val deprecatedKey = deprecatedConfigs.getOrElse(userKey, null)
+    if (deprecatedKey != null) {
+      deprecatedKey.warn()
+      if (deprecatedKey.newName != null) deprecatedKey.newName else userKey
+    } else {
+      userKey
+    }
+  }
+
+  /**
+   * Holds information about keys that have been deprecated or renamed.
+   *
+   * @param oldName Old configuration key.
+   * @param newName New configuration key, or `null` if key is not used anymore.
+   * @param version Version of Spark where key was deprecated.
+   * @param deprecationMessage Message to include in the deprecation warning; mandatory when
+   *                           `newName` is not provided.
+   */
+  private case class DeprecatedConfig(
+      oldName: String,
+      newName: String,
+      version: String,
+      deprecationMessage: String = null) {
+
+    @volatile private var warned = false
+
+    if (newName == null && (deprecationMessage == null || deprecationMessage.isEmpty())) {
+      throw new IllegalArgumentException("Need new config name or deprecation message.")
+    }
+
+    def warn() = {
+      if (!warned) {
+        this.synchronized {
+          if (!warned) {
+            if (newName != null) {
+              val message = Option(deprecationMessage).getOrElse(
+                s"Please use the alternative '$newName' instead.")
+              logWarning(
+                s"The configuration option '$oldName' has been replaced as of Spark $version. " +
+                message)
+            } else {
+              logWarning(
+                s"The configuration option '$oldName' has been deprecated as of Spark $version. " +
+                deprecationMessage)
+            }
+            warned = true
+          }
+        }
+      }
+    }
+
+  }
 }

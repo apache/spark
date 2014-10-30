@@ -296,8 +296,7 @@ private[spark] class Executor(
     val urls = userClassPath ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
-    val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst",
-      conf.getBoolean("spark.files.userClassPathFirst", false))
+    val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
     userClassPathFirst match {
       case true => new ChildExecutorURLClassLoader(urls.toArray, currentLoader)
       case false => new ExecutorURLClassLoader(urls.toArray, currentLoader)
@@ -313,7 +312,7 @@ private[spark] class Executor(
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       val userClassPathFirst: java.lang.Boolean =
-        conf.getBoolean("spark.files.userClassPathFirst", false)
+        conf.getBoolean("spark.executor.userClassPathFirst", false)
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
