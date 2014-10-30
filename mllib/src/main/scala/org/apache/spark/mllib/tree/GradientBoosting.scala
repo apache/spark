@@ -34,7 +34,7 @@ import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Sum
 
 /**
  * :: Experimental ::
- * A class that implements gradient boosting for regression problems.
+ * A class that implements gradient boosting for regression and binary classification problems.
  * @param boostingStrategy Parameters for the gradient boosting algorithm
  */
 @Experimental
