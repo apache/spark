@@ -82,7 +82,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --jar JAR_PATH       Path to your application's JAR file
       |  --class CLASS_NAME   Name of your application's main class
       |  --args ARGS          Arguments to be passed to your application's main class.
-      |                       Mutliple invocations are possible, each will be passed in order.
+      |                       Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
