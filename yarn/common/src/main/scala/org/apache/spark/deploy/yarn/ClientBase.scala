@@ -792,9 +792,9 @@ private[spark] object ClientBase extends Logging {
    */
   def isolateClassPath(conf: SparkConf, isDriver: Boolean): Boolean = {
     if (isDriver) {
-      conf.getBoolean("spark.driver.enableClassPathIsolation", false)
+      conf.getBoolean("spark.driver.userClassPathFirst", false)
     } else {
-      conf.getBoolean("spark.executor.enableClassPathIsolation",
+      conf.getBoolean("spark.executor.userClassPathFirst",
         conf.getBoolean("spark.files.userClassPathFirst", false))
     }
   }

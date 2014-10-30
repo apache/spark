@@ -296,7 +296,7 @@ private[spark] class Executor(
     val urls = userClassPath ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
-    val userClassPathFirst = conf.getBoolean("spark.executor.enableClassPathIsolation",
+    val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst",
       conf.getBoolean("spark.files.userClassPathFirst", false))
     userClassPathFirst match {
       case true => new ChildExecutorURLClassLoader(urls.toArray, currentLoader)

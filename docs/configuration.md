@@ -48,8 +48,8 @@ val sc = new SparkContext(new SparkConf())
 
 Then, you can supply configuration values at runtime:
 {% highlight bash %}
-./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false 
-  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar 
+./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar
 {% endhighlight %}
 
 The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
@@ -218,7 +218,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.files.userClassPathFirst</code></td>
+  <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when
@@ -249,7 +249,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.python.profile.dump</code></td>
   <td>(none)</td>
   <td>
-    The directory which is used to dump the profile result before driver exiting. 
+    The directory which is used to dump the profile result before driver exiting.
     The results will be dumped as separated file for each RDD. They can be loaded
     by ptats.Stats(). If this is specified, the profile result will not be displayed
     automatically.
@@ -268,8 +268,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
-    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor 
-    process. The user can specify multiple of these and to set multiple environment variables. 
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
+    process. The user can specify multiple of these and to set multiple environment variables.
   </td>
 </tr>
 <tr>
@@ -474,9 +474,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The codec used to compress internal data such as RDD partitions, broadcast variables and
     shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
-    and <code>snappy</code>. You can also use fully qualified class names to specify the codec, 
-    e.g. 
-    <code>org.apache.spark.io.LZ4CompressionCodec</code>,    
+    and <code>snappy</code>. You can also use fully qualified class names to specify the codec,
+    e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
@@ -944,7 +944,7 @@ Apart from these, the following properties are also available, and may be useful
     (resources are executors in yarn mode, CPU cores in standalone mode)
     to wait for before scheduling begins. Specified as a double between 0 and 1.
     Regardless of whether the minimum ratio of resources has been reached,
-    the maximum amount of time it will wait before scheduling begins is controlled by config 
+    the maximum amount of time it will wait before scheduling begins is controlled by config
     <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
   </td>
 </tr>
@@ -953,7 +953,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>30000</td>
   <td>
     Maximum amount of time to wait for resources to register before scheduling begins
-    (in milliseconds).  
+    (in milliseconds).
   </td>
 </tr>
 <tr>
@@ -1022,7 +1022,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether Spark acls should are enabled. If enabled, this checks to see if the user has
-    access permissions to view or modify the job.  Note this requires the user to be known, 
+    access permissions to view or modify the job.  Note this requires the user to be known,
     so if the user comes across as null no checks are done. Filters can be used with the UI
     to authenticate and set the user.
   </td>

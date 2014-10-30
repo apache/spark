@@ -136,11 +136,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
   }
 
-  test("user class path isolation in client mode") {
+  test("user class path first in client mode") {
     testClassPathIsolation(true)
   }
 
-  test("user class path isolation in cluster mode") {
+  test("user class path first in cluster mode") {
     testClassPathIsolation(false)
   }
 
@@ -153,8 +153,8 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
       Seq("local:" + jarFile.getPath()),
       Map(
-        "spark.driver.enableClassPathIsolation" -> "true",
-        "spark.executor.enableClassPathIsolation" -> "true"))
+        "spark.driver.userClassPathFirst" -> "true",
+        "spark.executor.userClassPathFirst" -> "true"))
     checkResult(driverResult, "OVERRIDDEN")
     checkResult(executorResult, "OVERRIDDEN")
   }

@@ -451,7 +451,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
 
     val userClassLoader =
-      if (sparkConf.getBoolean("spark.driver.enableClassPathIsolation", false)) {
+      if (sparkConf.getBoolean("spark.driver.userClassPathFirst", false)) {
         val classpath = ClientBase.getUserClasspath(null, sparkConf)
         val urls = classpath.map { entry =>
           val absPath =

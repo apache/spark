@@ -413,7 +413,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
 
-  test("driver user classpath isolation") {
+  test("user classpath first in driver") {
     val systemJar = TestUtils.createJarWithFiles(Map("test.resource" -> "SYSTEM"))
     val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"))
     val args = Seq(
@@ -421,7 +421,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--name", "testApp",
       "--master", "local",
       "--conf", "spark.driver.extraClassPath=" + systemJar,
-      "--conf", "spark.driver.enableClassPathIsolation=true",
+      "--conf", "spark.driver.userClassPathFirst=true",
       userJar.toString)
     runSparkSubmit(args)
   }
