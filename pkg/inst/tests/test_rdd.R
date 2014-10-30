@@ -33,6 +33,21 @@ test_that("mapPartitions on RDD", {
   expect_equal(actual, list(15, 40))
 })
 
+test_that("Filter on RDD", {
+  filtered.rdd <- Filter(function(x) { x %% 2 == 0 }, rdd)
+  actual <- collect(filtered.rdd)
+  expect_equal(actual, list(2, 4, 6, 8, 10))
+  
+  filtered.rdd <- Filter(function(x) { x[[2]] < 0 }, intRdd)
+  actual <- collect(filtered.rdd)
+  expect_equal(actual, list(list(1L, -1)))
+  
+  # Filter out all elements.
+  filtered.rdd <- Filter(function(x) { x > 10 }, rdd)
+  actual <- collect(filtered.rdd)
+  expect_equal(actual, list())
+})
+
 test_that("lookup on RDD", {
   vals <- lookup(intRdd, 1L)
   expect_equal(vals, list(-1, 200))

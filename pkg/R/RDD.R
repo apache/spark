@@ -520,6 +520,44 @@ setMethod("mapPartitionsWithIndex",
             lapplyPartitionsWithIndex(X, FUN)
           })
 
+#' This function returns a new RDD containing only the elements that satisfy 
+#' a predicate (i.e. returning TRUE in a given logical function). 
+#' The same as `filter()' in Spark.
+#'
+#' @param f A unary predicate function.
+#' @param x The RDD to be filtered.
+#' @rdname Filter
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' unlist(collect(Filter(function (x) { x < 3 }, rdd))) # c(1, 2)
+#'}
+#setGeneric("Filter", function(f, x) { standardGeneric("Filter") })
+
+#' @rdname Filter
+#' @aliases Filter,function,RDD-method filter,function,RDD-method
+setMethod("Filter",
+          signature(f = "function", x = "RDD"),
+          function(f, x) {
+            filter.func <- function(part) {
+              Filter(f, part)
+            }
+            lapplyPartition(x, filter.func)
+          })
+
+#' @rdname Filter
+#' @export
+setGeneric("filter", function(f, x) { standardGeneric("filter") })
+
+#' @rdname Filter
+#' @aliases filter,function,RDD-method
+setMethod("filter",
+          signature(f = "function", x = "RDD"),
+          function(f, x) {
+            Filter(f, x)
+          })
 
 #' Reduce across elements of an RDD.
 #'

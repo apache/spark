@@ -10,6 +10,8 @@ exportMethods(
               "combineByKey",
               "count",
               "distinct",
+              "Filter",
+              "filter",
               "flatMap",
               "groupByKey",
               "length",
