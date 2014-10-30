@@ -69,8 +69,7 @@ private[spark] class TaskSetManager(
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
   // Limit of bytes for total size of results (default is 1GB)
-  val MAX_RESULT_SIZE =
-    Utils.memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
+  val maxResultSize = Utils.getMaxResultSize(conf)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -527,16 +526,22 @@ private[spark] class TaskSetManager(
   }
 
   /**
+   * Check whether has enough quota to fetch the result with `size` bytes
+   */
+  def canFetchMoreResult(size: Long): Boolean = synchronized {
+    totalResultSize += size
+    if (maxResultSize > 0 && totalResultSize > maxResultSize) {
+      logError(s"Total size of results is too big: ${Utils.bytesToString(totalResultSize)}")
+      false
+    } else {
+      true
+    }
+  }
+
+  /**
    * Marks the task as successful and notifies the DAGScheduler that a task has ended.
    */
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
-    totalResultSize += result.metrics.resultSize
-    if (MAX_RESULT_SIZE > 0 && totalResultSize > MAX_RESULT_SIZE) {
-      abort(s"The size of results ${Utils.bytesToString(totalResultSize)}" +
-            s" extends limit ${Utils.bytesToString(MAX_RESULT_SIZE)}, please increase" +
-            s" spark.driver.maxResultSize or avoid collect() if it's possible")
-      return
-    }
     val info = taskInfos(tid)
     val index = info.index
     info.markSuccessful()

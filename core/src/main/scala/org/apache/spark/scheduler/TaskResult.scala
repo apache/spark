@@ -31,8 +31,11 @@ import org.apache.spark.util.Utils
 private[spark] sealed trait TaskResult[T]
 
 /** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
-private[spark]
-case class IndirectTaskResult[T](blockId: BlockId) extends TaskResult[T] with Serializable
+private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
+  extends TaskResult[T] with Serializable
+
+/** A TaskResult which is larger than maxResultSize, dropped. */
+private[spark] case class TooLargeTaskResult[T](size: Int) extends TaskResult[T] with Serializable
 
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark]

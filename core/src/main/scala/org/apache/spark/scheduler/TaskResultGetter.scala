@@ -26,6 +26,8 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.Utils
 
+private class BigResultException extends RuntimeException
+
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
  */
@@ -49,8 +51,15 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         try {
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
-                (directResult, serializedData.limit())
-            case IndirectTaskResult(blockId) =>
+              if (!taskSetManager.canFetchMoreResult(serializedData.limit())) {
+                throw new BigResultException
+              }
+              (directResult, serializedData.limit())
+            case IndirectTaskResult(blockId, size) =>
+              if (!taskSetManager.canFetchMoreResult(size)) {
+                sparkEnv.blockManager.master.removeBlock(blockId)
+                throw new BigResultException
+              }
               logDebug("Fetching indirect task result for TID %s".format(tid))
               scheduler.handleTaskGettingResult(taskSetManager, tid)
               val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
@@ -65,11 +74,18 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
                 serializedTaskResult.get)
               sparkEnv.blockManager.master.removeBlock(blockId)
-              (deserializedResult, serializedTaskResult.get.limit())
+              (deserializedResult, size)
+            case TooLargeTaskResult(size) =>
+              logError(s"Result of task ${tid} is too big: ${Utils.bytesToString(size)}")
+              throw new BigResultException
           }
+
           result.metrics.resultSize = size
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
+          case e: BigResultException =>
+            taskSetManager.abort("Total size of result is bigger than maxResultSize, " +
+              "please increase spark.driver.maxResultSize or avoid collect() if possible")
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
