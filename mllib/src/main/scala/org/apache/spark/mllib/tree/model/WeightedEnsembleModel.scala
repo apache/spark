@@ -32,8 +32,8 @@ class WeightedEnsembleModel(
     val algo: Algo,
     val combiningStrategy: EnsembleCombiningStrategy) extends Serializable {
 
-  require(numWeakHypotheses > 0, s"WeightedEnsembleModel cannot be created without base learners. Number " +
-    s"of baselearners = $weakHypotheses")
+  require(numWeakHypotheses > 0, s"WeightedEnsembleModel cannot be created without weakHypotheses" +
+    s". Number of weakHypotheses = $weakHypotheses")
 
   /**
    * Predict values for a single data point using the model trained.
