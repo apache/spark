@@ -91,6 +91,9 @@ private[hive] trait HiveInspectors {
       if (data == null) null else hvoi.getPrimitiveJavaObject(data).getValue
     case hdoi: HiveDecimalObjectInspector =>
       if (data == null) null else BigDecimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+    // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
+    // if next timestamp is null, so Timestamp object is cloned
+    case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
     case li: ListObjectInspector =>
       Option(li.getList(data))
