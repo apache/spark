@@ -109,12 +109,10 @@ private[streaming] class ReceivedBlockTracker(
    */
   def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
     if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
-      val allocatedBlocks = {
-        val streamIdToBlocks = streamIds.map { streamId =>
-            (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
-        }.toMap
-        AllocatedBlocks(streamIdToBlocks)
-      }
+      val streamIdToBlocks = streamIds.map { streamId =>
+          (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
+      }.toMap
+      val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))
       timeToAllocatedBlocks(batchTime) = allocatedBlocks
       lastAllocatedBatchTime = batchTime
@@ -123,11 +121,6 @@ private[streaming] class ReceivedBlockTracker(
       throw new SparkException(s"Unexpected allocation of blocks, " +
         s"last batch = $lastAllocatedBatchTime, batch time to allocate = $batchTime  ")
     }
-  }
-
-  /** Get blocks that have been added but not yet allocated to any batch. */
-  def getUnallocatedBlocks(streamId: Int): Seq[ReceivedBlockInfo] = synchronized {
-    getReceivedBlockQueue(streamId).toSeq
   }
 
   /** Get the blocks allocated to the given batch. */
@@ -147,6 +140,14 @@ private[streaming] class ReceivedBlockTracker(
   /** Check if any blocks are left to be allocated to batches. */
   def hasUnallocatedReceivedBlocks: Boolean = synchronized {
     !streamIdToUnallocatedBlockQueues.values.forall(_.isEmpty)
+  }
+
+  /**
+   * Get blocks that have been added but not yet allocated to any batch. This method
+   * is primarily used for testing.
+   */
+  def getUnallocatedBlocks(streamId: Int): Seq[ReceivedBlockInfo] = synchronized {
+    getReceivedBlockQueue(streamId).toSeq
   }
 
   /** Clean up block information of old batches. */

@@ -71,10 +71,16 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
           ssc.scheduler.receiverTracker.getBlocksOfBatch(validTime).get(id).getOrElse(Seq.empty)
         val blockStoreResults = blockInfos.map { _.blockStoreResult }
         val blockIds = blockStoreResults.map { _.blockId.asInstanceOf[BlockId] }.toArray
-        val isWriteAheadLogBased = blockStoreResults.forall {
-          _.isInstanceOf[WriteAheadLogBasedStoreResult]
+
+        // Check whether all the results are of the same type
+        val resultTypes = blockStoreResults.map { _.getClass }.distinct
+        if (resultTypes.size > 1) {
+          logWarning("Multiple result types in block information, WAL information will be ignored.")
         }
-        if (isWriteAheadLogBased) {
+
+        // If all the results are of type WriteAheadLogBasedStoreResult, then create
+        // WriteAheadLogBackedBlockRDD else create simple BlockRDD.
+        if (resultTypes.size == 1 && resultTypes.head == classOf[WriteAheadLogBasedStoreResult]) {
           val logSegments = blockStoreResults.map {
             _.asInstanceOf[WriteAheadLogBasedStoreResult].segment
           }.toArray
