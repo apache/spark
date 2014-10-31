@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.catalyst.expressions.{Row => _, _}
+import scala.language.existentials
+
 import org.apache.spark.sql._
 
 class FilteredScanSource extends RelationProvider {
@@ -36,22 +37,26 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       StructField("a", IntegerType, nullable = false) ::
       StructField("b", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]) = {
-    val rowBuilders = requiredColumns.map(_.name).map {
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]) = {
+    val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
     }
 
+    FiltersPushed.list = filters
+
     val filter = filters.collect {
-      case Seq(EqualTo(a: AttributeReference, l: Literal)) if a.name == "a" =>
-        (i: Int) => i == l.value
-      case Seq(EqualTo(l: Literal, a: AttributeReference)) if a.name == "a" =>
-        (i: Int) => i == l.value
+      case EqualTo("a", v) => (a: Int) => a == v
     }.headOption.getOrElse((_: Int) => true)
 
     sqlContext.sparkContext.parallelize(from to to).filter(filter).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
+}
+
+// A hack for better error messages when filter pushdown fails.
+object FiltersPushed {
+  var list: Seq[Filter] = Nil
 }
 
 class FilteredScanSuite extends DataSourceTest {
@@ -111,7 +116,40 @@ class FilteredScanSuite extends DataSourceTest {
     Seq(1).map(i => Row(i, i * 2)).toSeq)
 
   sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE A = 1",
+    Seq(1).map(i => Row(i, i * 2)).toSeq)
+
+  sqlTest(
     "SELECT * FROM oneToTenFiltered WHERE b = 2",
     Seq(1).map(i => Row(i, i * 2)).toSeq)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE A = 1", 1)
+  testPushDown("SELECT a FROM oneToTenFiltered WHERE A = 1", 1)
+  testPushDown("SELECT b FROM oneToTenFiltered WHERE A = 1", 1)
+  testPushDown("SELECT a, b FROM oneToTenFiltered WHERE A = 1", 1)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 1", 1)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 5", 10)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10)
+
+  def testPushDown(sqlString: String, expectedCount: Int): Unit = {
+    test(s"PushDown Returns $expectedCount: $sqlString") {
+      val queryExecution = sql(sqlString).queryExecution
+      val rawPlan = queryExecution.executedPlan.collect {
+        case p: execution.PhysicalRDD => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      val rawCount = rawPlan.execute().count()
+
+      if (rawCount != expectedCount) {
+        fail(
+          s"Wrong # of results for pushed filter. Got $rawCount, Expected $expectedCount\n" +
+          s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+          queryExecution)
+      }
+    }
+  }
 }
 

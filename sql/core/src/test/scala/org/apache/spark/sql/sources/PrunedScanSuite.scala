@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.catalyst.expressions.{Row => _, _}
 import org.apache.spark.sql._
 
 class PrunedScanSource extends RelationProvider {
@@ -36,8 +35,8 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
       StructField("a", IntegerType, nullable = false) ::
       StructField("b", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(requiredColumns: Seq[Attribute]) = {
-    val rowBuilders = requiredColumns.map(_.name).map {
+  override def buildScan(requiredColumns: Array[String]) = {
+    val rowBuilders = requiredColumns.map {
       case "a" => (i: Int) => Seq(i)
       case "b" => (i: Int) => Seq(i * 2)
     }

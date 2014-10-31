@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -414,4 +415,11 @@ package object sql {
    */
   @DeveloperApi
   val StructField = catalyst.types.StructField
+
+  /**
+   * Converts a logical plan into zero or more SparkPlans.
+   */
+  @DeveloperApi
+  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+
 }

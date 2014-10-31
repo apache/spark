@@ -42,7 +42,7 @@ trait RelationProvider {
 /**
  * Represents a collection of tuples with a known schema.  Classes that extend BaseRelation must
  * be able to produce the schema of their data in the form of a [[StructType]]  Concrete
- * implementation should inherit from one of the descendant `Scan` classes, which also define
+ * implementation should inherit from one of the descendant `Scan` classes, which define various
  * abstract methods for execution.
  *
  * BaseRelations must also define a equality function that only returns true when the two
@@ -69,7 +69,7 @@ abstract class TableScan extends BaseRelation {
  */
 @DeveloperApi
 abstract class PrunedScan extends BaseRelation {
-  def buildScan(requiredColumns: Seq[Attribute]): RDD[Row]
+  def buildScan(requiredColumns: Array[String]): RDD[Row]
 }
 
 /**
@@ -82,5 +82,5 @@ abstract class PrunedScan extends BaseRelation {
  */
 @DeveloperApi
 abstract class FilteredScan extends BaseRelation {
-  def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
+  def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }

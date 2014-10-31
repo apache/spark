@@ -21,6 +21,8 @@ import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList}
 
+import org.apache.spark.sql.sources.DataSourceStrategy
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -326,7 +328,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
-      DataSources,
+      DataSourceStrategy,
       CommandStrategy(self),
       HiveCommandStrategy(self),
       TakeOrdered,

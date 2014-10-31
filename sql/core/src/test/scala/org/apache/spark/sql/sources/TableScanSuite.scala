@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.catalyst.expressions.{Row => _, _}
 import org.apache.spark.sql._
 
 class DefaultSource extends SimpleScanSource

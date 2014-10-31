@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{sources, SQLContext, execution}
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -248,31 +248,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
           InMemoryColumnarTableScan(_,  filters, mem)) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object DataSources extends Strategy {
-    import sources._
-
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FilteredScan)) =>
-        pruneFilterProject(
-          projectList,
-          filters,
-          identity[Seq[Expression]], // All filters still need to be evaluated
-          a => PhysicalRDD(a, t.buildScan(a.map(l.attributeMap), filters))) :: Nil
-
-      case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: PrunedScan)) =>
-        pruneFilterProject(
-          projectList,
-          filters,
-          identity[Seq[Expression]], // All filters still need to be evaluated.
-          a => PhysicalRDD(a, t.buildScan(a.map(l.attributeMap)))) :: Nil
-
-      case l @ LogicalRelation(t: TableScan) =>
-        PhysicalRDD(l.output, t.buildScan()) :: Nil
-
       case _ => Nil
     }
   }

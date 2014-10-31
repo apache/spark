@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{BaseRelation, DDLParser, LogicalRelation}
+import org.apache.spark.sql.sources.{DataSourceStrategy, BaseRelation, DDLParser, LogicalRelation}
 
 /**
  * :: AlphaComponent ::
@@ -306,7 +306,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
-      DataSources ::
+      DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
       LeftSemiJoin ::
