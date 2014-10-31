@@ -909,4 +909,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         """.stripMargin),
       (1 to 100).map(i => Seq(i, i, i)))
   }
+
+  test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"), 
+        (11 to 100).map(i => Seq(i)))
+  }
 }

@@ -232,8 +232,10 @@ class SqlParser extends AbstractSparkSQLParser {
     | termExpression ~ (">=" ~> termExpression) ^^ { case e1 ~ e2 => GreaterThanOrEqual(e1, e2) }
     | termExpression ~ ("!=" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
     | termExpression ~ ("<>" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
-    | termExpression ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
-        case e ~ el ~ eu => And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
+    | termExpression ~ NOT.? ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
+        case e ~ not ~ el ~ eu =>
+          val betweenExpr: Expression = And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
+          not.fold(betweenExpr)(f=> Not(betweenExpr))
       }
     | termExpression ~ (RLIKE  ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (REGEXP ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
