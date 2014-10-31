@@ -247,6 +247,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
 
+      val maybeAccumulators = info.accumulables
+      //val accumulatorsSortable = maybeAccumulators.map(_.name)
+      val accumulatorsReadable = maybeAccumulators
+        .map{acc => s"${acc.name}: ${acc.update.get}"}
+
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
       val inputReadable = maybeInput
@@ -301,9 +306,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         -->
         {if (hasAccumulators) {
           <td>
-            {Unparsed(
-              info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
-            )}
+            {Unparsed(accumulatorsReadable.mkString("<br/>"))}
           </td>
         }}
         {if (hasInput) {
