@@ -295,6 +295,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
 
+  /**
+   * :: DeveloperApi ::
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @DeveloperApi
+  var extraStrategies: Seq[Strategy] = Nil
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
 
@@ -305,6 +313,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
+      extraStrategies ++ (
       CommandStrategy(self) ::
       DataSourceStrategy ::
       TakeOrdered ::
@@ -315,7 +324,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil
+      BroadcastNestedLoopJoin :: Nil)
 
     /**
      * Used to build table scan operators where complex projection and filtering are done using
