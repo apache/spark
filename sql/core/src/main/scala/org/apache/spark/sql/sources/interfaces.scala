@@ -81,6 +81,6 @@ abstract class PrunedScan extends BaseRelation {
  * as filtering partitions based on a bloom filter.
  */
 @DeveloperApi
-abstract class FilteredScan extends BaseRelation {
+abstract class PrunedFilteredScan extends BaseRelation {
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.SparkPlan
  */
 private[sql] object DataSourceStrategy extends Strategy {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: FilteredScan)) =>
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: PrunedFilteredScan)) =>
       pruneFilterProject(
         l,
         projectList,
@@ -65,7 +65,8 @@ private[sql] object DataSourceStrategy extends Strategy {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
     }}).toArray
 
-    if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+    if (projectList.map(_.toAttribute) == projectList &&
+        projectSet.size == projectList.size &&
         filterSet.subsetOf(projectSet)) {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,

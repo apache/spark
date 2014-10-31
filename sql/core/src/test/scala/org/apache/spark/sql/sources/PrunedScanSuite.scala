@@ -78,6 +78,10 @@ class PrunedScanSuite extends DataSourceTest {
     (1 to 10).map(i => Row(i)).toSeq)
 
   sqlTest(
+    "SELECT a, a FROM oneToTenPruned",
+    (1 to 10).map(i => Row(i, i)).toSeq)
+
+  sqlTest(
     "SELECT b FROM oneToTenPruned",
     (1 to 10).map(i => Row(i * 2)).toSeq)
 
@@ -96,6 +100,38 @@ class PrunedScanSuite extends DataSourceTest {
   sqlTest(
     "SELECT x.a, y.b FROM oneToTenPruned x JOIN oneToTenPruned y ON x.a = y.b",
     (2 to 10 by 2).map(i => Row(i, i)).toSeq)
+
+  testPruning("SELECT * FROM oneToTenPruned", "a", "b")
+  testPruning("SELECT a, b FROM oneToTenPruned", "a", "b")
+  testPruning("SELECT b, a FROM oneToTenPruned", "b", "a")
+  testPruning("SELECT b, b FROM oneToTenPruned", "b")
+  testPruning("SELECT a FROM oneToTenPruned", "a")
+  testPruning("SELECT b FROM oneToTenPruned", "b")
+
+  def testPruning(sqlString: String, expectedColumns: String*): Unit = {
+    test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
+      val queryExecution = sql(sqlString).queryExecution
+      val rawPlan = queryExecution.executedPlan.collect {
+        case p: execution.PhysicalRDD => p
+      } match {
+        case Seq(p) => p
+        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+      }
+      val rawColumns = rawPlan.output.map(_.name)
+      val rawOutput = rawPlan.execute().first()
+
+      if (rawColumns != expectedColumns) {
+        fail(
+          s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
+          s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+            queryExecution)
+      }
+
+      if (rawOutput.size != expectedColumns.size) {
+        fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
+      }
+    }
+  }
 
 }
 

@@ -30,7 +30,7 @@ class FilteredScanSource extends RelationProvider {
 }
 
 case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends FilteredScan {
+  extends PrunedFilteredScan {
 
   override def schema =
     StructType(
@@ -146,8 +146,8 @@ class FilteredScanSuite extends DataSourceTest {
       if (rawCount != expectedCount) {
         fail(
           s"Wrong # of results for pushed filter. Got $rawCount, Expected $expectedCount\n" +
-          s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
-          queryExecution)
+            s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+            queryExecution)
       }
     }
   }
