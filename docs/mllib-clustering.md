@@ -174,7 +174,13 @@ to the cluster thus far, `$x_t$` is the new cluster center from the current batc
 is the number of points added to the cluster in the current batch. The decay factor `$\alpha$` 
 can be used to ignore the past: with `$\alpha$=1` all data will be used from the beginning; 
 with `$\alpha$=0` only the most recent data will be used. This is analogous to an 
-exponentially-weighted moving average.
+exponentially-weighted moving average. 
+
+The decay can be specified using a `halfLife` parameter, which determines the 
+correct decay factor `a` such that, for data acquired
+at time `t`, its contribution by time `t + halfLife` will have dropped to 0.5.
+The unit of time can be specified either as `batches` or `points` and the update rule
+will be adjusted accordingly.
 
 ### Examples
 

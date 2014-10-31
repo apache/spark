@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.scalatest.FunSuite
@@ -95,94 +94,6 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     // NOTE exact assignment depends on the initialization!
     assert(centers(0) ~== model.latestModel().clusterCenters(0) absTol 1E-1)
     assert(centers(1) ~== model.latestModel().clusterCenters(1) absTol 1E-1)
-
-  }
-
-  test("drifting with fractional decay in units of batches") {
-
-    val numBatches1 = 50
-    val numBatches2 = 50
-    val numPoints = 1
-    val q = 0.25
-    val k = 1
-    val d = 1
-    val r = 2.0
-
-    // create model with two clusters
-    val model = new StreamingKMeans()
-      .setK(1)
-      .setDecayFractionBatches(q)
-      .setInitialCenters(Array(Vectors.dense(0.0)))
-
-    // create two batches of data with different, pre-specified centers
-    // to simulate a transition from one cluster to another
-    val (input1, centers1) = StreamingKMeansDataGenerator(
-      numPoints, numBatches1, k, d, r, 42, initCenters = Array(Vectors.dense(100.0)))
-    val (input2, centers2) = StreamingKMeansDataGenerator(
-      numPoints, numBatches2, k, d, r, 84, initCenters = Array(Vectors.dense(0.0)))
-
-    // store the history
-    val history = new ArrayBuffer[Double](numBatches1 + numBatches2)
-
-    // setup and run the model training
-    val ssc = setupStreams(input1 ++ input2, (inputDStream: DStream[Vector]) => {
-      model.trainOn(inputDStream)
-      // extract the center (in this case one-dimensional)
-      inputDStream.foreachRDD(x => history.append(model.latestModel().clusterCenters(0)(0)))
-      inputDStream.count()
-    })
-    runStreams(ssc, numBatches1 + numBatches2, numBatches1 + numBatches2)
-
-    // check that the fraction of batches required to reach 50
-    // equals the setting of q, by finding the index of the first batch
-    // below 50 and comparing to total number of batches received
-    val halvedIndex = history.zipWithIndex.filter( x => x._1 < 50)(0)._2.toDouble
-    val fraction = (halvedIndex - numBatches1.toDouble) / halvedIndex
-    assert(fraction ~== q absTol 1E-1)
-
-  }
-
-  test("drifting with fractional decay in units of points") {
-
-    val numBatches1 = 50
-    val numBatches2 = 50
-    val numPoints = 10
-    val q = 0.25
-    val k = 1
-    val d = 1
-    val r = 2.0
-
-    // create model with two clusters
-    val model = new StreamingKMeans()
-      .setK(1)
-      .setDecayFractionPoints(q, numPoints)
-      .setInitialCenters(Array(Vectors.dense(0.0)))
-
-    // create two batches of data with different, pre-specified centers
-    // to simulate a transition from one cluster to another
-    val (input1, centers1) = StreamingKMeansDataGenerator(
-      numPoints, numBatches1, k, d, r, 42, initCenters = Array(Vectors.dense(100.0)))
-    val (input2, centers2) = StreamingKMeansDataGenerator(
-      numPoints, numBatches2, k, d, r, 84, initCenters = Array(Vectors.dense(0.0)))
-
-    // store the history
-    val history = new ArrayBuffer[Double](numBatches1 + numBatches2)
-
-    // setup and run the model training
-    val ssc = setupStreams(input1 ++ input2, (inputDStream: DStream[Vector]) => {
-      model.trainOn(inputDStream)
-      // extract the center (in this case one-dimensional)
-      inputDStream.foreachRDD(x => history.append(model.latestModel().clusterCenters(0)(0)))
-      inputDStream.count()
-    })
-    runStreams(ssc, numBatches1 + numBatches2, numBatches1 + numBatches2)
-
-    // check that the fraction of batches required to reach 50
-    // equals the setting of q, by finding the index of the first batch
-    // below 50 and comparing to total number of batches received
-    val halvedIndex = history.zipWithIndex.filter( x => x._1 < 50)(0)._2.toDouble
-    val fraction = (halvedIndex - numBatches1.toDouble) / halvedIndex
-    assert(fraction ~== q absTol 1E-1)
 
   }
 

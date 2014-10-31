@@ -39,28 +39,28 @@ import org.apache.spark.util.Utils
  *
  * The update algorithm uses the "mini-batch" KMeans rule,
  * generalized to incorporate forgetfullness (i.e. decay).
- * The basic update rule (for each cluster) is:
+ * The update rule (for each cluster) is:
  *
- * c_t+1 = [(c_t * n_t) + (x_t * m_t)] / [n_t + m_t]
- * n_t+t = n_t + m_t
+ * c_t+1 = [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t]
+ * n_t+t = n_t * a + m_t
  *
  * Where c_t is the previously estimated centroid for that cluster,
  * n_t is the number of points assigned to it thus far, x_t is the centroid
  * estimated on the current batch, and m_t is the number of points assigned
  * to that centroid in the current batch.
  *
- * This update rule is modified with a decay factor 'a' that scales
- * the contribution of the clusters as estimated thus far.
- * If a=1, all batches are weighted equally. If a=0, new centroids
+ * The decay factor 'a' scales the contribution of the clusters as estimated thus far,
+ * by applying a as a discount weighting on the current point when evaluating
+ * new incoming data. If a=1, all batches are weighted equally. If a=0, new centroids
  * are determined entirely by recent data. Lower values correspond to
  * more forgetting.
  *
- * Decay can optionally be specified as a decay fraction 'q',
- * which corresponds to the fraction of batches (or points)
- * after which the past will be reduced to a contribution of 0.5.
- * This decay fraction can be specified in units of 'points' or 'batches'.
- * if 'batches', behavior will be independent of the number of points per batch;
- * if 'points', the expected number of points per batch must be specified.
+ * Decay can optionally be specified by a half life and associated
+ * time unit. The time unit can either be a batch of data or a single
+ * data point. Considering data arrived at time t, the half life h is defined
+ * such that at time t + h the discount applied to the data from t is 0.5.
+ * The definition remains the same whether the time unit is given
+ * as batches or points.
  *
  */
 @DeveloperApi
@@ -69,7 +69,7 @@ class StreamingKMeansModel(
     val clusterCounts: Array[Long]) extends KMeansModel(clusterCenters) with Logging {
 
   /** Perform a k-means update on a batch of data. */
-  def update(data: RDD[Vector], a: Double, units: String): StreamingKMeansModel = {
+  def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModel = {
 
     val centers = clusterCenters
     val counts = clusterCounts
@@ -94,12 +94,12 @@ class StreamingKMeansModel(
       val newCount = count
       val newCentroid = mean / newCount.toDouble
       // compute the normalized scale factor that controls forgetting
-      val decayFactor = units match {
-        case "batches" =>  newCount / (a * oldCount + newCount)
-        case "points" => newCount / (math.pow(a, newCount) * oldCount + newCount)
+      val lambda = timeUnit match {
+        case "batches" =>  newCount / (decayFactor * oldCount + newCount)
+        case "points" => newCount / (math.pow(decayFactor, newCount) * oldCount + newCount)
       }
       // perform the update
-      val updatedCentroid = oldCentroid + (newCentroid - oldCentroid) * decayFactor
+      val updatedCentroid = oldCentroid + (newCentroid - oldCentroid) * lambda
       // store the new counts and centers
       counts(label) = oldCount + newCount
       centers(label) = Vectors.fromBreeze(updatedCentroid)
@@ -134,8 +134,8 @@ class StreamingKMeansModel(
 @DeveloperApi
 class StreamingKMeans(
     var k: Int,
-    var a: Double,
-    var units: String) extends Logging {
+    var decayFactor: Double,
+    var timeUnit: String) extends Logging {
 
   protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
 
@@ -149,30 +149,18 @@ class StreamingKMeans(
 
   /** Set the decay factor directly (for forgetful algorithms). */
   def setDecayFactor(a: Double): this.type = {
-    this.a = a
+    this.decayFactor = decayFactor
     this
   }
 
-  /** Set the decay units for forgetful algorithms ("batches" or "points"). */
-  def setUnits(units: String): this.type = {
-    if (units != "batches" && units != "points") {
-      throw new IllegalArgumentException("Invalid units for decay: " + units)
+  /** Set the half life and time unit ("batches" or "points") for forgetful algorithms. */
+  def setHalfLife(halfLife: Double, timeUnit: String): this.type = {
+    if (timeUnit != "batches" && timeUnit != "points") {
+      throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
     }
-    this.units = units
-    this
-  }
-
-  /** Set decay fraction in units of batches. */
-  def setDecayFractionBatches(q: Double): this.type = {
-    this.a = math.log(1 - q) / math.log(0.5)
-    this.units = "batches"
-    this
-  }
-
-  /** Set decay fraction in units of points. Must specify expected number of points per batch. */
-  def setDecayFractionPoints(q: Double, m: Double): this.type = {
-    this.a = math.pow(math.log(1 - q) / math.log(0.5), 1/m)
-    this.units = "points"
+    this.decayFactor = math.exp(math.log(0.5) / halfLife)
+    logInfo("Setting decay factor to: %g ".format (this.decayFactor))
+    this.timeUnit = timeUnit
     this
   }
 
@@ -216,7 +204,7 @@ class StreamingKMeans(
   def trainOn(data: DStream[Vector]) {
     this.assertInitialized()
     data.foreachRDD { (rdd, time) =>
-      model = model.update(rdd, this.a, this.units)
+      model = model.update(rdd, this.decayFactor, this.timeUnit)
     }
   }
 
