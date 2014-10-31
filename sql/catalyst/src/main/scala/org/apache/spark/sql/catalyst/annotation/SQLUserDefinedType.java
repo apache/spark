@@ -28,8 +28,7 @@ import org.apache.spark.sql.catalyst.types.UserDefinedType;
  *
  * WARNING: This annotation will only work if both Java and Scala reflection return the same class
  *          names (after erasure) for the UDT.  This will NOT be the case when, e.g., the UDT class
- *          is enclosed in an object (a singleton).  In these cases, the UDT must be registered
- *          manually.
+ *          is enclosed in an object (a singleton).
  *
  * WARNING: UDTs are currently only supported from Scala.
  */
@@ -38,5 +37,10 @@ import org.apache.spark.sql.catalyst.types.UserDefinedType;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface SQLUserDefinedType {
+
+  /**
+   * Returns an instance of the UserDefinedType which can serialize and deserialize the user
+   * class to and from Catalyst built-in types.
+   */
   Class<? extends UserDefinedType<?> > udt();
 }

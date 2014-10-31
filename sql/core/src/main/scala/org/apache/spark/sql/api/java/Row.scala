@@ -101,7 +101,7 @@ class Row(private[spark] val row: ScalaRow) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case that: Row =>
       (that canEqual this) &&
-        row.equals(that.row)
+        row == that.row // Should this be row.equals(that.row)?
     case _ => false
   }
 

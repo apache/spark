@@ -42,6 +42,10 @@ protected[sql] object DataTypeConversions {
    * Returns the equivalent DataType in Java for the given DataType in Scala.
    */
   def asJavaDataType(scalaDataType: DataType): JDataType = scalaDataType match {
+    // Check UDT first since UDTs can override other types
+    case udtType: UserDefinedType[_] =>
+      UDTWrappers.wrapAsJava(udtType)
+
     case StringType => JDataType.StringType
     case BinaryType => JDataType.BinaryType
     case BooleanType => JDataType.BooleanType
@@ -63,8 +67,6 @@ protected[sql] object DataTypeConversions {
         mapType.valueContainsNull)
     case structType: StructType => JDataType.createStructType(
         structType.fields.map(asJavaStructField).asJava)
-    case udtType: UserDefinedType[_] =>
-      UDTWrappers.wrapAsJava(udtType)
   }
 
   /**
@@ -81,6 +83,10 @@ protected[sql] object DataTypeConversions {
    * Returns the equivalent DataType in Scala for the given DataType in Java.
    */
   def asScalaDataType(javaDataType: JDataType): DataType = javaDataType match {
+    // Check UDT first since UDTs can override other types
+    case udtType: org.apache.spark.sql.api.java.UserDefinedType[_] =>
+      UDTWrappers.wrapAsScala(udtType)
+
     case stringType: org.apache.spark.sql.api.java.StringType =>
       StringType
     case binaryType: org.apache.spark.sql.api.java.BinaryType =>
@@ -115,8 +121,6 @@ protected[sql] object DataTypeConversions {
         mapType.isValueContainsNull)
     case structType: org.apache.spark.sql.api.java.StructType =>
       StructType(structType.getFields.map(asScalaStructField))
-    case udtType: org.apache.spark.sql.api.java.UserDefinedType[_] =>
-      UDTWrappers.wrapAsScala(udtType)
   }
 
   /** Converts Java objects to catalyst rows / types */
