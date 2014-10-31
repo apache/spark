@@ -19,7 +19,7 @@ package org.apache.spark.mllib.feature
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.linalg.{Vectors, DenseVector, SparseVector, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -43,15 +43,22 @@ import org.apache.spark.util.collection.OpenHashSet
  *   val indexedData2: RDD[Vector] = datasetIndexer.transform(myData2)
  *   val categoricalFeaturesInfo: Map[Int, Int] = datasetIndexer.getCategoricalFeaturesInfo()
  *
- * TODO: Add option for transform: defaultForUnknownValue (default index for unknown category).
- *
  * TODO: Add warning if a categorical feature has only 1 category.
+ *
+ * TODO: Add option for allowing unknown categories:
+ *       Parameter allowUnknownCategories:
+ *        If true, then handle unknown categories during `transform`
+ *        by assigning them to an extra category index.
+ *        That unknown category index will be the largest index;
+ *        e.g., if 5 categories are found during `fit`, then any
+ *        unknown categories will be assigned index 5.
+ *
+ * @param maxCategories  Threshold for the number of values a categorical feature can take.
+ *                       If a feature is found to have > maxCategories values, then it is
+ *                       declared continuous.
  */
 @Experimental
-class DatasetIndexer(
-    val maxCategories: Int,
-    val ignoreUnrecognizedCategories: Boolean = true)
-  extends Logging with Serializable {
+class DatasetIndexer(val maxCategories: Int) extends Logging with Serializable {
 
   require(maxCategories > 1,
     s"DatasetIndexer given maxCategories = $maxCategories, but requires maxCategories > 1.")
@@ -69,6 +76,8 @@ class DatasetIndexer(
     def merge(other: FeatureValueStats): FeatureValueStats = {
       featureValueSets.zip(other.featureValueSets).foreach { case (fvs1, fvs2) =>
         fvs2.iterator.foreach { val2 =>
+          // Once we have found > maxCategories values, we know the feature is continuous
+          // and do not need to collect more values for it.
           if (fvs1.size <= maxCategories) fvs1.add(val2)
         }
       }
@@ -122,20 +131,23 @@ class DatasetIndexer(
    *          can change the behavior of [[transform]] and [[getCategoricalFeatureIndexes]].
    *          It is best to [[fit]] on all datasets before calling [[transform]] on any.
    *
+   * Note: To run this on an RDD[Double], convert to Vector via `data.map(Vectors.dense(_))`.
+   *
    * @param data  Dataset with equal-length vectors.
    *              NOTE: A single instance of [[DatasetIndexer]] must always be given vectors of
    *              the same length.  If given non-matching vectors, this method will throw an error.
    */
   def fit(data: RDD[Vector]): Unit = {
+
     // For each partition, get (featureValueStats, newNumFeatures).
-    //  If all vectors have the same length, then newNumFeatures = -1.
+    //  If all vectors have the same length, then newNumFeatures = None.
     //  If a vector with a new length is found, then newNumFeatures is set to that length.
-    val partitionFeatureValueSets: RDD[(Option[FeatureValueStats], Int)] =
+    val partitionFeatureValueSets: RDD[(Option[FeatureValueStats], Option[Int])] =
       data.mapPartitions { iter =>
         // Make local copy of featureValueStats.
         //  This will be None initially if this is the first dataset to be fitted.
         var localFeatureValueStats: Option[FeatureValueStats] = featureValueStats
-        var localNumFeatures: Int = -1
+        var newNumFeatures: Option[Int] = None
         // TODO: Track which features are known to be continuous already, and do not bother
         //       updating counts for them.  Probably store featureValueStats in a linked list.
         iter.foreach {
@@ -146,7 +158,7 @@ class DatasetIndexer(
                   fvs.addDenseVector(dv)
                 } else {
                   // non-matching vector lengths
-                  localNumFeatures = dv.size
+                  newNumFeatures = Some(dv.size)
                 }
               case None =>
                 localFeatureValueStats = Some(new FeatureValueStats(dv.size, maxCategories))
@@ -159,40 +171,40 @@ class DatasetIndexer(
                   fvs.addSparseVector(sv)
                 } else {
                   // non-matching vector lengths
-                  localNumFeatures = sv.size
+                  newNumFeatures = Some(sv.size)
                 }
               case None =>
                 localFeatureValueStats = Some(new FeatureValueStats(sv.size, maxCategories))
                 localFeatureValueStats.get.addSparseVector(sv)
             }
         }
-        Iterator((localFeatureValueStats, localNumFeatures))
+        Iterator((localFeatureValueStats, newNumFeatures))
       }
-    val (aggFeatureValueStats: Option[FeatureValueStats], newNumFeatures: Int) =
-      partitionFeatureValueSets.fold((None, -1)) {
+    val (aggFeatureValueStats: Option[FeatureValueStats], newNumFeatures: Option[Int]) =
+      partitionFeatureValueSets.fold((None, None)) {
         case ((Some(fvs1), newNumFeatures1), (Some(fvs2), newNumFeatures2)) =>
           if (fvs2.numFeatures == fvs1.numFeatures) {
             val tmpNumFeatures = (newNumFeatures1, newNumFeatures2) match {
-              case (-1, -1) => -1 // good: vector lengths match
-              case (-1, _) => newNumFeatures2
+              case (None, None) => None // good: vector lengths match
+              case (None, _) => newNumFeatures2
               case (_, _) => newNumFeatures1
             }
             (Some(fvs1.merge(fvs2)), tmpNumFeatures)
           } else {
             // non-matching vector lengths
-            (Some(fvs1), fvs2.numFeatures)
+            (Some(fvs1), Some(fvs2.numFeatures))
           }
-        case ((Some(fvs1), newNumFeatures1), (None, -1)) =>
+        case ((Some(fvs1), newNumFeatures1), (None, None)) =>
           (Some(fvs1), newNumFeatures1)
-        case ((None, -1), (Some(fvs2), newNumFeatures2)) =>
+        case ((None, None), (Some(fvs2), newNumFeatures2)) =>
           (Some(fvs2), newNumFeatures2)
-        case ((None, -1), (None, -1)) =>
-          (None, -1)
+        case ((None, None), (None, None)) =>
+          (None, None)
       }
-    if (newNumFeatures != -1) {
+    if (newNumFeatures.nonEmpty) {
       throw new RuntimeException("DatasetIndexer given records of non-matching length." +
         s" Found records with length ${aggFeatureValueStats.get.numFeatures} and length" +
-        s" $newNumFeatures")
+        s" ${newNumFeatures.get}")
     }
     (featureValueStats, aggFeatureValueStats) match {
       case (Some(origFVS), Some(newFVS)) =>
@@ -209,7 +221,7 @@ class DatasetIndexer(
    * Categorical features are mapped to their feature value indices.
    * Continuous features (columns) are left unchanged.
    *
-   * This currently converts sparse vectors to dense ones.
+   * Note: To run this on an RDD[Double], convert to Vector via `data.map(Vectors.dense(_))`.
    *
    * @param data  Dataset with equal-length vectors.
    *              NOTE: A single instance of [[DatasetIndexer]] must always be given vectors of
@@ -276,5 +288,4 @@ class DatasetIndexer(
       throw new RuntimeException("DatasetIndexer.getCategoricalFeatureIndexes called," +
         " but no datasets have been indexed via fit() yet.")
   }
-
 }
