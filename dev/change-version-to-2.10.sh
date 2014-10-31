@@ -16,5 +16,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-find \( -name 'pom.xml' -a -not -path 'target' \) -exec sed -i 's|\(artifactId.*\)_2.11|\1_2.10|g' {}  \;
+find . -name 'pom.xml' | grep -v target \
+  | xargs -I {} sed -i -e 's|\(artifactId.*\)_2.11|\1_2.10|g' {}  
