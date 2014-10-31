@@ -43,14 +43,13 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
 
         val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+          subsamplingRate = subsamplingRate)
 
         val dt = DecisionTree.train(remappedInput, treeStrategy)
 
-        val boostingStrategy = new BoostingStrategy(algo = Regression,
-          numEstimators = numEstimators, loss = SquaredError, maxDepth = 2,
-          numClassesForClassification = 1, categoricalFeaturesInfo = categoricalFeaturesInfo,
-          subsample = subsamplingRate, learningRate = learningRate)
+        val boostingStrategy = new BoostingStrategy(Regression, numEstimators, SquaredError,
+          subsamplingRate, learningRate, 1, categoricalFeaturesInfo, treeStrategy)
 
         val gbt = GradientBoosting.trainRegressor(rdd, boostingStrategy)
         assert(gbt.weakHypotheses.size === numEstimators)
@@ -63,24 +62,53 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("Binary classification with continuous features: Log Loss") {
+  test("Regression with continuous features: Absolute Error") {
 
     GradientBoostingSuite.testCombinations.foreach {
-      case (numEstimators, learningRate, sumSamplingRate) =>
+      case (numEstimators, learningRate, subsamplingRate) =>
         val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
         val rdd = sc.parallelize(arr)
         val categoricalFeaturesInfo = Map.empty[Int, Int]
 
         val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+          subsamplingRate = subsamplingRate)
 
         val dt = DecisionTree.train(remappedInput, treeStrategy)
 
-        val boostingStrategy = new BoostingStrategy(algo = Classification,
-          numEstimators = numEstimators, loss = LogLoss, maxDepth = 2,
+        val boostingStrategy = new BoostingStrategy(Regression, numEstimators, SquaredError,
+          subsamplingRate, learningRate, 1, categoricalFeaturesInfo, treeStrategy)
+
+        val gbt = GradientBoosting.trainRegressor(rdd, boostingStrategy)
+        assert(gbt.weakHypotheses.size === numEstimators)
+        val gbtTree = gbt.weakHypotheses(0)
+
+        EnsembleTestHelper.validateRegressor(gbt, arr, 0.02)
+
+        // Make sure trees are the same.
+        assert(gbtTree.toString == dt.toString)
+    }
+  }
+
+
+  test("Binary classification with continuous features: Log Loss") {
+
+    GradientBoostingSuite.testCombinations.foreach {
+      case (numEstimators, learningRate, subsamplingRate) =>
+        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+        val rdd = sc.parallelize(arr)
+        val categoricalFeaturesInfo = Map.empty[Int, Int]
+
+        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+        val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
           numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
-          subsample = sumSamplingRate, learningRate = learningRate)
+          subsamplingRate = subsamplingRate)
+
+        val dt = DecisionTree.train(remappedInput, treeStrategy)
+
+        val boostingStrategy = new BoostingStrategy(Classification, numEstimators, LogLoss,
+          subsamplingRate, learningRate, 1, categoricalFeaturesInfo, treeStrategy)
 
         val gbt = GradientBoosting.trainClassifier(rdd, boostingStrategy)
         assert(gbt.weakHypotheses.size === numEstimators)
