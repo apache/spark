@@ -119,7 +119,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   extends Attribute with trees.LeafNode[Expression] {
 
   override def equals(other: Any) = other match {
-    case ar: AttributeReference => exprId == ar.exprId && dataType == ar.dataType
+    case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
     case _ => false
   }
 
