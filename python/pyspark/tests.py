@@ -884,19 +884,22 @@ class InputFormatTests(ReusedPySparkTestCase):
               (3, array('d', [4.0, 5.0, 6.0]))]
         self.assertEqual(arrays, ea)
 
-        clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
-                                            "org.apache.hadoop.io.Text",
-                                            "org.apache.spark.api.python.TestWritable").collect())
-        ec = (u'1',
-              {u'__class__': u'org.apache.spark.api.python.TestWritable',
-               u'double': 54.0, u'int': 123, u'str': u'test1'})
-        self.assertEqual(clazz[0], ec)
+        clazz = self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
+                                     "org.apache.hadoop.io.Text",
+                                     "org.apache.spark.api.python.TestWritable").collect()
+        cname = u'org.apache.spark.api.python.TestWritable'
+        ec = [(u'1', {u'__class__': cname, u'double': 1.0, u'int': 1, u'str': u'test1'}),
+              (u'2', {u'__class__': cname, u'double': 2.3, u'int': 2, u'str': u'test2'}),
+              (u'3', {u'__class__': cname, u'double': 3.1, u'int': 3, u'str': u'test3'}),
+              (u'5', {u'__class__': cname, u'double': 5.5, u'int': 5, u'str': u'test56'}),
+              (u'4', {u'__class__': cname, u'double': 4.2, u'int': 4, u'str': u'test4'})]
+        self.assertEqual(clazz, ec)
 
-        unbatched_clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
-                                                      "org.apache.hadoop.io.Text",
-                                                      "org.apache.spark.api.python.TestWritable",
-                                                      ).collect())
-        self.assertEqual(unbatched_clazz[0], ec)
+        unbatched_clazz = self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
+                                               "org.apache.hadoop.io.Text",
+                                               "org.apache.spark.api.python.TestWritable",
+                                               ).collect()
+        self.assertEqual(unbatched_clazz, ec)
 
     def test_oldhadoop(self):
         basepath = self.tempdir.name

@@ -440,7 +440,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(sc.hadoopConfiguration()))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -466,7 +466,7 @@ private[spark] object PythonRDD extends Logging {
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(mergedConf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -492,7 +492,7 @@ private[spark] object PythonRDD extends Logging {
         None, inputFormatClass, keyClass, valueClass, conf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -535,7 +535,7 @@ private[spark] object PythonRDD extends Logging {
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(mergedConf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -561,7 +561,7 @@ private[spark] object PythonRDD extends Logging {
         None, inputFormatClass, keyClass, valueClass, conf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
