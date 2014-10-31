@@ -52,6 +52,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val numCompleted = tasks.count(_.taskInfo.finished)
       val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val hasAccumulators = accumulables.size > 0
       val hasInput = stageData.inputBytes > 0
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
@@ -104,7 +105,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val taskHeaders: Seq[String] =
         Seq(
           "Index", "ID", "Attempt", "Status", "Locality Level", "Executor ID / Host",
-          "Launch Time", "Duration", "GC Time", "Accumulators") ++
+          "Launch Time", "Duration", "GC Time") ++
+        {if (hasAccumulators) Seq("Accumulators") else Nil} ++
         {if (hasInput) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
@@ -112,7 +114,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         Seq("Errors")
 
       val taskTable = UIUtils.listingTable(
-        taskHeaders, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+        taskHeaders, 
+        taskRow(hasAccumulators, hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled),
+        tasks)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
@@ -232,6 +236,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   }
 
   def taskRow(
+      hasAccumulators: Boolean,
       hasInput: Boolean,
       hasShuffleRead: Boolean,
       hasShuffleWrite: Boolean,
@@ -243,6 +248,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
+
+      val maybeAccumulators = info.accumulables
+      val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
 
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
@@ -290,17 +298,17 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
-        <td>
-          {Unparsed(
-            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
-          )}
-        </td>
         <!--
         TODO: Add this back after we add support to hide certain columns.
         <td sorttable_customkey={serializationTime.toString}>
           {if (serializationTime > 0) UIUtils.formatDuration(serializationTime) else ""}
         </td>
         -->
+        {if (hasAccumulators) {
+          <td>
+            {Unparsed(accumulatorsReadable.mkString("<br/>"))}
+          </td>
+        }}
         {if (hasInput) {
           <td sorttable_customkey={inputSortable}>
             {inputReadable}
