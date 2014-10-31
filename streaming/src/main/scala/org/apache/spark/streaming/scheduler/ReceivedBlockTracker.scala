@@ -42,7 +42,7 @@ private[streaming] case class BatchCleanupEvent(times: Seq[Time])
 
 
 /** Class representing the blocks of all the streams allocated to a batch */
-case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {
+private[streaming] case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {
   def getBlockForStream(streamId: Int) = streamIdToAllocatedBlocks(streamId)
 }
 
@@ -51,11 +51,17 @@ case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlock
  * when required. All actions taken by this class can be saved to a write ahead log
  * (if a checkpoint directory has been provided), so that the state of the tracker
  * (received blocks and block-to-batch allocations) can be recovered after driver failure.
+ *
+ * Note that when any instance of this class is created with a checkpoint directory,
+ * it will try reading events from logs in the directory.
  */
-private[streaming]
-class ReceivedBlockTracker(
-    conf: SparkConf, hadoopConf: Configuration, streamIds: Seq[Int], clock: Clock,
-    checkpointDirOption: Option[String]) extends Logging {
+private[streaming] class ReceivedBlockTracker(
+    conf: SparkConf,
+    hadoopConf: Configuration,
+    streamIds: Seq[Int],
+    clock: Clock,
+    checkpointDirOption: Option[String])
+  extends Logging {
 
   private type ReceivedBlockQueue = mutable.Queue[ReceivedBlockInfo]
   
@@ -136,14 +142,11 @@ class ReceivedBlockTracker(
     logManagerOption.foreach { _.stop() }
   }
 
-
   /**
    * Recover all the tracker actions from the write ahead logs to recover the state (unallocated
    * and allocated block info) prior to failure.
    */
   private def recoverFromWriteAheadLogs(): Unit = synchronized {
-    logInfo("Recovering from checkpoint")
-
     // Insert the recovered block information
     def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
@@ -166,6 +169,7 @@ class ReceivedBlockTracker(
     }
 
     logManagerOption.foreach { logManager =>
+      logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
       logManager.readFromLog().foreach { byteBuffer =>
         logTrace("Recovering record " + byteBuffer)
         Utils.deserialize[ReceivedBlockTrackerLogEvent](byteBuffer.array) match {
