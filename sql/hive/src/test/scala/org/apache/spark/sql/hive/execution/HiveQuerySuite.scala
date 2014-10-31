@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import scala.util.Try
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
@@ -569,7 +571,7 @@ class HiveQuerySuite extends HiveComparisonTest {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // Now only verify 0.12.0, and ignore other versions due to binary compatability
+    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
     // current TestSerDe.jar is from 0.12.0
     if (HiveShim.version == "0.12.0") {
       sql(s"ADD JAR $testJar")
@@ -579,6 +581,17 @@ class HiveQuerySuite extends HiveComparisonTest {
         """.stripMargin)
     }
     sql("DROP TABLE alter1")
+  }
+
+  test("ADD FILE command") {
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    sql(s"ADD FILE $testFile")
+
+    val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
+      Iterator.single(new File(SparkFiles.get("v1.txt")).canRead)
+    }
+
+    assert(checkAddFileRDD.first())
   }
 
   case class LogEntry(filename: String, message: String)
@@ -816,7 +829,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("select from thrift based table",
     "SELECT * from src_thrift")
-  
+
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
 }
