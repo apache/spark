@@ -37,6 +37,7 @@ package object sources {
    *
    * A new instance of this class with be instantiated each time a DDL call is made.
    */
+  @DeveloperApi
   trait RelationProvider {
     /** Returns a new base relation with the given parameters. */
     def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
