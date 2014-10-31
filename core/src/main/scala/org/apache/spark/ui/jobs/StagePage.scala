@@ -248,9 +248,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
 
       val maybeAccumulators = info.accumulables
-      //val accumulatorsSortable = maybeAccumulators.map(_.name)
-      val accumulatorsReadable = maybeAccumulators
-        .map{acc => s"${acc.name}: ${acc.update.get}"}
+      val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
 
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
