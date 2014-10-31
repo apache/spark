@@ -23,7 +23,8 @@ import scala.collection.IndexedSeqOptimized
 
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.types.{BinaryType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.catalyst.types._
+import org.apache.commons.lang.StringUtils
 
 trait StringRegexExpression {
   self: BinaryExpression =>
@@ -49,7 +50,10 @@ trait StringRegexExpression {
     Pattern.compile(escape(str))
   }
 
-  protected def pattern(str: String) = if(cache == null) compile(str) else cache
+    /** Returns a string representation of the nodes in this tree */
+    override def treeString = ???
+
+    protected def pattern(str: String) = if(cache == null) compile(str) else cache
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
@@ -92,6 +96,11 @@ trait StringTransformationExpression {
   }
 }
 
+/**
+ * This trait is use for string calculation that return Integer Type
+ * Functions that return Integer Type should use this trait
+ * eg: length(s), instr( string1, string2, start_position,nth_appearance )
+ */
 
 trait StringCalculationExpression {
     self: UnaryExpression =>
@@ -102,7 +111,7 @@ trait StringCalculationExpression {
 
     override def foldable: Boolean = child.foldable
     def nullable: Boolean = child.nullable
-    def dataType: DataType = StringType
+    def dataType: DataType = IntegerType
 
     override def eval(input: Row): Any = {
         val evaluated = child.eval(input)
@@ -163,7 +172,7 @@ case class RLike(left: Expression, right: Expression)
  */
 case class Ltrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = v.replaceAll("^\\s+", "")
+    override def convert(v: String): String = StringUtils.stripStart(v, " ");
 
     override def toString() = s"Ltrim($child)"
 }
@@ -173,7 +182,7 @@ case class Ltrim(child: Expression) extends UnaryExpression with StringTransform
  */
 case class Rtrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = v.replaceAll("\\s+$", "")
+    override def convert(v: String): String = StringUtils.stripEnd(v, " ");
 
     override def toString() = s"Rtrim($child)"
 }
