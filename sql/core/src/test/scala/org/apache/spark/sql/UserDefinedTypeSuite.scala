@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.beans.{BeanInfo, BeanProperty}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.types.UserDefinedType
@@ -31,7 +33,10 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   }
 }
 
-private[sql] case class MyLabeledPoint(label: Double, features: MyDenseVector)
+@BeanInfo
+private[sql] case class MyLabeledPoint(
+    @BeanProperty label: Double,
+    @BeanProperty features: MyDenseVector)
 
 private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
