@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.api.java;
 
+import java.io.Serializable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,7 +28,7 @@ import java.util.Set;
  * To get/create specific data type, users should use singleton objects and factory methods
  * provided by this class.
  */
-public abstract class DataType {
+public abstract class DataType implements Serializable {
 
   /**
    * Gets the StringType object.

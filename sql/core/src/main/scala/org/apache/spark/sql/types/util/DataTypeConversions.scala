@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.types.util
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField, UDTWrappers, JavaToScalaUDTWrapper}
-
 import scala.collection.JavaConverters._
+
+import org.apache.spark.sql._
+import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField,
+  UDTWrappers}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.types.UserDefinedType
+
 
 protected[sql] object DataTypeConversions {
 
@@ -116,9 +120,10 @@ protected[sql] object DataTypeConversions {
   }
 
   /** Converts Java objects to catalyst rows / types */
-  def convertJavaToCatalyst(a: Any): Any = a match {
-    case d: java.math.BigDecimal => BigDecimal(d)
-    case other => other
+  def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
+    case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
+    case (d: java.math.BigDecimal, _) => BigDecimal(d)
+    case (other, _) => other
   }
 
   /** Converts Java objects to catalyst rows / types */
