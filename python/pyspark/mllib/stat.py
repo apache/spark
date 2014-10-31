@@ -19,66 +19,36 @@
 Python package for statistical functions in MLlib.
 """
 
-from functools import wraps
-
-from pyspark import PickleSerializer
-from pyspark.mllib.linalg import _convert_to_vector, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
+from pyspark.mllib.linalg import _convert_to_vector
 
 
 __all__ = ['MultivariateStatisticalSummary', 'Statistics']
 
 
-def serialize(f):
-    ser = PickleSerializer()
-
-    @wraps(f)
-    def func(self):
-        jvec = f(self)
-        bytes = self._sc._jvm.SerDe.dumps(jvec)
-        return ser.loads(str(bytes)).toArray()
-
-    return func
-
-
-class MultivariateStatisticalSummary(object):
+class MultivariateStatisticalSummary(JavaModelWrapper):
 
     """
     Trait for multivariate statistical summary of a data matrix.
     """
 
-    def __init__(self, sc, java_summary):
-        """
-        :param sc:  Spark context
-        :param java_summary:  Handle to Java summary object
-        """
-        self._sc = sc
-        self._java_summary = java_summary
-
-    def __del__(self):
-        self._sc._gateway.detach(self._java_summary)
-
-    @serialize
     def mean(self):
-        return self._java_summary.mean()
+        return self.call("mean").toArray()
 
-    @serialize
     def variance(self):
-        return self._java_summary.variance()
+        return self.call("variance").toArray()
 
     def count(self):
-        return self._java_summary.count()
+        return self.call("count")
 
-    @serialize
     def numNonzeros(self):
-        return self._java_summary.numNonzeros()
+        return self.call("numNonzeros").toArray()
 
-    @serialize
     def max(self):
-        return self._java_summary.max()
+        return self.call("max").toArray()
 
-    @serialize
     def min(self):
-        return self._java_summary.min()
+        return self.call("min").toArray()
 
 
 class Statistics(object):
@@ -106,10 +76,8 @@ class Statistics(object):
         >>> cStats.min()
         array([ 2.,  0.,  0., -2.])
         """
-        sc = rdd.ctx
-        jrdd = _to_java_object_rdd(rdd.map(_convert_to_vector))
-        cStats = sc._jvm.PythonMLLibAPI().colStats(jrdd)
-        return MultivariateStatisticalSummary(sc, cStats)
+        cStats = callMLlibFunc("colStats", rdd.map(_convert_to_vector))
+        return MultivariateStatisticalSummary(cStats)
 
     @staticmethod
     def corr(x, y=None, method=None):
@@ -156,7 +124,6 @@ class Statistics(object):
         ... except TypeError:
         ...     pass
         """
-        sc = x.ctx
         # Check inputs to determine whether a single value or a matrix is needed for output.
         # Since it's legal for users to use the method name as the second argument, we need to
         # check if y is used to specify the method name instead.
@@ -164,15 +131,9 @@ class Statistics(object):
             raise TypeError("Use 'method=' to specify method name.")
 
         if not y:
-            jx = _to_java_object_rdd(x.map(_convert_to_vector))
-            resultMat = sc._jvm.PythonMLLibAPI().corr(jx, method)
-            bytes = sc._jvm.SerDe.dumps(resultMat)
-            ser = PickleSerializer()
-            return ser.loads(str(bytes)).toArray()
+            return callMLlibFunc("corr", x.map(_convert_to_vector), method).toArray()
         else:
-            jx = _to_java_object_rdd(x.map(float))
-            jy = _to_java_object_rdd(y.map(float))
-            return sc._jvm.PythonMLLibAPI().corr(jx, jy, method)
+            return callMLlibFunc("corr", x.map(float), y.map(float), method)
 
 
 def _test():

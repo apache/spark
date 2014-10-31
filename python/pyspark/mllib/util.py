@@ -18,8 +18,7 @@
 import numpy as np
 import warnings
 
-from pyspark.rdd import RDD
-from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
+from pyspark.mllib.common import callMLlibFunc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
@@ -173,9 +172,7 @@ class MLUtils(object):
         (0.0,[1.01,2.02,3.03])
         """
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
-        jrdd = sc._jvm.PythonMLLibAPI().loadLabeledPoints(sc._jsc, path, minPartitions)
-        jpyrdd = sc._jvm.SerDe.javaToPython(jrdd)
-        return RDD(jpyrdd, sc, AutoBatchedSerializer(PickleSerializer()))
+        return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
 
 def _test():

@@ -21,87 +21,14 @@ Python package for feature in MLlib.
 import sys
 import warnings
 
-import py4j.protocol
 from py4j.protocol import Py4JJavaError
-from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, SparkContext
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.mllib.linalg import Vectors, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
+from pyspark.mllib.linalg import Vectors
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel']
-
-
-# Hack for support float('inf') in Py4j
-_old_smart_decode = py4j.protocol.smart_decode
-
-_float_str_mapping = {
-    u'nan': u'NaN',
-    u'inf': u'Infinity',
-    u'-inf': u'-Infinity',
-}
-
-
-def _new_smart_decode(obj):
-    if isinstance(obj, float):
-        s = unicode(obj)
-        return _float_str_mapping.get(s, s)
-    return _old_smart_decode(obj)
-
-py4j.protocol.smart_decode = _new_smart_decode
-
-
-# TODO: move these helper functions into utils
-_picklable_classes = [
-    'LinkedList',
-    'SparseVector',
-    'DenseVector',
-    'DenseMatrix',
-    'Rating',
-    'LabeledPoint',
-]
-
-
-def _py2java(sc, a):
-    """ Convert Python object into Java """
-    if isinstance(a, RDD):
-        a = _to_java_object_rdd(a)
-    elif not isinstance(a, (int, long, float, bool, basestring)):
-        bytes = bytearray(PickleSerializer().dumps(a))
-        a = sc._jvm.SerDe.loads(bytes)
-    return a
-
-
-def _java2py(sc, r):
-    if isinstance(r, JavaObject):
-        clsName = r.getClass().getSimpleName()
-        if clsName in ("RDD", "JavaRDD"):
-            if clsName == "RDD":
-                r = r.toJavaRDD()
-            jrdd = sc._jvm.SerDe.javaToPython(r)
-            return RDD(jrdd, sc, AutoBatchedSerializer(PickleSerializer()))
-
-        elif clsName in _picklable_classes:
-            r = sc._jvm.SerDe.dumps(r)
-
-    if isinstance(r, bytearray):
-        r = PickleSerializer().loads(str(r))
-    return r
-
-
-def _callJavaFunc(sc, func, *args):
-    """ Call Java Function
-    """
-    args = [_py2java(sc, a) for a in args]
-    return _java2py(sc, func(*args))
-
-
-def _callAPI(sc, name, *args):
-    """ Call API in PythonMLLibAPI
-    """
-    api = getattr(sc._jvm.PythonMLLibAPI(), name)
-    return _callJavaFunc(sc, api, *args)
 
 
 class VectorTransformer(object):
@@ -160,25 +87,19 @@ class Normalizer(VectorTransformer):
         """
         sc = SparkContext._active_spark_context
         assert sc is not None, "SparkContext should be initialized first"
-        return _callAPI(sc, "normalizeVector", self.p, vector)
+        return callMLlibFunc("normalizeVector", self.p, vector)
 
 
-class JavaModelWrapper(VectorTransformer):
+class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
     """
     Wrapper for the model in JVM
     """
-    def __init__(self, sc, java_model):
-        self._sc = sc
-        self._java_model = java_model
-
-    def __del__(self):
-        self._sc._gateway.detach(self._java_model)
 
     def transform(self, dataset):
-        return _callJavaFunc(self._sc, self._java_model.transform, dataset)
+        return self.call("transform", dataset)
 
 
-class StandardScalerModel(JavaModelWrapper):
+class StandardScalerModel(JavaVectorTransformer):
     """
     :: Experimental ::
 
@@ -192,7 +113,7 @@ class StandardScalerModel(JavaModelWrapper):
         :return: Standardized vector. If the variance of a column is zero,
                 it will return default `0.0` for the column with zero variance.
         """
-        return JavaModelWrapper.transform(self, vector)
+        return JavaVectorTransformer.transform(self, vector)
 
 
 class StandardScaler(object):
@@ -233,9 +154,8 @@ class StandardScaler(object):
                     the transformation model.
         :return: a StandardScalarModel
         """
-        sc = dataset.context
-        jmodel = _callAPI(sc, "fitStandardScaler", self.withMean, self.withStd, dataset)
-        return StandardScalerModel(sc, jmodel)
+        jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
+        return StandardScalerModel(jmodel)
 
 
 class HashingTF(object):
@@ -276,7 +196,7 @@ class HashingTF(object):
         return Vectors.sparse(self.numFeatures, freq.items())
 
 
-class IDFModel(JavaModelWrapper):
+class IDFModel(JavaVectorTransformer):
     """
     Represents an IDF model that can transform term frequency vectors.
     """
@@ -291,7 +211,7 @@ class IDFModel(JavaModelWrapper):
         :param dataset: an RDD of term frequency vectors
         :return: an RDD of TF-IDF vectors
         """
-        return JavaModelWrapper.transform(self, dataset)
+        return JavaVectorTransformer.transform(self, dataset)
 
 
 class IDF(object):
@@ -335,12 +255,11 @@ class IDF(object):
 
         :param dataset: an RDD of term frequency vectors
         """
-        sc = dataset.context
-        jmodel = _callAPI(sc, "fitIDF", self.minDocFreq, dataset)
-        return IDFModel(sc, jmodel)
+        jmodel = callMLlibFunc("fitIDF", self.minDocFreq, dataset)
+        return IDFModel(jmodel)
 
 
-class Word2VecModel(JavaModelWrapper):
+class Word2VecModel(JavaVectorTransformer):
     """
     class for Word2Vec model
     """
@@ -354,7 +273,7 @@ class Word2VecModel(JavaModelWrapper):
         :return: vector representation of word(s)
         """
         try:
-            return _callJavaFunc(self._sc, self._java_model.transform, word)
+            return self.call("transform", word)
         except Py4JJavaError:
             raise ValueError("%s not found" % word)
 
@@ -368,7 +287,7 @@ class Word2VecModel(JavaModelWrapper):
 
         Note: local use only
         """
-        words, similarity = _callJavaFunc(self._sc, self._java_model.findSynonyms, word, num)
+        words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
 
 
@@ -458,11 +377,10 @@ class Word2Vec(object):
         :param data: training data. RDD of subtype of Iterable[String]
         :return: Word2VecModel instance
         """
-        sc = data.context
-        jmodel = _callAPI(sc, "trainWord2Vec", data, int(self.vectorSize),
-                          float(self.learningRate), int(self.numPartitions),
-                          int(self.numIterations), long(self.seed))
-        return Word2VecModel(sc, jmodel)
+        jmodel = callMLlibFunc("trainWord2Vec", data, int(self.vectorSize),
+                               float(self.learningRate), int(self.numPartitions),
+                               int(self.numIterations), long(self.seed))
+        return Word2VecModel(jmodel)
 
 
 def _test():

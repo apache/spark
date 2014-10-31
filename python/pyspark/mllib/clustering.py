@@ -16,8 +16,8 @@
 #
 
 from pyspark import SparkContext
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _to_java_object_rdd
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 
 __all__ = ['KMeansModel', 'KMeans']
 
@@ -80,14 +80,11 @@ class KMeans(object):
     @classmethod
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||"):
         """Train a k-means clustering model."""
-        sc = rdd.context
-        ser = PickleSerializer()
         # cache serialized data to avoid objects over head in JVM
-        cached = rdd.map(_convert_to_vector)._reserialize(AutoBatchedSerializer(ser)).cache()
-        model = sc._jvm.PythonMLLibAPI().trainKMeansModel(
-            _to_java_object_rdd(cached), k, maxIterations, runs, initializationMode)
-        bytes = sc._jvm.SerDe.dumps(model.clusterCenters())
-        centers = ser.loads(str(bytes))
+        jcached = _to_java_object_rdd(rdd.map(_convert_to_vector), cache=True)
+        model = callMLlibFunc("trainKMeansModel", jcached, k, maxIterations, runs,
+                              initializationMode)
+        centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 
 
