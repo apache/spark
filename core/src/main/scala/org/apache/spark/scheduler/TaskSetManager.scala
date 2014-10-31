@@ -563,7 +563,7 @@ private[spark] class TaskSetManager(
         // erase current line
         System.err.print(" " * Terminal.getTerminal.getTerminalWidth + "\n" + ANSICodes.up(0))
         System.err.println(s"Stage ${stageId}: Finished in ${used}s with ${total} tasks " +
-          s"(${min}/${med}/${avg}/${max}s).")
+          s"(min=${min}/median=${med}/avg=${avg}/max=${max}s).")
       }
     }
     lastUpdate = now
