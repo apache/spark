@@ -98,10 +98,7 @@ object ScalaReflection {
         //       Java appends a '$' to the object name but Scala does not).
         val udt = Utils.classForName(className)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
-        //UDTRegistry.registerType(udt)
         Schema(udt, nullable = true)
-      //case t if UDTRegistry.udtRegistry.contains(t) =>
-        //Schema(UDTRegistry.udtRegistry(t), nullable = true)
       case t if t <:< typeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
