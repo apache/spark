@@ -21,6 +21,7 @@ import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
 import org.apache.hadoop.hive.conf.HiveConf
@@ -28,10 +29,16 @@ import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Table, Hive, Partition}
 import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer}
-import org.apache.hadoop.mapred.InputFormat
-import org.apache.spark.Logging
+import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
+import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
+import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
+import org.apache.spark.Logging
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
@@ -53,6 +60,59 @@ private[hive] object HiveShim {
     properties: Properties) = {
     new TableDesc(inputFormatClass, outputFormatClass, properties)
   }
+
+  def getPrimitiveWritableConstantObjectInspector(value: String): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.stringTypeInfo, new hadoopIo.Text(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Int): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.intTypeInfo, new hadoopIo.IntWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Double): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.doubleTypeInfo, new hiveIo.DoubleWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Boolean): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.booleanTypeInfo, new hadoopIo.BooleanWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Long): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.longTypeInfo, new hadoopIo.LongWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Float): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.floatTypeInfo, new hadoopIo.FloatWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Short): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.shortTypeInfo, new hiveIo.ShortWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Byte): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.byteTypeInfo, new hiveIo.ByteWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: Array[Byte]): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.binaryTypeInfo, new hadoopIo.BytesWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: java.sql.Date): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.dateTypeInfo, new hiveIo.DateWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: java.sql.Timestamp): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.timestampTypeInfo, new hiveIo.TimestampWritable(value))
+
+  def getPrimitiveWritableConstantObjectInspector(value: BigDecimal): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.decimalTypeInfo,
+      new hiveIo.HiveDecimalWritable(HiveShim.createDecimal(value.underlying())))
+
+  def getPrimitiveNullWritableConstantObjectInspector: ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.voidTypeInfo, null)
 
   def createDriverResultsArray = new JArrayList[Object]
 
