@@ -56,11 +56,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
   /**
-   * Value of the broadcast object. On driver, this is set directly by the constructor.
-   * On executors, this is reconstructed by [[readObject]], which builds this value by reading
-   * blocks from the driver and/or other executors.
+   * Value of the broadcast object on executors. This is reconstructed by [[readBroadcastBlock]],
+   * which builds this value by reading blocks from the driver and/or other executors.
+   *
+   * On the driver, if the value is required, it is read lazily from the block manager.
    */
-  @transient private var _value: T = obj
+  @transient private lazy val _value: T = readBroadcastBlock()
+
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
@@ -79,22 +81,24 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private val broadcastId = BroadcastBlockId(id)
 
   /** Total number of blocks this broadcast variable contains. */
-  private val numBlocks: Int = writeBlocks()
+  private val numBlocks: Int = writeBlocks(obj)
 
-  override protected def getValue() = _value
+  override protected def getValue() = {
+    _value
+  }
 
   /**
    * Divide the object into multiple blocks and put those blocks in the block manager.
-   *
+   * @param value the object to divide
    * @return number of blocks this broadcast variable is divided into
    */
-  private def writeBlocks(): Int = {
+  private def writeBlocks(value: T): Int = {
     // Store a copy of the broadcast variable in the driver so that tasks run on the driver
     // do not create a duplicate copy of the broadcast variable's value.
-    SparkEnv.get.blockManager.putSingle(broadcastId, _value, StorageLevel.MEMORY_AND_DISK,
+    SparkEnv.get.blockManager.putSingle(broadcastId, value, StorageLevel.MEMORY_AND_DISK,
       tellMaster = false)
     val blocks =
-      TorrentBroadcast.blockifyObject(_value, blockSize, SparkEnv.get.serializer, compressionCodec)
+      TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     blocks.zipWithIndex.foreach { case (block, i) =>
       SparkEnv.get.blockManager.putBytes(
         BroadcastBlockId(id, "piece" + i),
@@ -157,31 +161,30 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     out.defaultWriteObject()
   }
 
-  /** Used by the JVM when deserializing this object. */
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
+  private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.synchronized {
       setConf(SparkEnv.get.conf)
       SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
         case Some(x) =>
-          _value = x.asInstanceOf[T]
+          x.asInstanceOf[T]
 
         case None =>
           logInfo("Started reading broadcast variable " + id)
-          val start = System.nanoTime()
+          val startTimeMs = System.currentTimeMillis()
           val blocks = readBlocks()
-          val time = (System.nanoTime() - start) / 1e9
-          logInfo("Reading broadcast variable " + id + " took " + time + " s")
+          logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
 
-          _value =
-            TorrentBroadcast.unBlockifyObject[T](blocks, SparkEnv.get.serializer, compressionCodec)
+          val obj = TorrentBroadcast.unBlockifyObject[T](
+            blocks, SparkEnv.get.serializer, compressionCodec)
           // Store the merged copy in BlockManager so other tasks on this executor don't
           // need to re-fetch it.
           SparkEnv.get.blockManager.putSingle(
-            broadcastId, _value, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+            broadcastId, obj, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+          obj
       }
     }
   }
+
 }
 
 

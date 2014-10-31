@@ -29,7 +29,6 @@ import copy_reg
 
 import numpy as np
 
-from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
 
@@ -50,17 +49,6 @@ try:
 except:
     # No SciPy in environment, but that's okay
     _have_scipy = False
-
-
-# this will call the MLlib version of pythonToJava()
-def _to_java_object_rdd(rdd):
-    """ Return an JavaRDD of Object by unpickling
-
-    It will convert each Python object into Java object by Pyrolite, whenever the
-    RDD is serialized in batch or not.
-    """
-    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
 def _convert_to_vector(l):
@@ -109,6 +97,13 @@ def _vector_size(v):
         return v.shape[0]
     else:
         raise TypeError("Cannot treat type %s as a vector" % type(v))
+
+
+def _format_float(f, digits=4):
+    s = str(round(f, digits))
+    if '.' in s:
+        s = s[:s.index('.') + 1 + digits]
+    return s
 
 
 class Vector(object):
@@ -228,7 +223,7 @@ class DenseVector(Vector):
         return "[" + ",".join([str(v) for v in self.array]) + "]"
 
     def __repr__(self):
-        return "DenseVector(%r)" % self.array
+        return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
         return isinstance(other, DenseVector) and self.array == other.array
@@ -416,7 +411,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(self.indices.size):
+        for i in xrange(len(self.indices)):
             arr[self.indices[i]] = self.values[i]
         return arr
 
@@ -431,7 +426,8 @@ class SparseVector(Vector):
     def __repr__(self):
         inds = self.indices
         vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
+        entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
+                             for i in xrange(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -491,7 +487,7 @@ class Vectors(object):
         returns a NumPy array.
 
         >>> Vectors.dense([1, 2, 3])
-        DenseVector(array('d', [1.0, 2.0, 3.0]))
+        DenseVector([1.0, 2.0, 3.0])
         """
         return DenseVector(elements)
 
