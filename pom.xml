@@ -129,7 +129,7 @@
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>0.13.1</hive.version>
+    <hive.version>0.13.1a</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>0.13.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
@@ -233,6 +233,18 @@
       <id>spark-staging</id>
       <name>Spring Staging Repository</name>
       <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!-- This is temporarily included to fix issues with Hive 0.13 -->
+      <id>spark-staging-hive13</id>
+      <name>Spring Staging Repository Hive 13</name>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -908,9 +920,9 @@
                  by Spark SQL for code generation. -->
             <compilerPlugins>
               <compilerPlugin>
-                  <groupId>org.scalamacros</groupId>
-                  <artifactId>paradise_${scala.version}</artifactId>
-                  <version>${scala.macros.version}</version>
+                <groupId>org.scalamacros</groupId>
+                <artifactId>paradise_${scala.version}</artifactId>
+                <version>${scala.macros.version}</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -1314,14 +1326,19 @@
       </dependencies>
     </profile>
     <profile>
+      <id>hive</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+    <profile>
       <id>hive-0.12.0</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
-      <modules>
-        <module>sql/hive-thriftserver</module>
-      </modules>
       <properties>
         <hive.version>0.12.0-protobuf-2.5</hive.version>
         <hive.version.short>0.12.0</hive.version.short>

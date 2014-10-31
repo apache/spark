@@ -201,12 +201,6 @@
           <artifactId>spark-hive_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
-      <id>hive-0.12.0</id>
-      <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
