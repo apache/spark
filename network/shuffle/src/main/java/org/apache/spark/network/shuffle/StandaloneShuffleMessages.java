@@ -18,6 +18,9 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Serializable;
+import java.util.Arrays;
+
+import com.google.common.base.Objects;
 
 /** Messages handled by the {@link StandaloneShuffleBlockHandler}. */
 public class StandaloneShuffleMessages {
@@ -32,6 +35,31 @@ public class StandaloneShuffleMessages {
       this.appId = appId;
       this.execId = execId;
       this.blockIds = blockIds;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(appId, execId) * 41 + Arrays.hashCode(blockIds);
+    }
+
+    @Override
+    public String toString() {
+      return Objects.toStringHelper(this)
+        .add("appId", appId)
+        .add("execId", execId)
+        .add("blockIds", Arrays.toString(blockIds))
+        .toString();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (other != null && other instanceof OpenShuffleBlocks) {
+        OpenShuffleBlocks o = (OpenShuffleBlocks) other;
+        return Objects.equal(appId, o.appId)
+          && Objects.equal(execId, o.execId)
+          && Arrays.equals(blockIds, o.blockIds);
+      }
+      return false;
     }
   }
 
@@ -48,6 +76,31 @@ public class StandaloneShuffleMessages {
       this.appId = appId;
       this.execId = execId;
       this.executorConfig = executorConfig;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(appId, execId, executorConfig);
+    }
+
+    @Override
+    public String toString() {
+      return Objects.toStringHelper(this)
+        .add("appId", appId)
+        .add("execId", execId)
+        .add("executorConfig", executorConfig)
+        .toString();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (other != null && other instanceof RegisterExecutor) {
+        RegisterExecutor o = (RegisterExecutor) other;
+        return Objects.equal(appId, o.appId)
+          && Objects.equal(execId, o.execId)
+          && Objects.equal(executorConfig, o.executorConfig);
+      }
+      return false;
     }
   }
 }

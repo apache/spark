@@ -23,6 +23,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -135,17 +136,17 @@ public class StandaloneShuffleBlockManager {
    * Hashes a filename into the corresponding local directory, in a manner consistent with
    * Spark's DiskBlockManager.getFile().
    */
-  private File getFile(String[] localDirs, int subDirsPerLocalDir, String filename) {
-    int hash = nonNegativeHash(filename);
+  @VisibleForTesting
+  static File getFile(String[] localDirs, int subDirsPerLocalDir, String filename) {
+    int hash = JavaUtils.nonNegativeHash(filename);
     String localDir = localDirs[hash % localDirs.length];
     int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
     return new File(new File(localDir, String.format("%02x", subDirId)), filename);
   }
 
-  /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). */
-  private int nonNegativeHash(Object obj) {
-    if (obj == null) { return 0; }
-    int hash = obj.hashCode();
-    return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
+  /** For testing, clears all registered executors. */
+  @VisibleForTesting
+  void clearRegisteredExecutors() {
+    executors.clear();
   }
 }

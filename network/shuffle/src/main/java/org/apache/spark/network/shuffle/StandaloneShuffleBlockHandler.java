@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,12 +43,20 @@ import org.apache.spark.network.util.JavaUtils;
 public class StandaloneShuffleBlockHandler implements RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(StandaloneShuffleBlockHandler.class);
 
-  private final OneForOneStreamManager streamManager;
   private final StandaloneShuffleBlockManager blockManager;
+  private final OneForOneStreamManager streamManager;
 
   public StandaloneShuffleBlockHandler() {
-    this.streamManager = new OneForOneStreamManager();
-    this.blockManager = new StandaloneShuffleBlockManager();
+    this(new OneForOneStreamManager(), new StandaloneShuffleBlockManager());
+  }
+
+  /** Enables mocking out the StreamManager and BlockManager. */
+  @VisibleForTesting
+  StandaloneShuffleBlockHandler(
+      OneForOneStreamManager streamManager,
+      StandaloneShuffleBlockManager blockManager) {
+    this.streamManager = streamManager;
+    this.blockManager = blockManager;
   }
 
   @Override
@@ -82,5 +91,11 @@ public class StandaloneShuffleBlockHandler implements RpcHandler {
   @Override
   public StreamManager getStreamManager() {
     return streamManager;
+  }
+
+  /** For testing, clears all executors registered with "RegisterExecutor". */
+  @VisibleForTesting
+  void clearRegisteredExecutors() {
+    blockManager.clearRegisteredExecutors();
   }
 }

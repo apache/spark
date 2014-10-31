@@ -66,4 +66,11 @@ public class JavaUtils {
       throw new RuntimeException("Could not serialize object", e);
     }
   }
+
+  /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). */
+  public static int nonNegativeHash(Object obj) {
+    if (obj == null) { return 0; }
+    int hash = obj.hashCode();
+    return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
+  }
 }

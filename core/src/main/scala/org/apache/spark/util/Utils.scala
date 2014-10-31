@@ -1238,7 +1238,7 @@ private[spark] object Utils extends Logging {
 
   // Handles idiosyncracies with hash (add more as required)
   // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#nonNegativeHash().
+  // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
 
     // Required ?

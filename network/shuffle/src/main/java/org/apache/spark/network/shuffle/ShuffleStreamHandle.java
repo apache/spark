@@ -18,6 +18,9 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Serializable;
+import java.util.Arrays;
+
+import com.google.common.base.Objects;
 
 /**
  * Identifier for a fixed number of chunks to read from a stream created by an "open blocks"
@@ -30,5 +33,28 @@ public class ShuffleStreamHandle implements Serializable {
   public ShuffleStreamHandle(long streamId, int numChunks) {
     this.streamId = streamId;
     this.numChunks = numChunks;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(streamId, numChunks);
+  }
+
+  @Override
+  public String toString() {
+    return Objects.toStringHelper(this)
+      .add("streamId", streamId)
+      .add("numChunks", numChunks)
+      .toString();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other != null && other instanceof ShuffleStreamHandle) {
+      ShuffleStreamHandle o = (ShuffleStreamHandle) other;
+      return Objects.equal(streamId, o.streamId)
+        && Objects.equal(numChunks, o.numChunks);
+    }
+    return false;
   }
 }
