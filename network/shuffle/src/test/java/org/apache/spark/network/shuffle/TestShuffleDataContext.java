@@ -88,8 +88,8 @@ public class TestShuffleDataContext {
    * Creates an ExecutorShuffleInfo object based on the given shuffle manager which targets this
    * context's directories.
    */
-  public ExecutorShuffleConfig createExecutorConfig(String shuffleManager) {
-    return new ExecutorShuffleConfig(localDirs, subDirsPerLocalDir, shuffleManager);
+  public ExecutorShuffleInfo createExecutorInfo(String shuffleManager) {
+    return new ExecutorShuffleInfo(localDirs, subDirsPerLocalDir, shuffleManager);
   }
 
   private static void deleteRecursively(File f) {

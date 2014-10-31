@@ -169,7 +169,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchOneSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorConfig(SORT_MANAGER));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
     assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
     assertTrue(exec0Fetch.failedBlocks.isEmpty());
@@ -179,7 +179,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchThreeSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorConfig(SORT_MANAGER));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult exec0Fetch = fetchBlocks("exec-0",
       new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" });
     assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
@@ -191,7 +191,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchHash() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorConfig(HASH_MANAGER));
+    registerExecutor("exec-1", dataContext1.createExecutorInfo(HASH_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-1",
       new String[] { "shuffle_1_0_0", "shuffle_1_0_1" });
     assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.successBlocks);
@@ -202,7 +202,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchWrongShuffle() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorConfig(SORT_MANAGER /* wrong manager */));
+    registerExecutor("exec-1", dataContext1.createExecutorInfo(SORT_MANAGER /* wrong manager */));
     FetchResult execFetch = fetchBlocks("exec-1",
       new String[] { "shuffle_1_0_0", "shuffle_1_0_1" });
     assertTrue(execFetch.successBlocks.isEmpty());
@@ -211,7 +211,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchInvalidShuffle() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorConfig("unknown sort manager"));
+    registerExecutor("exec-1", dataContext1.createExecutorInfo("unknown sort manager"));
     FetchResult execFetch = fetchBlocks("exec-1",
       new String[] { "shuffle_1_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
@@ -220,7 +220,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchWrongBlockId() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorConfig(SORT_MANAGER /* wrong manager */));
+    registerExecutor("exec-1", dataContext1.createExecutorInfo(SORT_MANAGER /* wrong manager */));
     FetchResult execFetch = fetchBlocks("exec-1",
       new String[] { "rdd_1_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
@@ -229,7 +229,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchNonexistent() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorConfig(SORT_MANAGER));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
       new String[] { "shuffle_2_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
@@ -238,7 +238,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchWrongExecutor() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorConfig(SORT_MANAGER));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
       new String[] { "shuffle_0_0_0" /* right */, "shuffle_1_0_0" /* wrong */ });
     // Both still fail, as we start by checking for all block.
@@ -248,7 +248,7 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchUnregisteredExecutor() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorConfig(SORT_MANAGER));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-2",
       new String[] { "shuffle_0_0_0", "shuffle_1_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
@@ -257,16 +257,16 @@ public class StandaloneShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorConfig(SORT_MANAGER));
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
       new String[] { "shuffle_1_0_0", "shuffle_1_0_1" }, 1 /* port */);
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
   }
 
-  private void registerExecutor(String executorId, ExecutorShuffleConfig executorInfo) {
+  private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo) {
     StandaloneShuffleClient client = new StandaloneShuffleClient(conf, APP_ID);
-    client.registerWithStandaloneShuffleService(TestUtils.getLocalHost(), server.getPort(),
+    client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);
   }
 

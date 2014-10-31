@@ -44,8 +44,8 @@ public class StandaloneShuffleBlockManager {
   private final Logger logger = LoggerFactory.getLogger(StandaloneShuffleBlockManager.class);
 
   // Map from "appId-execId" to the executor's configuration.
-  private final ConcurrentHashMap<String, ExecutorShuffleConfig> executors =
-    new ConcurrentHashMap<String, ExecutorShuffleConfig>();
+  private final ConcurrentHashMap<String, ExecutorShuffleInfo> executors =
+    new ConcurrentHashMap<String, ExecutorShuffleInfo>();
 
   // Returns an id suitable for a single executor within a single application.
   private String getAppExecId(String appId, String execId) {
@@ -56,15 +56,16 @@ public class StandaloneShuffleBlockManager {
   public void registerExecutor(
       String appId,
       String execId,
-      ExecutorShuffleConfig executorConfig) {
+      ExecutorShuffleInfo executorInfo) {
     String fullId = getAppExecId(appId, execId);
-    executors.put(fullId, executorConfig);
+    logger.info("Registered executor {} with {}", fullId, executorInfo);
+    executors.put(fullId, executorInfo);
   }
 
   /**
    * Obtains a FileSegmentManagedBuffer from a shuffle block id. We expect the blockId has the
-   * format "shuffle_ShuffleId_MapId_ReduceId", and additionally make assumptions about how the
-   * hash and sort based shuffles store their data.
+   * format "shuffle_ShuffleId_MapId_ReduceId" (from ShuffleBlockId), and additionally make
+   * assumptions about how the hash and sort based shuffles store their data.
    */
   public ManagedBuffer getBlockData(String appId, String execId, String blockId) {
     String[] blockIdParts = blockId.split("_");
@@ -77,7 +78,7 @@ public class StandaloneShuffleBlockManager {
     int mapId = Integer.parseInt(blockIdParts[2]);
     int reduceId = Integer.parseInt(blockIdParts[3]);
 
-    ExecutorShuffleConfig executor = executors.get(getAppExecId(appId, execId));
+    ExecutorShuffleInfo executor = executors.get(getAppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
@@ -98,17 +99,18 @@ public class StandaloneShuffleBlockManager {
    * This logic is from FileShuffleBlockManager.
    */
   // TODO: Support consolidated hash shuffle files
-  private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleConfig executor, String blockId) {
+  private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
     File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
     return new FileSegmentManagedBuffer(shuffleFile, 0, shuffleFile.length());
   }
 
   /**
    * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0.index" into a data file
-   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockManager.
+   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockManager,
+   * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleConfig executor, int shuffleId, int mapId, int reduceId) {
+    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 

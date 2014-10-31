@@ -56,7 +56,7 @@ public class StandaloneShuffleBlockHandlerSuite {
   public void testRegisterExecutor() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ExecutorShuffleConfig config = new ExecutorShuffleConfig(new String[] {"/a", "/b"}, 16, "sort");
+    ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
     byte[] registerMessage = JavaUtils.serialize(
       new RegisterExecutor("app0", "exec1", config));
     handler.receive(client, registerMessage, callback);
@@ -109,7 +109,7 @@ public class StandaloneShuffleBlockHandlerSuite {
     }
 
     byte[] unexpectedMessage = JavaUtils.serialize(
-      new ExecutorShuffleConfig(new String[] {"/a", "/b"}, 16, "sort"));
+      new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort"));
     try {
       handler.receive(client, unexpectedMessage, callback);
       fail("Should have thrown");

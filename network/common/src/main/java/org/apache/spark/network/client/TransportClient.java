@@ -34,7 +34,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.StreamChunkId;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 
 /**

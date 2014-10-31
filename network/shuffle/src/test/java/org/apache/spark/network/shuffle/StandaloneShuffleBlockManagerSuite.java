@@ -66,7 +66,7 @@ public class StandaloneShuffleBlockManagerSuite {
     }
 
     // Invalid shuffle manager
-    manager.registerExecutor("app0", "exec2", dataContext.createExecutorConfig("foobar"));
+    manager.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
     try {
       manager.getBlockData("app0", "exec2", "shuffle_1_1_0");
       fail("Should have failed");
@@ -76,7 +76,7 @@ public class StandaloneShuffleBlockManagerSuite {
 
     // Nonexistent shuffle block
     manager.registerExecutor("app0", "exec3",
-      dataContext.createExecutorConfig("org.apache.spark.shuffle.sort.SortShuffleManager"));
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
     try {
       manager.getBlockData("app0", "exec3", "shuffle_1_1_0");
       fail("Should have failed");
@@ -89,7 +89,7 @@ public class StandaloneShuffleBlockManagerSuite {
   public void testSortShuffleBlocks() throws IOException {
     StandaloneShuffleBlockManager manager = new StandaloneShuffleBlockManager();
     manager.registerExecutor("app0", "exec0",
-      dataContext.createExecutorConfig("org.apache.spark.shuffle.sort.SortShuffleManager"));
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
     InputStream block0Stream =
       manager.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
@@ -108,7 +108,7 @@ public class StandaloneShuffleBlockManagerSuite {
   public void testHashShuffleBlocks() throws IOException {
     StandaloneShuffleBlockManager manager = new StandaloneShuffleBlockManager();
     manager.registerExecutor("app0", "exec0",
-      dataContext.createExecutorConfig("org.apache.spark.shuffle.hash.HashShuffleManager"));
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
 
     InputStream block0Stream =
       manager.getBlockData("app0", "exec0", "shuffle_1_0_0").createInputStream();

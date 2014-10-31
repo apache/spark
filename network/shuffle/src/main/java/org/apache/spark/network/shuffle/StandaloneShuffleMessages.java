@@ -67,20 +67,20 @@ public class StandaloneShuffleMessages {
   public static class RegisterExecutor implements Serializable {
     public final String appId;
     public final String execId;
-    public final ExecutorShuffleConfig executorConfig;
+    public final ExecutorShuffleInfo executorInfo;
 
     public RegisterExecutor(
         String appId,
         String execId,
-        ExecutorShuffleConfig executorConfig) {
+        ExecutorShuffleInfo executorInfo) {
       this.appId = appId;
       this.execId = execId;
-      this.executorConfig = executorConfig;
+      this.executorInfo = executorInfo;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(appId, execId, executorConfig);
+      return Objects.hashCode(appId, execId, executorInfo);
     }
 
     @Override
@@ -88,7 +88,7 @@ public class StandaloneShuffleMessages {
       return Objects.toStringHelper(this)
         .add("appId", appId)
         .add("execId", execId)
-        .add("executorConfig", executorConfig)
+        .add("executorInfo", executorInfo)
         .toString();
     }
 
@@ -98,7 +98,7 @@ public class StandaloneShuffleMessages {
         RegisterExecutor o = (RegisterExecutor) other;
         return Objects.equal(appId, o.appId)
           && Objects.equal(execId, o.execId)
-          && Objects.equal(executorConfig, o.executorConfig);
+          && Objects.equal(executorInfo, o.executorInfo);
       }
       return false;
     }

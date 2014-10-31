@@ -22,8 +22,8 @@ import java.util.Arrays;
 
 import com.google.common.base.Objects;
 
-/** Contains all configuration necessary for a single Executor to find its shuffle files. */
-public class ExecutorShuffleConfig implements Serializable {
+/** Contains all configuration necessary for locating the shuffle files of an executor. */
+public class ExecutorShuffleInfo implements Serializable {
   /** The base set of local directories that the executor stores its shuffle files in. */
   final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
@@ -31,7 +31,7 @@ public class ExecutorShuffleConfig implements Serializable {
   /** Shuffle manager (SortShuffleManager or HashShuffleManager) that the executor is using. */
   final String shuffleManager;
 
-  public ExecutorShuffleConfig(String[] localDirs, int subDirsPerLocalDir, String shuffleManager) {
+  public ExecutorShuffleInfo(String[] localDirs, int subDirsPerLocalDir, String shuffleManager) {
     this.localDirs = localDirs;
     this.subDirsPerLocalDir = subDirsPerLocalDir;
     this.shuffleManager = shuffleManager;
@@ -53,8 +53,8 @@ public class ExecutorShuffleConfig implements Serializable {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof ExecutorShuffleConfig) {
-      ExecutorShuffleConfig o = (ExecutorShuffleConfig) other;
+    if (other != null && other instanceof ExecutorShuffleInfo) {
+      ExecutorShuffleInfo o = (ExecutorShuffleInfo) other;
       return Arrays.equals(localDirs, o.localDirs)
         && Objects.equal(subDirsPerLocalDir, o.subDirsPerLocalDir)
         && Objects.equal(shuffleManager, o.shuffleManager);

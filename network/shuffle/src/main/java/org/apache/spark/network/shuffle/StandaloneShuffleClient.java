@@ -67,16 +67,16 @@ public class StandaloneShuffleClient implements ShuffleClient {
    * @param host Host of standalone shuffle server.
    * @param port Port of standalone shuffle server.
    * @param execId This Executor's id.
-   * @param executorConfig Contains all config necessary for the service to find our shuffle files.
+   * @param executorInfo Contains all info necessary for the service to find our shuffle files.
    */
-  public void registerWithStandaloneShuffleService(
+  public void registerWithShuffleServer(
       String host,
       int port,
       String execId,
-      ExecutorShuffleConfig executorConfig) {
+      ExecutorShuffleInfo executorInfo) {
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerExecutorMessage =
-      JavaUtils.serialize(new RegisterExecutor(appId, execId, executorConfig));
+      JavaUtils.serialize(new RegisterExecutor(appId, execId, executorInfo));
     client.sendRpcSync(registerExecutorMessage, 3000);
   }
 }

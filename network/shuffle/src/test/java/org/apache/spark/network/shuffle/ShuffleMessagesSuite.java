@@ -36,7 +36,7 @@ public class ShuffleMessagesSuite {
 
   @Test
   public void serializeRegisterExecutor() {
-    RegisterExecutor msg = new RegisterExecutor("app-1", "exec-2", new ExecutorShuffleConfig(
+    RegisterExecutor msg = new RegisterExecutor("app-1", "exec-2", new ExecutorShuffleInfo(
       new String[] { "/local1", "/local2" }, 32, "MyShuffleManager"));
     RegisterExecutor msg2 = JavaUtils.deserialize(JavaUtils.serialize(msg));
     assertEquals(msg, msg2);
