@@ -54,11 +54,22 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
 
   def stop() {}
 
-  /** Ask ReceiverInputTracker for received data blocks and generates RDDs with them. */
+  /**
+   * Generates RDDs with blocks received by the receiver of this stream. */
   override def compute(validTime: Time): Option[RDD[T]] = {
     val blockRDD = {
-      if (validTime >= graph.startTime) {
-        val blockStoreResults = getReceivedBlockInfo(validTime).map { _.blockStoreResult }
+
+      if (validTime < graph.startTime) {
+        // If this is called for any time before the start time of the context,
+        // then this returns an empty RDD. This may happen when recovering from a
+        // driver failure without any write ahead log to recover pre-failure data.
+        new BlockRDD[T](ssc.sc, Array.empty)
+      } else {
+        // Otherwise, ask the tracker for all the blocks that have been allocated to this stream
+        // for this batch
+        val blockInfos =
+          ssc.scheduler.receiverTracker.getBlocksOfBatch(validTime).get(id).getOrElse(Seq.empty)
+        val blockStoreResults = blockInfos.map { _.blockStoreResult }
         val blockIds = blockStoreResults.map { _.blockId.asInstanceOf[BlockId] }.toArray
         val isWriteAheadLogBased = blockStoreResults.forall {
           _.isInstanceOf[WriteAheadLogBasedStoreResult]
@@ -72,19 +83,9 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         } else {
           new BlockRDD[T](ssc.sc, blockIds)
         }
-      } else {
-        // If this is called for any time before the start time of the context,
-        // then this returns an empty RDD. This may happen when recovering from a
-        // driver failure, a
-        new BlockRDD[T](ssc.sc, Array.empty)
       }
     }
     Some(blockRDD)
-  }
-
-  /** Get information on received blocks. */
-  private[streaming] def getReceivedBlockInfo(time: Time): Seq[ReceivedBlockInfo] = {
-    ssc.scheduler.receiverTracker.getReceivedBlocks(time, id)
   }
 
   /**

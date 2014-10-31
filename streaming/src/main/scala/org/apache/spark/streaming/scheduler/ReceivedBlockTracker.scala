@@ -25,7 +25,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{Clock, WriteAheadLogManager}
 import org.apache.spark.util.Utils
@@ -42,8 +42,11 @@ private[streaming] case class BatchCleanupEvent(times: Seq[Time])
 
 
 /** Class representing the blocks of all the streams allocated to a batch */
-private[streaming] case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {
-  def getBlockForStream(streamId: Int) = streamIdToAllocatedBlocks(streamId)
+private[streaming]
+case class AllocatedBlocks(streamIdToAllocatedBlocks: Map[Int, Seq[ReceivedBlockInfo]]) {
+  def getBlocksOfStream(streamId: Int): Seq[ReceivedBlockInfo] = {
+    streamIdToAllocatedBlocks.get(streamId).getOrElse(Seq.empty)
+  }
 }
 
 /**
@@ -80,6 +83,8 @@ private[streaming] class ReceivedBlockTracker(
     )
   }
 
+  private var lastAllocatedBatchTime: Time = null
+
   // Recover block information from write ahead logs
   recoverFromWriteAheadLogs()
 
@@ -103,22 +108,40 @@ private[streaming] class ReceivedBlockTracker(
    * This event will get written to the write ahead log (if enabled).
    */
   def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
-    val allocatedBlocks = AllocatedBlocks(streamIds.map { streamId =>
-        (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
-    }.toMap)
-    writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))
-    timeToAllocatedBlocks(batchTime) = allocatedBlocks
-    allocatedBlocks
+    if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
+      val allocatedBlocks = {
+        val streamIdToBlocks = streamIds.map { streamId =>
+            (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
+        }.toMap
+        AllocatedBlocks(streamIdToBlocks)
+      }
+      writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))
+      timeToAllocatedBlocks(batchTime) = allocatedBlocks
+      lastAllocatedBatchTime = batchTime
+      allocatedBlocks
+    } else {
+      throw new SparkException(s"Unexpected allocation of blocks, " +
+        s"last batch = $lastAllocatedBatchTime, batch time to allocate = $batchTime  ")
+    }
   }
 
   /** Get blocks that have been added but not yet allocated to any batch. */
   def getUnallocatedBlocks(streamId: Int): Seq[ReceivedBlockInfo] = synchronized {
     getReceivedBlockQueue(streamId).toSeq
-  } 
+  }
 
-  /** Get the blocks allocated to a batch, or allocate blocks to the batch and then get them. */
-  def getBlocksOfBatch(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = synchronized {
-    timeToAllocatedBlocks.get(batchTime).map { _.getBlockForStream(streamId) }.getOrElse(Seq.empty)
+  /** Get the blocks allocated to the given batch. */
+  def getBlocksOfBatch(batchTime: Time): Map[Int, Seq[ReceivedBlockInfo]] = synchronized {
+    timeToAllocatedBlocks.get(batchTime).map { _.streamIdToAllocatedBlocks }.getOrElse(Map.empty)
+  }
+
+  /** Get the blocks allocated to the given batch and stream. */
+  def getBlocksOfBatchAndStream(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = {
+    synchronized {
+      timeToAllocatedBlocks.get(batchTime).map {
+        _.getBlocksOfStream(streamId)
+      }.getOrElse(Seq.empty)
+    }
   }
 
   /** Check if any blocks are left to be allocated to batches. */
@@ -155,11 +178,12 @@ private[streaming] class ReceivedBlockTracker(
 
     // Insert the recovered block-to-batch allocations and clear the queue of received blocks
     // (when the blocks were originally allocated to the batch, the queue must have been cleared).
-    def insertAllocatedBatch(time: Time, allocatedBlocks: AllocatedBlocks) {
-      logTrace(s"Recovery: Inserting allocated batch for time $time to " +
+    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks) {
+      logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       streamIdToUnallocatedBlockQueues.values.foreach { _.clear() }
-      timeToAllocatedBlocks.put(time, allocatedBlocks)
+      lastAllocatedBatchTime = batchTime
+      timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
     }
 
     // Cleanup the batch allocations

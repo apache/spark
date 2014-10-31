@@ -28,7 +28,7 @@ import scala.util.Random
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
@@ -73,12 +73,27 @@ class ReceivedBlockTrackerSuite
     val blockInfos = generateBlockInfos()
     blockInfos.map(receivedBlockTracker.addBlock)
 
+    // Verify added blocks are unallocated blocks
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
+
+    // Allocate the blocks to a batch and verify that all of them have been allocated
     receivedBlockTracker.allocateBlocksToBatch(1)
-    receivedBlockTracker.getBlocksOfBatch(1, streamId) shouldEqual blockInfos
-    receivedBlockTracker.getUnallocatedBlocks(streamId) should have size 0
+    receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
+    receivedBlockTracker.getUnallocatedBlocks(streamId) shouldBe empty
+
+    // Allocate no blocks to another batch
     receivedBlockTracker.allocateBlocksToBatch(2)
-    receivedBlockTracker.getBlocksOfBatch(2, streamId) should have size 0
+    receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
+
+    // Verify that batch 2 cannot be allocated again
+    intercept[SparkException] {
+      receivedBlockTracker.allocateBlocksToBatch(2)
+    }
+
+    // Verify that older batches cannot be allocated again
+    intercept[SparkException] {
+      receivedBlockTracker.allocateBlocksToBatch(1)
+    }
   }
 
   test("block addition, block to batch allocation and cleanup with write ahead log") {
@@ -126,14 +141,14 @@ class ReceivedBlockTrackerSuite
     // Allocate blocks to batch and verify whether the unallocated blocks got allocated
     val batchTime1 = manualClock.currentTime
     tracker2.allocateBlocksToBatch(batchTime1)
-    tracker2.getBlocksOfBatch(batchTime1, streamId) shouldEqual blockInfos1
+    tracker2.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
 
     // Add more blocks and allocate to another batch
     incrementTime()
     val batchTime2 = manualClock.currentTime
     val blockInfos2 = addBlockInfos(tracker2)
     tracker2.allocateBlocksToBatch(batchTime2)
-    tracker2.getBlocksOfBatch(batchTime2, streamId) shouldEqual blockInfos2
+    tracker2.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
 
     // Verify whether log has correct contents
     val expectedWrittenData2 = expectedWrittenData1 ++
@@ -145,8 +160,8 @@ class ReceivedBlockTrackerSuite
     // Restart tracker and verify recovered state
     incrementTime()
     val tracker3 = createTracker(enableCheckpoint = true, clock = manualClock)
-    tracker3.getBlocksOfBatch(batchTime1, streamId) shouldEqual blockInfos1
-    tracker3.getBlocksOfBatch(batchTime2, streamId) shouldEqual blockInfos2
+    tracker3.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual blockInfos1
+    tracker3.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
     tracker3.getUnallocatedBlocks(streamId) shouldBe empty
 
     // Cleanup first batch but not second batch
@@ -155,7 +170,7 @@ class ReceivedBlockTrackerSuite
     tracker3.cleanupOldBatches(batchTime2)
 
     // Verify that the batch allocations have been cleaned, and the act has been written to log
-    tracker3.getBlocksOfBatch(batchTime1, streamId) shouldEqual Seq.empty
+    tracker3.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual Seq.empty
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
 
     // Verify that at least one log file gets deleted
@@ -169,8 +184,8 @@ class ReceivedBlockTrackerSuite
     incrementTime()
     val tracker4 = createTracker(enableCheckpoint = true, clock = manualClock)
     tracker4.getUnallocatedBlocks(streamId) shouldBe empty
-    tracker4.getBlocksOfBatch(batchTime1, streamId) shouldBe empty  // should be cleaned
-    tracker4.getBlocksOfBatch(batchTime2, streamId) shouldEqual blockInfos2
+    tracker4.getBlocksOfBatchAndStream(batchTime1, streamId) shouldBe empty  // should be cleaned
+    tracker4.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
   }
 
   /**

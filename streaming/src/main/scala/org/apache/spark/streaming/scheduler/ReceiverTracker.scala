@@ -56,13 +56,13 @@ private[streaming]
 class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false) extends Logging {
 
   private val receiverInputStreams = ssc.graph.getReceiverInputStreams()
-  private val receiverInputStreamMap = Map(receiverInputStreams.map(x => (x.id, x)): _*)
+  private val receiverInputStreamIds = receiverInputStreams.map { _.id }
   private val receiverExecutor = new ReceiverLauncher()
   private val receiverInfo = new HashMap[Int, ReceiverInfo] with SynchronizedMap[Int, ReceiverInfo]
   private val receivedBlockTracker = new ReceivedBlockTracker(
     ssc.sparkContext.conf,
     ssc.sparkContext.hadoopConfiguration,
-    receiverInputStreams.map { _.id },
+    receiverInputStreamIds,
     ssc.scheduler.clock,
     Option(ssc.checkpointDir)
   )
@@ -107,12 +107,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  /** Get all the block for batch time . */
-  def getReceivedBlocks(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = {
-    receivedBlockTracker.getBlocksOfBatch(batchTime, streamId)
+  /** Get the blocks for the given batch and all input streams. */
+  def getBlocksOfBatch(batchTime: Time): Map[Int, Seq[ReceivedBlockInfo]] = {
+    receivedBlockTracker.getBlocksOfBatch(batchTime)
   }
 
-  /** Clean up metadata older than the given threshold time */
+  /** Get the blocks allocated to the given batch and stream. */
+  def getBlocksOfBatchAndStream(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = {
+    synchronized {
+      receivedBlockTracker.getBlocksOfBatchAndStream(batchTime, streamId)
+    }
+  }
+
+    /** Clean up metadata older than the given threshold time */
   def cleanupOldMetadata(cleanupThreshTime: Time) {
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime)
   }
@@ -125,8 +132,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverActor: ActorRef,
       sender: ActorRef
     ) {
-    if (!receiverInputStreamMap.contains(streamId)) {
-      throw new Exception("Register received for unexpected id " + streamId)
+    if (!receiverInputStreamIds.contains(streamId)) {
+      throw new SparkException("Register received for unexpected id " + streamId)
     }
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)
