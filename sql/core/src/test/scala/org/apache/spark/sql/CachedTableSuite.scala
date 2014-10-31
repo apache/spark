@@ -243,4 +243,37 @@ class CachedTableSuite extends QueryTest {
         assert(cached.statistics.sizeInBytes === actualSizeInBytes)
     }
   }
+
+  test("Unregister temp table") {
+    testData.select('key).registerTempTable("t1")
+    table("t1")
+    unregisterTempTable("t1")
+    intercept[RuntimeException](table("t1"))
+  }
+
+  test("Unregister but don't unpersist temp table") {
+    testData.select('key).registerTempTable("t1")
+    testData.select('key).registerTempTable("t2")
+    cacheTable("t1")
+
+    assert(isCached("t1"))
+    assert(isCached("t2"))
+
+    unregisterTempTable("t1", unpersist = false)
+
+    assert(isCached("t2"))
+  }
+
+  test("Unregister and unpersist temp table") {
+    testData.select('key).registerTempTable("t1")
+    testData.select('key).registerTempTable("t2")
+    cacheTable("t1")
+
+    assert(isCached("t1"))
+    assert(isCached("t2"))
+
+    unregisterTempTable("t1", unpersist = true)
+
+    assert(!isCached("t2"))
+  }
 }

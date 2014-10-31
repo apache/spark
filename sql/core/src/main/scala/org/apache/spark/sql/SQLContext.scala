@@ -267,6 +267,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Unregisters the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it can be unpersisted if required.
+   *
+   * @param tableName the name of the table to be unregistered.
+   * @param unpersist whether to unpersist the table if it has been cached/persisted before.
+   *
+   * @group userf
+   */
+  def unregisterTempTable(tableName: String, unpersist: Boolean = false): Unit = {
+    val schemaRDD = table(tableName)
+    if (unpersist && lookupCachedData(schemaRDD).nonEmpty) {
+      uncacheQuery(schemaRDD)
+    }
+    catalog.unregisterTable(None, tableName)
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
