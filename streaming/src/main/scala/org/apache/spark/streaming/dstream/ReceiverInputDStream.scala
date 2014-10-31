@@ -78,8 +78,9 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
           val logSegments = blockStoreResults.map {
             _.asInstanceOf[WriteAheadLogBasedStoreResult].segment
           }.toArray
+          // Since storeInBlockManager = false, the storage level does not matter.
           new WriteAheadLogBackedBlockRDD[T](ssc.sparkContext,
-            blockIds, logSegments, storeInBlockManager = false, StorageLevel.MEMORY_ONLY_SER)
+            blockIds, logSegments, storeInBlockManager = false, StorageLevel.NONE)
         } else {
           new BlockRDD[T](ssc.sc, blockIds)
         }

@@ -19,7 +19,6 @@ package org.apache.spark.streaming
 
 import java.io.File
 
-import scala.Some
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
@@ -28,18 +27,16 @@ import scala.util.Random
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.{SparkException, Logging, SparkConf}
-import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.WriteAheadLogSuite._
-import org.apache.spark.streaming.util.{WriteAheadLogReader, Clock, ManualClock, SystemClock}
-import org.apache.spark.util.Utils
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.StreamBlockId
-import scala.Some
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.streaming.util.{Clock, ManualClock, SystemClock, WriteAheadLogReader}
+import org.apache.spark.streaming.util.WriteAheadLogSuite._
+import org.apache.spark.util.Utils
 
 class ReceivedBlockTrackerSuite
   extends FunSuite with BeforeAndAfter with Matchers with Logging {
@@ -174,7 +171,7 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
 
     // Verify that at least one log file gets deleted
-    eventually(timeout(10 seconds), interval(10 millisecond )) {
+    eventually(timeout(10 seconds), interval(10 millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
     printLogFiles("After cleanup")
