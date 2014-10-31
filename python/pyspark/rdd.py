@@ -1070,10 +1070,13 @@ class RDD(object):
                 # If we didn't find any rows after the previous iteration,
                 # quadruple and retry.  Otherwise, interpolate the number of
                 # partitions we need to try, but overestimate it by 50%.
+                # We also cap the estimation in the end.
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    numPartsToTry = int(1.5 * num * partsScanned / len(items))
+                    # the first paramter of max is >=1 whenever partsScanned >= 2
+                    numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
+                    numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
 
             left = num - len(items)
 
@@ -1864,11 +1867,11 @@ class RDD(object):
         Assign a name to this RDD.
 
         >>> rdd1 = sc.parallelize([1,2])
-        >>> rdd1.setName('RDD1')
-        >>> rdd1.name()
+        >>> rdd1.setName('RDD1').name()
         'RDD1'
         """
         self._jrdd.setName(name)
+        return self
 
     def toDebugString(self):
         """
@@ -2009,7 +2012,7 @@ class RDD(object):
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
 
-        :param relativeSD Relative accuracy. Smaller values create
+        :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
                            It must be greater than 0.000017.
 

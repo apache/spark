@@ -29,11 +29,10 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.optimizer.{Optimizer, DefaultOptimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataType
-import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
@@ -68,7 +67,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new Analyzer(catalog, functionRegistry, caseSensitive = true)
 
   @transient
-  protected[sql] val optimizer = Optimizer
+  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
   protected[sql] val sqlParser = {
@@ -374,13 +373,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def logical: LogicalPlan
 
     lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
-    lazy val optimizedPlan = optimizer(analyzed)
-    lazy val withCachedData = useCachedData(optimizedPlan)
+    lazy val withCachedData = useCachedData(analyzed)
+    lazy val optimizedPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = {
       SparkPlan.currentContext.set(self)
-      planner(withCachedData).next()
+      planner(optimizedPlan).next()
     }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
@@ -439,12 +438,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
-    import scala.collection.JavaConversions._
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
       case ShortType => true
       case FloatType => true
+      case DateType => true
       case TimestampType => true
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
@@ -452,46 +451,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case other => false
     }
 
-    // Converts value to the type specified by the data type.
-    // Because Python does not have data types for TimestampType, FloatType, ShortType, and
-    // ByteType, we need to explicitly convert values in columns of these data types to the desired
-    // JVM data types.
-    def convert(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-      // TODO: We should check nullable
-      case (null, _) => null
-
-      case (c: java.util.List[_], ArrayType(elementType, _)) =>
-        c.map { e => convert(e, elementType)}: Seq[Any]
-
-      case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-        c.asInstanceOf[Array[_]].map(e => convert(e, elementType)): Seq[Any]
-
-      case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
-          case (key, value) => (convert(key, keyType), convert(value, valueType))
-        }.toMap
-
-      case (c, StructType(fields)) if c.getClass.isArray =>
-        new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
-          case (e, f) => convert(e, f.dataType)
-        }): Row
-
-      case (c: java.util.Calendar, TimestampType) =>
-        new java.sql.Timestamp(c.getTime().getTime())
-
-      case (c: Int, ByteType) => c.toByte
-      case (c: Long, ByteType) => c.toByte
-      case (c: Int, ShortType) => c.toShort
-      case (c: Long, ShortType) => c.toShort
-      case (c: Long, IntegerType) => c.toInt
-      case (c: Double, FloatType) => c.toFloat
-      case (c, StringType) if !c.isInstanceOf[String] => c.toString
-
-      case (c, _) => c
-    }
-
     val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
       rdd.map(m => m.zip(schema.fields).map {
-        case (value, field) => convert(value, field.dataType)
+        case (value, field) => EvaluatePython.fromJava(value, field.dataType)
       })
     } else {
       rdd

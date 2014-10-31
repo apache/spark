@@ -38,6 +38,11 @@ import org.apache.spark.storage.{BlockObjectWriter, BlockId}
  *
  * If combining is disabled, the type C must equal V -- we'll cast the objects at the end.
  *
+ * Note: Although ExternalSorter is a fairly generic sorter, some of its configuration is tied
+ * to its use in sort-based shuffle (for example, its block compression is controlled by
+ * `spark.shuffle.compress`).  We may need to revisit this if ExternalSorter is used in other
+ * non-shuffle contexts where we might want to use different configuration settings.
+ *
  * @param aggregator optional Aggregator with combine functions to use for merging data
  * @param partitioner optional Partitioner; if given, sort by partition ID and then key
  * @param ordering optional Ordering to sort keys within each partition; should be a total ordering
@@ -93,6 +98,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  private val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
 
   // Size of object batches when reading/writing from serializers.
   //
@@ -258,7 +264,10 @@ private[spark] class ExternalSorter[K, V, C](
   private def spillToMergeableFile(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
     assert(!bypassMergeSort)
 
-    val (blockId, file) = diskBlockManager.createTempBlock()
+    // Because these files may be read during shuffle, their compression must be controlled by
+    // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
+    // createTempShuffleBlock here; see SPARK-3426 for more context.
+    val (blockId, file) = diskBlockManager.createTempShuffleBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0   // Objects written since the last flush
@@ -337,7 +346,10 @@ private[spark] class ExternalSorter[K, V, C](
     if (partitionWriters == null) {
       curWriteMetrics = new ShuffleWriteMetrics()
       partitionWriters = Array.fill(numPartitions) {
-        val (blockId, file) = diskBlockManager.createTempBlock()
+        // Because these files may be read during shuffle, their compression must be controlled by
+        // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
+        // createTempShuffleBlock here; see SPARK-3426 for more context.
+        val (blockId, file) = diskBlockManager.createTempShuffleBlock()
         blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics).open()
       }
     }
@@ -705,10 +717,10 @@ private[spark] class ExternalSorter[K, V, C](
       var out: FileOutputStream = null
       var in: FileInputStream = null
       try {
-        out = new FileOutputStream(outputFile)
+        out = new FileOutputStream(outputFile, true)
         for (i <- 0 until numPartitions) {
           in = new FileInputStream(partitionWriters(i).fileSegment().file)
-          val size = org.apache.spark.util.Utils.copyStream(in, out, false)
+          val size = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
           in.close()
           in = null
           lengths(i) = size

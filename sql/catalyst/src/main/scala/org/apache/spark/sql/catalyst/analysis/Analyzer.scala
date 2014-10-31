@@ -60,10 +60,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
+      TrimAliases ::
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution),
+      CheckResolution,
+      CheckAggregation),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
@@ -84,6 +86,49 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case p if !p.resolved =>
           throw new TreeNodeException(p, "Unresolved plan in tree")
         case p => p
+      }
+    }
+  }
+
+  /**
+   * Removes no-op Alias expressions from the plan.
+   */
+  object TrimAliases extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Aggregate(groups, aggs, child) =>
+        Aggregate(
+          groups.map {
+            _ transform {
+              case Alias(c, _) => c
+            }
+          },
+          aggs,
+          child)
+    }
+  }
+
+  /**
+   * Checks for non-aggregated attributes with aggregation
+   */
+  object CheckAggregation extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.transform {
+        case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
+          def isValidAggregateExpression(expr: Expression): Boolean = expr match {
+            case _: AggregateExpression => true
+            case e: Attribute => groupingExprs.contains(e)
+            case e if groupingExprs.contains(e) => true
+            case e if e.references.isEmpty => true
+            case e => e.children.forall(isValidAggregateExpression)
+          }
+
+          aggregateExprs.foreach { e =>
+            if (!isValidAggregateExpression(e)) {
+              throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
+            }
+          }
+
+          aggregatePlan
       }
     }
   }
@@ -204,18 +249,17 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _)) 
+      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
           if aggregate.resolved && containsAggregate(havingCondition) => {
         val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
-        
+
         Project(aggregate.output,
           Filter(evaluatedCondition.toAttribute,
             aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
       }
-      
     }
-    
+
     protected def containsAggregate(condition: Expression): Boolean =
       condition
         .collect { case ae: AggregateExpression => ae }

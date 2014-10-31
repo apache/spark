@@ -203,6 +203,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
+    logInfo(s"Removing block manager $blockManagerId")
   }
 
   private def expireDeadHosts() {
@@ -327,20 +328,20 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
-        case Some(manager) =>
-          // A block manager of the same executor already exists.
-          // This should never happen. Let's just quit.
-          logError("Got two different block manager registrations on " + id.executorId)
-          System.exit(1)
+        case Some(oldId) =>
+          // A block manager of the same executor already exists, so remove it (assumed dead)
+          logError("Got two different block manager registrations on same executor - " 
+              + s" will replace old one $oldId with new one $id")
+          removeExecutor(id.executorId)  
         case None =>
-          blockManagerIdByExecutor(id.executorId) = id
       }
-
-      logInfo("Registering block manager %s with %s RAM".format(
-        id.hostPort, Utils.bytesToString(maxMemSize)))
-
-      blockManagerInfo(id) =
-        new BlockManagerInfo(id, time, maxMemSize, slaveActor)
+      logInfo("Registering block manager %s with %s RAM, %s".format(
+        id.hostPort, Utils.bytesToString(maxMemSize), id))
+      
+      blockManagerIdByExecutor(id.executorId) = id
+      
+      blockManagerInfo(id) = new BlockManagerInfo(
+        id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
@@ -457,16 +458,18 @@ private[spark] class BlockManagerInfo(
 
     if (_blocks.containsKey(blockId)) {
       // The block exists on the slave already.
-      val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
+      val blockStatus: BlockStatus = _blocks.get(blockId)
+      val originalLevel: StorageLevel = blockStatus.storageLevel
+      val originalMemSize: Long = blockStatus.memSize
 
       if (originalLevel.useMemory) {
-        _remainingMem += memSize
+        _remainingMem += originalMemSize
       }
     }
 
     if (storageLevel.isValid) {
       /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
-       * But the memSize here indicates the data size in or dropped from memory,
+       * The memSize here indicates the data size in or dropped from memory,
        * tachyonSize here indicates the data size in or dropped from Tachyon,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
@@ -493,7 +496,6 @@ private[spark] class BlockManagerInfo(
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
       if (blockStatus.storageLevel.useMemory) {
-        _remainingMem += blockStatus.memSize
         logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
           Utils.bytesToString(_remainingMem)))
