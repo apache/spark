@@ -60,8 +60,6 @@ public final class JavaFlumeEventCount {
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, batchInterval);
     JavaReceiverInputDStream<SparkFlumeEvent> flumeStream = FlumeUtils.createStream(ssc, host, port);
 
-    flumeStream.count();
-
     flumeStream.count().map(new Function<Long, String>() {
       @Override
       public String call(Long in) {
