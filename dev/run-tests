@@ -159,7 +159,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
   # Then build with default version(0.13.1) because tests are based on this version
   echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS -Phive"
   echo -e "q\n" \
-    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive clean package assembly/assembly  \
+    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive package assembly/assembly  \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
