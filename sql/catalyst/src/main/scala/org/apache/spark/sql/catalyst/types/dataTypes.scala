@@ -76,7 +76,7 @@ object DataType {
       StructField(name, parseDataType(dataType), nullable)
   }
 
-  @deprecated("Use DataType.fromJson instead")
+  @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private object CaseClassStringParser extends RegexParsers {
