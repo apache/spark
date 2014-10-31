@@ -312,7 +312,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         else metrics.map(_.executorRunTime).getOrElse(1L)
       val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
         else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
-      val schedulerDelay = getSchedulerDelay(info, metrics.get)
+      val schedulerDelay = metrics.map(getSchedulerDelay(info, _)).getOrElse(0L)
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
       val gettingResultTime = info.gettingResultTime
