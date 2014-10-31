@@ -648,6 +648,12 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
 
+    def test_partitions_property(self):
+        rdd = self.sc.parallelize([], 80)
+        self.assertEquals(rdd.getNumPartitions(), 80)
+        self.assertEquals(rdd.partitions.size(), 80)
+        self.assertEquals(len(rdd.partitions), 80)
+
 
 class ProfilerTests(PySparkTestCase):
 
