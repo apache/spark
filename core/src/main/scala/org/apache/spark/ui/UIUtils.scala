@@ -20,13 +20,13 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.{Text, Node}
+import scala.xml.{Node, Text}
 
 import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS = "table table-bordered table-striped table-condensed sortable"
+  val TABLE_CLASS = "table table-bordered table-striped-custom table-condensed sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -160,6 +160,8 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+    <script src={prependBaseUri("/static/table.js")}></script>
+    <script src={prependBaseUri("/static/additional-metrics.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -240,7 +242,8 @@ private[spark] object UIUtils extends Logging {
       generateDataRow: T => Seq[Node],
       data: Iterable[T],
       fixedWidth: Boolean = false,
-      id: Option[String] = None): Seq[Node] = {
+      id: Option[String] = None,
+      headerClasses: Seq[String] = Seq.empty): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
     if (fixedWidth) {
@@ -248,20 +251,29 @@ private[spark] object UIUtils extends Logging {
     }
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
-    val headerRow: Seq[Node] = {
-      // if none of the headers have "\n" in them
-      if (headers.forall(!_.contains("\n"))) {
-        // represent header as simple text
-        headers.map(h => <th width={colWidthAttr}>{h}</th>)
+
+    def getClass(index: Int): String = {
+      if (index < headerClasses.size) {
+        headerClasses(index)
       } else {
-        // represent header text as list while respecting "\n"
-        headers.map { case h =>
-          <th width={colWidthAttr}>
-            <ul class ="unstyled">
-              { h.split("\n").map { case t => <li> {t} </li> } }
-            </ul>
-          </th>
-        }
+        ""
+      }
+    }
+
+    val newlinesInHeader = headers.exists(_.contains("\n"))
+    def getHeaderContent(header: String): Seq[Node] = {
+      if (newlinesInHeader) {
+        <ul class="unstyled">
+          { header.split("\n").map { case t => <li> {t} </li> } }
+        </ul>
+      } else {
+        Text(header)
+      }
+    }
+
+    val headerRow: Seq[Node] = {
+      headers.view.zipWithIndex.map { x =>
+        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
       }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
