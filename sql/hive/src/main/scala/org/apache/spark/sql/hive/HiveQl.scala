@@ -992,8 +992,9 @@ private[hive] object HiveQl {
 
       val targetExpression = nodeToExpr(target)
       val betweenExpr =
-        And(GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
-        LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
+        And(
+          GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
+          LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
       kw match {
         case Token("KW_FALSE", Nil) => betweenExpr
         case Token("KW_TRUE", Nil) => Not(betweenExpr)
