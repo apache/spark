@@ -27,12 +27,12 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>network</artifactId>
+  <artifactId>spark-network-common_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Shuffle Streaming Service</name>
+  <name>Spark Project Common Network Code</name>
   <url>http://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>network</sbt.project.name>
+    <sbt.project.name>network-common</sbt.project.name>
   </properties>
 
   <dependencies>
@@ -60,6 +60,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.novocode</groupId>
+      <artifactId>junit-interface</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <scope>test</scope>
@@ -69,25 +74,20 @@
       <artifactId>mockito-all</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
-
   <build>
-    <outputDirectory>target/java/classes</outputDirectory>
-    <testOutputDirectory>target/java/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <version>2.17</version>
-        <configuration>
-          <skipTests>false</skipTests>
-          <includes>
-            <include>**/Test*.java</include>
-            <include>**/*Test.java</include>
-            <include>**/*Suite.java</include>
-          </includes>
-        </configuration>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>
