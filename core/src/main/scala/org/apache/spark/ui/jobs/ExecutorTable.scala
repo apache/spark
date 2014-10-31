@@ -49,6 +49,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
         <th>Shuffle Spill (Memory)</th>
         <th>Shuffle Spill (Disk)</th>
+        <th>Cache Hit Ratio</th>
       </thead>
       <tbody>
         {createExecutorTable()}
@@ -85,6 +86,14 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
               {Utils.bytesToString(v.memoryBytesSpilled)}</td>
             <td sorttable_customkey={v.diskBytesSpilled.toString}>
               {Utils.bytesToString(v.diskBytesSpilled)}</td>
+            { if (v.cacheHitCount > 0 || v.cacheMissCount > 0) {
+                <td sorttable_customekey={(v.cacheHitCount * 100.0 /
+                  (v.cacheHitCount + v.cacheMissCount)).toString}>
+                  {v.cacheHitCount * 100 / (v.cacheHitCount + v.cacheMissCount)} %
+                </td>
+            } else {
+                <td sorttable_customekey="0"></td>
+            }}
           </tr>
         }
       case None =>

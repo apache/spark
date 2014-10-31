@@ -43,10 +43,10 @@ class JsonProtocolSuite extends FunSuite {
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 180, 20, hasHadoopInput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 90, 10, hasHadoopInput = true))
     val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -83,7 +83,7 @@ class JsonProtocolSuite extends FunSuite {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
-    testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
+    testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, 500, 500, hasHadoopInput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
 
     // StorageLevel
@@ -146,7 +146,7 @@ class JsonProtocolSuite extends FunSuite {
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 3, 7, hasHadoopInput = true)
     assert(metrics.inputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
@@ -550,6 +550,8 @@ class JsonProtocolSuite extends FunSuite {
       d: Long,
       e: Int,
       f: Int,
+      g: Long,
+      h: Long,
       hasHadoopInput: Boolean) = {
     val t = new TaskMetrics
     val sw = new ShuffleWriteMetrics
@@ -560,6 +562,8 @@ class JsonProtocolSuite extends FunSuite {
     t.jvmGCTime = d
     t.resultSerializationTime = a + b
     t.memoryBytesSpilled = a + c
+    t.cacheHitCount = g
+    t.cacheMissCount = h
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
@@ -803,6 +807,8 @@ class JsonProtocolSuite extends FunSuite {
       |    "Result Serialization Time": 700,
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
+      |    "Cache Hit Count": 180,
+      |    "Cache Miss Count": 20,
       |    "Shuffle Read Metrics": {
       |      "Remote Blocks Fetched": 800,
       |      "Local Blocks Fetched": 700,
@@ -886,6 +892,8 @@ class JsonProtocolSuite extends FunSuite {
       |    "Result Serialization Time": 700,
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
+      |    "Cache Hit Count": 90,
+      |    "Cache Miss Count": 10,
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500

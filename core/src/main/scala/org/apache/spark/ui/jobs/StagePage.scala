@@ -56,6 +56,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
       val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
+      val hasCacheHitRatio = stageData.cacheHitCount > 0 || stageData.cacheMissCount > 0
 
       // scalastyle:off
       val summary =
@@ -91,6 +92,13 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             <li>
               <strong>Shuffle spill (disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
+            </li>
+            }
+            {if (hasCacheHitRatio)
+            <li>
+              <strong>Cache hit ratio: </strong>{stageData.cacheHitCount * 100.0 /
+              (stageData.cacheHitCount + stageData.cacheMissCount)}
+              %
             </li>
             }
           </ul>

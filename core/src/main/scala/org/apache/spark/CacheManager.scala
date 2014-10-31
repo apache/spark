@@ -45,9 +45,12 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
         context.taskMetrics.inputMetrics = Some(blockResult.inputMetrics)
+        context.taskMetrics.cacheHitCount += 1
         new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
 
       case None =>
+
+        context.taskMetrics.cacheMissCount += 1
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
         val storedValues = acquireLockForPartition[T](key)

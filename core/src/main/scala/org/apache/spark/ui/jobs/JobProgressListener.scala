@@ -263,6 +263,17 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val timeDelta =
       taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)
     stageData.executorRunTime += timeDelta
+
+    val cacheHitCountDelta =
+      taskMetrics.cacheHitCount - oldMetrics.map(_.cacheHitCount).getOrElse(0L)
+    stageData.cacheHitCount += cacheHitCountDelta
+    execSummary.cacheHitCount += cacheHitCountDelta
+
+    val cacheMissCountDelta =
+      taskMetrics.cacheMissCount - oldMetrics.map(_.cacheMissCount).getOrElse(0L)
+    stageData.cacheMissCount += cacheMissCountDelta
+    execSummary.cacheMissCount += cacheMissCountDelta
+
   }
 
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
