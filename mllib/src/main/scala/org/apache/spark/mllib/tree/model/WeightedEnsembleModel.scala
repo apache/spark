@@ -80,7 +80,7 @@ class WeightedEnsembleModel(
    * @param features array representing a single data point
    * @return Double prediction from the trained model
    */
-  def predictByAveraging(features: Vector): Double = {
+  private def predictByAveraging(features: Vector): Double = {
     algo match {
       case Classification =>
         val predictionToCount = new mutable.HashMap[Int, Int]()
@@ -119,10 +119,10 @@ class WeightedEnsembleModel(
   def predict(features: RDD[Vector]): RDD[Double] = features.map(x => predict(x))
 
   /**
-   * Print full model.
+   * Print a summary of the model.
    */
   override def toString: String = {
-    val header = algo match {
+    algo match {
       case Classification =>
         s"WeightedEnsembleModel classifier with $numWeakHypotheses trees\n"
       case Regression =>
@@ -130,9 +130,6 @@ class WeightedEnsembleModel(
       case _ => throw new IllegalArgumentException(
         s"WeightedEnsembleModel given unknown algo parameter: $algo.")
     }
-    header + weakHypotheses.zipWithIndex.map { case (learner, treeIndex) =>
-      s"  Tree $treeIndex:\n" + learner.topNode.subtreeToString(4)
-    }.fold("")(_ + _)
   }
 
   /**
@@ -145,13 +142,13 @@ class WeightedEnsembleModel(
     }.fold("")(_ + _)
   }
 
-  // TODO: Remove these helpers methods once class is generalized to support any base learning
-  // algorithms.
-
   /**
    * Get number of trees in forest.
    */
   def numWeakHypotheses: Int = weakHypotheses.size
+
+  // TODO: Remove these helpers methods once class is generalized to support any base learning
+  // algorithms.
 
   /**
    * Get total number of nodes, summed over all trees in the forest.
