@@ -41,6 +41,7 @@ app.jinja_env.add_extension("chartkick.ext.charts")
 class DateTimeForm(Form):
     execution_date = DateTimeField("Execution date")
 
+
 class GraphForm(Form):
     execution_date = DateTimeField("Execution date")
     arrange = SelectField("Layout", choices=(
@@ -149,7 +150,7 @@ class Airflow(BaseView):
             if not attr_name.startswith('_'):
                 attr = getattr(task, attr_name)
                 if type(attr) != type(self.task) and attr_name not in sql_attrs:
-                     s += attr_name + ': ' + str(attr) + '\n'
+                    s += attr_name + ': ' + str(attr) + '\n'
 
         s = s.replace('<', '&lt')
         s = s.replace('>', '&gt')

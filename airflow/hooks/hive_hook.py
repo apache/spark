@@ -1,18 +1,15 @@
 import logging
 import subprocess
 import sys
-import os
 from airflow.models import DatabaseConnection
 from airflow import settings
 
 # Adding the Hive python libs to python path
 sys.path.insert(0, settings.HIVE_HOME_PY)
 
-from thrift import Thrift
 from thrift.transport import TSocket
 from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol
-from hive_metastore import ThriftHiveMetastore
 from hive_service import ThriftHive
 
 from airflow.hooks.base_hook import BaseHook
@@ -55,9 +52,7 @@ class HiveHook(BaseHook):
             else:
                 return False
         except Exception as e:
-            logging.error(
-                "Metastore down? Activing as if partition doesn't "
-                "exist to be safe...")
+            logging.error(e)
             return False
 
     def get_records(self, hql, schema=None):
@@ -99,14 +94,14 @@ class HiveHook(BaseHook):
         for tables that have a single partition key. For subpartitionned
         table, we recommend using signal tables.
         '''
-        table = client.get_table(dbname=schema, tbl_name=table)
+        table = self.hive.get_table(dbname=schema, tbl_name=table)
         if len(table.partitionKeys) == 0:
             raise Exception("The table isn't partitionned")
-        elif len(table.partitionKeys) >1:
+        elif len(table.partitionKeys) > 1:
             raise Exception(
                 "The table is partitionned by multiple columns, "
                 "use a signal table!")
         else:
-            parts = client.get_partitions(
+            parts = self.hive.get_partitions(
                 db_name='core_data', tbl_name='dim_users', max_parts=32767)
             return max([p.values[0] for p in parts])
