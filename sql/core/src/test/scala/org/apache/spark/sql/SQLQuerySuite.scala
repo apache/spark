@@ -899,4 +899,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-3814 Support Bitwise ~ operator") {
     checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), -2)
   }
+
+  test("SPARK-4120 Join of multiple tables does not work in SparkSQL") {
+    checkAnswer(
+      sql(
+        """SELECT a.key, b.key, c.key
+          |FROM testData a,testData b,testData c
+          |where a.key = b.key and a.key = c.key
+        """.stripMargin),
+      (1 to 100).map(i => Seq(i, i, i)))
+  }
 }
