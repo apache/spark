@@ -277,8 +277,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def unregisterTempTable(tableName: String, unpersist: Boolean = false): Unit = {
     val schemaRDD = table(tableName)
-    if (unpersist && lookupCachedData(schemaRDD).nonEmpty) {
-      uncacheQuery(schemaRDD)
+    if (unpersist) {
+      tryUncacheQuery(schemaRDD)
     }
     catalog.unregisterTable(None, tableName)
   }
