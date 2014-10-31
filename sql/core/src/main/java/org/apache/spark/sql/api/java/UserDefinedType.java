@@ -25,14 +25,11 @@ import org.apache.spark.annotation.DeveloperApi;
  * ::DeveloperApi::
  * The data type representing User-Defined Types (UDTs).
  * UDTs may use any other DataType for an underlying representation.
- *
- * TODO: Do we need to provide DataType#createUserDefinedType methods?
  */
 @DeveloperApi
 public abstract class UserDefinedType<UserType> extends DataType implements Serializable {
 
-  protected UserDefinedType() { // TODO?
-  }
+  protected UserDefinedType() { }
 
   @Override
   public boolean equals(Object o) {
@@ -51,5 +48,6 @@ public abstract class UserDefinedType<UserType> extends DataType implements Seri
   /** Convert a SQL datum to the user type */
   public abstract UserType deserialize(Object datum);
 
+  /** Class object for the UserType */
   public abstract Class<UserType> userClass();
 }

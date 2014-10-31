@@ -26,7 +26,7 @@ import java.util.*;
  * To get/create specific data type, users should use singleton objects and factory methods
  * provided by this class.
  */
-public abstract class DataType implements Serializable {
+public abstract class DataType {
 
   /**
    * Gets the StringType object.
@@ -201,19 +201,5 @@ public abstract class DataType implements Serializable {
 
     return new StructType(fields);
   }
-/*
-  public static <UserType> org.apache.spark.sql.UserDefinedType<UserType>
-  wrapAsScala(UserDefinedType<UserType> udtType) {
-    // TODO: Check if we can unwrap instead of wrapping.
-    return new JavaToScalaUDTWrapper<UserType>(udtType);
-  }
-
-// EDITING HERE: Does this method need to be implemented in Scala in order to avoid exposing Catalyst?
-  public static <UserType> UserDefinedType<UserType>
-  wrapAsJava(org.apache.spark.sql.UserDefinedType<UserType> udtType) {
-    // TODO: Check if we can unwrap instead of wrapping.
-    return new ScalaToJavaUDTWrapper(udtType);
-  }
-*/
 
 }
