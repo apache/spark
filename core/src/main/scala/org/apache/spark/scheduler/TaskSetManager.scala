@@ -532,9 +532,11 @@ private[spark] class TaskSetManager(
     totalResultSize += size
     calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
-      logError(s"Total number of bytes of serialized results (${calculatedTasks} tasks) is " +
-        s"bigger than maxResultSize: ${Utils.bytesToString(totalResultSize)} > " +
-        s"${Utils.bytesToString(maxResultSize)}")
+      val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
+        s"(${Utils.bytesToString(totalResultSize)}) is bigger than maxResultSize " +
+        s"(${Utils.bytesToString(maxResultSize)})"
+      logError(msg)
+      abort(msg)
       false
     } else {
       true
