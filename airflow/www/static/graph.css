@@ -15,9 +15,6 @@ g.node.running rect{
 g.node.failed rect {
     stroke: red;
 }
-input, select {
-    margin-bottom: 0px;
-}
 div#svg_container {
  border: 1px solid black;
  background-color: #EEE;

@@ -69,6 +69,17 @@ class HiveHook(BaseHook):
         self.transport.close()
         return [row.split("\t") for row in records]
 
+    def get_pandas_df(self, hql, schema=None):
+        import pandas as pd
+        self.transport.open()
+        if schema:
+            self.hive.execute("USE " + schema)
+        self.hive.execute(hql)
+        records = self.hive.fetchAll()
+        self.transport.close()
+        df = pd.DataFrame([row.split("\t") for row in records])
+        return df
+
     def run(self, hql, schema=None):
         self.transport.open()
         if schema:

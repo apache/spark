@@ -39,3 +39,10 @@ pre code {
     overflow-wrap: normal;
     white-space: pre;
 }
+textarea {
+    width: 100%;
+    margin-top:2px;
+}
+input, select {
+    margin: 0px;
+}

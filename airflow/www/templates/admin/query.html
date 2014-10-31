@@ -1,0 +1,24 @@
+{% extends "admin/master.html" %}
+
+{% block title %}Airflow - DAGs{% endblock %}
+
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" type="text/css"
+    href="{{ url_for("static", filename="main.css") }}">
+{% endblock %}
+
+{% block body %}
+  <h2>Query</h2>
+  <form method="get">
+  {{ form.db_id }}
+  <input type="submit" class="btn btn-default" value="Run!"><br>
+  {{ form.sql(rows=10) }}
+  </form>
+  {{ results|safe }}
+{% endblock %}
+{% block tail %}
+  {{ super() }}
+  <script>
+  </script>
+{% endblock %}

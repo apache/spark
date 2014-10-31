@@ -7,10 +7,10 @@ from flask import Flask, url_for, Markup, Blueprint, redirect, flash
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
 from flask.ext.admin.contrib.sqla import ModelView
 from flask import request
-from wtforms import Form, DateTimeField, SelectField
+from wtforms import Form, DateTimeField, SelectField, TextField, TextAreaField
 
 from pygments import highlight
-from pygments.lexers import PythonLexer
+from pygments.lexers import PythonLexer, SqlLexer
 from pygments.formatters import HtmlFormatter
 
 
@@ -78,6 +78,32 @@ class Airflow(BaseView):
     def index(self):
         return self.render('admin/dags.html')
 
+    @expose('/query')
+    def query(self):
+        session = settings.Session()
+        dbs = session.query(models.DatabaseConnection)
+        db_choices = [(db.db_id, db.db_id) for db in dbs]
+        db_id_str = request.args.get('db_id')
+        sql = request.args.get('sql')
+        class QueryForm(Form):
+            db_id = SelectField("Layout", choices=db_choices)
+            sql = TextAreaField("Execution date")
+        data = {
+            'db_id': db_id_str,
+            'sql': sql,
+        }
+        results = None
+        if db_id_str:
+            db = [db for db in dbs if db.db_id == db_id_str][0]
+            hook = db.get_hook()
+            results = hook.get_pandas_df(sql).to_html(
+                classes="table table-striped table-bordered model-list")
+
+        form = QueryForm(request.form, data=data)
+        session.commit()
+        session.close()
+        return self.render('admin/query.html', form=form, results=results)
+
     @expose('/code')
     def code(self):
         dag_id = request.args.get('dag_id')
@@ -118,16 +144,25 @@ class Airflow(BaseView):
         task = dag.get_task(task_id)
 
         s = ''
+        sql_attrs = ['hql', 'sql']
         for attr_name in dir(task):
             if not attr_name.startswith('_'):
                 attr = getattr(task, attr_name)
-                if type(attr) != type(self.task):
+                if type(attr) != type(self.task) and attr_name not in sql_attrs:
                      s += attr_name + ': ' + str(attr) + '\n'
 
         s = s.replace('<', '&lt')
         s = s.replace('>', '&gt')
-        html_code = "<pre><code>" + s + "</code></pre>"
+        html_code = "<h3>Atributes:</h3><pre><code>" + s + "</code></pre>"
+
         title = "Task Details for {task_id}".format(**locals())
+
+        for attr_name in sql_attrs:
+            if hasattr(task, attr_name):
+                html_code = "<h3>"+attr_name+"</h3>" + highlight(
+                    getattr(task, attr_name),
+                    SqlLexer(),
+                    HtmlFormatter(noclasses=True)) + html_code
 
         return self.render(
             'admin/code.html', html_code=html_code, dag=dag, title=title)

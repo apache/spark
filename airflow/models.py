@@ -129,6 +129,15 @@ class DatabaseConnection(Base):
         self.schema = schema
         self.port = port
 
+    def get_hook(self):
+        from airflow import hooks
+        if self.db_type == 'mysql':
+            return hooks.MySqlHook(mysql_dbid=self.db_id)
+        elif self.db_type == 'hive':
+            return hooks.HiveHook(hive_dbid=self.db_id)
+        elif self.db_type == 'presto':
+            return hooks.PrestoHook(presto_dbid=self.db_id)
+
 
 class DagPickle(Base):
     """
