@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
@@ -37,7 +36,8 @@ private[spark]
 class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
   extends RDD[T](sc, Nil) {
 
-  val broadcastedConf = sc.broadcast(new SerializableWritable(sc.hadoopConfiguration))
+  // Serializable configuration
+  private val sConf = new SerializableWritable(sc.hadoopConfiguration)
 
   @transient val fs = new Path(checkpointPath).getFileSystem(sc.hadoopConfiguration)
 
@@ -71,7 +71,7 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val file = new Path(checkpointPath, CheckpointRDD.splitIdToFile(split.index))
-    CheckpointRDD.readFromFile(file, broadcastedConf, context)
+    CheckpointRDD.readFromFile(file, sConf.value, context)
   }
 
   override def checkpoint() {
@@ -86,12 +86,12 @@ private[spark] object CheckpointRDD extends Logging {
 
   def writeToFile[T: ClassTag](
       path: String,
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+      conf: SerializableWritable[Configuration],
       blockSize: Int = -1
     )(ctx: TaskContext, iterator: Iterator[T]) {
     val env = SparkEnv.get
     val outputDir = new Path(path)
-    val fs = outputDir.getFileSystem(broadcastedConf.value.value)
+    val fs = outputDir.getFileSystem(conf.value)
 
     val finalOutputName = splitIdToFile(ctx.partitionId)
     val finalOutputPath = new Path(outputDir, finalOutputName)
@@ -130,11 +130,11 @@ private[spark] object CheckpointRDD extends Logging {
 
   def readFromFile[T](
       path: Path,
-      broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+      conf: Configuration,
       context: TaskContext
     ): Iterator[T] = {
     val env = SparkEnv.get
-    val fs = path.getFileSystem(broadcastedConf.value.value)
+    val fs = path.getFileSystem(conf)
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
     val fileInputStream = fs.open(path, bufferSize)
     val serializer = env.serializer.newInstance()
@@ -159,8 +159,8 @@ private[spark] object CheckpointRDD extends Logging {
     val path = new Path(hdfsPath, "temp")
     val conf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val fs = path.getFileSystem(conf)
-    val broadcastedConf = sc.broadcast(new SerializableWritable(conf))
-    sc.runJob(rdd, CheckpointRDD.writeToFile[Int](path.toString, broadcastedConf, 1024) _)
+    sc.runJob(rdd, CheckpointRDD.writeToFile[Int](
+      path.toString, new SerializableWritable(conf), 1024) _)
     val cpRDD = new CheckpointRDD[Int](sc, path.toString)
     assert(cpRDD.partitions.length == rdd.partitions.length, "Number of partitions is not the same")
     assert(cpRDD.collect.toList == rdd.collect.toList, "Data of partitions not the same")

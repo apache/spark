@@ -19,9 +19,9 @@ package org.apache.spark
 
 import java.io._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
+import org.apache.spark.deploy.SparkHadoopUtil
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
@@ -39,8 +39,10 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     val ow = new ObjectWritable()
-    ow.setConf(new Configuration())
-    ow.readFields(in)
+    SparkHadoopUtil.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
+      ow.setConf(SparkHadoopUtil.newConfiguration())
+      ow.readFields(in)  // not thread safe
+    }
     t = ow.get().asInstanceOf[T]
   }
 }
