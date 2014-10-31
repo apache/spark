@@ -87,6 +87,10 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   /**
    * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: The ordering of elements in the schema may differ from Scala.
+   *          If you create a [[org.apache.spark.sql.SchemaRDD]] using [[SQLContext]]
+   *          with the same Java Bean, row elements may be in a different order.
    */
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): JavaSchemaRDD = {
     val attributeSeq = getSchema(beanClass)
@@ -193,11 +197,16 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
     sqlContext.registerRDDAsTable(rdd.baseSchemaRDD, tableName)
   }
 
-  /** Returns a Catalyst Schema for the given java bean class. */
+  /**
+   * Returns a Catalyst Schema for the given java bean class.
+   */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
     val beanInfo = Introspector.getBeanInfo(beanClass)
 
+    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
+    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
+    //       element ordering.
     val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
     fields.map { property =>
       val (dataType, nullable) = property.getPropertyType match {

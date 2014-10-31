@@ -75,42 +75,14 @@ public class JavaUserDefinedTypeSuite implements Serializable {
       Assert.assertTrue(actualFeatures.contains(lp.features()));
     }
 
-    List<Row> actual = javaSqlCtx.sql("SELECT * FROM points").collect();
+    List<Row> actual = javaSqlCtx.sql("SELECT label, features FROM points").collect();
     List<MyLabeledPoint> actualPoints =
         new LinkedList<MyLabeledPoint>();
     for (Row r : actual) {
-      // Note: JavaSQLContext.getSchema switches the ordering of the Row elements
-      //       in the MyLabeledPoint case class.
-      actualPoints.add(new MyLabeledPoint(
-          r.getDouble(1), (MyDenseVector)r.get(0)));
+      actualPoints.add(new MyLabeledPoint(r.getDouble(0), (MyDenseVector)r.get(1)));
     }
     for (MyLabeledPoint lp : points) {
       Assert.assertTrue(actualPoints.contains(lp));
     }
-    /*
-    // THIS FAILS BECAUSE JavaSQLContext.getSchema switches the ordering of the Row elements
-    //  in the MyLabeledPoint case class.
-    List<Row> expected = new LinkedList<Row>();
-    expected.add(Row.create(new MyLabeledPoint(1.0,
-        new MyDenseVector(new double[]{0.1, 1.0}))));
-    expected.add(Row.create(new MyLabeledPoint(0.0,
-        new MyDenseVector(new double[]{0.2, 2.0}))));
-    System.out.println("Expected:");
-    for (Row r : expected) {
-      System.out.println("r: " + r.toString());
-      for (int i = 0; i < r.length(); ++i) {
-        System.out.println("  r[i]: " + r.get(i).toString());
-      }
-    }
-
-    System.out.println("Actual:");
-    for (Row r : actual) {
-      System.out.println("r: " + r.toString());
-      for (int i = 0; i < r.length(); ++i) {
-        System.out.println("  r[i]: " + r.get(i).toString());
-      }
-      Assert.assertTrue(expected.contains(r));
-    }
-    */
   }
 }
