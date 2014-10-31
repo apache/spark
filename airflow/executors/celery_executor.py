@@ -1,12 +1,11 @@
 import multiprocessing
-import subprocess
 import time
 
 from airflow.executors.base_executor import BaseExecutor
 from airflow import settings
 from airflow.utils import State
-
 from celery_worker import execute_command
+
 
 class CeleryExecutor(BaseExecutor):
     """ Submits the task to RabbitMQ, which is picked up and executed by a bunch
@@ -18,7 +17,9 @@ class CeleryExecutor(BaseExecutor):
     def start(self):
         self.queue = multiprocessing.JoinableQueue()
         self.result_queue = multiprocessing.Queue()
-        self.workers = [ CelerySubmitter(self.queue, self.result_queue) for i in xrange(self.parallelism) ]
+        self.workers = [
+            CelerySubmitter(self.queue, self.result_queue)
+            for i in xrange(self.parallelism)]
 
         for w in self.workers:
             w.start()
@@ -47,7 +48,7 @@ class CelerySubmitter(multiprocessing.Process):
     def run(self):
         while True:
             key, command = self.task_queue.get()
-            if command == None:
+            if command is None:
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break

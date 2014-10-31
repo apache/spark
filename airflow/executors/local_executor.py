@@ -8,6 +8,7 @@ from airflow.utils import State
 
 from airflow.executors.base_executor import BaseExecutor
 
+
 class LocalWorker(multiprocessing.Process):
 
     def __init__(self, task_queue, result_queue):

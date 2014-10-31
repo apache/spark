@@ -28,7 +28,6 @@ class HiveOperator(BaseOperator):
         self.hook = HiveHook(hive_dbid=hive_dbid)
         self.hql = hql
 
-
     def execute(self, execution_date):
         logging.info('Executing: ' + self.hql)
         self.hook.run_cli(hql=self.hql, schema=self.hive_dbid)
