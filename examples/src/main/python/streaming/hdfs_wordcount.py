@@ -21,7 +21,7 @@
    <directory> is the directory that Spark Streaming will use to find and read new text files.
 
  To run this on your local machine on directory `localdir`, run this example
-    $ bin/spark-submit examples/src/main/python/streaming/network_wordcount.py localdir
+    $ bin/spark-submit examples/src/main/python/streaming/hdfs_wordcount.py localdir
 
  Then create a text file in `localdir` and the words in the file will get counted.
 """

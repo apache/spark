@@ -52,4 +52,3 @@ private[streaming] class WriteAheadLogRandomReader(path: String, conf: Configura
     HdfsUtils.checkState(!closed, "Stream is closed. Create a new Reader to read from the file.")
   }
 }
-

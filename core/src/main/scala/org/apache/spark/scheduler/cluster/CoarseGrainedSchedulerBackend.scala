@@ -31,7 +31,6 @@ import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
-import org.apache.spark.ui.JettyUtils
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -42,7 +41,7 @@ import org.apache.spark.ui.JettyUtils
  * (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: ActorSystem)
+class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSystem: ActorSystem)
   extends SchedulerBackend with Logging
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -61,10 +60,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
 
+  private val executorDataMap = new HashMap[String, ExecutorData]
+
+  // Number of executors requested from the cluster manager that have not registered yet
+  private var numPendingExecutors = 0
+
+  // Executors we have requested the cluster manager to kill that have not died yet
+  private val executorsPendingToRemove = new HashSet[String]
+
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[Address, String]
-    private val executorDataMap = new HashMap[String, ExecutorData]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -84,12 +90,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor
-          executorDataMap.put(executorId, new ExecutorData(sender, sender.path.address,
-            Utils.parseHostPort(hostPort)._1, cores, cores))
 
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
+          val (host, _) = Utils.parseHostPort(hostPort)
+          val data = new ExecutorData(sender, sender.path.address, host, cores, cores)
+          // This must be synchronized because variables mutated
+          // in this block are read when requesting executors
+          CoarseGrainedSchedulerBackend.this.synchronized {
+            executorDataMap.put(executorId, data)
+            if (numPendingExecutors > 0) {
+              numPendingExecutors -= 1
+              logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
+            }
+          }
           makeOffers()
         }
 
@@ -126,10 +141,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
-        sender ! true
-
-      case AddWebUIFilter(filterName, filterParams, proxyBase) =>
-        addWebUIFilter(filterName, filterParams, proxyBase)
         sender ! true
 
       case DisassociatedEvent(_, address, _) =>
@@ -183,13 +194,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
 
     // Remove a disconnected slave from the cluster
-    def removeExecutor(executorId: String, reason: String) {
+    def removeExecutor(executorId: String, reason: String): Unit = {
       executorDataMap.get(executorId) match {
         case Some(executorInfo) =>
-          executorDataMap -= executorId
+          // This must be synchronized because variables mutated
+          // in this block are read when requesting executors
+          CoarseGrainedSchedulerBackend.this.synchronized {
+            executorDataMap -= executorId
+            executorsPendingToRemove -= executorId
+          }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           scheduler.executorLost(executorId, SlaveLost(reason))
-        case None => logError(s"Asked to remove non existant executor $executorId")
+        case None => logError(s"Asked to remove non-existent executor $executorId")
       }
     }
   }
@@ -274,21 +290,62 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     false
   }
 
-  // Add filters to the SparkUI
-  def addWebUIFilter(filterName: String, filterParams: Map[String, String], proxyBase: String) {
-    if (proxyBase != null && proxyBase.nonEmpty) {
-      System.setProperty("spark.ui.proxyBase", proxyBase)
-    }
+  /**
+   * Return the number of executors currently registered with this backend.
+   */
+  def numExistingExecutors: Int = executorDataMap.size
 
-    val hasFilter = (filterName != null && filterName.nonEmpty &&
-      filterParams != null && filterParams.nonEmpty)
-    if (hasFilter) {
-      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
-      conf.set("spark.ui.filters", filterName)
-      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
-      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
-    }
+  /**
+   * Request an additional number of executors from the cluster manager.
+   * Return whether the request is acknowledged.
+   */
+  final def requestExecutors(numAdditionalExecutors: Int): Boolean = synchronized {
+    logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
+    logDebug(s"Number of pending executors is now $numPendingExecutors")
+    numPendingExecutors += numAdditionalExecutors
+    // Account for executors pending to be added or removed
+    val newTotal = numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size
+    doRequestTotalExecutors(newTotal)
   }
+
+  /**
+   * Request executors from the cluster manager by specifying the total number desired,
+   * including existing pending and running executors.
+   *
+   * The semantics here guarantee that we do not over-allocate executors for this application,
+   * since a later request overrides the value of any prior request. The alternative interface
+   * of requesting a delta of executors risks double counting new executors when there are
+   * insufficient resources to satisfy the first request. We make the assumption here that the
+   * cluster manager will eventually fulfill all requests when resources free up.
+   *
+   * Return whether the request is acknowledged.
+   */
+  protected def doRequestTotalExecutors(requestedTotal: Int): Boolean = false
+
+  /**
+   * Request that the cluster manager kill the specified executors.
+   * Return whether the kill request is acknowledged.
+   */
+  final def killExecutors(executorIds: Seq[String]): Boolean = {
+    logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
+    val filteredExecutorIds = new ArrayBuffer[String]
+    executorIds.foreach { id =>
+      if (executorDataMap.contains(id)) {
+        filteredExecutorIds += id
+      } else {
+        logWarning(s"Executor to kill $id does not exist!")
+      }
+    }
+    executorsPendingToRemove ++= filteredExecutorIds
+    doKillExecutors(filteredExecutorIds)
+  }
+
+  /**
+   * Kill the given list of executors through the cluster manager.
+   * Return whether the kill request is acknowledged.
+   */
+  protected def doKillExecutors(executorIds: Seq[String]): Boolean = false
+
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
