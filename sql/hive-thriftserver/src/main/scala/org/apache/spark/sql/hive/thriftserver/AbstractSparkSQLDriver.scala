@@ -29,11 +29,11 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
-private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveContext)
-  extends Driver with Logging {
+private[hive] abstract class AbstractSparkSQLDriver(
+    val context: HiveContext = SparkSQLEnv.hiveContext) extends Driver with Logging {
 
-  private var tableSchema: Schema = _
-  private var hiveResponse: Seq[String] = _
+  private[hive] var tableSchema: Schema = _
+  private[hive] var hiveResponse: Seq[String] = _
 
   override def init(): Unit = {
   }
@@ -73,16 +73,6 @@ private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveCo
   }
 
   override def getSchema: Schema = tableSchema
-
-  override def getResults(res: JArrayList[String]): Boolean = {
-    if (hiveResponse == null) {
-      false
-    } else {
-      res.addAll(hiveResponse)
-      hiveResponse = null
-      true
-    }
-  }
 
   override def destroy() {
     super.destroy()
