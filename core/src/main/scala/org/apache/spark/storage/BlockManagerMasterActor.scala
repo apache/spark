@@ -416,6 +416,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }
   }
 
+  /**
+   * Returns the hostname and port of an executor's actor system, based on the Akka address of its
+   * BlockManagerSlaveActor.
+   */
   private def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
