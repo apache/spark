@@ -33,7 +33,7 @@ sparkR.onLoad <- function(libname, pkgname) {
 #'                  list(spark.executor.memory="1g"))
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="1g"),
-#'                  List(LD_LIBRARY_PATH="/directory of Java VM Library Files (libjvm.so) on worker nodes/"),
+#'                  list(LD_LIBRARY_PATH="/directory of Java VM Library Files (libjvm.so) on worker nodes/"),
 #'                  c("jarfile1.jar","jarfile2.jar"))
 #'}
 
