@@ -177,7 +177,6 @@ synonyms = model.findSynonyms('china', 40)
 
 for word, cosine_distance in synonyms:
     print "{}: {}".format(word, cosine_distance)
-    sc.stop()
 {% endhighlight %}
 </div>
 </div>
