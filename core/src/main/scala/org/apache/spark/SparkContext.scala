@@ -363,7 +363,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   /** Called by the web UI to obtain executor thread dumps */
   private[spark] def getExecutorThreadDump(executorId: String): Array[ThreadStackTrace] = {
-    if (executorId == "<driver>") {
+    if (executorId == SparkContext.DRIVER_IDENTIFIER) {
       Utils.getThreadDump()
     } else {
       val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
