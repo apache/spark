@@ -18,10 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
-class MyDenseVector(val data: Array[Double]) extends Serializable {
+private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
       java.util.Arrays.equals(this.data, v.data)
@@ -29,15 +31,9 @@ class MyDenseVector(val data: Array[Double]) extends Serializable {
   }
 }
 
-case class MyLabeledPoint(label: Double, features: MyDenseVector) {
-  override def equals(other: Any): Boolean = other match {
-    case lp: MyLabeledPoint =>
-      label == lp.label && features.equals(lp.features)
-    case _ => false
-  }
-}
+private[sql] case class MyLabeledPoint(label: Double, features: MyDenseVector)
 
-class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
+private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
@@ -57,31 +53,6 @@ class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   override def userClass = classOf[MyDenseVector]
 }
-
-/*
-// This is to test registering a UDT which is defined within an object (where Java and Scala
-// reflection use different class names).  This functionality is currently not supported but
-// should be later on.
-object UserDefinedTypeSuiteObject {
-
-  class ClassInObject(val dv: MyDenseVector) extends Serializable
-
-  case class MyLabeledPointInObject(label: Double, features: ClassInObject)
-
-  class ClassInObjectUDT extends UserDefinedType[ClassInObject] {
-
-    override def sqlType: ArrayType = ArrayType(DoubleType, containsNull = false)
-
-    private val dvUDT = new MyDenseVectorUDT()
-
-    override def serialize(obj: Any): Row = obj match {
-      case cio: ClassInObject => dvUDT.serialize(cio)
-    }
-
-    override def deserialize(row: Row): ClassInObject = new ClassInObject(dvUDT.deserialize(row))
-  }
-}
-*/
 
 class UserDefinedTypeSuite extends QueryTest {
 
@@ -104,5 +75,4 @@ class UserDefinedTypeSuite extends QueryTest {
     assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
   }
-
 }

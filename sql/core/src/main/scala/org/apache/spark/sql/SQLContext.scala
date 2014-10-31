@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{UDTRegistry, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
@@ -466,16 +466,4 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
-}
-
-object SQLContext {
-
-  /**
-   * Registers a User-Defined Type (UDT) so that schemas can include this type.
-   * UDTs can override built-in types.
-   */
-  def registerUDT(udt: UserDefinedType[_]): Unit = {
-    UDTRegistry.registerType(udt)
-  }
-
 }

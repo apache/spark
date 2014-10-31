@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.sql.{DataType => ScalaDataType, UserDefinedType => ScalaUserDefinedType}
+import org.apache.spark.sql.catalyst.types.{UserDefinedType => ScalaUserDefinedType}
+import org.apache.spark.sql.{DataType => ScalaDataType}
 import org.apache.spark.sql.types.util.DataTypeConversions
 
 /**
  * Scala wrapper for a Java UserDefinedType
  */
 private[sql] class JavaToScalaUDTWrapper[UserType](val javaUDT: UserDefinedType[UserType])
-  extends ScalaUserDefinedType[UserType] {
+  extends ScalaUserDefinedType[UserType] with Serializable {
 
   /** Underlying storage type for this UDT */
   val sqlType: ScalaDataType = DataTypeConversions.asScalaDataType(javaUDT.sqlType())
@@ -42,7 +43,7 @@ private[sql] class JavaToScalaUDTWrapper[UserType](val javaUDT: UserDefinedType[
  * Java wrapper for a Scala UserDefinedType
  */
 private[sql] class ScalaToJavaUDTWrapper[UserType](val scalaUDT: ScalaUserDefinedType[UserType])
-  extends UserDefinedType[UserType] {
+  extends UserDefinedType[UserType] with Serializable {
 
   /** Underlying storage type for this UDT */
   val sqlType: DataType = DataTypeConversions.asJavaDataType(scalaUDT.sqlType)
@@ -58,13 +59,17 @@ private[sql] class ScalaToJavaUDTWrapper[UserType](val scalaUDT: ScalaUserDefine
 
 private[sql] object UDTWrappers {
 
-  def wrapAsScala(udtType: UserDefinedType[_]): JavaToScalaUDTWrapper[_] = {
-    // TODO: Check if we can unwrap instead of wrapping.
-    new JavaToScalaUDTWrapper(udtType)
+  def wrapAsScala(udtType: UserDefinedType[_]): ScalaUserDefinedType[_] = {
+    udtType match {
+      case t: ScalaToJavaUDTWrapper[_] => t.scalaUDT
+      case _ => new JavaToScalaUDTWrapper(udtType)
+    }
   }
 
-  def wrapAsJava(udtType: ScalaUserDefinedType[_]): ScalaToJavaUDTWrapper[_] = {
-    // TODO: Check if we can unwrap instead of wrapping.
-    new ScalaToJavaUDTWrapper(udtType)
+  def wrapAsJava(udtType: ScalaUserDefinedType[_]): UserDefinedType[_] = {
+    udtType match {
+      case t: JavaToScalaUDTWrapper[_] => t.javaUDT
+      case _ => new ScalaToJavaUDTWrapper(udtType)
+    }
   }
 }

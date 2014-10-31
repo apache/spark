@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.DeveloperApi;
 
 /**
@@ -27,7 +29,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * TODO: Do we need to provide DataType#createUserDefinedType methods?
  */
 @DeveloperApi
-public abstract class UserDefinedType<UserType> extends DataType {
+public abstract class UserDefinedType<UserType> extends DataType implements Serializable {
 
   protected UserDefinedType() { // TODO?
   }

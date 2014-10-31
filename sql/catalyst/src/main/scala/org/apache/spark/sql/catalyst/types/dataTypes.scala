@@ -576,6 +576,19 @@ case class MapType(
 /**
  * ::DeveloperApi::
  * The data type for User Defined Types (UDTs).
+ *
+ * This interface allows a user to make their own classes more interoperable with SparkSQL;
+ * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
+ * a SchemaRDD which has class X in the schema.
+ *
+ * For SparkSQL to recognize UDTs, the UDT must be registered in
+ * [[org.apache.spark.sql.catalyst.UDTRegistry]].  This registration can be done either
+ * explicitly by calling [[org.apache.spark.sql.catalyst.UDTRegistry.registerType()]]
+ * before using the UDT with SparkSQL, or implicitly by annotating the UDT with
+ * [[org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType]].
+ *
+ * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
+ * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
  */
 @DeveloperApi
 abstract class UserDefinedType[UserType] extends DataType with Serializable {

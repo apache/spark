@@ -18,11 +18,8 @@
 package org.apache.spark.sql.api.java;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
-import org.apache.spark.sql.types.util.DataTypeConversions;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,7 +38,7 @@ public class JavaUserDefinedTypeSuite implements Serializable {
   public void setUp() {
     javaCtx = new JavaSparkContext("local", "JavaUserDefinedTypeSuite");
     javaSqlCtx = new JavaSQLContext(javaCtx);
-    JavaSQLContext$.MODULE$.registerUDT(new MyDenseVectorUDT());
+    //JavaSQLContext$.MODULE$.registerUDT(new MyDenseVectorUDT());
   }
 
   @After
@@ -70,7 +67,7 @@ public class JavaUserDefinedTypeSuite implements Serializable {
     }
   }
 
-  class MyLabeledPoint {
+  class MyLabeledPoint implements Serializable {
     double label;
     MyDenseVector features;
     public MyLabeledPoint(double label, MyDenseVector features) {
@@ -79,7 +76,7 @@ public class JavaUserDefinedTypeSuite implements Serializable {
     }
   }
 
-  class MyDenseVectorUDT extends UserDefinedType<MyDenseVector> {
+  class MyDenseVectorUDT extends UserDefinedType<MyDenseVector> implements Serializable {
 
     /**
      * Underlying storage type for this UDT
@@ -114,89 +111,48 @@ public class JavaUserDefinedTypeSuite implements Serializable {
             new org.apache.spark.sql.MyDenseVector(new double[]{0.1, 1.0})),
         new org.apache.spark.sql.MyLabeledPoint(0.0,
             new org.apache.spark.sql.MyDenseVector(new double[]{0.2, 2.0})));
-    JavaRDD<Row> rowRDD = javaCtx.parallelize(points).map(
-        new Function<org.apache.spark.sql.MyLabeledPoint, Row>() {
-          public Row call(org.apache.spark.sql.MyLabeledPoint lp) throws Exception {
-            return Row.create(lp.label(), lp.features());
-          }
-        });
-
-    List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataType.createStructField("label", DataType.DoubleType, false));
-    // EDITING HERE: HOW TO CONVERT SCALA UDT TO JAVA UDT (without exposing Catalyst)?
-    fields.add(DataType.createStructField("features", ???, false));
-    StructType schema = DataType.createStructType(fields);
+    JavaRDD<org.apache.spark.sql.MyLabeledPoint> pointsRDD = javaCtx.parallelize(points);
 
     JavaSchemaRDD schemaRDD =
-        javaSqlCtx.applySchema(pointRDD, org.apache.spark.sql.MyLabeledPoint.class);
+        javaSqlCtx.applySchema(pointsRDD, org.apache.spark.sql.MyLabeledPoint.class);
 
     schemaRDD.registerTempTable("points");
     List<Row> actual = javaSqlCtx.sql("SELECT * FROM points").collect();
-// check set
-    List<Row> expected = new ArrayList<Row>(2);
-    expected.add(Row.create(1.0,
-        new org.apache.spark.sql.MyDenseVector(new double[]{0.1, 1.0})));
-    expected.add(Row.create(0.0,
-        new org.apache.spark.sql.MyDenseVector(new double[]{0.2, 2.0})));
-
-    Assert.assertEquals(expected, actual);
-  }
-
-    // test("register user type: MyDenseVector for MyLabeledPoint")
-  @Test
-  public void registerUDT() {
+    List<org.apache.spark.sql.MyLabeledPoint> actualPoints =
+        new LinkedList<org.apache.spark.sql.MyLabeledPoint>();
+    for (Row r : actual) {
+      // Note: JavaSQLContext.getSchema switches the ordering of the Row elements
+      //       in the MyLabeledPoint case class.
+      actualPoints.add(new org.apache.spark.sql.MyLabeledPoint(
+          r.getDouble(1), (org.apache.spark.sql.MyDenseVector)r.get(0)));
+    }
+    for (org.apache.spark.sql.MyLabeledPoint lp : points) {
+      Assert.assertTrue(actualPoints.contains(lp));
+    }
     /*
-    List<MyLabeledPoint> points = Arrays.asList(
-        new MyLabeledPoint(1.0, new MyDenseVector(new double[]{0.1, 1.0})),
-        new MyLabeledPoint(0.0, new MyDenseVector(new double[]{0.2, 2.0})));
-    JavaRDD<MyLabeledPoint> pointsRDD = javaCtx.parallelize(points).map(
-        new Function<MyLabeledPoint, Row>() {
-          public Row call(MyLabeledPoint lp) throws Exception {
-            return Row.create(lp.label, lp.features)
-          }
-        }
-    );
-    JavaSchemaRDD schemaRDD = pointsRDD;
+    // THIS FAILS BECAUSE JavaSQLContext.getSchema switches the ordering of the Row elements
+    //  in the MyLabeledPoint case class.
+    List<Row> expected = new LinkedList<Row>();
+    expected.add(Row.create(new org.apache.spark.sql.MyLabeledPoint(1.0,
+        new org.apache.spark.sql.MyDenseVector(new double[]{0.1, 1.0}))));
+    expected.add(Row.create(new org.apache.spark.sql.MyLabeledPoint(0.0,
+        new org.apache.spark.sql.MyDenseVector(new double[]{0.2, 2.0}))));
+    System.out.println("Expected:");
+    for (Row r : expected) {
+      System.out.println("r: " + r.toString());
+      for (int i = 0; i < r.length(); ++i) {
+        System.out.println("  r[i]: " + r.get(i).toString());
+      }
+    }
+
+    System.out.println("Actual:");
+    for (Row r : actual) {
+      System.out.println("r: " + r.toString());
+      for (int i = 0; i < r.length(); ++i) {
+        System.out.println("  r[i]: " + r.get(i).toString());
+      }
+      Assert.assertTrue(expected.contains(r));
+    }
     */
-    /*
-    JavaRDD<Double> labels = pointsRDD.select('label).map { case Row(v: double) => v }
-        val labelsArrays: Array[double] = labels.collect()
-    assert(labelsArrays.size === 2)
-    assert(labelsArrays.contains(1.0))
-    assert(labelsArrays.contains(0.0))
-
-    val features: RDD[MyDenseVector] =
-        pointsRDD.select('features).map { case Row(v: MyDenseVector) => v }
-            val featuresArrays: Array[MyDenseVector] = features.collect()
-    assert(featuresArrays.size === 2)
-    assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
-    assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
-    */
-
-/*
-    JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
-      new Function<Person, Row>() {
-        public Row call(Person person) throws Exception {
-          return Row.create(person.getName(), person.getAge());
-        }
-      });
-
-    List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataType.createStructField("name", DataType.StringType, false));
-    fields.add(DataType.createStructField("age", DataType.IntegerType, false));
-    StructType schema = DataType.createStructType(fields);
-
-    JavaSchemaRDD schemaRDD = javaSqlCtx.applySchema(rowRDD, schema);
-    schemaRDD.registerTempTable("people");
-    List<Row> actual = javaSqlCtx.sql("SELECT * FROM people").collect();
-
-    List<Row> expected = new ArrayList<Row>(2);
-    expected.add(Row.create("Michael", 29));
-    expected.add(Row.create("Yin", 28));
-
-    Assert.assertEquals(expected, actual);
-
- */
   }
-
 }
