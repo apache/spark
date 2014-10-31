@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mapreduce
+package org.apache.hadoop.mapreduce
 
 import java.lang.{Boolean => JBoolean, Integer => JInteger}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapreduce.{JobContext, JobID, TaskAttemptContext, TaskAttemptID}
 
-private[spark]
+private[apache]
 trait SparkHadoopMapReduceUtil {
   def newJobContext(conf: Configuration, jobId: JobID): JobContext = {
     val klass = firstAvailableClass(

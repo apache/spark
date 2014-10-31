@@ -77,14 +77,6 @@ object MimaExcludes {
             // SPARK-3822
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
-          ) ++ Seq(
-            // SPARK-1209
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil"),
-            ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.hadoop.mapred.SparkHadoopMapRedUtil"),
-            ProblemFilters.exclude[MissingTypesProblem](
-              "org.apache.spark.rdd.PairRDDFunctions")
           )
 
         case v if v.startsWith("1.1") =>
