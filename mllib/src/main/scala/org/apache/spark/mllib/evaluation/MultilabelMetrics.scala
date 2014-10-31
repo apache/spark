@@ -22,55 +22,57 @@ import org.apache.spark.SparkContext._
 
 /**
  * Evaluator for multilabel classification.
- * @param predictionAndLabels an RDD of (predictions, labels) pairs, both are non-null sets.
+ * @param predictionAndLabels an RDD of (predictions, labels) pairs,
+ * both are non-null Arrays, each with unique elements.
  */
-class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
+class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
 
-  private lazy val numDocs: Long = predictionAndLabels.count
+  private lazy val numDocs: Long = predictionAndLabels.count()
 
   private lazy val numLabels: Long = predictionAndLabels.flatMap { case (_, labels) =>
-    labels}.distinct.count
+    labels}.distinct().count()
 
   /**
    * Returns strict Accuracy
    * (for equal sets of labels)
    */
   lazy val strictAccuracy: Double = predictionAndLabels.filter { case (predictions, labels) =>
-    predictions == labels}.count.toDouble / numDocs
+    predictions.deep == labels.deep }.count().toDouble / numDocs
 
   /**
    * Returns Accuracy
    */
   lazy val accuracy: Double = predictionAndLabels.map { case (predictions, labels) =>
-    labels.intersect(predictions).size.toDouble / labels.union(predictions).size}.sum / numDocs
+    labels.intersect(predictions).size.toDouble /
+      (labels.size + predictions.size - labels.intersect(predictions).size)}.sum / numDocs
 
   /**
    * Returns Hamming-loss
    */
-  lazy val hammingLoss: Double = (predictionAndLabels.map { case (predictions, labels) =>
+  lazy val hammingLoss: Double = predictionAndLabels.map { case (predictions, labels) =>
     labels.diff(predictions).size + predictions.diff(labels).size}.
-    sum).toDouble / (numDocs * numLabels)
+    sum / (numDocs * numLabels)
 
   /**
    * Returns Document-based Precision averaged by the number of documents
    */
-  lazy val macroPrecisionDoc: Double = (predictionAndLabels.map { case (predictions, labels) =>
+  lazy val macroPrecisionDoc: Double = predictionAndLabels.map { case (predictions, labels) =>
     if (predictions.size > 0) {
       predictions.intersect(labels).size.toDouble / predictions.size
     } else 0
-  }.sum) / numDocs
+  }.sum / numDocs
 
   /**
    * Returns Document-based Recall averaged by the number of documents
    */
-  lazy val macroRecallDoc: Double = (predictionAndLabels.map { case (predictions, labels) =>
-    labels.intersect(predictions).size.toDouble / labels.size}.sum) / numDocs
+  lazy val macroRecallDoc: Double = predictionAndLabels.map { case (predictions, labels) =>
+    labels.intersect(predictions).size.toDouble / labels.size}.sum / numDocs
 
   /**
    * Returns Document-based F1-measure averaged by the number of documents
    */
-  lazy val macroF1MeasureDoc: Double = (predictionAndLabels.map { case (predictions, labels) =>
-    2.0 * predictions.intersect(labels).size / (predictions.size + labels.size)}.sum) / numDocs
+  lazy val macroF1MeasureDoc: Double = predictionAndLabels.map { case (predictions, labels) =>
+    2.0 * predictions.intersect(labels).size / (predictions.size + labels.size)}.sum / numDocs
 
   /**
    * Returns micro-averaged document-based Precision
@@ -137,7 +139,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
    * Returns micro-averaged label-based Precision
    */
   lazy val microPrecisionClass = {
-    val sumFp = fpPerClass.foldLeft(0L){ case(sumFp, (_, fp)) => sumFp + fp}
+    val sumFp = fpPerClass.foldLeft(0L){ case(cum, (_, fp)) => cum + fp}
     sumTp.toDouble / (sumTp + sumFp)
   }
 
@@ -145,7 +147,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Set[Double], Set[Double])]) {
    * Returns micro-averaged label-based Recall
    */
   lazy val microRecallClass = {
-    val sumFn = fnPerClass.foldLeft(0.0){ case(sumFn, (_, fn)) => sumFn + fn}
+    val sumFn = fnPerClass.foldLeft(0.0){ case(cum, (_, fn)) => cum + fn}
     sumTp.toDouble / (sumTp + sumFn)
   }
 

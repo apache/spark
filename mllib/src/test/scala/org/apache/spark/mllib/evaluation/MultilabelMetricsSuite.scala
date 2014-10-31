@@ -45,14 +45,14 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
     * class 2 - doc 0, 3, 4, 6 (total 4)
     *
     */
-    val scoreAndLabels: RDD[(Set[Double], Set[Double])] = sc.parallelize(
-      Seq((Set(0.0, 1.0), Set(0.0, 2.0)),
-        (Set(0.0, 2.0), Set(0.0, 1.0)),
-        (Set(), Set(0.0)),
-        (Set(2.0), Set(2.0)),
-        (Set(2.0, 0.0), Set(2.0, 0.0)),
-        (Set(0.0, 1.0, 2.0), Set(0.0, 1.0)),
-        (Set(1.0), Set(1.0, 2.0))), 2)
+    val scoreAndLabels: RDD[(Array[Double], Array[Double])] = sc.parallelize(
+      Seq((Array(0.0, 1.0), Array(0.0, 2.0)),
+        (Array(0.0, 2.0), Array(0.0, 1.0)),
+        (Array(), Array(0.0)),
+        (Array(2.0), Array(2.0)),
+        (Array(2.0, 0.0), Array(2.0, 0.0)),
+        (Array(0.0, 1.0, 2.0), Array(0.0, 1.0)),
+        (Array(1.0), Array(1.0, 2.0))), 2)
     val metrics = new MultilabelMetrics(scoreAndLabels)
     val delta = 0.00001
     val precision0 = 4.0 / (4 + 0)
