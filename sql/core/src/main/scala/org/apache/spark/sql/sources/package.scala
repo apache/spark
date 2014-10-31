@@ -34,6 +34,8 @@ package object sources {
    * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
    * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
    * data source 'org.apache.spark.sql.json.DefaultSource'
+   *
+   * A new instance of this class with be instantiated each time a DDL call is made.
    */
   trait RelationProvider {
     /** Returns a new base relation with the given parameters. */
