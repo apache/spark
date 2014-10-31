@@ -45,7 +45,7 @@ def launch_gateway():
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func)
+            proc = Popen(command, stdout=PIPE, stderr=PIPE, stdin=PIPE, preexec_fn=preexec_func)
         else:
             # preexec_fn not supported on Windows
             proc = Popen(command, stdout=PIPE, stdin=PIPE)
@@ -100,6 +100,7 @@ def launch_gateway():
                     line = self.stream.readline()
                     sys.stderr.write(line)
         EchoOutputThread(proc.stdout).start()
+        EchoOutputThread(proc.stderr).start()
 
     # Connect to the gateway
     gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=False)

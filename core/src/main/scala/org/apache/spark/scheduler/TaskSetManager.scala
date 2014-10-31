@@ -26,6 +26,9 @@ import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
 
+import jline.ANSIBuffer.ANSICodes
+import jline.Terminal
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
@@ -54,6 +57,10 @@ private[spark] class TaskSetManager(
   extends Schedulable with Logging {
 
   val conf = sched.sc.conf
+  val isInTerminal = Terminal.getTerminal.isANSISupported
+  val showProgress = isInTerminal && conf.getBoolean("spark.driver.showConsoleProgress", true)
+  val startTime = clock.getTime()
+  var lastUpdate = clock.getTime()
 
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
@@ -521,6 +528,47 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskGettingResult(info)
   }
 
+  private def progressBar(curr: Int, total: Int): Unit = {
+    val now = clock.getTime()
+    // Only update title once in one second
+    if (now - lastUpdate < 100 && curr < total) {
+      return
+    }
+    val SetTitle = "\033]0;"
+    val EndTitle = "\007"
+    if (curr < total) {
+      System.err.print(s"${SetTitle} Spark Job: $curr/$total Finished, " +
+        s"$runningTasks are running ${EndTitle}")
+
+      if (!log.isInfoEnabled) {
+        val used = (now - startTime) / 1000
+        val header = s"Stage ${stageId}: ["
+        val tailer = s"] ${curr}+${runningTasks}/${total} - ${used}s"
+        val width = Terminal.getTerminal.getTerminalWidth - header.size - tailer.size
+        val percent = curr * width / total;
+        val bar = (0 until width).map { i =>
+          if (i < percent) "=" else if (i==percent) ">" else " "
+        }.mkString("")
+        System.err.print(header + bar + tailer + s"\n${ANSICodes.up(0)}")
+      }
+    } else {
+      System.err.print(s"${SetTitle} Spark Job: All Finished ${EndTitle}")
+      if (!log.isInfoEnabled) {
+        val used = (now  - startTime) / 1000
+        val finishTimes = taskInfos.map(_._2.finishTime - startTime)
+        val avg = finishTimes.sum / finishTimes.size / 1000
+        val min = finishTimes.min / 1000
+        val max = finishTimes.max / 1000
+        val med = finishTimes.toSeq.sorted.slice(0, finishTimes.size / 2).last / 1000
+        // erase current line
+        System.err.print(" " * Terminal.getTerminal.getTerminalWidth + "\n" + ANSICodes.up(0))
+        System.err.println(s"Stage ${stageId}: Finished in ${used}s with ${total} tasks " +
+          s"(${min}/${med}/${avg}/${max}s).")
+      }
+    }
+    lastUpdate = now
+  }
+
   /**
    * Marks the task as successful and notifies the DAGScheduler that a task has ended.
    */
@@ -533,8 +581,11 @@ private[spark] class TaskSetManager(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
-        info.id, taskSet.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
+      if (showProgress) {
+        progressBar(tasksSuccessful, numTasks)
+      }
+      logDebug("Finished task %s in stage %s (TID %d) in %.3fs on %s (%d/%d)".format(
+        info.id, taskSet.id, info.taskId, info.duration/1000.0, info.host, tasksSuccessful, numTasks))
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
