@@ -65,7 +65,7 @@ environment variable. For example to use 1g, you can run
 
     SPARK_MEM=1g ./sparkR
 
-In a cluster settting to set the amount of memory used by the executors you can
+In a cluster setting to set the amount of memory used by the executors you can
 pass the variable `spark.executor.memory` to the SparkContext constructor.
 
     library(SparkR)
@@ -88,6 +88,26 @@ You can also run the unit-tests for SparkR by running
 
 Instructions for running SparkR on EC2 can be found in the
 [SparkR wiki](https://github.com/amplab-extras/SparkR-pkg/wiki/SparkR-on-EC2).
+
+## Running on YARN
+Currently, SparkR supports running on YARN with the `yarn-client` mode. These steps show how to build SparkR with YARN support and run SparkR programs on a YARN cluster:
+
+```
+# assumes Java, R, rJava, yarn, spark etc. are installed on the whole cluster.
+cd SparkR-pkg/
+USE_YARN=1 SPARK_YARN_VERSION=2.4.0 SPARK_HADOOP_VERSION=2.4.0 ./install-dev.sh
+```
+
+Before launching an application, make sure each worker node has a local copy of `lib/SparkR/sparkr-assembly-0.1.jar`. With a cluster launched with the `spark-ec2` script, do:
+```
+~/spark-ec2/copy-dir ~/SparkR-pkg
+```
+
+Finally, when launching an application, the environment variable `YARN_CONF_DIR` needs to be set to the directory which contains the client-side configuration files for the Hadoop cluster (with a cluster launched with `spark-ec2`, this defaults to `/root/ephemeral-hdfs/conf/`):
+```
+YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ MASTER=yarn-client ./sparkR
+YARN_CONF_DIR=/root/ephemeral-hdfs/conf/ ./sparkR examples/pi.R yarn-client
+```
 
 ## Report Issues/Feedback 
 
