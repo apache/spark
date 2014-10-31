@@ -22,14 +22,65 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
+import org.json4s.{JNothing, JObject, JValue}
+import org.json4s.JsonDSL._
+
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.util.{JsonProtocol, Utils, Distribution}
 import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val listener = parent.listener
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val stageId = request.getParameter("id").toInt
+    val stageAttemptId = request.getParameter("attempt").toInt
+    var stageSummary = ("Stage ID" -> stageId) ~ ("Stage Attempt ID" -> stageAttemptId)
+    val stageDataOpt = listener.stageIdToData.get((stageId, stageAttemptId))
+    var stageInfoJson: JValue = JNothing
+
+    if (!stageDataOpt.isEmpty && !stageDataOpt.get.taskData.isEmpty) {
+      val stageData = stageDataOpt.get
+
+      stageSummary ~= ("Executor Run Time" -> stageData.executorRunTime)
+      if (stageData.inputBytes > 0) stageSummary ~= ("Input Bytes" -> stageData.inputBytes)
+      if (stageData.shuffleReadBytes > 0) {
+        stageSummary ~= ("Shuffle Read Bytes" -> stageData.shuffleReadBytes)
+      }
+
+      if (stageData.shuffleWriteBytes > 0) {
+        stageSummary ~= ("Shuffle Write bytes" -> stageData.shuffleWriteBytes)
+      }
+
+      if (stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0) {
+        stageSummary ~=
+          ("Memory Bytes Spilled" -> stageData.memoryBytesSpilled) ~
+          ("Disk Bytes Spilled" -> stageData.diskBytesSpilled)
+      }
+
+      val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
+
+      val taskList = tasks.map {
+        case uiData: TaskUIData =>
+          var jsonTaskInfo: JValue = JsonProtocol.taskInfoToJson(uiData.taskInfo)
+          val jsonTaskMetrics: JValue =
+            if (uiData.taskMetrics.isDefined) {
+              JsonProtocol.taskMetricsToJson(uiData.taskMetrics.get)
+            } else JNothing
+
+          if (jsonTaskInfo.isInstanceOf[JObject] && jsonTaskMetrics.isInstanceOf[JObject]) {
+            jsonTaskInfo =
+              jsonTaskInfo.asInstanceOf[JObject] ~ jsonTaskMetrics.asInstanceOf[JObject]
+          }
+          jsonTaskInfo
+      }
+
+      stageInfoJson = ("Stage Summary" -> stageSummary) ~ ("Tasks" -> taskList)
+    }
+    stageInfoJson
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {

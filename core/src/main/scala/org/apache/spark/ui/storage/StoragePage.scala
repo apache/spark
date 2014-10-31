@@ -21,13 +21,23 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.json4s.JValue
+import org.json4s.JsonDSL._
+
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.{WebUIPage, UIUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val listener = parent.listener
+
+  override def renderJson(request: HttpServletRequest): JValue = {
+    val rddJsonList =
+      listener.rddInfoList.map { info => JsonProtocol.rddInfoToJson(info) }
+
+    rddJsonList
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
