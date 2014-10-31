@@ -42,17 +42,17 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project.hive</groupId>
+      <groupId>org.apache.hive</groupId>
       <artifactId>hive-cli</artifactId>
       <version>${hive.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project.hive</groupId>
+      <groupId>org.apache.hive</groupId>
       <artifactId>hive-jdbc</artifactId>
       <version>${hive.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project.hive</groupId>
+      <groupId>org.apache.hive</groupId>
       <artifactId>hive-beeline</artifactId>
       <version>${hive.version}</version>
     </dependency>
