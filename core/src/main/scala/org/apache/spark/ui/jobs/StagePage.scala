@@ -53,6 +53,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val numCompleted = tasks.count(_.taskInfo.finished)
       val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
+      val hasAccumulators = accumulables.size > 0
       val hasInput = stageData.inputBytes > 0
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
@@ -144,11 +145,12 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val taskHeadersAndCssClasses: Seq[(String, String)] =
         Seq(
           ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
-          ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""), ("Accumulators", ""),
+          ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
           ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
           ("GC Time", TaskDetailsClassNames.GC_TIME),
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
+        {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input", "")) else Nil} ++
         {if (hasShuffleRead) Seq(("Shuffle Read", ""))  else Nil} ++
         {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write", "")) else Nil} ++
@@ -159,7 +161,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val unzipped = taskHeadersAndCssClasses.unzip
 
       val taskTable = UIUtils.listingTable(
-        unzipped._1, taskRow(hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks,
+        unzipped._1,
+        taskRow(hasAccumulators, hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled),
+        tasks,
         headerClasses = unzipped._2)
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
@@ -298,6 +302,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   }
 
   def taskRow(
+      hasAccumulators: Boolean,
       hasInput: Boolean,
       hasShuffleRead: Boolean,
       hasShuffleWrite: Boolean,
@@ -311,6 +316,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
       val gettingResultTime = info.gettingResultTime
+
+      val maybeAccumulators = info.accumulables
+      val accumulatorsReadable = maybeAccumulators.map{acc => s"${acc.name}: ${acc.update.get}"}
 
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
@@ -355,10 +363,6 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <td sorttable_customkey={duration.toString}>
           {formatDuration}
         </td>
-        <td>
-          {Unparsed(
-          info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>"))}
-        </td>
         <td sorttable_customkey={schedulerDelay.toString}
             class={TaskDetailsClassNames.SCHEDULER_DELAY}>
           {UIUtils.formatDuration(schedulerDelay.toLong)}
@@ -374,6 +378,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
           {UIUtils.formatDuration(gettingResultTime)}
         </td>
+        {if (hasAccumulators) {
+          <td>
+            {Unparsed(accumulatorsReadable.mkString("<br/>"))}
+          </td>
+        }}
         {if (hasInput) {
           <td sorttable_customkey={inputSortable}>
             {inputReadable}
