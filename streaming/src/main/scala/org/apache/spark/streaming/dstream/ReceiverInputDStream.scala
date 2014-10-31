@@ -59,7 +59,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
     val blockRDD = {
       if (validTime >= graph.startTime) {
         val blockStoreResults = getReceivedBlockInfo(validTime).map { _.blockStoreResult }
-        val blockIds = blockStoreResults.map { _.asInstanceOf[BlockId] }.toArray
+        val blockIds = blockStoreResults.map { _.blockId.asInstanceOf[BlockId] }.toArray
         val isWriteAheadLogBased = blockStoreResults.forall {
           _.isInstanceOf[WriteAheadLogBasedStoreResult]
         }
