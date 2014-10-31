@@ -112,7 +112,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.receiverTracker.hasMoreReceivedBlockIds) {
+      while(!hasTimedOut && jobScheduler.receiverTracker.hasUnallocatedBlocks) {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
@@ -218,7 +218,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Generate jobs and perform checkpoint for the given `time`.  */
   private def generateJobs(time: Time) {
     SparkEnv.set(ssc.env)
-    Try(graph.generateJobs(time)) match {
+    Try {
+      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
+      graph.generateJobs(time) // generate jobs using allocated block
+    } match {
       case Success(jobs) =>
         val receivedBlockInfo = graph.getReceiverInputStreams.map { stream =>
           val streamId = stream.id
@@ -235,6 +238,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Clear DStream metadata for the given `time`. */
   private def clearMetadata(time: Time) {
     ssc.graph.clearMetadata(time)
+    jobScheduler.receiverTracker.cleanupOldMetadata(time - graph.batchDuration)
 
     // If checkpointing is enabled, then checkpoint,
     // else mark batch to be fully processed

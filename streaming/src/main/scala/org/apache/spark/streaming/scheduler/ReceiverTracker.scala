@@ -100,12 +100,20 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  /** Return all the blocks received from a receiver. */
-  def getReceivedBlocks(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = {
-    receivedBlockTracker.getOrAllocateBlocksToBatch(batchTime, streamId)
+  /** Allocate all unallocated blocks to the given batch. */
+  def allocateBlocksToBatch(batchTime: Time): Unit = {
+    if (receiverInputStreams.nonEmpty) {
+      receivedBlockTracker.allocateBlocksToBatch(batchTime)
+    }
   }
 
-  def cleanupOldInfo(cleanupThreshTime: Time) {
+  /** Get all the block for batch time . */
+  def getReceivedBlocks(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = {
+    receivedBlockTracker.getBlocksOfBatch(batchTime, streamId)
+  }
+
+  /** Clean up metadata older than the given threshold time */
+  def cleanupOldMetadata(cleanupThreshTime: Time) {
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime)
   }
 
@@ -170,8 +178,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Check if any blocks are left to be processed */
-  def hasMoreReceivedBlockIds: Boolean = {
-    receivedBlockTracker.hasUnallocatedReceivedBlocks()
+  def hasUnallocatedBlocks: Boolean = {
+    receivedBlockTracker.hasUnallocatedReceivedBlocks
   }
 
   /** Actor to receive messages from the receivers. */
