@@ -166,7 +166,8 @@ class SqlParser extends AbstractSparkSQLParser {
   // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
   protected lazy val relations: Parser[LogicalPlan] =
-    ( relation ~ ("," ~> relation) ^^ { case r1 ~ r2 => Join(r1, r2, Inner, None) }
+    ( relation ~ rep1("," ~> relation) ^^ {
+        case r1 ~ joins => joins.foldLeft(r1) { case(lhs, r) => Join(lhs, r, Inner, None) } }
     | relation
     )
 
