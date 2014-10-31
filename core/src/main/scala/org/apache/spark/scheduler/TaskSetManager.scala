@@ -585,7 +585,8 @@ private[spark] class TaskSetManager(
         progressBar(tasksSuccessful, numTasks)
       }
       logDebug("Finished task %s in stage %s (TID %d) in %.3fs on %s (%d/%d)".format(
-        info.id, taskSet.id, info.taskId, info.duration/1000.0, info.host, tasksSuccessful, numTasks))
+        info.id, taskSet.id, info.taskId, info.duration/1000.0, info.host,
+        tasksSuccessful, numTasks))
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
