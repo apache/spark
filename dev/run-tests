@@ -53,6 +53,14 @@ function handle_error () {
   fi
 }
 
+AMPLAB_JENKINS_BUILD_SCALA211=1
+
+if [ -n "$AMPLAB_JENKINS_BUILD_SCALA211" ]; then 
+    export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pscala-2.11"
+else
+    export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pscala-2.10"
+fi
+
 export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 
 # Determine Java path and version.
