@@ -29,7 +29,7 @@ class FilteredScanSource extends RelationProvider {
 }
 
 case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
-  extends BaseRelation with FilteredScan {
+  extends FilteredScan {
 
   override def schema =
     StructType(

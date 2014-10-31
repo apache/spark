@@ -62,9 +62,7 @@ package object sources {
    * Mixed into a BaseRelation that can produce all of its tuples as an RDD of Row objects.
    */
   @DeveloperApi
-  trait TableScan {
-    self: BaseRelation =>
-
+  abstract class TableScan extends BaseRelation {
     def buildScan(): RDD[Row]
   }
 
@@ -73,9 +71,7 @@ package object sources {
    * containing all of its tuples as Row objects.
    */
   @DeveloperApi
-  trait PrunedScan {
-    self: BaseRelation =>
-
+  abstract class PrunedScan extends BaseRelation {
     def buildScan(requiredColumns: Seq[Attribute]): RDD[Row]
   }
 
@@ -88,9 +84,7 @@ package object sources {
    * as filtering partitions based on a bloom filter.
    */
   @DeveloperApi
-  trait FilteredScan {
-    self: BaseRelation =>
-
+  abstract class FilteredScan extends BaseRelation {
     def buildScan(
       requiredColumns: Seq[Attribute],
       filters: Seq[Expression]): RDD[Row]

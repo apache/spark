@@ -34,7 +34,7 @@ private[sql] class DefaultSource extends RelationProvider {
 
 private[sql] case class JSONRelation(fileName: String, samplingRatio: Double)(
     @transient val sqlContext: SQLContext)
-  extends BaseRelation with TableScan {
+  extends TableScan {
 
   private def baseRDD = sqlContext.sparkContext.textFile(fileName)
 
