@@ -326,6 +326,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
+      DataSources,
       CommandStrategy(self),
       HiveCommandStrategy(self),
       TakeOrdered,

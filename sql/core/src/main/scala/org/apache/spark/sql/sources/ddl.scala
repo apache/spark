@@ -72,15 +72,13 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-    CREATE ~> TEMPORARY ~> TABLE ~> ident ~
-    USING ~ className ~
-    OPTIONS ~ options ^^ {
-      case tableName ~ _ ~ provider ~ _ ~ opts =>
+    CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
+      case tableName ~ provider ~ opts =>
         CreateTableUsing(tableName, provider, opts)
     }
 
   protected lazy val options: Parser[Map[String, String]] =
-  "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
+    "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
@@ -94,9 +92,9 @@ private[sql] case class CreateTableUsing(
 
   def run(sqlContext: SQLContext) = {
     val loader = Utils.getContextOrSparkClassLoader
-    val clazz: Class[_] = try Utils.getContextOrSparkClassLoader.loadClass(provider) catch {
+    val clazz: Class[_] = try loader.loadClass(provider) catch {
       case cnf: java.lang.ClassNotFoundException =>
-        try Utils.getContextOrSparkClassLoader.loadClass(provider + ".DefaultSource") catch {
+        try loader.loadClass(provider + ".DefaultSource") catch {
           case cnf: java.lang.ClassNotFoundException =>
             sys.error(s"Failed to load class for data source: $provider")
         }

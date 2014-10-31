@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.{SQLConf, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.sources._
 
 private[sql] class DefaultSource extends RelationProvider {

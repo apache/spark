@@ -17,16 +17,14 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Expression, Attribute}
-import org.apache.spark.sql.catalyst.plans.logical.{Statistics, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.LeafNode
+import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.plans.logical.{Statistics, LeafNode, LogicalPlan}
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
  */
 private[sql] case class LogicalRelation(relation: BaseRelation)
-  extends LogicalPlan
-  with LeafNode[LogicalPlan]
+  extends LeafNode
   with MultiInstanceRelation {
 
   override val output = relation.schema.toAttributes

@@ -18,6 +18,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext, StructType}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
 
 /**
@@ -40,8 +41,9 @@ trait RelationProvider {
 
 /**
  * Represents a collection of tuples with a known schema.  Classes that extend BaseRelation must
- * be able to produce the schema of their data in the form of a [[StructType]]  In order to be
- * executed, a BaseRelation must also mix in at least one of the Scan traits.
+ * be able to produce the schema of their data in the form of a [[StructType]]  Concrete
+ * implementation should inherit from one of the descendant `Scan` classes, which also define
+ * abstract methods for execution.
  *
  * BaseRelations must also define a equality function that only returns true when the two
  * instances will return the same data.  This equality function is used when determining when
@@ -54,7 +56,7 @@ abstract class BaseRelation {
 }
 
 /**
- * Mixed into a BaseRelation that can produce all of its tuples as an RDD of Row objects.
+ * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
  */
 @DeveloperApi
 abstract class TableScan extends BaseRelation {
@@ -62,7 +64,7 @@ abstract class TableScan extends BaseRelation {
 }
 
 /**
- * Mixed into a BaseRelation that can eliminate unneeded columns before producing an RDD
+ * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
  */
 @DeveloperApi
@@ -71,7 +73,7 @@ abstract class PrunedScan extends BaseRelation {
 }
 
 /**
- * Mixed into a BaseRelation that can eliminate unneeded columns and filter using selected
+ * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
  * The pushed down filters are currently purely an optimization as they will all be evaluated
@@ -80,7 +82,5 @@ abstract class PrunedScan extends BaseRelation {
  */
 @DeveloperApi
 abstract class FilteredScan extends BaseRelation {
-  def buildScan(
-                 requiredColumns: Seq[Attribute],
-                 filters: Seq[Expression]): RDD[Row]
+  def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }
