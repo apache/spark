@@ -157,14 +157,9 @@ class DecimalType(DataType):
     """
 
     def __init__(self, precision=None, scale=None):
-        if precision is None:
-            self.hasPrecisionInfo = False
-            self.precision = None
-            self.scale = None
-        else:
-            self.hasPrecisionInfo = True
-            self.precision = precision
-            self.scale = scale
+        self.precision = precision
+        self.scale = scale
+        self.hasPrecisionInfo = precision is not None
 
     def jsonValue(self):
         if self.hasPrecisionInfo:
@@ -473,13 +468,16 @@ _FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
 
 
 def _parse_datatype_json_value(json_value):
-    if type(json_value) is unicode and json_value in _all_primitive_types.keys():
-        return _all_primitive_types[json_value]()
-    elif type(json_value) is unicode and json_value == u'decimal':
-        return DecimalType()
-    elif type(json_value) is unicode and _FIXED_DECIMAL.match(json_value):
-        m = _FIXED_DECIMAL.match(json_value)
-        return DecimalType(int(m.group(1)), int(m.group(2)))
+    if type(json_value) is unicode:
+        if json_value in _all_primitive_types.keys():
+            return _all_primitive_types[json_value]()
+        elif json_value == u'decimal':
+            return DecimalType()
+        elif _FIXED_DECIMAL.match(json_value):
+            m = _FIXED_DECIMAL.match(json_value)
+            return DecimalType(int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Could not parse datatype: %s" % json_value)
     else:
         return _all_complex_types[json_value["type"]].fromJson(json_value)
 
