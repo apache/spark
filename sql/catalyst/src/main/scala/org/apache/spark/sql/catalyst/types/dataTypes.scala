@@ -76,7 +76,7 @@ object DataType {
       StructField(name, parseDataType(dataType), nullable)
   }
 
-  @deprecated("Use DataType.fromJson instead")
+  @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private object CaseClassStringParser extends RegexParsers {
@@ -91,6 +91,7 @@ object DataType {
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
       | "DecimalType" ^^^ DecimalType
+      | "DateType" ^^^ DateType
       | "TimestampType" ^^^ TimestampType
       )
 
@@ -198,7 +199,8 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private[sql] val all = Seq(DecimalType, TimestampType, BinaryType) ++ NativeType.all
+  private[sql] val all = Seq(DecimalType, DateType, TimestampType, BinaryType) ++
+    NativeType.all
 
   private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
 }

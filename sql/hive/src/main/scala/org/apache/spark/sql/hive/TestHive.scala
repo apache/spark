@@ -20,12 +20,16 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.session.SessionState
+
 import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
@@ -63,6 +67,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
+  CommandProcessorFactory.clean(hiveconf)
 
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
@@ -117,7 +122,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\.", testDataLocation)
+      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
     } else {
       cmd
     }
@@ -375,6 +380,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
+  // Database default may not exist in 0.13.1, create it if not exist
+  HiveShim.createDefaultDBIfNeeded(this)
+
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -412,6 +420,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
+      // Some tests corrupt this value on purpose, which breaks the RESET call below.
+      hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       runSqlHive("RESET")
@@ -433,10 +443,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
-        // At this point there is really no reason to continue, but the test framework traps exits.
-        // So instead we just pause forever so that at least the developer can see where things
-        // started to go wrong.
-        Thread.sleep(100000)
     }
   }
 }

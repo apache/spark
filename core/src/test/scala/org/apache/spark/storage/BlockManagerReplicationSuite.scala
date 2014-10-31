@@ -27,7 +27,7 @@ import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
@@ -57,7 +57,9 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
 
-  private def makeBlockManager(maxMem: Long, name: String = "<driver>"): BlockManager = {
+  private def makeBlockManager(
+      maxMem: Long,
+      name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NioBlockTransferService(conf, securityMgr)
     val store = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer)
@@ -108,7 +110,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
       storeIds.filterNot { _ == stores(2).blockManagerId })
 
     // Add driver store and test whether it is filtered out
-    val driverStore = makeBlockManager(1000, "<driver>")
+    val driverStore = makeBlockManager(1000, SparkContext.DRIVER_IDENTIFIER)
     assert(master.getPeers(stores(0).blockManagerId).forall(!_.isDriver))
     assert(master.getPeers(stores(1).blockManagerId).forall(!_.isDriver))
     assert(master.getPeers(stores(2).blockManagerId).forall(!_.isDriver))

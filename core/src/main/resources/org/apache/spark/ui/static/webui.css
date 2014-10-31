@@ -120,7 +120,37 @@ pre {
   border: none;
 }
 
+span.expand-additional-metrics {
+  cursor: pointer;
+}
+
+span.additional-metric-title {
+  cursor: pointer;
+}
+
+.additional-metrics.collapsed {
+  display: none;
+}
+
 .tooltip {
  font-weight: normal;
 }
 
+.arrow-open {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid black;
+  float: left;
+  margin-top: 6px;
+}
+
+.arrow-closed {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 5px solid black;
+  display: inline-block;
+}

@@ -22,7 +22,7 @@ import scala.util.Try
 import org.scalatest.FunSuite
 
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.sql.api.java.JavaSchemaRDD
+import org.apache.spark.sql.api.java.{JavaSQLContext, JavaSchemaRDD}
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -33,9 +33,7 @@ class JavaHiveQLSuite extends FunSuite {
   lazy val javaCtx = new JavaSparkContext(TestHive.sparkContext)
 
   // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
-  lazy val javaHiveCtx = new JavaHiveContext(javaCtx) {
-    override val sqlContext = TestHive
-  }
+  lazy val javaHiveCtx = new JavaHiveContext(TestHive)
 
   test("SELECT * FROM src") {
     assert(

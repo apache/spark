@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.api.java.JavaRDD
 
 /**
@@ -378,46 +378,14 @@ class SchemaRDD(
   def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
 
   /**
-   * Helper for converting a Row to a simple Array suitable for pyspark serialization.
-   */
-  private def rowToJArray(row: Row, structType: StructType): Array[Any] = {
-    import scala.collection.Map
-
-    def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-      case (null, _) => null
-
-      case (obj: Row, struct: StructType) => rowToJArray(obj, struct)
-
-      case (seq: Seq[Any], array: ArrayType) =>
-        seq.map(x => toJava(x, array.elementType)).asJava
-      case (list: JList[_], array: ArrayType) =>
-        list.map(x => toJava(x, array.elementType)).asJava
-      case (arr, array: ArrayType) if arr.getClass.isArray =>
-        arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
-
-      case (obj: Map[_, _], mt: MapType) => obj.map {
-        case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
-      }.asJava
-
-      // Pyrolite can handle Timestamp
-      case (other, _) => other
-    }
-
-    val fields = structType.fields.map(field => field.dataType)
-    row.zip(fields).map {
-      case (obj, dataType) => toJava(obj, dataType)
-    }.toArray
-  }
-
-  /**
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
+    val fieldTypes = schema.fields.map(_.dataType)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        rowToJArray(row, rowSchema)
+        EvaluatePython.rowToArray(row, fieldTypes)
       }.grouped(100).map(batched => pickle.dumps(batched.toArray))
     }
   }
@@ -427,10 +395,10 @@ class SchemaRDD(
    * format as javaToPython. It is used by pyspark.
    */
   private[sql] def collectToPython: JList[Array[Byte]] = {
-    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
+    val fieldTypes = schema.fields.map(_.dataType)
     val pickle = new Pickler
     new java.util.ArrayList(collect().map { row =>
-      rowToJArray(row, rowSchema)
+      EvaluatePython.rowToArray(row, fieldTypes)
     }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
 

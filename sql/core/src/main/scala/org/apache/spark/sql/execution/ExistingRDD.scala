@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * :: DeveloperApi ::
@@ -100,7 +97,7 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQ
   override final def newInstance(): this.type = {
     SparkLogicalPlan(
       alreadyPlanned match {
-        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
+        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance()), rdd)
         case _ => sys.error("Multiple instance of the same relation detected.")
       })(sqlContext).asInstanceOf[this.type]
   }
