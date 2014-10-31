@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.mllib.ann.{ArtificialNeuralNetworkModel, ArtificialNeuralNetwork}
@@ -6,6 +23,8 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vectors
 import breeze.linalg.{argmax => Bargmax}
+
+import scala.util.Random
 
 trait ANNClassifierHelper {
 
@@ -25,7 +44,8 @@ trait ANNClassifierHelper {
   }
 }
 
-class ANNClassifierModel private[mllib](val annModel: ArtificialNeuralNetworkModel, val labelToIndex: Map[Double, Int])
+class ANNClassifierModel private[mllib](val annModel: ArtificialNeuralNetworkModel,
+                                        val labelToIndex: Map[Double, Int])
   extends ClassificationModel with ANNClassifierHelper with Serializable {
   /**
    * Predict values for the given data set using the model trained.
@@ -58,7 +78,8 @@ class ANNClassifier private(val labelToIndex: Map[Double, Int],
   def run(data: RDD[LabeledPoint]): ANNClassifierModel = {
     val annData = data.map(lp => labeledPointToVectorPair(lp))
     /* train the model */
-    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology/*, initialWeights*/, maxIterations, convergeTol)
+    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology,
+      initialWeights, maxIterations, convergeTol)
     new ANNClassifierModel(model, labelToIndex)
   }
 }
@@ -79,6 +100,12 @@ object ANNClassifier {
     train(data, hiddenLayersTopology, initialWeights, maxIterations, stepSize, convergenceTol)
   }
 
+  def train(data: RDD[LabeledPoint], model: ANNClassifierModel, maxIterations: Int,
+            stepSize: Double, convergenceTol: Double): ANNClassifierModel = {
+    val hiddenLayersTopology = model.annModel.topology.slice(1, model.annModel.topology.length - 1)
+    train(data, hiddenLayersTopology, model.annModel.weights, maxIterations, stepSize, convergenceTol)
+  }
+
   def train(data: RDD[LabeledPoint]): ANNClassifierModel = {
     val featureCount = data.first().features.size
     val hiddenSize = featureCount / 2 + 1
@@ -87,9 +114,14 @@ object ANNClassifier {
   }
 
   /* TODO: remove duplication - the same analysis will be done in ANNClassifier.run() */
-  def randomWeights(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int]) = {
+  def randomWeights(data: RDD[LabeledPoint],
+                    hiddenLayersTopology: Array[Int], seed: Int): Vector = {
     val labelCount = data.map( lp => lp.label).distinct().collect().length
     val featureCount = data.first().features.size
-    null
+    ArtificialNeuralNetwork.randomWeights(featureCount, labelCount, hiddenLayersTopology, seed)
+  }
+
+  def randomWeights(data: RDD[LabeledPoint], hiddenLayersTopology: Array[Int]): Vector = {
+    randomWeights(data, hiddenLayersTopology, Random.nextInt())
   }
 }
