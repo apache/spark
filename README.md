@@ -53,6 +53,12 @@ shell with
 
     ./sparkR
 
+The `sparkR` script automatically creates a SparkContext with Spark by default in
+local mode. To specify the Spark master of a cluster for the automatically created
+SparkContext, you can run
+
+    MASTER=<Spark master URL> ./sparkR
+    
 If you have installed it directly from github, you can include the SparkR
 package and then initialize a SparkContext. For example to run with a local
 Spark master you can launch R and then run
