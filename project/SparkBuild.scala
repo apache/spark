@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import java.io.File
+
 import scala.util.Properties
 import scala.collection.JavaConversions._
 
@@ -23,7 +25,7 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.genjavadocSettings
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 object BuildCommons {
@@ -106,6 +108,15 @@ object SparkBuild extends PomBuild {
   }
 
   override val userPropertiesMap = System.getProperties.toMap
+
+  val pom = loadEffectivePom(new File("pom.xml"),
+    profiles = profiles,
+    userProps = userPropertiesMap)
+
+  if (System.getProperty("hadoop.version") == null) {
+    System.setProperty("hadoop.version",
+      pom.getProperties.get("hadoop.version").asInstanceOf[String])
+  }
 
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
@@ -270,7 +281,7 @@ object Assembly {
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
-      Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
+      System.getProperty("hadoop.version") + ".jar" },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
