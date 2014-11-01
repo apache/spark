@@ -46,7 +46,7 @@ object ScalaReflection {
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
