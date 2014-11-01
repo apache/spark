@@ -267,19 +267,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Unregisters the temporary table with the given table name in the catalog. If the table has been
-   * cached/persisted before, it can be unpersisted if required.
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
    *
    * @param tableName the name of the table to be unregistered.
-   * @param unpersist whether to unpersist the table if it has been cached/persisted before.
    *
    * @group userf
    */
-  def unregisterTempTable(tableName: String, unpersist: Boolean = false): Unit = {
-    val schemaRDD = table(tableName)
-    if (unpersist) {
-      tryUncacheQuery(schemaRDD)
-    }
+  def dropTempTable(tableName: String): Unit = {
+    tryUncacheQuery(table(tableName))
     catalog.unregisterTable(None, tableName)
   }
 

@@ -244,14 +244,14 @@ class CachedTableSuite extends QueryTest {
     }
   }
 
-  test("Unregister temp table") {
+  test("Drops temporary table") {
     testData.select('key).registerTempTable("t1")
     table("t1")
-    unregisterTempTable("t1")
-    intercept[RuntimeException](table("t1"))
+    dropTempTable("t1")
+    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
   }
 
-  test("Unregister but don't unpersist temp table") {
+  test("Drops cached temporary table") {
     testData.select('key).registerTempTable("t1")
     testData.select('key).registerTempTable("t2")
     cacheTable("t1")
@@ -259,21 +259,8 @@ class CachedTableSuite extends QueryTest {
     assert(isCached("t1"))
     assert(isCached("t2"))
 
-    unregisterTempTable("t1", unpersist = false)
-
-    assert(isCached("t2"))
-  }
-
-  test("Unregister and unpersist temp table") {
-    testData.select('key).registerTempTable("t1")
-    testData.select('key).registerTempTable("t2")
-    cacheTable("t1")
-
-    assert(isCached("t1"))
-    assert(isCached("t2"))
-
-    unregisterTempTable("t1", unpersist = true)
-
+    dropTempTable("t1")
+    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
     assert(!isCached("t2"))
   }
 }
