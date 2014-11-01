@@ -26,6 +26,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Average
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, TreePoint, DecisionTreeMetadata, TimeTracker}
 import org.apache.spark.mllib.tree.impurity.Impurities
@@ -59,7 +60,7 @@ import org.apache.spark.util.Utils
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
  *                                  to "onethird" for regression.
- * @param seed  Random seed for bootstrapping and choosing feature subsets.
+ * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 @Experimental
 private class RandomForest (
@@ -78,9 +79,9 @@ private class RandomForest (
   /**
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @return RandomForestModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): RandomForestModel = {
+  def train(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
 
     val timer = new TimeTracker()
 
@@ -111,11 +112,20 @@ private class RandomForest (
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
-    val baggedInput = if (numTrees > 1) {
-      BaggedPoint.convertToBaggedRDD(treeInput, numTrees, seed)
-    } else {
-      BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
-    }.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val (subsample, withReplacement) = {
+      // TODO: Have a stricter check for RF in the strategy
+      val isRandomForest = numTrees > 1
+      if (isRandomForest) {
+        (1.0, true)
+      } else {
+        (strategy.subsamplingRate, false)
+      }
+    }
+
+    val baggedInput
+      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
+        .persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -184,7 +194,8 @@ private class RandomForest (
     logInfo(s"$timer")
 
     val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))
-    RandomForestModel.build(trees)
+    val treeWeights = Array.fill[Double](numTrees)(1.0)
+    new WeightedEnsembleModel(trees, treeWeights, strategy.algo, Average)
   }
 
 }
@@ -205,14 +216,14 @@ object RandomForest extends Serializable with Logging {
    *                                if numTrees > 1 (forest) set to "sqrt" for classification and
    *                                  to "onethird" for regression.
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
       strategy: Strategy,
       numTrees: Int,
       featureSubsetStrategy: String,
-      seed: Int): RandomForestModel = {
+      seed: Int): WeightedEnsembleModel = {
     require(strategy.algo == Classification,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
@@ -243,7 +254,7 @@ object RandomForest extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 100)
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
@@ -254,7 +265,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int = Utils.random.nextInt()): RandomForestModel = {
+      seed: Int = Utils.random.nextInt()): WeightedEnsembleModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(Classification, impurityType, maxDepth,
       numClassesForClassification, maxBins, Sort, categoricalFeaturesInfo)
@@ -273,7 +284,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): RandomForestModel = {
+      seed: Int): WeightedEnsembleModel = {
     trainClassifier(input.rdd, numClassesForClassification,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
@@ -293,14 +304,14 @@ object RandomForest extends Serializable with Logging {
    *                                if numTrees > 1 (forest) set to "sqrt" for classification and
    *                                  to "onethird" for regression.
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
       strategy: Strategy,
       numTrees: Int,
       featureSubsetStrategy: String,
-      seed: Int): RandomForestModel = {
+      seed: Int): WeightedEnsembleModel = {
     require(strategy.algo == Regression,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
@@ -330,7 +341,7 @@ object RandomForest extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 100)
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return WeightedEnsembleModel that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
@@ -340,7 +351,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int = Utils.random.nextInt()): RandomForestModel = {
+      seed: Int = Utils.random.nextInt()): WeightedEnsembleModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(Regression, impurityType, maxDepth,
       0, maxBins, Sort, categoricalFeaturesInfo)
@@ -358,7 +369,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): RandomForestModel = {
+      seed: Int): WeightedEnsembleModel = {
     trainRegressor(input.rdd,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
