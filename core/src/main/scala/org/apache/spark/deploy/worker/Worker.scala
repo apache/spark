@@ -40,12 +40,6 @@ import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
-// TODO: Remove me before merge!
-import org.apache.spark.network.util.SystemPropertyConfigProvider
-import org.apache.spark.network.TransportContext
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
-import org.apache.spark.network.util.TransportConf
-
 /**
   * @param masterUrls Each url should look like spark://host:port.
   */
@@ -434,17 +428,6 @@ private[spark] object Worker extends Logging {
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
-
-    // Create external shuffle server
-    // TODO: Remove this before PR goes in -- this is just to demonstrate how it looks!
-    scala.util.Try {
-      val port = conf.getInt("spark.shuffle.service.port", 7337)
-      val transportConf = new TransportConf(new SystemPropertyConfigProvider())
-      val rpcHandler = new ExternalShuffleBlockHandler()
-      val transportContext = new TransportContext(transportConf, rpcHandler)
-      transportContext.createServer(port)
-    }
-
     val args = new WorkerArguments(argStrings, conf)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)
