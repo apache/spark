@@ -488,7 +488,7 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select * from jsonTable"),
       Seq(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
-        """{"field":str}"""), Seq(Seq(214748364700L), Seq(1))) :: Nil
+        """{"field":"str"}"""), Seq(Seq(214748364700L), Seq(1))) :: Nil
     )
 
     // Treat an element as a number.

@@ -357,7 +357,8 @@ private[sql] object JsonRDD extends Logging {
       case (key, value) =>
         if (count > 0) builder.append(",")
         count += 1
-        builder.append(s"""\"${key}\":${toString(value)}""")
+        val stringValue = if (value.isInstanceOf[String]) s"""\"$value\"""" else toString(value)
+        builder.append(s"""\"${key}\":${stringValue}""")
     }
     builder.append("}")
 
