@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -175,12 +176,8 @@ public class TransportClient implements Closeable {
 
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    } catch (ExecutionException e) {
-      throw new RuntimeException(e);
-    } catch (TimeoutException e) {
-      throw new RuntimeException(e);
+    } catch (Exception e) {
+      throw Throwables.propagate(e);
     }
   }
 

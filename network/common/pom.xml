@@ -85,10 +85,6 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-      </plugin>
       <!-- Create a test-jar so network-shuffle can depend on our test utilities. -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
