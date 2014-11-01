@@ -62,7 +62,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
     val rfModel = rf.train(input)
-    rfModel.trees(0)
+    rfModel.weakHypotheses(0)
   }
 
 }

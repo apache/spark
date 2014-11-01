@@ -493,7 +493,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(rootNode1.rightNode.nonEmpty)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
 
     // Single group second level tree construction.
     val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
@@ -786,7 +786,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
 
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
 
     val topNode = Node.emptyNode(nodeIndex = 1)
     assert(topNode.predict.predict === Double.MinValue)
@@ -829,7 +829,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
 
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
 
     val topNode = Node.emptyNode(nodeIndex = 1)
     assert(topNode.predict.predict === Double.MinValue)

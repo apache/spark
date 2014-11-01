@@ -26,7 +26,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest, DecisionTree, impurity}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
+import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -317,7 +317,7 @@ object DecisionTreeRunner {
   /**
    * Calculates the mean squared error for regression.
    */
-  private def meanSquaredError(tree: RandomForestModel, data: RDD[LabeledPoint]): Double = {
+  private def meanSquaredError(tree: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
     data.map { y =>
       val err = tree.predict(y.features) - y.label
       err * err
