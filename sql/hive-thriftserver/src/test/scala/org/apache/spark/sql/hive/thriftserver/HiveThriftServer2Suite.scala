@@ -40,6 +40,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.hive.HiveShim
 
 /**
  * Tests for the HiveThriftServer2 using JDBC.
@@ -263,7 +264,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     withJdbcStatement() { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
-      assert(resultSet.getString(1) === "spark.sql.hive.version=0.12.0-protobuf-2.5")
+      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
     }
   }
 }
