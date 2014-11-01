@@ -214,8 +214,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    */
   def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2,
-    mapUsesSrcAttr: Boolean = true, mapUsesDstAttr: Boolean = true): Graph[VD, ED2] = {
-    mapTriplets((pid, iter) => iter.map(map), mapUsesSrcAttr, mapUsesDstAttr)
+      tripletFields: TripletFields = TripletFields.All)
+    : Graph[VD, ED2] = {
+    mapTriplets((pid, iter) => iter.map(map), tripletFields)
   }
 
   /**
@@ -241,8 +242,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    */
   def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
-    mapUsesSrcAttr: Boolean, mapUsesDstAttr: Boolean)
-    : Graph[VD, ED2]
+    tripletFields: TripletFields): Graph[VD, ED2]
 
   /**
    * Reverses all edges in the graph.  If this graph contains an edge from a to b then the returned
@@ -272,7 +272,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def subgraph(
       epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-      vpred: (VertexId, VD) => Boolean = ((v, d) => true))
+      vpred: (VertexId, VD) => Boolean = ((v, d) => true),
+      tripletFields: TripletFields = TripletFields.All)
     : Graph[VD, ED]
 
   /**
@@ -342,13 +343,13 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None,
-      mapUsesSrcAttr: Boolean = true, mapUsesDstAttr: Boolean = true)
+      tripletFields: TripletFields = TripletFields.All,
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
     : VertexRDD[A]
 
   /**
-   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.  The
-   * input table should contain at most one entry for each vertex.  If no entry in `other` is
+   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.
+   * The input table should contain at most one entry for each vertex.  If no entry in `other` is
    * provided for a particular vertex in the graph, the map function receives `None`.
    *
    * @tparam U the type of entry in the table of updates

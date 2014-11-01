@@ -298,7 +298,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
           throw new Exception("map ran on edge with dst vid %d, which is odd".format(et.dstId))
         }
         Iterator((et.srcId, 1))
-      }, (a: Int, b: Int) => a + b, Some((active, EdgeDirection.In))).collect.toSet
+      }, (a: Int, b: Int) => a + b, TripletFields.All, Some((active, EdgeDirection.In))).collect.toSet
       assert(numEvenNeighbors === (1 to n).map(x => (x: VertexId, n / 2)).toSet)
 
       // outerJoinVertices followed by mapReduceTriplets(activeSetOpt)
@@ -312,7 +312,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
           throw new Exception("map ran on edge with src vid %d, which is even".format(et.dstId))
         }
         Iterator((et.dstId, 1))
-      }, (a: Int, b: Int) => a + b, Some(changed, EdgeDirection.Out)).collect.toSet
+      }, (a: Int, b: Int) => a + b, TripletFields.All, Some(changed, EdgeDirection.Out)).collect.toSet
       assert(numOddNeighbors === (2 to n by 2).map(x => (x: VertexId, 1)).toSet)
 
     }

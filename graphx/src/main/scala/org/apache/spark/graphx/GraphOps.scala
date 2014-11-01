@@ -69,14 +69,12 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   private def degreesRDD(edgeDirection: EdgeDirection): VertexRDD[Int] = {
     if (edgeDirection == EdgeDirection.In) {
-      graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _,
-        mapUsesSrcAttr = false, mapUsesDstAttr = false)
+      graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _, TripletFields.None)
     } else if (edgeDirection == EdgeDirection.Out) {
-      graph.mapReduceTriplets(et => Iterator((et.srcId,1)), _ + _,
-        mapUsesSrcAttr = false, mapUsesDstAttr = false)
+      graph.mapReduceTriplets(et => Iterator((et.srcId,1)), _ + _, TripletFields.None)
     } else { // EdgeDirection.Either
       graph.mapReduceTriplets(et => Iterator((et.srcId,1), (et.dstId,1)), _ + _,
-        mapUsesSrcAttr = false, mapUsesDstAttr = false)
+        TripletFields.None)
     }
   }
 
@@ -93,19 +91,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       if (edgeDirection == EdgeDirection.Either) {
         graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
-          reduceFunc = _ ++ _,
-          mapUsesSrcAttr = false, mapUsesDstAttr = false
-        )
+          reduceFunc = _ ++ _, tripletFields = TripletFields.None)
       } else if (edgeDirection == EdgeDirection.Out) {
         graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId))),
-          reduceFunc = _ ++ _,
-          mapUsesSrcAttr = false, mapUsesDstAttr = false)
+          reduceFunc = _ ++ _, tripletFields = TripletFields.None)
       } else if (edgeDirection == EdgeDirection.In) {
         graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
-          reduceFunc = _ ++ _,
-          mapUsesSrcAttr = false, mapUsesDstAttr = false)
+          reduceFunc = _ ++ _, tripletFields = TripletFields.None)
       } else {
         throw new SparkException("It doesn't make sense to collect neighbor ids without a " +
           "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
@@ -133,18 +127,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         graph.mapReduceTriplets[Array[(VertexId,VD)]](
           edge => Iterator((edge.srcId, Array((edge.dstId, edge.dstAttr))),
             (edge.dstId, Array((edge.srcId, edge.srcAttr)))),
-          (a, b) => a ++ b,
-          mapUsesSrcAttr = true, mapUsesDstAttr = true)
+          (a, b) => a ++ b, TripletFields.SrcDstOnly)
       case EdgeDirection.In =>
         graph.mapReduceTriplets[Array[(VertexId,VD)]](
           edge => Iterator((edge.dstId, Array((edge.srcId, edge.srcAttr)))),
-          (a, b) => a ++ b,
-          mapUsesSrcAttr = true, mapUsesDstAttr = false)
+          (a, b) => a ++ b, TripletFields.SrcOnly)
       case EdgeDirection.Out =>
         graph.mapReduceTriplets[Array[(VertexId,VD)]](
           edge => Iterator((edge.srcId, Array((edge.dstId, edge.dstAttr)))),
-          (a, b) => a ++ b,
-          mapUsesSrcAttr = false, mapUsesDstAttr = true)
+          (a, b) => a ++ b, TripletFields.DstOnly)
       case EdgeDirection.Both =>
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
@@ -175,15 +166,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         graph.mapReduceTriplets[Array[Edge[ED]]](
           edge => Iterator((edge.srcId, Array(new Edge(edge.srcId, edge.dstId, edge.attr))),
                            (edge.dstId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
-          (a, b) => a ++ b, mapUsesSrcAttr = false, mapUsesDstAttr = false)
+          (a, b) => a ++ b, TripletFields.EdgeOnly)
       case EdgeDirection.In =>
         graph.mapReduceTriplets[Array[Edge[ED]]](
           edge => Iterator((edge.dstId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
-          (a, b) => a ++ b, mapUsesSrcAttr = false, mapUsesDstAttr = false)
+          (a, b) => a ++ b, TripletFields.EdgeOnly)
       case EdgeDirection.Out =>
         graph.mapReduceTriplets[Array[Edge[ED]]](
           edge => Iterator((edge.srcId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
-          (a, b) => a ++ b, mapUsesSrcAttr = false, mapUsesDstAttr = false)
+          (a, b) => a ++ b, TripletFields.EdgeOnly)
       case EdgeDirection.Both =>
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
@@ -337,10 +328,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
       mergeMsg: (A, A) => A,
-      sendMsgUsesSrcAttr: Boolean = true, sendMsgUsesDstAttr: Boolean = true)
+      tripletFields: TripletFields = TripletFields.All)
     : Graph[VD, ED] = {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg,
-      sendMsgUsesSrcAttr, sendMsgUsesDstAttr)
+      tripletFields)
   }
 
   /**
