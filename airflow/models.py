@@ -946,6 +946,14 @@ class DAG(Base):
     def pickle(self):
         return pickle.dumps(self)
 
+    def set_dependency(self, upstream_task_id, downstream_task_id):
+        """
+        Simple utility method to set dependency between two tasks that
+        already have been added to the DAG using add_task()
+        """
+        self.get_task(upstream_task_id).set_downstream(
+            self.get_task(downstream_task_id))
+
     def get_task_instances(self, start_date=None, end_date=None):
         session = settings.Session()
         TI = TaskInstance
