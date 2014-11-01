@@ -28,7 +28,7 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.RoutingTableMessageRDDFunctions._
 import org.apache.spark.graphx.impl.VertexRDDFunctions._
 
-class VertexRDDImpl[@specialized VD] private[graphx] (
+class VertexRDDImpl[VD] private[graphx] (
     val partitionsRDD: RDD[ShippableVertexPartition[VD]],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   (implicit override protected val vdTag: ClassTag[VD])

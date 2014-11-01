@@ -56,7 +56,7 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
  *
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
-abstract class VertexRDD[@specialized VD](
+abstract class VertexRDD[VD](
     @transient sc: SparkContext,
     @transient deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
 

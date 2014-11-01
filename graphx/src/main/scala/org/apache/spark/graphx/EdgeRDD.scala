@@ -34,7 +34,7 @@ import org.apache.spark.graphx.impl.EdgeRDDImpl
  * edge to provide the triplet view. Shipping of the vertex attributes is managed by
  * `impl.ReplicatedVertexView`.
  */
-abstract class EdgeRDD[@specialized ED, VD](
+abstract class EdgeRDD[ED, VD](
     @transient sc: SparkContext,
     @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
   /**
