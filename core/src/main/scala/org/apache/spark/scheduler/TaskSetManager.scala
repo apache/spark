@@ -577,8 +577,6 @@ private[spark] class TaskSetManager(
     val index = info.index
     info.markSuccessful()
     removeRunningTask(tid)
-    sched.dagScheduler.taskEnded(
-      tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
       if (showProgress) {
@@ -596,6 +594,8 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
+    sched.dagScheduler.taskEnded(
+      tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     failedExecutors.remove(index)
     maybeFinishTaskSet()
   }
