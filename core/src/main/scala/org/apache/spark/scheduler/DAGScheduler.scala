@@ -1057,26 +1057,22 @@ class DAGScheduler(
         // It is likely that we receive multiple FetchFailed for a single stage (because we have
         // multiple tasks running concurrently on different executors). In that case, it is possible
         // the fetch failure has already been handled by the scheduler.
-        if (runningStages.contains(failedStage)) {
+        if (runningStages.contains(failedStage) && stage.pendingTasks.contains(task)) {
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
             s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some("Fetch failure"))
-          runningStages -= failedStage
-        }
-
-        if (failedStages.isEmpty && eventProcessActor != null) {
-          // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-          // in that case the event will already have been scheduled. eventProcessActor may be
-          // null during unit tests.
           // TODO: Cancel running tasks in the stage
-          import env.actorSystem.dispatcher
-          logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-            s"$failedStage (${failedStage.name}) due to fetch failure")
-          env.actorSystem.scheduler.scheduleOnce(
-            RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+          markStageAsFinished(failedStage, Some("Fetch failure"))
+          if (eventProcessActor != null) {
+            // eventProcessActor may be null during unit tests.
+            import env.actorSystem.dispatcher
+            logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+              s"$failedStage (${failedStage.name}) due to fetch failure")
+            env.actorSystem.scheduler.scheduleOnce(
+              RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+          }
+          failedStages += failedStage
+          failedStages += mapStage
         }
-        failedStages += failedStage
-        failedStages += mapStage
 
         // Mark the map whose fetch failed as broken in the map stage
         if (mapId != -1) {

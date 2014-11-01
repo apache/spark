@@ -480,6 +480,24 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // The SparkListener should not receive redundant failure events.
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.size == 1)
+
+    scheduler.resubmitFailedStages()
+
+    runEvent(CompletionEvent(taskSets(0).tasks.head, FetchFailed(makeBlockManagerId("hostA"),
+      shuffleId, 0, 0), null, Map[Long, Any](), null, null))
+    // tasks in taskSets(0) should not cause resubmit stage
+    // when it is not in stage's pendingTasks
+    assert(scheduler.failedStages.isEmpty)
+
+    // have the 2nd attempt pass
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+    complete(taskSets(3), Seq((Success, 43)))
+
+    runEvent(CompletionEvent(taskSets(2).tasks.head, FetchFailed(makeBlockManagerId("hostA"),
+      shuffleId, 0, 0), null, Map[Long, Any](), null, null))
+    // tasks in taskSets(2) should not cause resubmit stage
+    // when stage is not in scheduler's runningStages
+    assert(scheduler.failedStages.isEmpty)
   }
 
   test("ignore late map task completions") {
