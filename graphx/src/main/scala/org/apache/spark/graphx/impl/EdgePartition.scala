@@ -340,24 +340,23 @@ class EdgePartition[
    * Send messages along edges and aggregate them at the receiving vertices. Implemented by scanning
    * all edges sequentially and filtering them with `idPred`.
    *
-   * @param mapFunc the edge map function which generates messages to neighboring vertices
-   * @param reduceFunc the combiner applied to messages destined to the same vertex
-   * @param mapUsesSrcAttr whether or not `mapFunc` uses the edge's source vertex attribute
-   * @param mapUsesDstAttr whether or not `mapFunc` uses the edge's destination vertex attribute
+   * @param sendMsg generates messages to neighboring vertices of an edge
+   * @param mergeMsg the combiner applied to messages destined to the same vertex
+   * @param sendMsgUsesSrcAttr whether or not `mapFunc` uses the edge's source vertex attribute
+   * @param sendMsgUsesDstAttr whether or not `mapFunc` uses the edge's destination vertex attribute
    * @param idPred a predicate to filter edges based on their source and destination vertex ids
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
-  def mapReduceTriplets[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      reduceFunc: (A, A) => A,
-      mapUsesSrcAttr: Boolean,
-      mapUsesDstAttr: Boolean,
+  def aggregateMessages[A: ClassTag](
+      sendMsg: EdgeContext[VD, ED, A] => Unit,
+      mergeMsg: (A, A) => A,
+      tripletFields: TripletFields,
       idPred: (VertexId, VertexId) => Boolean): Iterator[(VertexId, A)] = {
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
-    var edge = new EdgeTriplet[VD, ED]
+    var ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
     var i = 0
     while (i < size) {
       val localSrcId = localSrcIds(i)
@@ -365,23 +364,14 @@ class EdgePartition[
       val localDstId = localDstIds(i)
       val dstId = local2global(localDstId)
       if (idPred(srcId, dstId)) {
-        edge.srcId = srcId
-        edge.dstId = dstId
-        edge.attr = data(i)
-        if (mapUsesSrcAttr) { edge.srcAttr = vertexAttrs(localSrcId) }
-        if (mapUsesDstAttr) { edge.dstAttr = vertexAttrs(localDstId) }
-
-        mapFunc(edge).foreach { kv =>
-          val globalId = kv._1
-          val msg = kv._2
-          val localId = if (globalId == srcId) localSrcId else localDstId
-          if (bitset.get(localId)) {
-            aggregates(localId) = reduceFunc(aggregates(localId), msg)
-          } else {
-            aggregates(localId) = msg
-            bitset.set(localId)
-          }
-        }
+        ctx.localSrcId = localSrcId
+        ctx.localDstId = localDstId
+        ctx.srcId = srcId
+        ctx.dstId = dstId
+        ctx.attr = data(i)
+        if (tripletFields.useSrc) { ctx.srcAttr = vertexAttrs(localSrcId) }
+        if (tripletFields.useDst) { ctx.dstAttr = vertexAttrs(localDstId) }
+        sendMsg(ctx)
       }
       i += 1
     }
@@ -394,53 +384,41 @@ class EdgePartition[
    * filtering the source vertex index with `srcIdPred`, then scanning edge clusters and filtering
    * with `dstIdPred`. Both `srcIdPred` and `dstIdPred` must match for an edge to run.
    *
-   * @param mapFunc the edge map function which generates messages to neighboring vertices
-   * @param reduceFunc the combiner applied to messages destined to the same vertex
-   * @param mapUsesSrcAttr whether or not `mapFunc` uses the edge's source vertex attribute
-   * @param mapUsesDstAttr whether or not `mapFunc` uses the edge's destination vertex attribute
+   * @param sendMsg generates messages to neighboring vertices of an edge
+   * @param mergeMsg the combiner applied to messages destined to the same vertex
    * @param srcIdPred a predicate to filter edges based on their source vertex id
    * @param dstIdPred a predicate to filter edges based on their destination vertex id
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
-  def mapReduceTripletsWithIndex[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      reduceFunc: (A, A) => A,
-      mapUsesSrcAttr: Boolean,
-      mapUsesDstAttr: Boolean,
+  def aggregateMessagesWithIndex[A: ClassTag](
+      sendMsg: EdgeContext[VD, ED, A] => Unit,
+      mergeMsg: (A, A) => A,
+      tripletFields: TripletFields,
       srcIdPred: VertexId => Boolean,
       dstIdPred: VertexId => Boolean): Iterator[(VertexId, A)] = {
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
-    var edge = new EdgeTriplet[VD, ED]
+    var ctx = new AggregatingEdgeContext[VD, ED, A](mergeMsg, aggregates, bitset)
     index.iterator.foreach { cluster =>
       val clusterSrcId = cluster._1
       val clusterPos = cluster._2
       val clusterLocalSrcId = localSrcIds(clusterPos)
       if (srcIdPred(clusterSrcId)) {
         var pos = clusterPos
-        edge.srcId = clusterSrcId
-        if (mapUsesSrcAttr) { edge.srcAttr = vertexAttrs(clusterLocalSrcId) }
+        ctx.srcId = clusterSrcId
+        ctx.localSrcId = clusterLocalSrcId
+        if (tripletFields.useSrc) { ctx.srcAttr = vertexAttrs(clusterLocalSrcId) }
         while (pos < size && localSrcIds(pos) == clusterLocalSrcId) {
           val localDstId = localDstIds(pos)
           val dstId = local2global(localDstId)
           if (dstIdPred(dstId)) {
-            edge.dstId = dstId
-            edge.attr = data(pos)
-            if (mapUsesDstAttr) { edge.dstAttr = vertexAttrs(localDstId) }
-
-            mapFunc(edge).foreach { kv =>
-              val globalId = kv._1
-              val msg = kv._2
-              val localId = if (globalId == clusterSrcId) clusterLocalSrcId else localDstId
-              if (bitset.get(localId)) {
-                aggregates(localId) = reduceFunc(aggregates(localId), msg)
-              } else {
-                aggregates(localId) = msg
-                bitset.set(localId)
-              }
-            }
+            ctx.dstId = dstId
+            ctx.localDstId = localDstId
+            ctx.attr = data(pos)
+            if (tripletFields.useDst) { ctx.dstAttr = vertexAttrs(localDstId) }
+            sendMsg(ctx)
           }
           pos += 1
         }
@@ -448,5 +426,37 @@ class EdgePartition[
     }
 
     bitset.iterator.map { localId => (local2global(localId), aggregates(localId)) }
+  }
+}
+
+private class AggregatingEdgeContext[VD, ED, A](
+    mergeMsg: (A, A) => A,
+    aggregates: Array[A],
+    bitset: BitSet)
+  extends EdgeContext[VD, ED, A] {
+
+  var srcId: VertexId = _
+  var dstId: VertexId = _
+  var srcAttr: VD = _
+  var dstAttr: VD = _
+  var attr: ED = _
+
+  var localSrcId: Int = _
+  var localDstId: Int = _
+
+  override def sendToSrc(msg: A) {
+    send(localSrcId, msg)
+  }
+  override def sendToDst(msg: A) {
+    send(localDstId, msg)
+  }
+
+  private def send(localId: Int, msg: A) {
+    if (bitset.get(localId)) {
+      aggregates(localId) = mergeMsg(aggregates(localId), msg)
+    } else {
+      aggregates(localId) = msg
+      bitset.set(localId)
+    }
   }
 }

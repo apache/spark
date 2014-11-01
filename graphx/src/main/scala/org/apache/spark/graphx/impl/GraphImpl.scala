@@ -126,13 +126,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def mapTriplets[ED2: ClassTag](
-      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+      tripletFields: TripletFields): Graph[VD, ED2] = {
     vertices.cache()
-    val mapUsesSrcAttr = accessesVertexAttr(f, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(f, "dstAttr")
-    replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
+    replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
     val newEdges = replicatedVertexView.edges.mapEdgePartitions { (pid, part) =>
-      part.map(f(pid, part.tripletIterator(mapUsesSrcAttr, mapUsesDstAttr)))
+      part.map(f(pid, part.tripletIterator(tripletFields.useSrc, tripletFields.useDst)))
     }
     new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
   }
@@ -170,15 +169,38 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)]): VertexRDD[A] = {
+
+    def sendMsg(ctx: EdgeContext[VD, ED, A]) {
+      mapFunc(ctx.toEdgeTriplet).foreach { kv =>
+        val id = kv._1
+        val msg = kv._2
+        if (id == ctx.srcId) {
+          ctx.sendToSrc(msg)
+        } else {
+          assert(id == ctx.dstId)
+          ctx.sendToDst(msg)
+        }
+      }
+    }
+
+    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
+    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
+    val tripletFields = TripletFields(mapUsesSrcAttr, mapUsesDstAttr, useEdge = true)
+
+    aggregateMessages(sendMsg, reduceFunc, tripletFields, activeSetOpt)
+  }
+
+  override def aggregateMessages[A: ClassTag](
+      sendMsg: EdgeContext[VD, ED, A] => Unit,
+      mergeMsg: (A, A) => A,
+      tripletFields: TripletFields,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
 
     vertices.cache()
-
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
-    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
-    replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
+    replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
     val view = activeSetOpt match {
       case Some((activeSet, _)) =>
         replicatedVertexView.withActiveSet(activeSet)
@@ -195,46 +217,39 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
         activeDirectionOpt match {
           case Some(EdgeDirection.Both) =>
             if (activeFraction < 0.8) {
-              edgePartition.mapReduceTripletsWithIndex(
-                mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              edgePartition.aggregateMessagesWithIndex(sendMsg, mergeMsg, tripletFields,
                 srcId => edgePartition.isActive(srcId),
                 dstId => edgePartition.isActive(dstId))
             } else {
-              edgePartition.mapReduceTriplets(
-                mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
                 (srcId, dstId) => edgePartition.isActive(srcId) && edgePartition.isActive(dstId))
             }
           case Some(EdgeDirection.Either) =>
             // TODO: Because we only have a clustered index on the source vertex ID, we can't filter
             // the index here. Instead we have to scan all edges and then do the filter.
-            edgePartition.mapReduceTriplets(
-              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
               (srcId, dstId) => edgePartition.isActive(srcId) || edgePartition.isActive(dstId))
           case Some(EdgeDirection.Out) =>
             if (activeFraction < 0.8) {
-              edgePartition.mapReduceTripletsWithIndex(
-                mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              edgePartition.aggregateMessagesWithIndex(sendMsg, mergeMsg, tripletFields,
                 srcId => edgePartition.isActive(srcId),
                 dstId => true)
             } else {
-            edgePartition.mapReduceTriplets(
-              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
               (srcId, dstId) => edgePartition.isActive(srcId))
             }
           case Some(EdgeDirection.In) =>
-            edgePartition.mapReduceTriplets(
-              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
               (srcId, dstId) => edgePartition.isActive(dstId))
           case _ => // None
-            edgePartition.mapReduceTriplets(
-              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
               (srcId, dstId) => true)
         }
-    }).setName("GraphImpl.mapReduceTriplets - preAgg")
+    }).setName("GraphImpl.aggregateMessages - preAgg")
 
     // do the final reduction reusing the index map
-    vertices.aggregateUsingIndex(preAgg, reduceFunc)
-  } // end of mapReduceTriplets
+    vertices.aggregateUsingIndex(preAgg, mergeMsg)
+  }
 
   override def outerJoinVertices[U: ClassTag, VD2: ClassTag]
       (other: RDD[(VertexId, U)])

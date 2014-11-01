@@ -318,6 +318,21 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("aggregateMessages") {
+    withSpark { sc =>
+      val n = 5
+      val agg = starGraph(sc, n).aggregateMessages[String](
+        ctx => {
+          if (ctx.dstAttr != null) {
+            throw new Exception(
+              "expected ctx.dstAttr to be null due to TripletFields, but it was " + ctx.dstAttr)
+          }
+          ctx.sendToDst(ctx.srcAttr)
+        }, _ + _, TripletFields.SrcOnly)
+      assert(agg.collect().toSet === (1 to n).map(x => (x: VertexId, "v")).toSet)
+    }
+  }
+
   test("outerJoinVertices") {
     withSpark { sc =>
       val n = 5
