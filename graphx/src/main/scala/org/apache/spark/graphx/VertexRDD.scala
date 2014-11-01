@@ -56,7 +56,9 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
  *
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
-trait VertexRDD[@specialized VD] extends RDD[(VertexId, VD)] {
+abstract class VertexRDD[@specialized VD](
+    @transient sc: SparkContext,
+    @transient deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
 
   implicit protected def vdTag: ClassTag[VD]
 
@@ -81,8 +83,8 @@ trait VertexRDD[@specialized VD] extends RDD[(VertexId, VD)] {
    * preserves the index for efficient joins with the original RDD, and it sets bits in the bitmask
    * rather than allocating new memory.
    *
-   * It is declared and defined in the VertexRDD trait to allow refining the return type from
-   * `RDD[(VertexId, VD)]` to `VertexRDD[VD]`.
+   * It is declared and defined here to allow refining the return type from `RDD[(VertexId, VD)]` to
+   * `VertexRDD[VD]`.
    *
    * @param pred the user defined predicate, which takes a tuple to conform to the
    * `RDD[(VertexId, VD)]` interface

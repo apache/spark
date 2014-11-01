@@ -28,8 +28,7 @@ import org.apache.spark.graphx._
 class EdgeRDDImpl[@specialized ED: ClassTag, VD: ClassTag] private[graphx] (
     override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-  extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))
-  with EdgeRDD[ED, VD] {
+  extends EdgeRDD[ED, VD](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
   override def setName(_name: String): this.type = {
     if (partitionsRDD.name != null) {

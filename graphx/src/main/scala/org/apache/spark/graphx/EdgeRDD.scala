@@ -19,6 +19,8 @@ package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.Dependency
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -32,7 +34,9 @@ import org.apache.spark.graphx.impl.EdgeRDDImpl
  * edge to provide the triplet view. Shipping of the vertex attributes is managed by
  * `impl.ReplicatedVertexView`.
  */
-trait EdgeRDD[@specialized ED, VD] extends RDD[Edge[ED]] {
+abstract class EdgeRDD[@specialized ED, VD](
+    @transient sc: SparkContext,
+    @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
   /**
    * Map the values in an edge partitioning preserving the structure but changing the values.
    *
