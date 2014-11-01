@@ -1,5 +1,4 @@
 import subprocess
-import StringIO
 
 from airflow import settings
 from airflow.models import DatabaseConnection

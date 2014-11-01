@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey, func
 )
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.serializer import loads, dumps
 from sqlalchemy.orm import relationship
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow import settings
@@ -156,12 +157,12 @@ class DagPickle(Base):
     __tablename__ = "dag_pickle"
 
     def __init__(self, dag, job):
-        self.pickle = pickle.dumps(dag)
         self.dag_id = dag.dag_id
         self.job = job
+        self.pickle = dumps(dag)
 
     def get_object(self):
-        return pickle.loads(self.pickle)
+        return loads(self.pickle)
 
 
 class TaskInstance(Base):
