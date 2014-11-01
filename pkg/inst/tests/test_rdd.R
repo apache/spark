@@ -10,9 +10,25 @@ rdd <- parallelize(sc, nums, 2L)
 intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
 intRdd <- parallelize(sc, intPairs, 2L)
 
+# File content
+mockFile <- c("Spark is pretty.", "Spark is awesome.")
+
 test_that("count and length on RDD", {
    expect_equal(count(rdd), 10)
    expect_equal(length(rdd), 10)
+})
+
+test_that("reserialize on RDD", {
+  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  writeLines(mockFile, fileName)
+  
+  text.rdd <- textFile(sc, fileName)
+  expect_false(text.rdd@env$serialized)
+  ser.rdd <- reserialize(text.rdd)
+  expect_equal(collect(ser.rdd), as.list(mockFile))
+  expect_true(ser.rdd@env$serialized)
+  
+  unlink(fileName)
 })
 
 test_that("lapply on RDD", {

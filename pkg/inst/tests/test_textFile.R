@@ -41,6 +41,8 @@ test_that("textFile() word count works as expected", {
   expected <- list(list("pretty.", 1), list("is", 2), list("awesome.", 1),
                    list("Spark", 2))
   expect_equal(output, expected)
+  
+  unlink(fileName)
 })
 
 test_that("several transformations on RDD created by textFile()", {
