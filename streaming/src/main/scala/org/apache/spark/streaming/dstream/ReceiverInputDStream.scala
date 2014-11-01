@@ -23,8 +23,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.receiver.{WriteAheadLogBasedStoreResult, BlockManagerBasedStoreResult, Receiver}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.SparkException
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -65,10 +66,10 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
     if (validTime >= graph.startTime) {
       val blockInfo = ssc.scheduler.receiverTracker.getReceivedBlockInfo(id)
       receivedBlockInfo(validTime) = blockInfo
-      val blockIds = blockInfo.map(_.blockId.asInstanceOf[BlockId])
+      val blockIds = blockInfo.map { _.blockStoreResult.blockId.asInstanceOf[BlockId] }
       Some(new BlockRDD[T](ssc.sc, blockIds))
     } else {
-      Some(new BlockRDD[T](ssc.sc, Array[BlockId]()))
+      Some(new BlockRDD[T](ssc.sc, Array.empty))
     }
   }
 

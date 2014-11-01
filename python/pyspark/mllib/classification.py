@@ -20,8 +20,8 @@ from math import exp
 import numpy
 from numpy import array
 
-from pyspark import SparkContext, PickleSerializer
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
 
@@ -102,14 +102,11 @@ class LogisticRegressionWithSGD(object):
                                   training data (i.e. whether bias features
                                   are activated or not).
         """
-        sc = data.context
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, iterations, step,
+                                 miniBatchFraction, i, regParam, regType, intercept)
 
-        def train(jdata, i):
-            return sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
-                jdata, iterations, step, miniBatchFraction, i, regParam, regType, intercept)
-
-        return _regression_train_wrapper(sc, train, LogisticRegressionModel, data,
-                                         initialWeights)
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
 class SVMModel(LinearModel):
@@ -174,13 +171,11 @@ class SVMWithSGD(object):
                                   training data (i.e. whether bias features
                                   are activated or not).
         """
-        sc = data.context
+        def train(rdd, i):
+            return callMLlibFunc("trainSVMModelWithSGD", rdd, iterations, step, regParam,
+                                 miniBatchFraction, i, regType, intercept)
 
-        def train(jrdd, i):
-            return sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
-                jrdd, iterations, step, regParam, miniBatchFraction, i, regType, intercept)
-
-        return _regression_train_wrapper(sc, train, SVMModel, data, initialWeights)
+        return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
 
 class NaiveBayesModel(object):
@@ -243,14 +238,13 @@ class NaiveBayes(object):
                (e.g. a count vector).
         :param lambda_: The smoothing parameter
         """
-        sc = data.context
-        jlist = sc._jvm.PythonMLLibAPI().trainNaiveBayes(_to_java_object_rdd(data), lambda_)
-        labels, pi, theta = PickleSerializer().loads(str(sc._jvm.SerDe.dumps(jlist)))
+        labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 
 def _test():
     import doctest
+    from pyspark import SparkContext
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)

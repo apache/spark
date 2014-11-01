@@ -138,7 +138,7 @@ class HadoopTableReader(
       filterOpt: Option[PathFilter]): RDD[Row] = {
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
-      val partPath = partition.getPartitionPath
+      val partPath = HiveShim.getDataLocationPath(partition)
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
@@ -291,7 +291,7 @@ private[hive] object HadoopTableReader extends HiveInspectors {
         case oi: DoubleObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
         case oi =>
-          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapData(value, oi)
+          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrap(value, oi)
       }
     }
 

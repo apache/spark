@@ -27,6 +27,9 @@ import org.apache.spark.sql.catalyst.types._
  * Provides experimental support for generating catalyst schemas for scala objects.
  */
 object ScalaReflection {
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
   import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
@@ -109,6 +112,7 @@ object ScalaReflection {
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
     case obj: DecimalType.JvmType => DecimalType
+    case obj: DateType.JvmType => DateType
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a

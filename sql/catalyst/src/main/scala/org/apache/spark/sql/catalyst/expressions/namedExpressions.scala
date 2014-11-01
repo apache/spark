@@ -173,7 +173,7 @@ case class AttributeReference(
    * Returns a copy of this [[AttributeReference]] with new qualifiers.
    */
   override def withQualifiers(newQualifiers: Seq[String]) = {
-    if (newQualifiers == qualifiers) {
+    if (newQualifiers.toSet == qualifiers.toSet) {
       this
     } else {
       AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifiers)
