@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util.Metadata
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -42,6 +43,9 @@ abstract class NamedExpression extends Expression {
   def qualifiers: Seq[String]
 
   def toAttribute: Attribute
+
+  /** Returns the metadata when an expression is a reference to another expression with metadata. */
+  def metadata: Metadata = Metadata.empty
 
   protected def typeSuffix =
     if (resolved) {
@@ -88,10 +92,16 @@ case class Alias(child: Expression, name: String)
 
   override def dataType = child.dataType
   override def nullable = child.nullable
+  override def metadata: Metadata = {
+    child match {
+      case named: NamedExpression => named.metadata
+      case _ => Metadata.empty
+    }
+  }
 
   override def toAttribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable)(exprId, qualifiers)
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifiers)
     } else {
       UnresolvedAttribute(name)
     }
@@ -108,15 +118,20 @@ case class Alias(child: Expression, name: String)
  * @param name The name of this attribute, should only be used during analysis or for debugging.
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
+ * @param metadata The metadata of this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the
  *               same attribute.
  * @param qualifiers a list of strings that can be used to referred to this attribute in a fully
  *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                   tableName and subQueryAlias are possible qualifiers.
  */
-case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
-    (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
-  extends Attribute with trees.LeafNode[Expression] {
+case class AttributeReference(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean = true,
+    override val metadata: Metadata = Metadata.empty)(
+    val exprId: ExprId = NamedExpression.newExprId,
+    val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
 
   override def equals(other: Any) = other match {
     case ar: AttributeReference => exprId == ar.exprId && dataType == ar.dataType
@@ -128,10 +143,12 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     var h = 17
     h = h * 37 + exprId.hashCode()
     h = h * 37 + dataType.hashCode()
+    h = h * 37 + metadata.hashCode()
     h
   }
 
-  override def newInstance() = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  override def newInstance() =
+    AttributeReference(name, dataType, nullable, metadata)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -140,7 +157,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifiers)
     }
   }
 
@@ -159,7 +176,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     if (newQualifiers.toSet == qualifiers.toSet) {
       this
     } else {
-      AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifiers)
     }
   }
 

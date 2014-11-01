@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.types.DataType
-
 class DataTypeSuite extends FunSuite {
 
   test("construct an ArrayType") {
@@ -79,8 +77,12 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(ArrayType(StringType, false))
   checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))
   checkDataTypeJsonRepr(MapType(IntegerType, ArrayType(DoubleType), false))
+  val metadata = new MetadataBuilder()
+    .putString("name", "age")
+    .build()
   checkDataTypeJsonRepr(
     StructType(Seq(
       StructField("a", IntegerType, nullable = true),
-      StructField("b", ArrayType(DoubleType), nullable = false))))
+      StructField("b", ArrayType(DoubleType), nullable = false),
+      StructField("c", DoubleType, nullable = false, metadata))))
 }

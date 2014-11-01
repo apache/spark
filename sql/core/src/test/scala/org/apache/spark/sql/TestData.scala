@@ -166,4 +166,15 @@ object TestData {
   // An RDD with 4 elements and 8 partitions
   val withEmptyParts = TestSQLContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
   withEmptyParts.registerTempTable("withEmptyParts")
+
+  case class Person(id: Int, name: String, age: Int)
+  case class Salary(personId: Int, salary: Double)
+  val person = TestSQLContext.sparkContext.parallelize(
+    Person(0, "mike", 30) ::
+    Person(1, "jim", 20) :: Nil)
+  person.registerTempTable("person")
+  val salary = TestSQLContext.sparkContext.parallelize(
+    Salary(0, 2000.0) ::
+    Salary(1, 1000.0) :: Nil)
+  salary.registerTempTable("salary")
 }

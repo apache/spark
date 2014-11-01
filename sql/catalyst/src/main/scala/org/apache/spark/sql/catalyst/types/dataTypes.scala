@@ -24,15 +24,15 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s.JsonAST.JValue
 import org.json4s._
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
-
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -70,10 +70,11 @@ object DataType {
 
   private def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
+        ("metadata", metadata: JObject),
         ("name", JString(name)),
         ("nullable", JBool(nullable)),
         ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable)
+      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
   }
 
   @deprecated("Use DataType.fromJson instead", "1.2.0")
@@ -388,24 +389,34 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
+ * @param metadata The metadata of this field. The metadata should be preserved during
+ *                 transformation if the content of the column is not modified, e.g, in selection.
  */
-case class StructField(name: String, dataType: DataType, nullable: Boolean) {
+case class StructField(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean,
+    metadata: Metadata = Metadata.empty) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
 
+  // override the default toString to be compatible with legacy parquet files.
+  override def toString: String = s"StructField($name,$dataType,$nullable)"
+
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
-      ("nullable" -> nullable)
+      ("nullable" -> nullable) ~
+      ("metadata" -> metadata.jsonValue)
   }
 }
 
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
-    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -439,7 +450,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   }
 
   protected[sql] def toAttributes =
-    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   def treeString: String = {
     val builder = new StringBuilder
