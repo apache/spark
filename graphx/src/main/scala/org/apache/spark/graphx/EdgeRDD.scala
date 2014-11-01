@@ -82,10 +82,15 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
     this
   }
 
-  /** Persists the vertex partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  /** Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)
     this
+  }
+
+  /** The number of edges in the RDD. */
+  override def count(): Long = {
+    partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
   }
 
   private[graphx] def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
