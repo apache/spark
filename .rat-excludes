@@ -1,5 +1,6 @@
 target
 .gitignore
+.gitattributes
 .project
 .classpath
 .mima-excludes
@@ -48,6 +49,7 @@ sbt-launch-lib.bash
 plugins.sbt
 work
 .*\.q
+.*\.qv
 golden
 test.out/*
 .*iml

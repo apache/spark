@@ -1,7 +1,7 @@
 set hive.nullsafe.equijoin=true;
 
 CREATE TABLE myinput1(key int, value int);
-LOAD DATA LOCAL INPATH '../data/files/in8.txt' INTO TABLE myinput1;
+LOAD DATA LOCAL INPATH '../../data/files/in8.txt' INTO TABLE myinput1;
 
 -- merging
 explain select * from myinput1 a join myinput1 b on a.key<=>b.value ORDER BY a.key, a.value, b.key, b.value;
@@ -31,10 +31,10 @@ SELECT /*+ MAPJOIN(b) */ * FROM myinput1 a JOIN myinput1 b ON a.key<=>b.value OR
 -- smbs
 CREATE TABLE smb_input1(key int, value int) CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS;
 CREATE TABLE smb_input2(key int, value int) CLUSTERED BY (value) SORTED BY (value) INTO 2 BUCKETS;
-LOAD DATA LOCAL INPATH '../data/files/in8.txt' into table smb_input1;
-LOAD DATA LOCAL INPATH '../data/files/in9.txt' into table smb_input1;
-LOAD DATA LOCAL INPATH '../data/files/in8.txt' into table smb_input2;
-LOAD DATA LOCAL INPATH '../data/files/in9.txt' into table smb_input2;
+LOAD DATA LOCAL INPATH '../../data/files/in8.txt' into table smb_input1;
+LOAD DATA LOCAL INPATH '../../data/files/in9.txt' into table smb_input1;
+LOAD DATA LOCAL INPATH '../../data/files/in8.txt' into table smb_input2;
+LOAD DATA LOCAL INPATH '../../data/files/in9.txt' into table smb_input2;
 
 SET hive.optimize.bucketmapJOIN = true;
 SET hive.optimize.bucketmapJOIN.sortedmerge = true;

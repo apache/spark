@@ -61,7 +61,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-    ",", ";", "%", "{", "}", ":", "[", "]", "."
+    ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~"
   )
 
   override lazy val token: Parser[Token] =
@@ -75,6 +75,8 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
       { case chars => StringLit(chars mkString "") }
     | '"' ~> chrExcept('"', '\n', EofCh).* <~ '"' ^^
       { case chars => StringLit(chars mkString "") }
+    | '`' ~> chrExcept('`', '\n', EofCh).* <~ '`' ^^
+      { case chars => Identifier(chars mkString "") }
     | EofCh ^^^ EOF
     | '\'' ~> failure("unclosed string literal")
     | '"' ~> failure("unclosed string literal")
@@ -135,7 +137,6 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val LAZY    = Keyword("LAZY")
   protected val SET     = Keyword("SET")
   protected val TABLE   = Keyword("TABLE")
-  protected val SOURCE  = Keyword("SOURCE")
   protected val UNCACHE = Keyword("UNCACHE")
 
   protected implicit def asParser(k: Keyword): Parser[String] =
@@ -150,8 +151,7 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
   override val lexical = new SqlLexical(reservedWords)
 
-  override protected lazy val start: Parser[LogicalPlan] =
-    cache | uncache | set | shell | source | others
+  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | others
 
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
@@ -167,16 +167,6 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   private lazy val set: Parser[LogicalPlan] =
     SET ~> restInput ^^ {
       case input => SetCommandParser(input)
-    }
-
-  private lazy val shell: Parser[LogicalPlan] =
-    "!" ~> restInput ^^ {
-      case input => ShellCommand(input.trim)
-    }
-
-  private lazy val source: Parser[LogicalPlan] =
-    SOURCE ~> restInput ^^ {
-      case input => SourceCommand(input.trim)
     }
 
   private lazy val others: Parser[LogicalPlan] =

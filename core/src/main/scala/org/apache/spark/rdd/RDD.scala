@@ -43,7 +43,8 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils, CallSite}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
+  SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -375,7 +376,8 @@ abstract class RDD[T: ClassTag](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), true, seed)
+      new PartitionwiseSampledRDD[T, T](
+        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
     }.toArray
   }
 
@@ -927,32 +929,15 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
-   * combine step happens locally on the master, equivalent to running a single reduce task.
+   * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
+   *
+   * Note that this method should only be used if the resulting map is expected to be small, as
+   * the whole thing is loaded into the driver's memory.
+   * To handle very large results, consider using rdd.map(x => (x, 1L)).reduceByKey(_ + _), which
+   * returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
-    if (elementClassTag.runtimeClass.isArray) {
-      throw new SparkException("countByValue() does not support arrays")
-    }
-    // TODO: This should perhaps be distributed by default.
-    val countPartition = (iter: Iterator[T]) => {
-      val map = new OpenHashMap[T,Long]
-      iter.foreach {
-        t => map.changeValue(t, 1L, _ + 1L)
-      }
-      Iterator(map)
-    }: Iterator[OpenHashMap[T,Long]]
-    val mergeMaps = (m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]) => {
-      m2.foreach { case (key, value) =>
-        m1.changeValue(key, value, _ + value)
-      }
-      m1
-    }: OpenHashMap[T,Long]
-    val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    // Convert to a Scala mutable map
-    val mutableResult = scala.collection.mutable.Map[T,Long]()
-    myResult.foreach { case (k, v) => mutableResult.put(k, v) }
-    mutableResult
+    map(value => (value, null)).countByKey()
   }
 
   /**
@@ -1079,15 +1064,17 @@ abstract class RDD[T: ClassTag](
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
       if (partsScanned > 0) {
-        // If we didn't find any rows after the previous iteration, quadruple and retry.  Otherwise,
+        // If we didn't find any rows after the previous iteration, quadruple and retry. Otherwise,
         // interpolate the number of partitions we need to try, but overestimate it by 50%.
+        // We also cap the estimation in the end.
         if (buf.size == 0) {
           numPartsToTry = partsScanned * 4
         } else {
-          numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
+          // the left side of max is >=1 whenever partsScanned >= 2
+          numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
         }
       }
-      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = num - buf.size
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)

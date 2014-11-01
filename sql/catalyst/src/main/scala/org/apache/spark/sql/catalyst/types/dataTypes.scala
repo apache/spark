@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
 import scala.reflect.ClassTag
@@ -76,7 +76,7 @@ object DataType {
       StructField(name, parseDataType(dataType), nullable)
   }
 
-  @deprecated("Use DataType.fromJson instead")
+  @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private object CaseClassStringParser extends RegexParsers {
@@ -91,6 +91,7 @@ object DataType {
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
       | "DecimalType" ^^^ DecimalType
+      | "DateType" ^^^ DateType
       | "TimestampType" ^^^ TimestampType
       )
 
@@ -198,7 +199,8 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private[sql] val all = Seq(DecimalType, TimestampType, BinaryType) ++ NativeType.all
+  private[sql] val all = Seq(DecimalType, DateType, TimestampType, BinaryType) ++
+    NativeType.all
 
   private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
 }
@@ -247,6 +249,16 @@ case object TimestampType extends NativeType {
 
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
+  }
+}
+
+case object DateType extends NativeType {
+  private[sql] type JvmType = Date
+
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
+
+  private[sql] val ordering = new Ordering[JvmType] {
+    def compare(x: Date, y: Date) = x.compareTo(y)
   }
 }
 
@@ -349,7 +361,6 @@ case object FloatType extends FractionalType {
 object ArrayType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
-  def typeName: String = "array"
 }
 
 /**
@@ -395,8 +406,6 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
-
-  def typeName = "struct"
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -459,8 +468,6 @@ object MapType {
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
     MapType(keyType: DataType, valueType: DataType, true)
-
-  def simpleName = "map"
 }
 
 /**

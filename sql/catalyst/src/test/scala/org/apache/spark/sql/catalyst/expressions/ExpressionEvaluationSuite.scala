@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
-import org.scalautils.TripleEqualsSupport.Spread
+import org.scalactic.TripleEqualsSupport.Spread
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -191,6 +191,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like "a%", true)
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
+    checkEvaluation("a\nb" like "a_b", true)
+    checkEvaluation("ab" like "a%b", true)
+    checkEvaluation("a\nb" like "a%b", true)
   }
 
   test("LIKE Non-literal Regular Expression") {
@@ -207,6 +210,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a_b")))
+    checkEvaluation("ab" like regEx, true, new GenericRow(Array[Any]("a%b")))
+    checkEvaluation("a\nb" like regEx, true, new GenericRow(Array[Any]("a%b")))
 
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
@@ -252,8 +258,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.1"
-    val ts = Timestamp.valueOf(sts)
+    val sd = "1970-01-01"
+    val d = Date.valueOf(sd)
+    val sts = sd + " 00:00:02"
+    val nts = sts + ".1"
+    val ts = Timestamp.valueOf(nts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
     checkEvaluation("abdef" cast DecimalType, null)
@@ -266,8 +275,15 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
-    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
+    checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), d)
+    checkEvaluation(Cast(Literal(nts) cast TimestampType, StringType), nts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
+    // all convert to string type to check
+    checkEvaluation(
+      Cast(Cast(Literal(nts) cast TimestampType, DateType), StringType), sd)
+    checkEvaluation(
+      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), sts)
 
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
@@ -316,11 +332,28 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
 
+  test("date") {
+    val d1 = Date.valueOf("1970-01-01")
+    val d2 = Date.valueOf("1970-01-02")
+    checkEvaluation(Literal(d1) < Literal(d2), true)
+  }
+
   test("timestamp") {
     val ts1 = new Timestamp(12)
     val ts2 = new Timestamp(123)
     checkEvaluation(Literal("ab") < Literal("abc"), true)
     checkEvaluation(Literal(ts1) < Literal(ts2), true)
+  }
+
+  test("date casting") {
+    val d = Date.valueOf("1970-01-01")
+    checkEvaluation(Cast(d, ShortType), null)
+    checkEvaluation(Cast(d, IntegerType), null)
+    checkEvaluation(Cast(d, LongType), null)
+    checkEvaluation(Cast(d, FloatType), null)
+    checkEvaluation(Cast(d, DoubleType), null)
+    checkEvaluation(Cast(d, StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
   }
 
   test("timestamp casting") {
@@ -646,5 +679,37 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
 
     checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+  }
+
+  test("Bitwise operations") {
+    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.int.at(3)
+
+    checkEvaluation(BitwiseAnd(c1, c4), null, row)
+    checkEvaluation(BitwiseAnd(c1, c2), 0, row)
+    checkEvaluation(BitwiseAnd(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseAnd(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseOr(c1, c4), null, row)
+    checkEvaluation(BitwiseOr(c1, c2), 3, row)
+    checkEvaluation(BitwiseOr(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseOr(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseXor(c1, c4), null, row)
+    checkEvaluation(BitwiseXor(c1, c2), 3, row)
+    checkEvaluation(BitwiseXor(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(BitwiseXor(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(BitwiseNot(c4), null, row)
+    checkEvaluation(BitwiseNot(c1), -2, row)
+    checkEvaluation(BitwiseNot(Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 & c2, 0, row)
+    checkEvaluation(c1 | c2, 3, row)
+    checkEvaluation(c1 ^ c2, 3, row)
+    checkEvaluation(~c1, -2, row)
   }
 }

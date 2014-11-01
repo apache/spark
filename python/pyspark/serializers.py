@@ -80,6 +80,7 @@ class SpecialLengths(object):
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
+    END_OF_STREAM = -4
 
 
 class Serializer(object):
@@ -113,6 +114,9 @@ class Serializer(object):
 
     def __repr__(self):
         return "<%s object>" % self.__class__.__name__
+
+    def __hash__(self):
+        return hash(str(self))
 
 
 class FramedSerializer(Serializer):
