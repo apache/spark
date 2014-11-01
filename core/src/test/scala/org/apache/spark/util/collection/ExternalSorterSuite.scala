@@ -19,12 +19,35 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
+import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
-class ExternalSorterSuite extends FunSuite with LocalSparkContext {
+import scala.util.Random
+
+class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
+  private def createSparkConf(loadDefaults: Boolean): SparkConf = {
+    val conf = new SparkConf(loadDefaults)
+    // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
+    // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
+    conf.set("spark.serializer.objectStreamReset", "1")
+    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    // Ensure that we actually have multiple batches per spill file
+    conf.set("spark.shuffle.spill.batchSize", "10")
+    conf
+  }
+
+  private def assertBypassedMergeSort(sorter: ExternalSorter[_, _, _]): Unit = {
+    val bypassMergeSort = PrivateMethod[Boolean]('bypassMergeSort)
+    assert(sorter.invokePrivate(bypassMergeSort()), "sorter did not bypass merge-sort")
+  }
+
+  private def assertDidNotBypassMergeSort(sorter: ExternalSorter[_, _, _]): Unit = {
+    val bypassMergeSort = PrivateMethod[Boolean]('bypassMergeSort)
+    assert(!sorter.invokePrivate(bypassMergeSort()), "sorter bypassed merge-sort")
+  }
+
   test("empty data stream") {
     val conf = new SparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
@@ -60,7 +83,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("few elements per partition") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
@@ -75,45 +98,69 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     // Both aggregator and ordering
     val sorter = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
-    sorter.write(elements.iterator)
+    sorter.insertAll(elements.iterator)
     assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), None, None)
-    sorter2.write(elements.iterator)
+    sorter2.insertAll(elements.iterator)
     assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), Some(ord), None)
-    sorter3.write(elements.iterator)
+    sorter3.insertAll(elements.iterator)
     assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
-    sorter4.write(elements.iterator)
+    sorter4.insertAll(elements.iterator)
     assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
     sorter4.stop()
   }
 
   test("empty partitions with spilling") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
-    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val ord = implicitly[Ordering[Int]]
     val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
 
     val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(7)), Some(ord), None)
+    assertDidNotBypassMergeSort(sorter)
+    sorter.insertAll(elements)
+    assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
+    val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
+    assert(iter.next() === (0, Nil))
+    assert(iter.next() === (1, List((1, 1))))
+    assert(iter.next() === (2, (0 until 100000).map(x => (2, 2)).toList))
+    assert(iter.next() === (3, Nil))
+    assert(iter.next() === (4, Nil))
+    assert(iter.next() === (5, List((5, 5))))
+    assert(iter.next() === (6, Nil))
+    sorter.stop()
+  }
+
+  test("empty partitions with spilling, bypass merge-sort") {
+    val conf = createSparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val elements = Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
+
+    val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
-    sorter.write(elements)
+    assertBypassedMergeSort(sorter)
+    sorter.insertAll(elements)
     assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
     val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
     assert(iter.next() === (0, Nil))
@@ -127,7 +174,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling in local cluster") {
-    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -198,7 +245,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling in local cluster with many reduce tasks") {
-    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
@@ -269,20 +316,49 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("cleanup of intermediate files in sorter") {
-    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
+    val ord = implicitly[Ordering[Int]]
+
+    val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assertDidNotBypassMergeSort(sorter)
+    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
+    assert(diskBlockManager.getAllFiles().length > 0)
+    sorter.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+
+    val sorter2 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assertDidNotBypassMergeSort(sorter2)
+    sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
+    assert(diskBlockManager.getAllFiles().length > 0)
+    assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
+    sorter2.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+  }
+
+  test("cleanup of intermediate files in sorter, bypass merge-sort") {
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100000).iterator.map(i => (i, i)))
+    assertBypassedMergeSort(sorter)
+    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     sorter.stop()
     assert(diskBlockManager.getAllBlocks().length === 0)
 
     val sorter2 = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    sorter2.write((0 until 100000).iterator.map(i => (i, i)))
+    assertBypassedMergeSort(sorter2)
+    sorter2.insertAll((0 until 100000).iterator.map(i => (i, i)))
     assert(diskBlockManager.getAllFiles().length > 0)
     assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
     sorter2.stop()
@@ -290,15 +366,41 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("cleanup of intermediate files in sorter if there are errors") {
-    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
+    val ord = implicitly[Ordering[Int]]
+
+    val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assertDidNotBypassMergeSort(sorter)
+    intercept[SparkException] {
+      sorter.insertAll((0 until 100000).iterator.map(i => {
+        if (i == 99990) {
+          throw new SparkException("Intentional failure")
+        }
+        (i, i)
+      }))
+    }
+    assert(diskBlockManager.getAllFiles().length > 0)
+    sorter.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+  }
+
+  test("cleanup of intermediate files in sorter if there are errors, bypass merge-sort") {
+    val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
     val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    assertBypassedMergeSort(sorter)
     intercept[SparkException] {
-      sorter.write((0 until 100000).iterator.map(i => {
+      sorter.insertAll((0 until 100000).iterator.map(i => {
         if (i == 99990) {
           throw new SparkException("Intentional failure")
         }
@@ -311,7 +413,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("cleanup of intermediate files in shuffle") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
@@ -326,7 +428,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("cleanup of intermediate files in shuffle with errors") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
@@ -348,13 +450,13 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("no partial aggregation or sorting") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
     val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100000).iterator.map(i => (i / 4, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i / 4, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 100000).map(i => (i / 4, i)).filter(_._1 % 3 == p).toSet)
@@ -363,14 +465,14 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("partial aggregation without spill") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100).iterator.map(i => (i / 2, i)))
+    sorter.insertAll((0 until 100).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
@@ -379,14 +481,14 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("partial aggregation with spill, no ordering") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
-    sorter.write((0 until 100000).iterator.map(i => (i / 2, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
@@ -395,7 +497,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("partial aggregation with spill, with ordering") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
@@ -403,7 +505,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.write((0 until 100000).iterator.map(i => (i / 2, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i / 2, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
     val expected = (0 until 3).map(p => {
       (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
@@ -412,7 +514,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("sorting without aggregation, no spill") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
@@ -420,7 +522,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.write((0 until 100).iterator.map(i => (i, i)))
+    sorter.insertAll((0 until 100).iterator.map(i => (i, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSeq)}.toSeq
     val expected = (0 until 3).map(p => {
       (p, (0 until 100).map(i => (i, i)).filter(_._1 % 3 == p).toSeq)
@@ -429,7 +531,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("sorting without aggregation, with spill") {
-    val conf = new SparkConf(false)
+    val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
@@ -437,7 +539,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val ord = implicitly[Ordering[Int]]
     val sorter = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
-    sorter.write((0 until 100000).iterator.map(i => (i, i)))
+    sorter.insertAll((0 until 100000).iterator.map(i => (i, i)))
     val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSeq)}.toSeq
     val expected = (0 until 3).map(p => {
       (p, (0 until 100000).map(i => (i, i)).filter(_._1 % 3 == p).toSeq)
@@ -446,7 +548,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with hash collisions") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -484,7 +586,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val toInsert = (1 to 100000).iterator.map(_.toString).map(s => (s, s)) ++
       collisionPairs.iterator ++ collisionPairs.iterator.map(_.swap)
 
-    sorter.write(toInsert)
+    sorter.insertAll(toInsert)
 
     // A map of collision pairs in both directions
     val collisionPairsMap = (collisionPairs ++ collisionPairs.map(_.swap)).toMap
@@ -503,7 +605,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with many hash collisions") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -513,7 +615,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     // Insert 10 copies each of lots of objects whose hash codes are either 0 or 1. This causes
     // problems if the map fails to group together the objects with the same code (SPARK-2043).
     val toInsert = for (i <- 1 to 10; j <- 1 to 10000) yield (FixedHashObject(j, j % 2), 1)
-    sorter.write(toInsert.iterator)
+    sorter.insertAll(toInsert.iterator)
 
     val it = sorter.iterator
     var count = 0
@@ -526,7 +628,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with hash collisions using the Int.MaxValue key") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -537,7 +639,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val agg = new Aggregator[Int, Int, ArrayBuffer[Int]](createCombiner, mergeValue, mergeCombiners)
     val sorter = new ExternalSorter[Int, Int, ArrayBuffer[Int]](Some(agg), None, None, None)
 
-    sorter.write((1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
+    sorter.insertAll((1 to 100000).iterator.map(i => (i, i)) ++ Iterator((Int.MaxValue, Int.MaxValue)))
 
     val it = sorter.iterator
     while (it.hasNext) {
@@ -547,7 +649,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
   }
 
   test("spilling with null keys and values") {
-    val conf = new SparkConf(true)
+    val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
@@ -561,7 +663,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val sorter = new ExternalSorter[String, String, ArrayBuffer[String]](
       Some(agg), None, None, None)
 
-    sorter.write((1 to 100000).iterator.map(i => (i.toString, i.toString)) ++ Iterator(
+    sorter.insertAll((1 to 100000).iterator.map(i => (i.toString, i.toString)) ++ Iterator(
       (null.asInstanceOf[String], "1"),
       ("1", null.asInstanceOf[String]),
       (null.asInstanceOf[String], null.asInstanceOf[String])
@@ -573,4 +675,91 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
       it.next()
     }
   }
+
+  test("conditions for bypassing merge-sort") {
+    val conf = createSparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
+    val ord = implicitly[Ordering[Int]]
+
+    // Numbers of partitions that are above and below the default bypassMergeThreshold
+    val FEW_PARTITIONS = 50
+    val MANY_PARTITIONS = 10000
+
+    // Sorters with no ordering or aggregator: should bypass unless # of partitions is high
+
+    val sorter1 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
+    assertBypassedMergeSort(sorter1)
+
+    val sorter2 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(MANY_PARTITIONS)), None, None)
+    assertDidNotBypassMergeSort(sorter2)
+
+    // Sorters with an ordering or aggregator: should not bypass even if they have few partitions
+
+    val sorter3 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(FEW_PARTITIONS)), Some(ord), None)
+    assertDidNotBypassMergeSort(sorter3)
+
+    val sorter4 = new ExternalSorter[Int, Int, Int](
+      Some(agg), Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
+    assertDidNotBypassMergeSort(sorter4)
+  }
+
+  test("sort without breaking sorting contracts") {
+    val conf = createSparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.01")
+    conf.set("spark.shuffle.manager", "sort")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    // Using wrongOrdering to show integer overflow introduced exception.
+    val rand = new Random(100L)
+    val wrongOrdering = new Ordering[String] {
+      override def compare(a: String, b: String) = {
+        val h1 = if (a == null) 0 else a.hashCode()
+        val h2 = if (b == null) 0 else b.hashCode()
+        h1 - h2
+      }
+    }
+
+    val testData = Array.tabulate(100000) { _ => rand.nextInt().toString }
+
+    val sorter1 = new ExternalSorter[String, String, String](
+      None, None, Some(wrongOrdering), None)
+    val thrown = intercept[IllegalArgumentException] {
+      sorter1.insertAll(testData.iterator.map(i => (i, i)))
+      sorter1.iterator
+    }
+
+    assert(thrown.getClass() === classOf[IllegalArgumentException])
+    assert(thrown.getMessage().contains("Comparison method violates its general contract"))
+    sorter1.stop()
+
+    // Using aggregation and external spill to make sure ExternalSorter using
+    // partitionKeyComparator.
+    def createCombiner(i: String) = ArrayBuffer(i)
+    def mergeValue(c: ArrayBuffer[String], i: String) = c += i
+    def mergeCombiners(c1: ArrayBuffer[String], c2: ArrayBuffer[String]) = c1 ++= c2
+
+    val agg = new Aggregator[String, String, ArrayBuffer[String]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    val sorter2 = new ExternalSorter[String, String, ArrayBuffer[String]](
+      Some(agg), None, None, None)
+    sorter2.insertAll(testData.iterator.map(i => (i, i)))
+
+    // To validate the hash ordering of key
+    var minKey = Int.MinValue
+    sorter2.iterator.foreach { case (k, v) =>
+      val h = k.hashCode()
+      assert(h >= minKey)
+      minKey = h
+    }
+
+    sorter2.stop()
+ }
 }

@@ -26,12 +26,9 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
-  private val live = parent.live
   private val sc = parent.sc
   private val listener = parent.listener
-  private lazy val isFairScheduler = parent.isFairScheduler
+  private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -49,17 +46,17 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
       // For now, pool information is only accessible in live UIs
-      val pools = if (live) sc.getAllPools else Seq[Schedulable]()
+      val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])
       val poolTable = new PoolTable(pools, parent)
 
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (live) {
+            {if (sc.isDefined) {
               // Total duration is not meaningful unless the UI is live
               <li>
                 <strong>Total Duration: </strong>
-                {UIUtils.formatDuration(now - sc.startTime)}
+                {UIUtils.formatDuration(now - sc.get.startTime)}
               </li>
             }}
             <li>
@@ -82,7 +79,7 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         </div>
 
       val content = summary ++
-        {if (live && isFairScheduler) {
+        {if (sc.isDefined && isFairScheduler) {
           <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
           Seq[Node]()
@@ -94,7 +91,7 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", parent.headerTabs, parent)
+      UIUtils.headerSparkPage("Spark Stages", content, parent)
     }
   }
 }

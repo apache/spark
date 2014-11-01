@@ -21,8 +21,8 @@
 # Run this on the master nde
 
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 # Load the Spark configuration
 . "$sbin/spark-config.sh"

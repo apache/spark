@@ -32,12 +32,12 @@ import org.apache.spark.util.Utils
  * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  *
- * @param numFeatures number of features (default: 1000000)
+ * @param numFeatures number of features (default: 2^20^)
  */
 @Experimental
 class HashingTF(val numFeatures: Int) extends Serializable {
 
-  def this() = this(1000000)
+  def this() = this(1 << 20)
 
   /**
    * Returns the index of the input term.

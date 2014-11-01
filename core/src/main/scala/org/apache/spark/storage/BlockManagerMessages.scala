@@ -21,6 +21,8 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import akka.actor.ActorRef
 
+import org.apache.spark.util.Utils
+
 private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
@@ -53,7 +55,7 @@ private[spark] object BlockManagerMessages {
       sender: ActorRef)
     extends ToBlockManagerMaster
 
-  class UpdateBlockInfo(
+  case class UpdateBlockInfo(
       var blockManagerId: BlockManagerId,
       var blockId: BlockId,
       var storageLevel: StorageLevel,
@@ -65,7 +67,7 @@ private[spark] object BlockManagerMessages {
 
     def this() = this(null, null, null, 0, 0, 0)  // For deserialization only
 
-    override def writeExternal(out: ObjectOutput) {
+    override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
       blockManagerId.writeExternal(out)
       out.writeUTF(blockId.name)
       storageLevel.writeExternal(out)
@@ -74,7 +76,7 @@ private[spark] object BlockManagerMessages {
       out.writeLong(tachyonSize)
     }
 
-    override def readExternal(in: ObjectInput) {
+    override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
       blockManagerId = BlockManagerId(in)
       blockId = BlockId(in.readUTF())
       storageLevel = StorageLevel(in)
@@ -84,29 +86,11 @@ private[spark] object BlockManagerMessages {
     }
   }
 
-  object UpdateBlockInfo {
-    def apply(
-        blockManagerId: BlockManagerId,
-        blockId: BlockId,
-        storageLevel: StorageLevel,
-        memSize: Long,
-        diskSize: Long,
-        tachyonSize: Long): UpdateBlockInfo = {
-      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize)
-    }
-
-    // For pattern-matching
-    def unapply(h: UpdateBlockInfo)
-      : Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
-      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize, h.tachyonSize))
-    }
-  }
-
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 
-  case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
+  case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 

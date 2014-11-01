@@ -14,13 +14,13 @@ is commonly used for recommender systems.  These techniques aim to fill in the
 missing entries of a user-item association matrix.  MLlib currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
-In particular, we implement the [alternating least squares
+MLlib uses the [alternating least squares
 (ALS)](http://dl.acm.org/citation.cfm?id=1608614)
 algorithm to learn these latent factors. The implementation in MLlib has the
 following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
-* *rank* is the number of latent factors in our model.
+* *rank* is the number of latent factors in the model.
 * *iterations* is the number of iterations to run.
 * *lambda* specifies the regularization parameter in ALS.
 * *implicitPrefs* specifies whether to use the *explicit feedback* ALS variant or one adapted for
@@ -42,6 +42,17 @@ as a combination of binary preferences and *confidence values*. The ratings are 
 level of confidence in observed user preferences, rather than explicit ratings given to items.  The
 model then tries to find latent factors that can be used to predict the expected preference of a
 user for an item.
+
+### Scaling of the regularization parameter
+
+Since v1.1, we scale the regularization parameter `lambda` in solving each least squares problem by
+the number of ratings the user generated in updating user factors,
+or the number of ratings the product received in updating product factors.
+This approach is named "ALS-WR" and discussed in the paper
+"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
+It makes `lambda` less dependent on the scale of the dataset.
+So we can apply the best parameter learned from a sampled subset to the full dataset
+and expect similar performance.
 
 ## Examples
 
@@ -86,8 +97,8 @@ val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) =>
 println("Mean Squared Error = " + MSE)
 {% endhighlight %}
 
-If the rating matrix is derived from other source of information (i.e., it is inferred from
-other signals), you can use the trainImplicit method to get better results.
+If the rating matrix is derived from another source of information (e.g., it is inferred from
+other signals), you can use the `trainImplicit` method to get better results.
 
 {% highlight scala %}
 val alpha = 0.01
@@ -99,7 +110,7 @@ val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A standalone application example
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
@@ -173,11 +184,6 @@ public class CollaborativeFiltering {
   }
 }
 {% endhighlight %}
-
-In order to run the above standalone application using Spark framework make
-sure that you follow the instructions provided at section [Standalone
-Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -217,7 +223,13 @@ model = ALS.trainImplicit(ratings, rank, numIterations, alpha = 0.01)
 
 </div>
 
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
+Quick Start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
+
 ## Tutorial
 
-[AMP Camp](http://ampcamp.berkeley.edu/) provides a hands-on tutorial for
-[personalized movie recommendation with MLlib](http://ampcamp.berkeley.edu/big-data-mini-course/movie-recommendation-with-mllib.html).
+The [training exercises](https://databricks-training.s3.amazonaws.com/index.html) from the Spark Summit 2014 include a hands-on tutorial for
+[personalized movie recommendation with MLlib](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).

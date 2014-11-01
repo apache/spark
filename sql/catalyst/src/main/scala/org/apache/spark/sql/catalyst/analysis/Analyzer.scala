@@ -37,32 +37,41 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
 class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
+  val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+
   // TODO: pass this in as a parameter.
   val fixedPoint = FixedPoint(100)
 
-  val batches: Seq[Batch] = Seq(
+  /**
+   * Override to provide additional rules for the "Resolution" batch.
+   */
+  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
+
+  lazy val batches: Seq[Batch] = Seq(
     Batch("MultiInstanceRelations", Once,
       NewRelationInstances),
-    Batch("CaseInsensitiveAttributeReferences", Once,
-      (if (caseSensitive) Nil else LowercaseAttributeReferences :: Nil) : _*),
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ResolveSortReferences ::
       NewRelationInstances ::
       ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
-      UnresolvedHavingClauseAttributes :: 
-      typeCoercionRules :_*),
+      UnresolvedHavingClauseAttributes ::
+      TrimAliases ::
+      typeCoercionRules ++
+      extendedRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution),
+      CheckResolution,
+      CheckAggregation),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
 
   /**
-   * Makes sure all attributes have been resolved.
+   * Makes sure all attributes and logical plans have been resolved.
    */
   object CheckResolution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = {
@@ -70,6 +79,56 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case p if p.expressions.exists(!_.resolved) =>
           throw new TreeNodeException(p,
             s"Unresolved attributes: ${p.expressions.filterNot(_.resolved).mkString(",")}")
+        case p if !p.resolved && p.childrenResolved =>
+          throw new TreeNodeException(p, "Unresolved plan found")
+      } match {
+        // As a backstop, use the root node to check that the entire plan tree is resolved.
+        case p if !p.resolved =>
+          throw new TreeNodeException(p, "Unresolved plan in tree")
+        case p => p
+      }
+    }
+  }
+
+  /**
+   * Removes no-op Alias expressions from the plan.
+   */
+  object TrimAliases extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Aggregate(groups, aggs, child) =>
+        Aggregate(
+          groups.map {
+            _ transform {
+              case Alias(c, _) => c
+            }
+          },
+          aggs,
+          child)
+    }
+  }
+
+  /**
+   * Checks for non-aggregated attributes with aggregation
+   */
+  object CheckAggregation extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.transform {
+        case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
+          def isValidAggregateExpression(expr: Expression): Boolean = expr match {
+            case _: AggregateExpression => true
+            case e: Attribute => groupingExprs.contains(e)
+            case e if groupingExprs.contains(e) => true
+            case e if e.references.isEmpty => true
+            case e => e.children.forall(isValidAggregateExpression)
+          }
+
+          aggregateExprs.foreach { e =>
+            if (!isValidAggregateExpression(e)) {
+              throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
+            }
+          }
+
+          aggregatePlan
       }
     }
   }
@@ -79,25 +138,11 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case i @ InsertIntoTable(UnresolvedRelation(databaseName, name, alias), _, _, _) =>
+        i.copy(
+          table = EliminateAnalysisOperators(catalog.lookupRelation(databaseName, name, alias)))
       case UnresolvedRelation(databaseName, name, alias) =>
         catalog.lookupRelation(databaseName, name, alias)
-    }
-  }
-
-  /**
-   * Makes attribute naming case insensitive by turning all UnresolvedAttributes to lowercase.
-   */
-  object LowercaseAttributeReferences extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case UnresolvedRelation(databaseName, name, alias) =>
-        UnresolvedRelation(databaseName, name, alias.map(_.toLowerCase))
-      case Subquery(alias, child) => Subquery(alias.toLowerCase, child)
-      case q: LogicalPlan => q transformExpressions {
-        case s: Star => s.copy(table = s.table.map(_.toLowerCase))
-        case UnresolvedAttribute(name) => UnresolvedAttribute(name.toLowerCase)
-        case Alias(c, name) => Alias(c, name.toLowerCase)()
-        case GetField(c, name) => GetField(c, name.toLowerCase)
-      }
     }
   }
 
@@ -113,9 +158,55 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-            val result = q.resolve(name).getOrElse(u)
+            val result = q.resolveChildren(name, resolver).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
+        }
+    }
+  }
+
+  /**
+   * In many dialects of SQL is it valid to sort by attributes that are not present in the SELECT
+   * clause.  This rule detects such queries and adds the required attributes to the original
+   * projection, so that they will be available during sorting. Another projection is added to
+   * remove these attributes after sorting.
+   */
+  object ResolveSortReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case s @ Sort(ordering, p @ Project(projectList, child)) if !s.resolved && p.resolved =>
+        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+        val resolved = unresolved.flatMap(child.resolve(_, resolver))
+        val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
+
+        val missingInProject = requiredAttributes -- p.output
+        if (missingInProject.nonEmpty) {
+          // Add missing attributes and then project them away after the sort.
+          Project(projectList,
+            Sort(ordering,
+              Project(projectList ++ missingInProject, child)))
+        } else {
+          logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
+          s // Nothing we can do here. Return original plan.
+        }
+      case s @ Sort(ordering, a @ Aggregate(grouping, aggs, child)) if !s.resolved && a.resolved =>
+        val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
+        // A small hack to create an object that will allow us to resolve any references that
+        // refer to named expressions that are present in the grouping expressions.
+        val groupingRelation = LocalRelation(
+          grouping.collect { case ne: NamedExpression => ne.toAttribute }
+        )
+
+        logDebug(s"Grouping expressions: $groupingRelation")
+        val resolved = unresolved.flatMap(groupingRelation.resolve(_, resolver))
+        val missingInAggs = resolved.filterNot(a.outputSet.contains)
+        logDebug(s"Resolved: $resolved Missing in aggs: $missingInAggs")
+        if (missingInAggs.nonEmpty) {
+          // Add missing grouping exprs and then project them away after the sort.
+          Project(a.output,
+            Sort(ordering,
+              Aggregate(grouping, aggs ++ missingInAggs, child)))
+        } else {
+          s // Nothing we can do here. Return original plan.
         }
     }
   }
@@ -158,18 +249,17 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _)) 
+      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
           if aggregate.resolved && containsAggregate(havingCondition) => {
         val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
         val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
-        
+
         Project(aggregate.output,
           Filter(evaluatedCondition.toAttribute,
             aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
       }
-      
     }
-    
+
     protected def containsAggregate(condition: Expression): Boolean =
       condition
         .collect { case ae: AggregateExpression => ae }
@@ -199,14 +289,14 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
           projectList.flatMap {
-            case s: Star => s.expand(child.output)
+            case s: Star => s.expand(child.output, resolver)
             case o => o :: Nil
           },
           child)
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
           input = t.input.flatMap {
-            case s: Star => s.expand(t.child.output)
+            case s: Star => s.expand(t.child.output, resolver)
             case o => o :: Nil
           }
         )
@@ -214,7 +304,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         a.copy(
           aggregateExpressions = a.aggregateExpressions.flatMap {
-            case s: Star => s.expand(a.child.output)
+            case s: Star => s.expand(a.child.output, resolver)
             case o => o :: Nil
           }
         )
@@ -231,13 +321,11 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
 /**
  * Removes [[catalyst.plans.logical.Subquery Subquery]] operators from the plan.  Subqueries are
  * only required to provide scoping information for attributes and can be removed once analysis is
- * complete.  Similarly, this node also removes
- * [[catalyst.plans.logical.LowerCaseSchema LowerCaseSchema]] operators.
+ * complete.
  */
 object EliminateAnalysisOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Subquery(_, child) => child
-    case LowerCaseSchema(child) => child
   }
 }
 

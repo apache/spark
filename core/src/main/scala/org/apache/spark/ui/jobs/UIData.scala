@@ -17,8 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.TaskInfo
+import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
+import org.apache.spark.util.collection.OpenHashSet
 
 import scala.collection.mutable.HashMap
 
@@ -35,9 +37,17 @@ private[jobs] object UIData {
     var diskBytesSpilled : Long = 0
   }
 
+  class JobUIData(
+    var jobId: Int = -1,
+    var stageIds: Seq[Int] = Seq.empty,
+    var jobGroup: Option[String] = None,
+    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN
+  )
+
   class StageUIData {
     var numActiveTasks: Int = _
     var numCompleteTasks: Int = _
+    var completedIndices = new OpenHashSet[Int]()
     var numFailedTasks: Int = _
 
     var executorRunTime: Long = _
@@ -51,6 +61,7 @@ private[jobs] object UIData {
     var schedulingPool: String = ""
     var description: Option[String] = None
 
+    var accumulables = new HashMap[Long, AccumulableInfo]
     var taskData = new HashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
   }

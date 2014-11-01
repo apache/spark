@@ -17,6 +17,7 @@
 
 package org.apache.spark.api.java
 
+import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
@@ -40,7 +41,9 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
  */
-class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
+class JavaSparkContext(val sc: SparkContext)
+  extends JavaSparkContextVarargsWorkaround with Closeable {
+
   /**
    * Create a JavaSparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
@@ -129,6 +132,25 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
 
+
+  /**
+   * Return a list of all known jobs in a particular job group.  The returned list may contain
+   * running, failed, and completed jobs, and may vary across invocations of this method.  This
+   * method does not guarantee the order of the elements in its result.
+   */
+  def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.getJobIdsForGroup(jobGroup)
+
+  /**
+   * Returns job information, or `null` if the job info could not be found or was garbage collected.
+   */
+  def getJobInfo(jobId: Int): SparkJobInfo = sc.getJobInfo(jobId).orNull
+
+  /**
+   * Returns stage information, or `null` if the stage info could not be found or was
+   * garbage collected.
+   */
+  def getStageInfo(stageId: Int): SparkStageInfo = sc.getStageInfo(stageId).orNull
+
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
@@ -193,7 +215,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
+   * Do
+   * {{{
+   *   JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")
+   * }}}
    *
    * <p> then `rdd` contains
    * {{{
@@ -430,11 +455,31 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.accumulator(initialValue)(IntAccumulatorParam).asInstanceOf[Accumulator[java.lang.Integer]]
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def intAccumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
+    sc.accumulator(initialValue, name)(IntAccumulatorParam)
+      .asInstanceOf[Accumulator[java.lang.Integer]]
+
+  /**
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
   def doubleAccumulator(initialValue: Double): Accumulator[java.lang.Double] =
     sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def doubleAccumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
+    sc.accumulator(initialValue, name)(DoubleAccumulatorParam)
+      .asInstanceOf[Accumulator[java.lang.Double]]
 
   /**
    * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
@@ -443,11 +488,30 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
+    intAccumulator(initialValue, name)
+
+  /**
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
   def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
     doubleAccumulator(initialValue)
+
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
+    doubleAccumulator(initialValue, name)
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
@@ -457,11 +521,31 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.accumulator(initialValue)(accumulatorParam)
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
+   * values to using the `add` method. Only the master can access the accumulator's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulator[T](initialValue: T, name: String, accumulatorParam: AccumulatorParam[T])
+      : Accumulator[T] =
+    sc.accumulator(initialValue, name)(accumulatorParam)
+
+  /**
    * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
    * can "add" values with `add`. Only the master can access the accumuable's `value`.
    */
   def accumulable[T, R](initialValue: T, param: AccumulableParam[T, R]): Accumulable[T, R] =
     sc.accumulable(initialValue)(param)
+
+  /**
+   * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
+   * can "add" values with `add`. Only the master can access the accumuable's `value`.
+   *
+   * This version supports naming the accumulator for display in Spark's web UI.
+   */
+  def accumulable[T, R](initialValue: T, name: String, param: AccumulableParam[T, R])
+      : Accumulable[T, R] =
+    sc.accumulable(initialValue, name)(param)
 
   /**
    * Broadcast a read-only variable to the cluster, returning a
@@ -475,6 +559,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.stop()
   }
 
+  override def close(): Unit = stop()
+
   /**
    * Get Spark's home location from either a value set through the constructor,
    * or the spark.home Java property, or the SPARK_HOME environment variable
@@ -486,7 +572,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
-   * use `SparkFiles.get(path)` to find its download location.
+   * use `SparkFiles.get(fileName)` to find its download location.
    */
   def addFile(path: String) {
     sc.addFile(path)

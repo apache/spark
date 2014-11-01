@@ -26,8 +26,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliSampler
-import org.apache.spark.mllib.regression.{LabeledPointParser, LabeledPoint}
+import org.apache.spark.util.random.BernoulliCellSampler
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
@@ -76,7 +76,7 @@ object MLUtils {
       .map { line =>
         val items = line.split(' ')
         val label = items.head.toDouble
-        val (indices, values) = items.tail.map { item =>
+        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
           val value = indexAndValue(1).toDouble
@@ -185,7 +185,7 @@ object MLUtils {
    * @return labeled points stored as an RDD[LabeledPoint]
    */
   def loadLabeledPoints(sc: SparkContext, path: String, minPartitions: Int): RDD[LabeledPoint] =
-    sc.textFile(path, minPartitions).map(LabeledPointParser.parse)
+    sc.textFile(path, minPartitions).map(LabeledPoint.parse)
 
   /**
    * Loads labeled points saved using `RDD[LabeledPoint].saveAsTextFile` with the default number of
@@ -195,22 +195,9 @@ object MLUtils {
     loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
 
   /**
-   * Loads streaming labeled points from a stream of text files
-   * where points are in the same format as used in `RDD[LabeledPoint].saveAsTextFile`.
-   * See `StreamingContext.textFileStream` for more details on how to
-   * generate a stream from files
-   *
-   * @param ssc Streaming context
-   * @param dir Directory path in any Hadoop-supported file system URI
-   * @return Labeled points stored as a DStream[LabeledPoint]
-   */
-  def loadStreamingLabeledPoints(ssc: StreamingContext, dir: String): DStream[LabeledPoint] =
-    ssc.textFileStream(dir).map(LabeledPointParser.parse)
-
-  /**
    * Load labeled data from a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param sc SparkContext
    * @param dir Directory to the input data files.
@@ -232,8 +219,8 @@ object MLUtils {
 
   /**
    * Save labeled data to a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   * L, f1 f2 ...
+   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
    *
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.
@@ -257,7 +244,7 @@ object MLUtils {
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
-      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
+      val sampler = new BernoulliCellSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
         complement = false)
       val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)

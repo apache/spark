@@ -17,31 +17,27 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.ArrayBuffer
-import scala.math.{random, round}
-
-import java.sql.Timestamp
 import java.util.{Map => JMap}
+import scala.collection.mutable.Map
 
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
-
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{SchemaRDD, Row => SparkRow}
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.thriftserver.{SparkExecuteStatementOperation, ReflectionUtils}
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
  */
-class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManager with Logging {
+private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
+  extends OperationManager with Logging {
+
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
+
+  // TODO: Currenlty this will grow infinitely, even as sessions expire
+  val sessionToActivePool = Map[HiveSession, String]()
 
   override def newExecuteStatementOperation(
       parentSession: HiveSession,
@@ -49,103 +45,8 @@ class SparkSQLOperationManager(hiveContext: HiveContext) extends OperationManage
       confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
 
-    val operation = new ExecuteStatementOperation(parentSession, statement, confOverlay) {
-      private var result: SchemaRDD = _
-      private var iter: Iterator[SparkRow] = _
-      private var dataTypes: Array[DataType] = _
-
-      def close(): Unit = {
-        // RDDs will be cleaned automatically upon garbage collection.
-        logDebug("CLOSING")
-      }
-
-      def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
-        if (!iter.hasNext) {
-          new RowSet()
-        } else {
-          val maxRows = maxRowsL.toInt // Do you really want a row batch larger than Int Max? No.
-          var curRow = 0
-          var rowSet = new ArrayBuffer[Row](maxRows)
-
-          while (curRow < maxRows && iter.hasNext) {
-            val sparkRow = iter.next()
-            val row = new Row()
-            var curCol = 0
-
-            while (curCol < sparkRow.length) {
-              dataTypes(curCol) match {
-                case StringType =>
-                  row.addString(sparkRow(curCol).asInstanceOf[String])
-                case IntegerType =>
-                  row.addColumnValue(ColumnValue.intValue(sparkRow.getInt(curCol)))
-                case BooleanType =>
-                  row.addColumnValue(ColumnValue.booleanValue(sparkRow.getBoolean(curCol)))
-                case DoubleType =>
-                  row.addColumnValue(ColumnValue.doubleValue(sparkRow.getDouble(curCol)))
-                case FloatType =>
-                  row.addColumnValue(ColumnValue.floatValue(sparkRow.getFloat(curCol)))
-                case DecimalType =>
-                  val hiveDecimal = sparkRow.get(curCol).asInstanceOf[BigDecimal].bigDecimal
-                  row.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
-                case LongType =>
-                  row.addColumnValue(ColumnValue.longValue(sparkRow.getLong(curCol)))
-                case ByteType =>
-                  row.addColumnValue(ColumnValue.byteValue(sparkRow.getByte(curCol)))
-                case ShortType =>
-                  row.addColumnValue(ColumnValue.intValue(sparkRow.getShort(curCol)))
-                case TimestampType =>
-                  row.addColumnValue(
-                    ColumnValue.timestampValue(sparkRow.get(curCol).asInstanceOf[Timestamp]))
-                case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-                  val hiveString = result
-                    .queryExecution
-                    .asInstanceOf[HiveContext#QueryExecution]
-                    .toHiveString((sparkRow.get(curCol), dataTypes(curCol)))
-                  row.addColumnValue(ColumnValue.stringValue(hiveString))
-              }
-              curCol += 1
-            }
-            rowSet += row
-            curRow += 1
-          }
-          new RowSet(rowSet, 0)
-        }
-      }
-
-      def getResultSetSchema: TableSchema = {
-        logWarning(s"Result Schema: ${result.queryExecution.analyzed.output}")
-        if (result.queryExecution.analyzed.output.size == 0) {
-          new TableSchema(new FieldSchema("Result", "string", "") :: Nil)
-        } else {
-          val schema = result.queryExecution.analyzed.output.map { attr =>
-            new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
-          }
-          new TableSchema(schema)
-        }
-      }
-
-      def run(): Unit = {
-        logInfo(s"Running query '$statement'")
-        setState(OperationState.RUNNING)
-        try {
-          result = hiveContext.sql(statement)
-          logDebug(result.queryExecution.toString())
-          val groupId = round(random * 1000000).toString
-          hiveContext.sparkContext.setJobGroup(groupId, statement)
-          iter = result.queryExecution.toRdd.toLocalIterator
-          dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
-          setHasResultSet(true)
-        } catch {
-          // Actually do need to catch Throwable as some failures don't inherit from Exception and
-          // HiveServer will silently swallow them.
-          case e: Throwable =>
-            logError("Error executing query:",e)
-            throw new HiveSQLException(e.toString)
-        }
-        setState(OperationState.FINISHED)
-      }
-    }
-
+    val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay)(
+      hiveContext, sessionToActivePool)
    handleToOperation.put(operation.getHandle, operation)
    operation
   }

@@ -68,7 +68,7 @@ class JdbcRDD[T: ClassTag](
   }
 
   override def compute(thePart: Partition, context: TaskContext) = new NextIterator[T] {
-    context.addOnCompleteCallback{ () => closeIfNeeded() }
+    context.addTaskCompletionListener{ context => closeIfNeeded() }
     val part = thePart.asInstanceOf[JdbcPartition]
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
@@ -96,17 +96,23 @@ class JdbcRDD[T: ClassTag](
 
     override def close() {
       try {
-        if (null != rs && ! rs.isClosed()) rs.close()
+        if (null != rs && ! rs.isClosed()) {
+          rs.close()
+        }
       } catch {
         case e: Exception => logWarning("Exception closing resultset", e)
       }
       try {
-        if (null != stmt && ! stmt.isClosed()) stmt.close()
+        if (null != stmt && ! stmt.isClosed()) {
+          stmt.close()
+        }
       } catch {
         case e: Exception => logWarning("Exception closing statement", e)
       }
       try {
-        if (null != conn && ! stmt.isClosed()) conn.close()
+        if (null != conn && ! conn.isClosed()) {
+          conn.close()
+        }
         logInfo("closed connection")
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
@@ -120,3 +126,4 @@ object JdbcRDD {
     Array.tabulate[Object](rs.getMetaData.getColumnCount)(i => rs.getObject(i + 1))
   }
 }
+

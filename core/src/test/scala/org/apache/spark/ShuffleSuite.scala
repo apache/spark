@@ -26,7 +26,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
 
-class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
+abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   val conf = new SparkConf(loadDefaults = false)
 
@@ -241,6 +241,30 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.toLowerCase.contains("serializable"))
+  }
+
+  test("shuffle with different compression settings (SPARK-3426)") {
+    for (
+      shuffleSpillCompress <- Set(true, false);
+      shuffleCompress <- Set(true, false)
+    ) {
+      val conf = new SparkConf()
+        .setAppName("test")
+        .setMaster("local")
+        .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
+        .set("spark.shuffle.compress", shuffleCompress.toString)
+        .set("spark.shuffle.memoryFraction", "0.001")
+      resetSparkContext()
+      sc = new SparkContext(conf)
+      try {
+        sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
+      } catch {
+        case e: Exception =>
+          val errMsg = s"Failed with spark.shuffle.spill.compress=$shuffleSpillCompress," +
+            s" spark.shuffle.compress=$shuffleCompress"
+          throw new Exception(errMsg, e)
+      }
+    }
   }
 }
 

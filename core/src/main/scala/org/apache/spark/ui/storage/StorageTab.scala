@@ -25,14 +25,11 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage") {
-  val appName = parent.appName
-  val basePath = parent.basePath
-  val listener = new StorageListener(parent.storageStatusListener)
+private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storage") {
+  val listener = parent.storageListener
 
   attachPage(new StoragePage(this))
   attachPage(new RDDPage(this))
-  parent.registerListener(listener)
 }
 
 /**
@@ -72,8 +69,11 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
-    // Remove all partitions that are no longer cached
-    _rddInfoMap.retain { case (_, info) => info.numCachedPartitions > 0 }
+    // Remove all partitions that are no longer cached in current completed stage
+    val completedRddIds = stageCompleted.stageInfo.rddInfos.map(r => r.id).toSet
+    _rddInfoMap.retain { case (id, info) =>
+      !completedRddIds.contains(id) || info.numCachedPartitions > 0
+    }
   }
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {

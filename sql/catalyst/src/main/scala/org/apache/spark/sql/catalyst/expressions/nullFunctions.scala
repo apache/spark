@@ -26,7 +26,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   def nullable = !children.exists(!_.nullable)
 
-  def references = children.flatMap(_.references).toSet
   // Coalesce is foldable if all children are foldable.
   override def foldable = !children.exists(!_.foldable)
 
@@ -53,17 +52,17 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 }
 
 case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  def references = child.references
   override def foldable = child.foldable
   def nullable = false
 
   override def eval(input: Row): Any = {
     child.eval(input) == null
   }
+
+  override def toString = s"IS NULL $child"
 }
 
 case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  def references = child.references
   override def foldable = child.foldable
   def nullable = false
   override def toString = s"IS NOT NULL $child"

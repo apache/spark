@@ -11,15 +11,11 @@ was added to Spark in version 0.6.0, and improved in subsequent releases.
 
 Running Spark-on-YARN requires a binary distribution of Spark which is built with YARN support.
 Binary distributions can be downloaded from the Spark project website. 
-To build Spark yourself, refer to the [building with Maven guide](building-with-maven.html).
+To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 # Configuration
 
 Most of the configs are the same for Spark on YARN as for other deployment modes. See the [configuration page](configuration.html) for more information on those.  These are configs that are specific to Spark on YARN.
-
-#### Environment Variables
-
-* `SPARK_YARN_USER_ENV`, to add environment variables to the Spark processes launched on YARN. This can be a comma separated list of environment variables, e.g. `SPARK_YARN_USER_ENV="JAVA_HOME=/jdk64,FOO=bar"`.
 
 #### Spark Properties
 
@@ -79,20 +75,20 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>(none)</td>
   <td>
     Comma-separated list of files to be placed in the working directory of each executor.
-  <td>
+  </td>
 </tr>
 <tr>
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>384</td>
+  <td>executorMemory * 0.07, with minimum of 384 </td>
   <td>
-    The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>384</td>
+  <td>driverMemory * 0.07, with minimum of 384 </td>
   <td>
-    The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
   </td>
 </tr>
 <tr>
@@ -104,6 +100,36 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
     need to be distributed each time an application runs. To point to a jar on HDFS, for example,
     set this configuration to "hdfs:///some/path".
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.access.namenodes</code></td>
+  <td>(none)</td>
+  <td>
+    A list of secure HDFS namenodes your Spark application is going to access. For 
+    example, `spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032`. 
+    The Spark application must have acess to the namenodes listed and Kerberos must 
+    be properly configured to be able to access them (either in the same realm or in 
+    a trusted realm). Spark acquires security tokens for each of the namenodes so that 
+    the Spark application can access those remote HDFS clusters.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+     Add the environment variable specified by <code>EnvironmentVariableName</code> to the 
+     Application Master process launched on YARN. The user can specify multiple of 
+     these and to set multiple environment variables. In yarn-cluster mode this controls 
+     the environment of the SPARK driver and in yarn-client mode it only controls 
+     the environment of the executor launcher. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.containerLauncherMaxThreads</code></td>
+  <td>25</td>
+  <td>
+    The maximum number of threads to use in the application master for launching executor containers.
   </td>
 </tr>
 </table>
@@ -129,6 +155,7 @@ For example:
         --driver-memory 4g \
         --executor-memory 2g \
         --executor-cores 1 \
+        --queue thequeue \
         lib/spark-examples*.jar \
         10
 
@@ -177,6 +204,8 @@ To use a custom log4j configuration for the application master or executors, the
 Note that for the first option, both executors and the application master will share the same
 log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
 to the same log file).
+
+If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use "${spark.yarn.app.container.log.dir}" in your log4j.properties. For example, log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log. For streaming application, configuring RollingFileAppender and setting file location to YARN's log directory will avoid disk overflow caused by large log file, and logs can be accessed using YARN's log utility.
 
 # Important notes
 

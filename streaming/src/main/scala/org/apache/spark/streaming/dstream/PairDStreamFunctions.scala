@@ -569,6 +569,42 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
   }
 
   /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
+   * number of partitions.
+   */
+  def fullOuterJoin[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Option[V], Option[W]))] = {
+    fullOuterJoin[W](other, defaultPartitioner())
+  }
+
+  /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def fullOuterJoin[W: ClassTag](
+      other: DStream[(K, W)],
+      numPartitions: Int
+    ): DStream[(K, (Option[V], Option[W]))] = {
+    fullOuterJoin[W](other, defaultPartitioner(numPartitions))
+  }
+
+  /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
+   * the partitioning of each RDD.
+   */
+  def fullOuterJoin[W: ClassTag](
+      other: DStream[(K, W)],
+      partitioner: Partitioner
+    ): DStream[(K, (Option[V], Option[W]))] = {
+    self.transformWith(
+      other,
+      (rdd1: RDD[(K, V)], rdd2: RDD[(K, W)]) => rdd1.fullOuterJoin(rdd2, partitioner)
+    )
+  }
+
+  /**
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval
    * is generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix"
    */

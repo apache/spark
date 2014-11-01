@@ -22,7 +22,6 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
-
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
@@ -30,7 +29,7 @@ import parquet.schema.MessageType
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -47,7 +46,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
-    @transient sqlContext: SQLContext)
+    @transient sqlContext: SQLContext,
+    partitioningAttributes: Seq[Attribute] = Nil)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -60,9 +60,14 @@ private[sql] case class ParquetRelation(
       .getSchema
 
   /** Attributes */
-  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path), conf)
+  override val output =
+    partitioningAttributes ++
+    ParquetTypesConverter.readSchemaFromFile(
+      new Path(path.split(",").head),
+      conf,
+      sqlContext.isParquetBinaryAsString)
 
-  override def newInstance = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
@@ -94,8 +99,13 @@ private[sql] object ParquetRelation {
   // The compression type
   type CompressionType = parquet.hadoop.metadata.CompressionCodecName
 
-  // The default compression
-  val defaultCompression = CompressionCodecName.GZIP
+  // The parquet compression short names
+  val shortParquetCompressionCodecNames = Map(
+    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
+    "SNAPPY"       -> CompressionCodecName.SNAPPY,
+    "GZIP"         -> CompressionCodecName.GZIP,
+    "LZO"          -> CompressionCodecName.LZO)
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
@@ -135,9 +145,8 @@ private[sql] object ParquetRelation {
                   conf: Configuration,
                   sqlContext: SQLContext): ParquetRelation = {
     val path = checkPath(pathString, allowExisting, conf)
-    if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
-      conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
-    }
+    conf.set(ParquetOutputFormat.COMPRESSION, shortParquetCompressionCodecNames.getOrElse(
+      sqlContext.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED).name())
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {

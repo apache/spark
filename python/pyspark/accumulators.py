@@ -94,6 +94,9 @@ from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
+__all__ = ['Accumulator', 'AccumulatorParam']
+
+
 pickleSer = PickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
@@ -110,6 +113,7 @@ def _deserialize_accumulator(aid, zero_value, accum_param):
 
 
 class Accumulator(object):
+
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
     operation. Worker tasks on a Spark cluster can add values to an Accumulator with the C{+=}
@@ -166,6 +170,7 @@ class Accumulator(object):
 
 
 class AccumulatorParam(object):
+
     """
     Helper object that defines how to accumulate values of a given type.
     """
@@ -186,6 +191,7 @@ class AccumulatorParam(object):
 
 
 class AddingAccumulatorParam(AccumulatorParam):
+
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
@@ -209,7 +215,23 @@ FLOAT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
 COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
+class PStatsParam(AccumulatorParam):
+    """PStatsParam is used to merge pstats.Stats"""
+
+    @staticmethod
+    def zero(value):
+        return None
+
+    @staticmethod
+    def addInPlace(value1, value2):
+        if value1 is None:
+            return value2
+        value1.add(value2)
+        return value1
+
+
 class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
+
     """
     This handler will keep polling updates from the same socket until the
     server is shutdown.
@@ -228,7 +250,9 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
                 # Write a byte in acknowledgement
                 self.wfile.write(struct.pack("!b", 1))
 
+
 class AccumulatorServer(SocketServer.TCPServer):
+
     """
     A simple TCP server that intercepts shutdown() in order to interrupt
     our continuous polling on the handler.
@@ -238,6 +262,7 @@ class AccumulatorServer(SocketServer.TCPServer):
     def shutdown(self):
         self.server_shutdown = True
         SocketServer.TCPServer.shutdown(self)
+
 
 def _start_update_server():
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""

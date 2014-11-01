@@ -17,23 +17,23 @@
 
 package org.apache.spark.mllib.feature
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => brzNorm}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Normalizes samples individually to unit L^p^ norm
  *
- * For any 1 <= p < Double.PositiveInfinity, normalizes samples using
+ * For any 1 &lt;= p &lt; Double.PositiveInfinity, normalizes samples using
  * sum(abs(vector).^p^)^(1/p)^ as norm.
  *
  * For p = Double.PositiveInfinity, max(abs(vector)) will be used as norm for normalization.
  *
  * @param p Normalization in L^p^ space, p = 2 by default.
  */
-@DeveloperApi
+@Experimental
 class Normalizer(p: Double) extends VectorTransformer {
 
   def this() = this(2)
@@ -47,7 +47,7 @@ class Normalizer(p: Double) extends VectorTransformer {
    * @return normalized vector. If the norm of the input is zero, it will return the input vector.
    */
   override def transform(vector: Vector): Vector = {
-    var norm = vector.toBreeze.norm(p)
+    var norm = brzNorm(vector.toBreeze, p)
 
     if (norm != 0.0) {
       // For dense vector, we've to allocate new memory for new output vector.

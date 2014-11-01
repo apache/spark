@@ -24,13 +24,30 @@
 set -o posix
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+
+CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
+
+function usage {
+  echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"
+  pattern="usage"
+  pattern+="\|Spark assembly has been built with Hive"
+  pattern+="\|NOTE: SPARK_PREPEND_CLASSES is set"
+  pattern+="\|Spark Command: "
+  pattern+="\|======="
+  pattern+="\|--help"
+
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  echo
+  echo "Thrift server options:"
+  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+}
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./sbin/start-thriftserver [options]"
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  usage
   exit 0
 fi
 
-CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
-exec "$FWDIR"/bin/spark-submit --class $CLASS spark-internal $@
+export SUBMIT_USAGE_FUNCTION=usage
+
+exec "$FWDIR"/sbin/spark-daemon.sh spark-submit $CLASS 1 "$@"

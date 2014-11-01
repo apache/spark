@@ -112,6 +112,8 @@ class JavaSchemaRDD(
     new java.util.ArrayList(arr)
   }
 
+  override def count(): Long = baseSchemaRDD.count
+
   override def take(num: Int): JList[Row] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[Row] = baseSchemaRDD.take(num).toSeq.map(new Row(_))
@@ -191,7 +193,7 @@ class JavaSchemaRDD(
    * Return an RDD with the elements from `this` that are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be &lt;= us.
    */
   def subtract(other: JavaSchemaRDD): JavaSchemaRDD =
     this.baseSchemaRDD.subtract(other.baseSchemaRDD).toJavaSchemaRDD

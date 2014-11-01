@@ -23,13 +23,13 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 
 import akka.actor.ActorRef
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
-import org.apache.spark.Logging
-import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.{Command, DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -39,6 +39,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
  * This is currently only used in standalone cluster deploy mode.
  */
 private[spark] class DriverRunner(
+    val conf: SparkConf,
     val driverId: String,
     val workDir: File,
     val sparkHome: File,
@@ -75,17 +76,9 @@ private[spark] class DriverRunner(
 
           // Make sure user application jar is on the classpath
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
-          val newCommand = Command(
-            driverDesc.command.mainClass,
-            driverDesc.command.arguments.map(substituteVariables),
-            driverDesc.command.environment,
-            classPath,
-            driverDesc.command.libraryPathEntries,
-            driverDesc.command.javaOpts)
-          val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
-            sparkHome.getAbsolutePath)
-          launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)
+          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
+            sparkHome.getAbsolutePath, substituteVariables, Seq(localJarFilename))
+          launchDriver(builder, driverDir, driverDesc.supervise)
         }
         catch {
           case e: Exception => finalException = Some(e)
@@ -144,8 +137,8 @@ private[spark] class DriverRunner(
 
     val jarPath = new Path(driverDesc.jarUrl)
 
-    val emptyConf = new Configuration()
-    val jarFileSystem = jarPath.getFileSystem(emptyConf)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val jarFileSystem = jarPath.getFileSystem(hadoopConf)
 
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
@@ -154,7 +147,7 @@ private[spark] class DriverRunner(
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
+      FileUtil.copy(jarFileSystem, jarPath, destPath, false, hadoopConf)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded
@@ -164,11 +157,8 @@ private[spark] class DriverRunner(
     localJarFilename
   }
 
-  private def launchDriver(command: Seq[String], envVars: Map[String, String], baseDir: File,
-                           supervise: Boolean) {
-    val builder = new ProcessBuilder(command: _*).directory(baseDir)
-    envVars.map{ case(k,v) => builder.environment().put(k, v) }
-
+  private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
+    builder.directory(baseDir)
     def initialize(process: Process) = {
       // Redirect stdout and stderr to files
       val stdout = new File(baseDir, "stdout")
@@ -176,8 +166,8 @@ private[spark] class DriverRunner(
 
       val stderr = new File(baseDir, "stderr")
       val header = "Launch Command: %s\n%s\n\n".format(
-        command.mkString("\"", "\" \"", "\""), "=" * 40)
-      Files.append(header, stderr, Charsets.UTF_8)
+        builder.command.mkString("\"", "\" \"", "\""), "=" * 40)
+      Files.append(header, stderr, UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)

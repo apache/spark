@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import atexit
 import os
 import sys
 import signal
@@ -39,7 +40,7 @@ def launch_gateway():
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
         submit_args = submit_args if submit_args is not None else ""
         submit_args = shlex.split(submit_args)
-        command = [os.path.join(SPARK_HOME, script), "pyspark-shell"] + submit_args
+        command = [os.path.join(SPARK_HOME, script)] + submit_args + ["pyspark-shell"]
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
@@ -54,17 +55,41 @@ def launch_gateway():
             gateway_port = proc.stdout.readline()
             gateway_port = int(gateway_port)
         except ValueError:
+            # Grab the remaining lines of stdout
             (stdout, _) = proc.communicate()
             exit_code = proc.poll()
             error_msg = "Launching GatewayServer failed"
-            error_msg += " with exit code %d! " % exit_code if exit_code else "! "
-            error_msg += "(Warning: unexpected output detected.)\n\n"
-            error_msg += gateway_port + stdout
+            error_msg += " with exit code %d!\n" % exit_code if exit_code else "!\n"
+            error_msg += "Warning: Expected GatewayServer to output a port, but found "
+            if gateway_port == "" and stdout == "":
+                error_msg += "no output.\n"
+            else:
+                error_msg += "the following:\n\n"
+                error_msg += "--------------------------------------------------------------\n"
+                error_msg += gateway_port + stdout
+                error_msg += "--------------------------------------------------------------\n"
             raise Exception(error_msg)
+
+        # In Windows, ensure the Java child processes do not linger after Python has exited.
+        # In UNIX-based systems, the child process can kill itself on broken pipe (i.e. when
+        # the parent process' stdin sends an EOF). In Windows, however, this is not possible
+        # because java.lang.Process reads directly from the parent process' stdin, contending
+        # with any opportunity to read an EOF from the parent. Note that this is only best
+        # effort and will not take effect if the python process is violently terminated.
+        if on_windows:
+            # In Windows, the child process here is "spark-submit.cmd", not the JVM itself
+            # (because the UNIX "exec" command is not available). This means we cannot simply
+            # call proc.kill(), which kills only the "spark-submit.cmd" process but not the
+            # JVMs. Instead, we use "taskkill" with the tree-kill option "/t" to terminate all
+            # child processes in the tree (http://technet.microsoft.com/en-us/library/bb491009.aspx)
+            def killChild():
+                Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
+            atexit.register(killChild)
 
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
         class EchoOutputThread(Thread):
+
             def __init__(self, stream):
                 Thread.__init__(self)
                 self.daemon = True

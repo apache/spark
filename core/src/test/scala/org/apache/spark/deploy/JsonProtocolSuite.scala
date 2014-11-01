@@ -115,14 +115,16 @@ class JsonProtocolSuite extends FunSuite {
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }
+
   def createExecutorRunner(): ExecutorRunner = {
     new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
       new File("sparkHome"), new File("workDir"), "akka://worker",
       new SparkConf, ExecutorState.RUNNING)
   }
+
   def createDriverRunner(): DriverRunner = {
-    new DriverRunner("driverId", new File("workDir"), new File("sparkHome"), createDriverDesc(),
-      null, "akka://worker")
+    new DriverRunner(new SparkConf(), "driverId", new File("workDir"), new File("sparkHome"),
+      createDriverDesc(), null, "akka://worker")
   }
 
   def assertValidJson(json: JValue) {

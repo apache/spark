@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
 
@@ -43,6 +43,7 @@ case class NullableData(
     booleanField: java.lang.Boolean,
     stringField: String,
     decimalField: BigDecimal,
+    dateField: Date,
     timestampField: Timestamp,
     binaryField: Array[Byte])
 
@@ -53,11 +54,14 @@ case class OptionalData(
     floatField: Option[Float],
     shortField: Option[Short],
     byteField: Option[Byte],
-    booleanField: Option[Boolean])
+    booleanField: Option[Boolean],
+    structField: Option[PrimitiveData])
 
 case class ComplexData(
     arrayField: Seq[Int],
-    mapField: Map[Int, String],
+    arrayFieldContainsNull: Seq[java.lang.Integer],
+    mapField: Map[Int, Long],
+    mapFieldValueContainsNull: Map[Int, java.lang.Long],
     structField: PrimitiveData)
 
 case class GenericData[A](
@@ -93,12 +97,13 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
         StructField("decimalField", DecimalType, nullable = true),
+        StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
       nullable = true))
   }
 
-  test("optinal data") {
+  test("optional data") {
     val schema = schemaFor[OptionalData]
     assert(schema === Schema(
       StructType(Seq(
@@ -108,7 +113,8 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("floatField", FloatType, nullable = true),
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
-        StructField("booleanField", BooleanType, nullable = true))),
+        StructField("booleanField", BooleanType, nullable = true),
+        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
       nullable = true))
   }
 
@@ -116,8 +122,22 @@ class ScalaReflectionSuite extends FunSuite {
     val schema = schemaFor[ComplexData]
     assert(schema === Schema(
       StructType(Seq(
-        StructField("arrayField", ArrayType(IntegerType), nullable = true),
-        StructField("mapField", MapType(IntegerType, StringType), nullable = true),
+        StructField(
+          "arrayField",
+          ArrayType(IntegerType, containsNull = false),
+          nullable = true),
+        StructField(
+          "arrayFieldContainsNull",
+          ArrayType(IntegerType, containsNull = true),
+          nullable = true),
+        StructField(
+          "mapField",
+          MapType(IntegerType, LongType, valueContainsNull = false),
+          nullable = true),
+        StructField(
+          "mapFieldValueContainsNull",
+          MapType(IntegerType, LongType, valueContainsNull = true),
+          nullable = true),
         StructField(
           "structField",
           StructType(Seq(
@@ -181,8 +201,11 @@ class ScalaReflectionSuite extends FunSuite {
     // DecimalType
     assert(DecimalType === typeOfObject(BigDecimal("1.7976931348623157E318")))
 
+    // DateType
+    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
+
     // TimestampType
-    assert(TimestampType === typeOfObject(java.sql.Timestamp.valueOf("2014-07-25 10:26:00")))
+    assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))
 
     // NullType
     assert(NullType === typeOfObject(null))
@@ -211,5 +234,18 @@ class ScalaReflectionSuite extends FunSuite {
 
     assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
     assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
+  }
+
+  test("convert PrimitiveData to catalyst") {
+    val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
+    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    assert(convertToCatalyst(data) === convertedData)
+  }
+
+  test("convert Option[Product] to catalyst") {
+    val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
+    val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true), Some(primitiveData))
+    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true, convertToCatalyst(primitiveData))
+    assert(convertToCatalyst(data) === convertedData)
   }
 }

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.api.python.PythonMLLibAPI
+import org.apache.spark.mllib.api.python.SerDe
 
 /**
  * Model representing the result of matrix factorization.
@@ -106,20 +106,4 @@ class MatrixFactorizationModel private[mllib] (
     }
     scored.top(num)(Ordering.by(_._2))
   }
-
-  /**
-   * :: DeveloperApi ::
-   * Predict the rating of many users for many products.
-   * This is a Java stub for python predictAll()
-   *
-   * @param usersProductsJRDD A JavaRDD with serialized tuples (user, product)
-   * @return JavaRDD of serialized Rating objects.
-   */
-  @DeveloperApi
-  def predict(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    val pythonAPI = new PythonMLLibAPI()
-    val usersProducts = usersProductsJRDD.rdd.map(xBytes => pythonAPI.unpackTuple(xBytes))
-    predict(usersProducts).map(rate => pythonAPI.serializeRating(rate))
-  }
-
 }
