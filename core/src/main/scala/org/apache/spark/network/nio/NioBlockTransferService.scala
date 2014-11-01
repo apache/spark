@@ -18,6 +18,7 @@
 package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
+import java.io.IOException
 
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
@@ -25,6 +26,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 
+import scala.collection.mutable.HashMap
 import scala.concurrent.Future
 
 
@@ -38,6 +40,10 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   private var cm: ConnectionManager = _
 
   private var blockDataManager: BlockDataManager = _
+
+  private val blockFailedCounts = new HashMap[Seq[String], Int]
+
+  val maxRetryNum = conf.getInt("spark.shuffle.fetch.maxRetryNumber", 3)
 
   /**
    * Port number the service is listening on, available only after [[init]] is invoked.
@@ -96,6 +102,11 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     future.onSuccess { case message =>
       val bufferMessage = message.asInstanceOf[BufferMessage]
       val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
+      blockFailedCounts.synchronized {
+        if(blockFailedCounts.contains(blockIds)){
+          blockFailedCounts -= blockIds
+        }
+      }
 
       // SPARK-4064: In some cases(eg. Remote block was removed) blockMessageArray may be empty.
       if (blockMessageArray.isEmpty) {
@@ -121,8 +132,34 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     }(cm.futureExecContext)
 
     future.onFailure { case exception =>
-      blockIds.foreach { blockId =>
-        listener.onBlockFetchFailure(blockId, exception)
+      exception match {
+        case connectExcpt: IOException =>
+          logWarning("Failed to connect to " + hostName + ":" + port);
+          var isRetry:Boolean = false
+          var failedCount:Int = 1
+          blockFailedCounts.synchronized {
+            if(blockFailedCounts.contains(blockIds)){
+              failedCount = blockFailedCounts(blockIds)
+              failedCount += 1
+            }
+            if(failedCount >= maxRetryNum){
+              isRetry = false
+            }else{
+              isRetry = true
+              blockFailedCounts += ((blockIds, failedCount))
+            }
+          }
+          if(isRetry){
+            fetchBlocks(hostName, port, blockIds, listener)
+          }else{
+            blockIds.foreach { blockId =>
+              listener.onBlockFetchFailure(blockId, connectExcpt)
+            }
+          }
+        case t: Throwable =>
+          blockIds.foreach { blockId =>
+            listener.onBlockFetchFailure(blockId, t)
+          }
       }
     }(cm.futureExecContext)
   }
