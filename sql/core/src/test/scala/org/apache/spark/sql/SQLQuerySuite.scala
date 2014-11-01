@@ -25,8 +25,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
-import org.apache.spark.sql.catalyst.util.MetadataBuilder
+
 import org.apache.spark.sql.test.TestSQLContext._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
