@@ -555,7 +555,7 @@ class JsonSuite extends QueryTest {
         |CREATE TEMPORARY TABLE jsonTableSQL
         |USING org.apache.spark.sql.json
         |OPTIONS (
-        |  fileName '$path'
+        |  path '$path'
         |)
       """.stripMargin)
 
