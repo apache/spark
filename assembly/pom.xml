@@ -146,10 +146,6 @@
                     <exclude>com/google/common/base/Present*</exclude>
                   </excludes>
                 </relocation>
-                <relocation>
-                  <pattern>org.apache.commons.math3</pattern>
-                  <shadedPattern>org.spark-project.commons.math3</shadedPattern>
-                </relocation>
               </relocations>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
