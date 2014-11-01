@@ -113,7 +113,7 @@ JAVA_VERSION=$("$RUNNER" -version 2>&1 | grep 'version' | sed 's/.* version "\(.
 if [ "$JAVA_VERSION" -ge 18 ]; then
   JAVA_OPTS="$OUR_JAVA_OPTS"
 else
-  JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
+  JAVA_OPTS="-Dscala.usejavacp=true -XX:MaxPermSize=128m $OUR_JAVA_OPTS"
 fi
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 
