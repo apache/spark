@@ -35,7 +35,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.{SparkTransportConf, NettyBlockTransferService}
-import org.apache.spark.network.shuffle.{ExecutorShuffleInfo, StandaloneShuffleClient}
+import org.apache.spark.network.shuffle.{ExecutorShuffleInfo, ExternalShuffleClient}
 import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
@@ -117,7 +117,7 @@ private[spark] class BlockManager(
   // standard BlockTranserService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
     val appId = conf.get("spark.app.id", "unknown-app-id")
-    new StandaloneShuffleClient(SparkTransportConf.fromSparkConf(conf), appId)
+    new ExternalShuffleClient(SparkTransportConf.fromSparkConf(conf), appId)
   } else {
     blockTransferService
   }
@@ -201,7 +201,7 @@ private[spark] class BlockManager(
     for (i <- 1 to MAX_ATTEMPTS) {
       try {
         // Synchronous and will throw an exception if we cannot connect.
-        shuffleClient.asInstanceOf[StandaloneShuffleClient].registerWithShuffleServer(
+        shuffleClient.asInstanceOf[ExternalShuffleClient].registerWithShuffleServer(
           shuffleServerId.host, shuffleServerId.port, shuffleServerId.executorId, shuffleConfig)
         return
       } catch {

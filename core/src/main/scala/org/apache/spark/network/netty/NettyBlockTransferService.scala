@@ -17,21 +17,17 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.network.shuffle.{OneForOneBlockFetcher, BlockFetchingListener, StandaloneShuffleMessages}
-
-import scala.concurrent.{Await, Future, Promise}
-import scala.concurrent.duration._
+import scala.concurrent.{Future, Promise}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.network._
-import StandaloneShuffleMessages.{RegisterExecutor}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientFactory}
 import org.apache.spark.network.netty.NettyMessages.{OpenBlocks, UploadBlock}
 import org.apache.spark.network.server._
-import org.apache.spark.network.util.{ConfigProvider, TransportConf}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.storage.{BlockId, BlockManagerId, StorageLevel}
+import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**

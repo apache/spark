@@ -24,7 +24,7 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.spark.network.shuffle.StandaloneShuffleMessages.*;
+import static org.apache.spark.network.shuffle.ExternalShuffleMessages.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -35,26 +35,27 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.JavaUtils;
 
 /**
- * RPC Handler for the standalone shuffle server.
+ * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
+ *
  * Handles registering executors and opening shuffle blocks from them. Shuffle blocks are registered
  * with the "one-for-one" strategy, meaning each Transport-layer Chunk is equivalent to one Spark-
  * level shuffle block.
  */
-public class StandaloneShuffleBlockHandler implements RpcHandler {
-  private final Logger logger = LoggerFactory.getLogger(StandaloneShuffleBlockHandler.class);
+public class ExternalShuffleBlockHandler implements RpcHandler {
+  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
-  private final StandaloneShuffleBlockManager blockManager;
+  private final ExternalShuffleBlockManager blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public StandaloneShuffleBlockHandler() {
-    this(new OneForOneStreamManager(), new StandaloneShuffleBlockManager());
+  public ExternalShuffleBlockHandler() {
+    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager());
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
-  StandaloneShuffleBlockHandler(
+  ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
-      StandaloneShuffleBlockManager blockManager) {
+      ExternalShuffleBlockManager blockManager) {
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }

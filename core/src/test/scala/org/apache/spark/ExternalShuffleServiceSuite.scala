@@ -25,21 +25,21 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
-import org.apache.spark.network.shuffle.{StandaloneShuffleBlockHandler, StandaloneShuffleClient}
+import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleClient}
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
  * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
- * set up in [[StandaloneShuffleBlockHandler]], such as changing the format of shuffle files or how
+ * set up in [[ExternalShuffleBlockHandler]], such as changing the format of shuffle files or how
  * we hash files into folders.
  */
 class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   var server: TransportServer = _
-  var rpcHandler: StandaloneShuffleBlockHandler = _
+  var rpcHandler: ExternalShuffleBlockHandler = _
 
   override def beforeAll() {
     val transportConf = SparkTransportConf.fromSparkConf(conf)
-    rpcHandler = new StandaloneShuffleBlockHandler()
+    rpcHandler = new ExternalShuffleBlockHandler()
     val transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()
 
@@ -56,7 +56,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   test("using external shuffle service") {
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.shuffleClient.getClass should equal(classOf[StandaloneShuffleClient])
+    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
 
     val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
 

@@ -22,8 +22,8 @@ import java.util.Arrays;
 
 import com.google.common.base.Objects;
 
-/** Messages handled by the {@link StandaloneShuffleBlockHandler}. */
-public class StandaloneShuffleMessages {
+/** Messages handled by the {@link ExternalShuffleBlockHandler}. */
+public class ExternalShuffleMessages {
 
   /** Request to read a set of shuffle blocks. Returns [[ShuffleStreamHandle]]. */
   public static class OpenShuffleBlocks implements Serializable {
@@ -63,7 +63,7 @@ public class StandaloneShuffleMessages {
     }
   }
 
-  /** Initial registration message between an executor and its local standalone shuffle server. */
+  /** Initial registration message between an executor and its local shuffle server. */
   public static class RegisterExecutor implements Serializable {
     public final String appId;
     public final String execId;

@@ -28,7 +28,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-public class StandaloneShuffleBlockManagerSuite {
+public class ExternalShuffleBlockManagerSuite {
   static String sortBlock0 = "Hello!";
   static String sortBlock1 = "World!";
 
@@ -56,7 +56,7 @@ public class StandaloneShuffleBlockManagerSuite {
 
   @Test
   public void testBadRequests() {
-    StandaloneShuffleBlockManager manager = new StandaloneShuffleBlockManager();
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager();
     // Unregistered executor
     try {
       manager.getBlockData("app0", "exec1", "shuffle_1_1_0");
@@ -87,7 +87,7 @@ public class StandaloneShuffleBlockManagerSuite {
 
   @Test
   public void testSortShuffleBlocks() throws IOException {
-    StandaloneShuffleBlockManager manager = new StandaloneShuffleBlockManager();
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager();
     manager.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
@@ -106,7 +106,7 @@ public class StandaloneShuffleBlockManagerSuite {
 
   @Test
   public void testHashShuffleBlocks() throws IOException {
-    StandaloneShuffleBlockManager manager = new StandaloneShuffleBlockManager();
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager();
     manager.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
 

@@ -24,17 +24,23 @@ import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.NoOpRpcHandler;
-import org.apache.spark.network.shuffle.StandaloneShuffleMessages.RegisterExecutor;
+import org.apache.spark.network.shuffle.ExternalShuffleMessages.RegisterExecutor;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
-public class StandaloneShuffleClient implements ShuffleClient {
-  private final Logger logger = LoggerFactory.getLogger(StandaloneShuffleClient.class);
+/**
+ * Client for reading shuffle blocks which points to an external (outside of executor) server.
+ * This is instead of reading shuffle blocks directly from other executors (via
+ * BlockTransferService), which has the downside of losing the shuffle data if we lose the
+ * executors.
+ */
+public class ExternalShuffleClient implements ShuffleClient {
+  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
 
   private final TransportClientFactory clientFactory;
   private final String appId;
 
-  public StandaloneShuffleClient(TransportConf conf, String appId) {
+  public ExternalShuffleClient(TransportConf conf, String appId) {
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
     this.clientFactory = context.createClientFactory();
     this.appId = appId;
@@ -47,11 +53,11 @@ public class StandaloneShuffleClient implements ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
-    logger.debug("Standalone shuffle fetch from {}:{} (executor id {})", host, port, execId);
+    logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
       new OneForOneBlockFetcher(client, blockIds, listener)
-        .start(new StandaloneShuffleMessages.OpenShuffleBlocks(appId, execId, blockIds));
+        .start(new ExternalShuffleMessages.OpenShuffleBlocks(appId, execId, blockIds));
     } catch (Exception e) {
       logger.error("Exception while beginning fetchBlocks", e);
       for (String blockId : blockIds) {
@@ -61,11 +67,11 @@ public class StandaloneShuffleClient implements ShuffleClient {
   }
 
   /**
-   * Registers this executor with a standalone shuffle server. This registration is required to
+   * Registers this executor with an external shuffle server. This registration is required to
    * inform the shuffle server about where and how we store our shuffle files.
    *
-   * @param host Host of standalone shuffle server.
-   * @param port Port of standalone shuffle server.
+   * @param host Host of shuffle server.
+   * @param port Port of shuffle server.
    * @param execId This Executor's id.
    * @param executorInfo Contains all info necessary for the service to find our shuffle files.
    */
@@ -77,6 +83,6 @@ public class StandaloneShuffleClient implements ShuffleClient {
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerExecutorMessage =
       JavaUtils.serialize(new RegisterExecutor(appId, execId, executorInfo));
-    client.sendRpcSync(registerExecutorMessage, 3000);
+    client.sendRpcSync(registerExecutorMessage, 5000 /* timeoutMs */);
   }
 }

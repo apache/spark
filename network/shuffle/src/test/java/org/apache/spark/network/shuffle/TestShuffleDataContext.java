@@ -27,7 +27,7 @@ import com.google.common.io.Files;
 
 /**
  * Manages some sort- and hash-based shuffle data, including the creation
- * and cleanup of directories that can be read by the StandaloneShuffleBlockManager.
+ * and cleanup of directories that can be read by the {@link ExternalShuffleBlockManager}.
  */
 public class TestShuffleDataContext {
   private final String[] localDirs;
@@ -59,9 +59,9 @@ public class TestShuffleDataContext {
     String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
 
     OutputStream dataStream = new FileOutputStream(
-      StandaloneShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+      ExternalShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
     DataOutputStream indexStream = new DataOutputStream(new FileOutputStream(
-      StandaloneShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+      ExternalShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
 
     long offset = 0;
     indexStream.writeLong(offset);
@@ -80,7 +80,7 @@ public class TestShuffleDataContext {
     for (int i = 0; i < blocks.length; i ++) {
       String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + i;
       Files.write(blocks[i],
-        StandaloneShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId));
+        ExternalShuffleBlockManager.getFile(localDirs, subDirsPerLocalDir, blockId));
     }
   }
 

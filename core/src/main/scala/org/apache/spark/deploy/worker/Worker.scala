@@ -43,7 +43,7 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 // TODO: Remove me before merge!
 import org.apache.spark.network.util.SystemPropertyConfigProvider
 import org.apache.spark.network.TransportContext
-import org.apache.spark.network.shuffle.StandaloneShuffleBlockHandler
+import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
 
 /**
@@ -440,7 +440,7 @@ private[spark] object Worker extends Logging {
     scala.util.Try {
       val port = conf.getInt("spark.shuffle.service.port", 7337)
       val transportConf = new TransportConf(new SystemPropertyConfigProvider())
-      val rpcHandler = new StandaloneShuffleBlockHandler()
+      val rpcHandler = new ExternalShuffleBlockHandler()
       val transportContext = new TransportContext(transportConf, rpcHandler)
       transportContext.createServer(port)
     }

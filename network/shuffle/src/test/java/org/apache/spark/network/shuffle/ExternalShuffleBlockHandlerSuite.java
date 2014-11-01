@@ -24,8 +24,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
-import static org.apache.spark.network.shuffle.StandaloneShuffleMessages.OpenShuffleBlocks;
-import static org.apache.spark.network.shuffle.StandaloneShuffleMessages.RegisterExecutor;
+import static org.apache.spark.network.shuffle.ExternalShuffleMessages.OpenShuffleBlocks;
+import static org.apache.spark.network.shuffle.ExternalShuffleMessages.RegisterExecutor;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
@@ -38,18 +38,18 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.util.JavaUtils;
 
-public class StandaloneShuffleBlockHandlerSuite {
+public class ExternalShuffleBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
 
   OneForOneStreamManager streamManager;
-  StandaloneShuffleBlockManager blockManager;
+  ExternalShuffleBlockManager blockManager;
   RpcHandler handler;
 
   @Before
   public void beforeEach() {
     streamManager = mock(OneForOneStreamManager.class);
-    blockManager = mock(StandaloneShuffleBlockManager.class);
-    handler = new StandaloneShuffleBlockHandler(streamManager, blockManager);
+    blockManager = mock(ExternalShuffleBlockManager.class);
+    handler = new ExternalShuffleBlockHandler(streamManager, blockManager);
   }
 
   @Test

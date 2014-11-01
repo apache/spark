@@ -45,7 +45,7 @@ import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
-public class StandaloneShuffleIntegrationSuite {
+public class ExternalShuffleIntegrationSuite {
 
   static String APP_ID = "app-id";
   static String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
@@ -56,7 +56,7 @@ public class StandaloneShuffleIntegrationSuite {
   // Executor 1 is hash-based
   static TestShuffleDataContext dataContext1;
 
-  static StandaloneShuffleBlockHandler handler;
+  static ExternalShuffleBlockHandler handler;
   static TransportServer server;
   static TransportConf conf;
 
@@ -91,7 +91,7 @@ public class StandaloneShuffleIntegrationSuite {
     dataContext1.insertHashShuffleData(1, 0, exec1Blocks);
 
     conf = new TransportConf(new SystemPropertyConfigProvider());
-    handler = new StandaloneShuffleBlockHandler();
+    handler = new ExternalShuffleBlockHandler();
     TransportContext transportContext = new TransportContext(conf, handler);
     server = transportContext.createServer();
   }
@@ -135,7 +135,7 @@ public class StandaloneShuffleIntegrationSuite {
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    StandaloneShuffleClient client = new StandaloneShuffleClient(conf, APP_ID);
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, APP_ID);
     client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
       new BlockFetchingListener() {
         @Override
@@ -265,7 +265,7 @@ public class StandaloneShuffleIntegrationSuite {
   }
 
   private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo) {
-    StandaloneShuffleClient client = new StandaloneShuffleClient(conf, APP_ID);
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);
   }

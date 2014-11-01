@@ -32,16 +32,16 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.util.JavaUtils;
 
 /**
- * Manages converting shuffle BlockIds into physical segments of local files. Each Executor must
- * register its own configuration about where it stores its files (local dirs) and how (shuffle
- * manager). The logic for retrieval of individual files is replicated from Spark's
- * FileShuffleBlockManager and IndexShuffleBlockManager.
+ * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
+ * of Executors. Each Executor must register its own configuration about where it stores its files
+ * (local dirs) and how (shuffle manager). The logic for retrieval of individual files is replicated
+ * from Spark's FileShuffleBlockManager and IndexShuffleBlockManager.
  *
  * Executors with shuffle file consolidation are not currently supported, as the index is stored in
  * the Executor's memory, unlike the IndexShuffleBlockManager.
  */
-public class StandaloneShuffleBlockManager {
-  private final Logger logger = LoggerFactory.getLogger(StandaloneShuffleBlockManager.class);
+public class ExternalShuffleBlockManager {
+  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
 
   // Map from "appId-execId" to the executor's configuration.
   private final ConcurrentHashMap<String, ExecutorShuffleInfo> executors =

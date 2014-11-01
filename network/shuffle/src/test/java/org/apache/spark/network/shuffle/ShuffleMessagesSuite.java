@@ -23,7 +23,7 @@ import static org.junit.Assert.*;
 
 import org.apache.spark.network.util.JavaUtils;
 
-import static org.apache.spark.network.shuffle.StandaloneShuffleMessages.*;
+import static org.apache.spark.network.shuffle.ExternalShuffleMessages.*;
 
 public class ShuffleMessagesSuite {
   @Test
