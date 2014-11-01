@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.sources
 
-abstract sealed class Filter
+abstract class Filter
 
 case class EqualTo(attribute: String, value: Any) extends Filter
+case class GreaterThan(attribute: String, value: Any) extends Filter
+case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter
+case class LessThan(attribute: String, value: Any) extends Filter
+case class LessThanOrEqual(attribute: String, value: Any) extends Filter

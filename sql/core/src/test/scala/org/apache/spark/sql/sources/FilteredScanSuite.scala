@@ -45,11 +45,17 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
 
     FiltersPushed.list = filters
 
-    val filter = filters.collect {
+    val filterFunctions = filters.collect {
       case EqualTo("a", v) => (a: Int) => a == v
-    }.headOption.getOrElse((_: Int) => true)
+      case LessThan("a", v: Int) => (a: Int) => a < v
+      case LessThanOrEqual("a", v: Int) => (a: Int) => a <= v
+      case GreaterThan("a", v: Int) => (a: Int) => a > v
+      case GreaterThanOrEqual("a", v: Int) => (a: Int) => a >= v
+    }
 
-    sqlContext.sparkContext.parallelize(from to to).filter(filter).map(i =>
+    def eval(a: Int) = !filterFunctions.map(_(a)).contains(false)
+
+    sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
@@ -128,8 +134,23 @@ class FilteredScanSuite extends DataSourceTest {
   testPushDown("SELECT b FROM oneToTenFiltered WHERE A = 1", 1)
   testPushDown("SELECT a, b FROM oneToTenFiltered WHERE A = 1", 1)
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 1", 1)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 = a", 1)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1", 9)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a >= 2", 9)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 < a", 9)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 2 <= a", 9)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 1 > a", 0)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE 2 >= a", 2)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 1", 0)
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a <= 2", 2)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1 AND a < 10", 8)
+
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0)
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 5", 10)
   testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10)
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
