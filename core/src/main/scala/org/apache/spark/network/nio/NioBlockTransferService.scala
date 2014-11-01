@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
@@ -79,13 +80,14 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   }
 
   override def fetchBlocks(
-      hostName: String,
+      host: String,
       port: Int,
-      blockIds: Seq[String],
+      execId: String,
+      blockIds: Array[String],
       listener: BlockFetchingListener): Unit = {
     checkInit()
 
-    val cmId = new ConnectionManagerId(hostName, port)
+    val cmId = new ConnectionManagerId(host, port)
     val blockMessageArray = new BlockMessageArray(blockIds.map { blockId =>
       BlockMessage.fromGetBlock(GetBlock(BlockId(blockId)))
     })

@@ -74,7 +74,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
 
     val blockFetcherItr = new ShuffleBlockFetcherIterator(
       context,
-      SparkEnv.get.blockTransferService,
+      SparkEnv.get.blockManager.shuffleClient,
       blockManager,
       blocksByAddress,
       serializer,

@@ -49,11 +49,11 @@ public class TransportServer implements Closeable {
   private ChannelFuture channelFuture;
   private int port = -1;
 
-  public TransportServer(TransportContext context) {
+  public TransportServer(TransportContext context, int portToBind) {
     this.context = context;
     this.conf = context.getConf();
 
-    init();
+    init(portToBind);
   }
 
   public int getPort() {
@@ -63,7 +63,7 @@ public class TransportServer implements Closeable {
     return port;
   }
 
-  private void init() {
+  private void init(int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
@@ -95,7 +95,7 @@ public class TransportServer implements Closeable {
       }
     });
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(conf.serverPort()));
+    channelFuture = bootstrap.bind(new InetSocketAddress(portToBind));
     channelFuture.syncUninterruptibly();
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
