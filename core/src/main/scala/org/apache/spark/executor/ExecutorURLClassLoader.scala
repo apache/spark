@@ -35,37 +35,27 @@ private[spark] trait MutableURLClassLoader extends ClassLoader {
 }
 
 private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends MutableURLClassLoader {
-
-  private object userClassLoader extends URLClassLoader(urls, null){
-    override def addURL(url: URL) {
-      super.addURL(url)
-    }
-    override def findClass(name: String): Class[_] = {
-      super.findClass(name)
-    }
-  }
+  extends URLClassLoader(urls, null) with MutableURLClassLoader {
 
   private val parentClassLoader = new ParentClassLoader(parent)
 
-  override def findClass(name: String): Class[_] = {
+  override def loadClass(name: String, resolve: Boolean): Class[_] = {
     try {
-      userClassLoader.findClass(name)
+      super.loadClass(name, resolve)
     } catch {
-      case e: ClassNotFoundException => {
+      case e: ClassNotFoundException =>
         parentClassLoader.loadClass(name)
-      }
     }
   }
 
   override def getResource(name: String): URL = {
-    val url = userClassLoader.findResource(name)
+    val url = super.findResource(name)
     val res = if (url != null) url else parentClassLoader.getResource(name)
     res
   }
 
   override def getResources(name: String): Enumeration[URL] = {
-    val urls = userClassLoader.findResources(name)
+    val urls = super.findResources(name)
     val res =
       if (urls != null && urls.hasMoreElements()) {
         urls
@@ -75,13 +65,10 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
     res
   }
 
-  def addURL(url: URL) {
-    userClassLoader.addURL(url)
+  override def addURL(url: URL) {
+    super.addURL(url)
   }
 
-  def getURLs() = {
-    userClassLoader.getURLs()
-  }
 }
 
 private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
