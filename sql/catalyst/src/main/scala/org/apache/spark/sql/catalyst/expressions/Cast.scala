@@ -274,7 +274,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   private[this] def castToDecimal(target: DecimalType): Any => Any = child.dataType match {
-    // TODO: handle casts of null to decimal?
     case StringType =>
       buildCast[String](_, s => try changePrecision(Decimal(s.toDouble), target) catch {
         case _: NumberFormatException => null

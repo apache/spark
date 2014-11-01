@@ -205,8 +205,11 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
-        case DecimalType.Fixed(precision, scale) if precision <= 18 =>
-          writeDecimal(value.asInstanceOf[Decimal], precision)
+        case d: DecimalType =>
+          if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+            sys.error(s"Unsupported datatype $d, cannot write to consumer")
+          }
+          writeDecimal(value.asInstanceOf[Decimal], d.precisionInfo.get.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -346,8 +349,11 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case DoubleType => writer.addDouble(record.getDouble(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
-      case DecimalType.Fixed(precision, scale) if precision <= 18 =>
-        writeDecimal(record(index).asInstanceOf[Decimal], precision)
+      case d: DecimalType =>
+        if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+          sys.error(s"Unsupported datatype $d, cannot write to consumer")
+        }
+        writeDecimal(record(index).asInstanceOf[Decimal], d.precisionInfo.get.precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }
