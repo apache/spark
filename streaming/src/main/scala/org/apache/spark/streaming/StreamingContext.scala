@@ -491,17 +491,16 @@ class StreamingContext private[streaming] (
     // or context is stopped before starting
     if (state == Initialized) {
       logWarning("StreamingContext has not been started yet")
-      return
-    }
-    if (state == Stopped) {
+    } else if (state == Stopped) {
       logWarning("StreamingContext has already been stopped")
-      return
-    } // no need to throw an exception as its okay to stop twice
-    scheduler.stop(stopGracefully)
-    logInfo("StreamingContext stopped successfully")
-    waiter.notifyStop()
+    } else {
+      scheduler.stop(stopGracefully)
+      logInfo("StreamingContext stopped successfully")
+      waiter.notifyStop()
+      state = Stopped
+    }
+    // Always stop Spark if requested, as it's started before any state change.
     if (stopSparkContext) sc.stop()
-    state = Stopped
   }
 }
 
