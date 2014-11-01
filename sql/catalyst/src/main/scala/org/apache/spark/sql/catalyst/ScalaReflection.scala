@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -27,13 +27,16 @@ import org.apache.spark.sql.catalyst.types._
  * Provides experimental support for generating catalyst schemas for scala objects.
  */
 object ScalaReflection {
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
   import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
   /** Converts Scala objects to catalyst rows / types */
   def convertToCatalyst(a: Any): Any = a match {
-    case o: Option[_] => o.orNull
+    case o: Option[_] => o.map(convertToCatalyst).orNull
     case s: Seq[_] => s.map(convertToCatalyst)
     case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
@@ -43,7 +46,7 @@ object ScalaReflection {
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -77,8 +80,9 @@ object ScalaReflection {
       val Schema(valueDataType, valueNullable) = schemaFor(valueType)
       Schema(MapType(schemaFor(keyType).dataType,
         valueDataType, valueContainsNull = valueNullable), nullable = true)
-    case t if t <:< typeOf[String]            => Schema(StringType, nullable = true)
+    case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
+    case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
     case t if t <:< typeOf[BigDecimal] => Schema(DecimalType, nullable = true)
     case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
     case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
@@ -108,6 +112,7 @@ object ScalaReflection {
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
     case obj: DecimalType.JvmType => DecimalType
+    case obj: DateType.JvmType => DateType
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a

@@ -68,15 +68,23 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   }
 
   /**
-   * Print full model.
+   * Print a summary of the model.
    */
   override def toString: String = algo match {
     case Classification =>
-      s"DecisionTreeModel classifier\n" + topNode.subtreeToString(2)
+      s"DecisionTreeModel classifier of depth $depth with $numNodes nodes"
     case Regression =>
-      s"DecisionTreeModel regressor\n" + topNode.subtreeToString(2)
+      s"DecisionTreeModel regressor of depth $depth with $numNodes nodes"
     case _ => throw new IllegalArgumentException(
       s"DecisionTreeModel given unknown algo parameter: $algo.")
+  }
+
+  /**
+   * Print the full model to a string.
+   */
+  def toDebugString: String = {
+    val header = toString + "\n"
+    header + topNode.subtreeToString(2)
   }
 
 }

@@ -57,7 +57,7 @@
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
-      <version>0.9</version>
+      <version>0.10</version>
       <exclusions>
         <!-- This is included as a compile-scoped dependency by jtransforms, which is
              a dependency of breeze. -->
@@ -70,6 +70,10 @@
           <artifactId>commons-math3</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-math3</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>

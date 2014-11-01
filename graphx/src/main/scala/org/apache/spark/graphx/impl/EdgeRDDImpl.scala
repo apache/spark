@@ -81,6 +81,11 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
+  /** The number of edges in the RDD. */
+  override def count(): Long = {
+    partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
+  }
+
   override def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDD[ED2, VD] =
     mapEdgePartitions((pid, part) => part.map(f))
 

@@ -24,13 +24,14 @@ import org.apache.hadoop.util.Progressable
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
 import org.apache.spark.{Partitioner, SharedSparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
+
 import org.scalatest.FunSuite
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
@@ -298,6 +299,21 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
+  test("fullOuterJoin") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val joined = rdd1.fullOuterJoin(rdd2).collect()
+    assert(joined.size === 6)
+    assert(joined.toSet === Set(
+      (1, (Some(1), Some('x'))),
+      (1, (Some(2), Some('x'))),
+      (2, (Some(1), Some('y'))),
+      (2, (Some(1), Some('z'))),
+      (3, (Some(1), None)),
+      (4, (None, Some('w')))
+    ))
+  }
+
   test("join with no matches") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((4, 'x'), (5, 'y'), (5, 'z'), (6, 'w')))
@@ -366,14 +382,16 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("zero-partition RDD") {
-    val emptyDir = Files.createTempDir()
-    emptyDir.deleteOnExit()
-    val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.partitions.size == 0)
-    assert(file.collect().toList === Nil)
-    // Test that a shuffle on the file works, because this used to be a bug
-    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    emptyDir.delete()
+    val emptyDir = Utils.createTempDir()
+    try {
+      val file = sc.textFile(emptyDir.getAbsolutePath)
+      assert(file.partitions.isEmpty)
+      assert(file.collect().toList === Nil)
+      // Test that a shuffle on the file works, because this used to be a bug
+      assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    } finally {
+      Utils.deleteRecursively(emptyDir)
+    }
   }
 
   test("keys and values") {

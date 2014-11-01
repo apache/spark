@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types.util
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField}
+import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField, MetadataBuilder => JMetaDataBuilder}
 
 import scala.collection.JavaConverters._
 
@@ -31,7 +31,8 @@ protected[sql] object DataTypeConversions {
     JDataType.createStructField(
       scalaStructField.name,
       asJavaDataType(scalaStructField.dataType),
-      scalaStructField.nullable)
+      scalaStructField.nullable,
+      (new JMetaDataBuilder).withMetadata(scalaStructField.metadata).build())
   }
 
   /**
@@ -41,6 +42,7 @@ protected[sql] object DataTypeConversions {
     case StringType => JDataType.StringType
     case BinaryType => JDataType.BinaryType
     case BooleanType => JDataType.BooleanType
+    case DateType => JDataType.DateType
     case TimestampType => JDataType.TimestampType
     case DecimalType => JDataType.DecimalType
     case DoubleType => JDataType.DoubleType
@@ -67,7 +69,8 @@ protected[sql] object DataTypeConversions {
     StructField(
       javaStructField.getName,
       asScalaDataType(javaStructField.getDataType),
-      javaStructField.isNullable)
+      javaStructField.isNullable,
+      javaStructField.getMetadata)
   }
 
   /**
@@ -80,6 +83,8 @@ protected[sql] object DataTypeConversions {
       BinaryType
     case booleanType: org.apache.spark.sql.api.java.BooleanType =>
       BooleanType
+    case dateType: org.apache.spark.sql.api.java.DateType =>
+      DateType
     case timestampType: org.apache.spark.sql.api.java.TimestampType =>
       TimestampType
     case decimalType: org.apache.spark.sql.api.java.DecimalType =>
@@ -106,5 +111,17 @@ protected[sql] object DataTypeConversions {
         mapType.isValueContainsNull)
     case structType: org.apache.spark.sql.api.java.StructType =>
       StructType(structType.getFields.map(asScalaStructField))
+  }
+
+  /** Converts Java objects to catalyst rows / types */
+  def convertJavaToCatalyst(a: Any): Any = a match {
+    case d: java.math.BigDecimal => BigDecimal(d)
+    case other => other
+  }
+
+  /** Converts Java objects to catalyst rows / types */
+  def convertCatalystToJava(a: Any): Any = a match {
+    case d: scala.math.BigDecimal => d.underlying()
+    case other => other
   }
 }

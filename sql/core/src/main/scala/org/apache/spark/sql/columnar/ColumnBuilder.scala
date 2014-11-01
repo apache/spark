@@ -107,6 +107,8 @@ private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColum
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
+private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
+
 private[sql] class TimestampColumnBuilder
   extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
 
@@ -151,6 +153,7 @@ private[sql] object ColumnBuilder {
       case STRING.typeId    => new StringColumnBuilder
       case BINARY.typeId    => new BinaryColumnBuilder
       case GENERIC.typeId   => new GenericColumnBuilder
+      case DATE.typeId      => new DateColumnBuilder
       case TIMESTAMP.typeId => new TimestampColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 

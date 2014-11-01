@@ -1,1 +1,1 @@
-source ../data/files/source.txt;
+source ../../data/files/source.txt;

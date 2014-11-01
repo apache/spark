@@ -18,11 +18,10 @@
 import numpy as np
 from numpy import array
 
-from pyspark import SparkContext
+from pyspark.mllib.common import callMLlibFunc, _to_java_object_rdd
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 
-__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel'
+__all__ = ['LabeledPoint', 'LinearModel', 'LinearRegressionModel', 'RidgeRegressionModel',
            'LinearRegressionWithSGD', 'LassoWithSGD', 'RidgeRegressionWithSGD']
 
 
@@ -31,8 +30,8 @@ class LabeledPoint(object):
     """
     The features and labels of a data point.
 
-    @param label: Label for this data point.
-    @param features: Vector of features for this point (NumPy array, list,
+    :param label: Label for this data point.
+    :param features: Vector of features for this point (NumPy array, list,
         pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix)
     """
 
@@ -65,6 +64,9 @@ class LinearModel(object):
     @property
     def intercept(self):
         return self._intercept
+
+    def __repr__(self):
+        return "(weights=%s, intercept=%s)" % (self._coeff, self._intercept)
 
 
 class LinearRegressionModelBase(LinearModel):
@@ -121,17 +123,11 @@ class LinearRegressionModel(LinearRegressionModelBase):
 # train_func should take two parameters, namely data and initial_weights, and
 # return the result of a call to the appropriate JVM stub.
 # _regression_train_wrapper is responsible for setup and error checking.
-def _regression_train_wrapper(sc, train_func, modelClass, data, initial_weights):
+def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
     initial_weights = initial_weights or [0.0] * len(data.first().features)
-    ser = PickleSerializer()
-    initial_bytes = bytearray(ser.dumps(_convert_to_vector(initial_weights)))
-    # use AutoBatchedSerializer before cache to reduce the memory
-    # overhead in JVM
-    cached = data._reserialize(AutoBatchedSerializer(ser)).cache()
-    ans = train_func(cached._to_java_object_rdd(), initial_bytes)
-    assert len(ans) == 2, "JVM call result had unexpected length"
-    weights = ser.loads(str(ans[0]))
-    return modelClass(weights, ans[1])
+    weights, intercept = train_func(_to_java_object_rdd(data, cache=True),
+                                    _convert_to_vector(initial_weights))
+    return modelClass(weights, intercept)
 
 
 class LinearRegressionWithSGD(object):
@@ -142,33 +138,35 @@ class LinearRegressionWithSGD(object):
         """
         Train a linear regression model on the given data.
 
-        @param data:              The training data.
-        @param iterations:        The number of iterations (default: 100).
-        @param step:              The step parameter used in SGD
+        :param data:              The training data.
+        :param iterations:        The number of iterations (default: 100).
+        :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        @param miniBatchFraction: Fraction of data to be used for each SGD
+        :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
-        @param initialWeights:    The initial weights (default: None).
-        @param regParam:          The regularizer parameter (default: 1.0).
-        @param regType:           The type of regularizer used for training
+        :param initialWeights:    The initial weights (default: None).
+        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regType:           The type of regularizer used for training
                                   our model.
-                                  Allowed values: "l1" for using L1Updater,
-                                                  "l2" for using
-                                                       SquaredL2Updater,
-                                                  "none" for no regularizer.
-                                  (default: "none")
+
+                                  :Allowed values:
+                                     - "l1" for using L1Updater,
+                                     - "l2" for using SquaredL2Updater,
+                                     - "none" for no regularizer.
+
+                                     (default: "none")
+
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
         """
-        sc = data.context
+        def train(rdd, i):
+            return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, iterations, step,
+                                 miniBatchFraction, i, regParam, regType, intercept)
 
-        def train(jrdd, i):
-            return sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                jrdd, iterations, step, miniBatchFraction, i, regParam, regType, intercept)
-
-        return _regression_train_wrapper(sc, train, LinearRegressionModel, data, initialWeights)
+        return _regression_train_wrapper(train, LinearRegressionModel,
+                                         data, initialWeights)
 
 
 class LassoModel(LinearRegressionModelBase):
@@ -210,12 +208,10 @@ class LassoWithSGD(object):
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
         """Train a Lasso regression model on the given data."""
-        sc = data.context
-
-        def train(jrdd, i):
-            return sc._jvm.PythonMLLibAPI().trainLassoModelWithSGD(
-                jrdd, iterations, step, regParam, miniBatchFraction, i)
-        return _regression_train_wrapper(sc, train, LassoModel, data, initialWeights)
+        def train(rdd, i):
+            return callMLlibFunc("trainLassoModelWithSGD", rdd, iterations, step, regParam,
+                                 miniBatchFraction, i)
+        return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
 
 class RidgeRegressionModel(LinearRegressionModelBase):
@@ -257,17 +253,17 @@ class RidgeRegressionWithSGD(object):
     def train(cls, data, iterations=100, step=1.0, regParam=1.0,
               miniBatchFraction=1.0, initialWeights=None):
         """Train a ridge regression model on the given data."""
-        sc = data.context
+        def train(rdd, i):
+            return callMLlibFunc("trainRidgeModelWithSGD", rdd, iterations, step, regParam,
+                                 miniBatchFraction, i)
 
-        def train(jrdd, i):
-            return sc._jvm.PythonMLLibAPI().trainRidgeModelWithSGD(
-                jrdd, iterations, step, regParam, miniBatchFraction, i)
-
-        return _regression_train_wrapper(sc, train, RidgeRegressionModel, data, initialWeights)
+        return _regression_train_wrapper(train, RidgeRegressionModel,
+                                         data, initialWeights)
 
 
 def _test():
     import doctest
+    from pyspark import SparkContext
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
