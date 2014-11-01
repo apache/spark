@@ -3,8 +3,12 @@ import logging
 from time import sleep
 
 from airflow import settings
-from airflow.models import BaseOperator, TaskInstance, State
-from airflow.hooks import MySqlHook, HiveHook
+from airflow.hooks import HiveHook
+from airflow.hooks import MySqlHook
+from airflow.models import BaseOperator
+from airflow.models import DatabaseConnection as DB
+from airflow.models import State
+from airflow.models import TaskInstance
 
 
 class BaseSensorOperator(BaseOperator):
@@ -13,6 +17,9 @@ class BaseSensorOperator(BaseOperator):
         super(BaseSensorOperator, self).__init__(*args, **kwargs)
         self.poke_interval = poke_interval
         self.timeout = timeout
+
+        # Since a sensor pokes in a loop, no need for higher level retries
+        self.retries = 0
 
     def poke(self):
         raise Exception('Override me.')
@@ -25,20 +32,30 @@ class BaseSensorOperator(BaseOperator):
                 raise Exception('Snap. Time is OUT.')
 
 
-class MySqlSensorOperator(BaseSensorOperator):
+class SqlSensor(BaseSensorOperator):
     """
-    Will fail if sql returns no row, or if the first cell in (0, '0', '')
+    Will keep trying until sql returns no row, or if the first cell
+    in (0, '0', '')
     """
     template_fields = ('sql',)
     __mapper_args__ = {
-        'polymorphic_identity': 'MySqlSensorOperator'
+        'polymorphic_identity': 'SqlSensor'
     }
 
-    def __init__(self, mysql_dbid, sql, *args, **kwargs):
-        super(MySqlSensorOperator, self).__init__(*args, **kwargs)
+    def __init__(self, db_id, sql, *args, **kwargs):
+
+        super(SqlSensor, self).__init__(*args, **kwargs)
+
         self.sql = sql
-        self.mysql_dbid = mysql_dbid
-        self.hook = MySqlHook(mysql_dbid=mysql_dbid)
+        self.db_id = db_id
+
+        session = settings.Session()
+        db = session.query(DB).filter(DB.db_id==db_id).all()
+        if not db:
+            raise Exception("db_id doesn't exist in the repository")
+        self.hook = db[0].get_hook()
+        session.commit()
+        session.close()
 
     def poke(self):
         logging.info('Poking: ' + self.sql)
@@ -59,7 +76,7 @@ class ExternalTaskSensor(BaseSensorOperator):
     """
     template_fields = ('execution_date',)
     __mapper_args__ = {
-        'polymorphic_identity': 'MySqlSensorOperator'
+        'polymorphic_identity': 'ExternalTaskSensor'
     }
 
     def __init__(self, external_dag_id, external_task_id, *args, **kwargs):
