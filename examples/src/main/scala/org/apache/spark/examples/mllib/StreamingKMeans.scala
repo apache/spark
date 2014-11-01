@@ -50,7 +50,6 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 object StreamingKMeans {
 
   def main(args: Array[String]) {
-
     if (args.length != 5) {
       System.err.println(
         "Usage: StreamingKMeans " +
@@ -67,14 +66,12 @@ object StreamingKMeans {
     val model = new StreamingKMeans()
       .setK(args(3).toInt)
       .setDecayFactor(1.0)
-      .setRandomCenters(args(4).toInt)
+      .setRandomCenters(args(4).toInt, 0.0)
 
     model.trainOn(trainingData)
     model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()
 
     ssc.start()
     ssc.awaitTermination()
-
   }
-
 }

@@ -17,21 +17,19 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.util.Random
-
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.random.XORShiftRandom
 
 class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
 
   override def maxWaitTimeMillis = 30000
 
   test("accuracy for single center and equivalence to grand average") {
-
     // set parameters
     val numBatches = 10
     val numPoints = 50
@@ -43,9 +41,9 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     val model = new StreamingKMeans()
       .setK(1)
       .setDecayFactor(1.0)
-      .setInitialCenters(Array(Vectors.dense(0.0, 0.0, 0.0, 0.0, 0.0)))
+      .setInitialCenters(Array(Vectors.dense(0.0, 0.0, 0.0, 0.0, 0.0)), Array(0.0))
 
-    // generate random data for kmeans
+    // generate random data for k-means
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
@@ -60,13 +58,12 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
 
     // estimated center from streaming should exactly match the arithmetic mean of all data points
     // because the decay factor is set to 1.0
-    val grandMean = input.flatten.map(x => x.toBreeze).reduce(_+_) / (numBatches * numPoints).toDouble
+    val grandMean =
+      input.flatten.map(x => x.toBreeze).reduce(_+_) / (numBatches * numPoints).toDouble
     assert(model.latestModel().clusterCenters(0) ~== Vectors.dense(grandMean.toArray) absTol 1E-5)
-
   }
 
   test("accuracy for two centers") {
-
     val numBatches = 10
     val numPoints = 5
     val k = 2
@@ -74,27 +71,66 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     val r = 0.1
 
     // create model with two clusters
-    val model = new StreamingKMeans()
+    val kMeans = new StreamingKMeans()
       .setK(2)
-      .setDecayFactor(1.0)
-      .setInitialCenters(Array(Vectors.dense(-0.1, 0.1, -0.2, -0.3, -0.1),
-                               Vectors.dense(0.1, -0.2, 0.0, 0.2, 0.1)))
+      .setHalfLife(2, "batches")
+      .setInitialCenters(
+        Array(Vectors.dense(-0.1, 0.1, -0.2, -0.3, -0.1),
+          Vectors.dense(0.1, -0.2, 0.0, 0.2, 0.1)),
+        Array(5.0, 5.0))
 
-    // generate random data for kmeans
+    // generate random data for k-means
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
     val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
-      model.trainOn(inputDStream)
+      kMeans.trainOn(inputDStream)
       inputDStream.count()
     })
     runStreams(ssc, numBatches, numBatches)
 
     // check that estimated centers are close to true centers
     // NOTE exact assignment depends on the initialization!
-    assert(centers(0) ~== model.latestModel().clusterCenters(0) absTol 1E-1)
-    assert(centers(1) ~== model.latestModel().clusterCenters(1) absTol 1E-1)
+    assert(centers(0) ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
+    assert(centers(1) ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
+  }
 
+  test("detecting dying clusters") {
+    val numBatches = 10
+    val numPoints = 5
+    val k = 1
+    val d = 1
+    val r = 1.0
+
+    // create model with two clusters
+    val kMeans = new StreamingKMeans()
+      .setK(2)
+      .setHalfLife(0.5, "points")
+      .setInitialCenters(
+        Array(Vectors.dense(0.0), Vectors.dense(1000.0)),
+        Array(1.0, 1.0))
+
+    // new data are all around the first cluster 0.0
+    val (input, _) =
+      StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42, Array(Vectors.dense(0.0)))
+
+    // setup and run the model training
+    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+      kMeans.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // check that estimated centers are close to true centers
+    // NOTE exact assignment depends on the initialization!
+    val model = kMeans.latestModel()
+    val c0 = model.clusterCenters(0)(0)
+    val c1 = model.clusterCenters(1)(0)
+
+    assert(c0 * c1 < 0.0, "should have one positive center and one negative center")
+    // 0.8 is the mean of half-normal distribution
+    assert(math.abs(c0) ~== 0.8 absTol 0.6)
+    assert(math.abs(c1) ~== 0.8 absTol 0.6)
   }
 
   def StreamingKMeansDataGenerator(
@@ -105,7 +141,7 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
       r: Double,
       seed: Int,
       initCenters: Array[Vector] = null): (IndexedSeq[IndexedSeq[Vector]], Array[Vector]) = {
-    val rand = new Random(seed)
+    val rand = new XORShiftRandom(seed)
     val centers = initCenters match {
       case null => Array.fill(k)(Vectors.dense(Array.fill(d)(rand.nextGaussian())))
       case _ => initCenters
@@ -118,6 +154,4 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     }
     (data, centers)
   }
-
-
 }
