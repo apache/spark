@@ -220,7 +220,7 @@ val numClusters = 2
 val model = new StreamingKMeans()
   .setK(numClusters)
   .setDecayFactor(1.0)
-  .setRandomWeights(numDimensions)
+  .setRandomCenters(numDimensions, 0.0)
 
 {% endhighlight %}
 

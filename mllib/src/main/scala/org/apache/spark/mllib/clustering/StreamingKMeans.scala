@@ -32,9 +32,9 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * :: DeveloperApi ::
  * StreamingKMeansModel extends MLlib's KMeansModel for streaming
- * algorithms, so it can keep track of the number of points assigned
- * to each cluster, and also update the model by doing a single iteration
- * of the standard k-means algorithm.
+ * algorithms, so it can keep track of a continuously updated weight
+ * associated with each cluster, and also update the model by
+ * doing a single iteration of the standard k-means algorithm.
  *
  * The update algorithm uses the "mini-batch" KMeans rule,
  * generalized to incorporate forgetfullness (i.e. decay).
