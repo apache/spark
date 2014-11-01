@@ -56,11 +56,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** Client on the same channel allowing us to talk back to the requester. */
   private final TransportClient reverseClient;
 
-  /** Returns each chunk part of a stream. */
-  private final StreamManager streamManager;
-
   /** Handles all RPC messages. */
   private final RpcHandler rpcHandler;
+
+  /** Returns each chunk part of a stream. */
+  private final StreamManager streamManager;
 
   /** List of all stream ids that have been read on this handler, used for cleanup. */
   private final Set<Long> streamIds;
@@ -68,12 +68,11 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   public TransportRequestHandler(
       Channel channel,
       TransportClient reverseClient,
-      StreamManager streamManager,
       RpcHandler rpcHandler) {
     this.channel = channel;
     this.reverseClient = reverseClient;
-    this.streamManager = streamManager;
     this.rpcHandler = rpcHandler;
+    this.streamManager = rpcHandler.getStreamManager();
     this.streamIds = Sets.newHashSet();
   }
 

@@ -17,8 +17,12 @@
 
 package org.apache.spark.network.util;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
@@ -34,5 +38,39 @@ public class JavaUtils {
     } catch (IOException e) {
       logger.error("IOException should not have been thrown.", e);
     }
+  }
+
+  // TODO: Make this configurable, do not use Java serialization!
+  public static <T> T deserialize(byte[] bytes) {
+    try {
+      ObjectInputStream is = new ObjectInputStream(new ByteArrayInputStream(bytes));
+      Object out = is.readObject();
+      is.close();
+      return (T) out;
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Could not deserialize object", e);
+    } catch (IOException e) {
+      throw new RuntimeException("Could not deserialize object", e);
+    }
+  }
+
+  // TODO: Make this configurable, do not use Java serialization!
+  public static byte[] serialize(Object object) {
+    try {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      ObjectOutputStream os = new ObjectOutputStream(baos);
+      os.writeObject(object);
+      os.close();
+      return baos.toByteArray();
+    } catch (IOException e) {
+      throw new RuntimeException("Could not serialize object", e);
+    }
+  }
+
+  /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). */
+  public static int nonNegativeHash(Object obj) {
+    if (obj == null) { return 0; }
+    int hash = obj.hashCode();
+    return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
   }
 }

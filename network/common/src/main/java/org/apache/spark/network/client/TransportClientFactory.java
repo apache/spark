@@ -78,15 +78,17 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) throws TimeoutException {
+  public TransportClient createClient(String remoteHost, int remotePort) {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     TransportClient cachedClient = connectionPool.get(address);
-    if (cachedClient != null && cachedClient.isActive()) {
-      return cachedClient;
-    } else if (cachedClient != null) {
-      connectionPool.remove(address, cachedClient); // Remove inactive clients.
+    if (cachedClient != null) {
+      if (cachedClient.isActive()) {
+        return cachedClient;
+      } else {
+        connectionPool.remove(address, cachedClient); // Remove inactive clients.
+      }
     }
 
     logger.debug("Creating new connection to " + address);
@@ -115,13 +117,14 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
-      throw new TimeoutException(
+      throw new RuntimeException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {
       throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
     }
 
-    // Successful connection
+    // Successful connection -- in the event that two threads raced to create a client, we will
+    // use the first one that was put into the connectionPool and close the one we made here.
     assert client.get() != null : "Channel future completed successfully with null client";
     TransportClient oldClient = connectionPool.putIfAbsent(address, client.get());
     if (oldClient == null) {

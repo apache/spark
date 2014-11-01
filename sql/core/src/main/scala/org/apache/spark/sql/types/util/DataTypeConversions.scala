@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types.util
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField}
+import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField, MetadataBuilder => JMetaDataBuilder}
 
 import scala.collection.JavaConverters._
 
@@ -31,7 +31,8 @@ protected[sql] object DataTypeConversions {
     JDataType.createStructField(
       scalaStructField.name,
       asJavaDataType(scalaStructField.dataType),
-      scalaStructField.nullable)
+      scalaStructField.nullable,
+      (new JMetaDataBuilder).withMetadata(scalaStructField.metadata).build())
   }
 
   /**
@@ -68,7 +69,8 @@ protected[sql] object DataTypeConversions {
     StructField(
       javaStructField.getName,
       asScalaDataType(javaStructField.getDataType),
-      javaStructField.isNullable)
+      javaStructField.isNullable,
+      javaStructField.getMetadata)
   }
 
   /**

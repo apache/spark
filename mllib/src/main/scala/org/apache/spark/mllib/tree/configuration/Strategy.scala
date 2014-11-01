@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import scala.beans.BeanProperty
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -43,7 +44,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                for choosing how to split on features at each node.
  *                More bins give higher granularity.
  * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
-   *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+ *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
  *                                number of discrete values they take. For example, an entry (n ->
  *                                k) implies the feature n is categorical with k categories 0,
@@ -58,19 +59,21 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                    this split will not be considered as a valid split.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.
+ * @param subsamplingRate Fraction of the training data used for learning decision tree.
  */
 @Experimental
 class Strategy (
     val algo: Algo,
-    val impurity: Impurity,
-    val maxDepth: Int,
-    val numClassesForClassification: Int = 2,
-    val maxBins: Int = 32,
-    val quantileCalculationStrategy: QuantileStrategy = Sort,
-    val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val minInstancesPerNode: Int = 1,
-    val minInfoGain: Double = 0.0,
-    val maxMemoryInMB: Int = 256) extends Serializable {
+    @BeanProperty var impurity: Impurity,
+    @BeanProperty var maxDepth: Int,
+    @BeanProperty var numClassesForClassification: Int = 2,
+    @BeanProperty var maxBins: Int = 32,
+    @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
+    @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+    @BeanProperty var minInstancesPerNode: Int = 1,
+    @BeanProperty var minInfoGain: Double = 0.0,
+    @BeanProperty var maxMemoryInMB: Int = 256,
+    @BeanProperty var subsamplingRate: Double = 1) extends Serializable {
 
   if (algo == Classification) {
     require(numClassesForClassification >= 2)
