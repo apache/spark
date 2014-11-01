@@ -124,6 +124,9 @@ class DAGScheduler(
   /** If enabled, we may run certain actions like take() and first() locally. */
   private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
 
+  /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
+  private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
+
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
     // not null before any job is submitted
@@ -1064,7 +1067,9 @@ class DAGScheduler(
           runningStages -= failedStage
         }
 
-        if (failedStages.isEmpty && eventProcessActor != null) {
+        if (disallowStageRetryForTest) {
+          abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+        } else if (failedStages.isEmpty && eventProcessActor != null) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
           // in that case the event will already have been scheduled. eventProcessActor may be
           // null during unit tests.

@@ -95,7 +95,7 @@ public class StandaloneShuffleBlockHandler implements RpcHandler {
 
   /** For testing, clears all executors registered with "RegisterExecutor". */
   @VisibleForTesting
-  void clearRegisteredExecutors() {
+  public void clearRegisteredExecutors() {
     blockManager.clearRegisteredExecutors();
   }
 }
