@@ -21,6 +21,11 @@ import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
+import java.io.DataInputStream
+
+import org.apache.hadoop.io.{BytesWritable, LongWritable}
+import org.apache.spark.input.{PortableDataStream, FixedLengthBinaryInputFormat}
+
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -32,7 +37,7 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
+import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
@@ -202,6 +207,8 @@ class JavaSparkContext(val sc: SparkContext)
   def textFile(path: String, minPartitions: Int): JavaRDD[String] =
     sc.textFile(path, minPartitions)
 
+
+
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
@@ -244,6 +251,54 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def wholeTextFiles(path: String): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path))
+
+  /**
+   * Read a directory of binary files from HDFS, a local file system (available on all nodes),
+   * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
+   * record and returned in a key-value pair, where the key is the path of each file,
+   * the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do
+   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def binaryFiles(path: String, minPartitions: Int):
+  JavaPairRDD[String,PortableDataStream] = new JavaPairRDD(sc.binaryFiles(path,minPartitions))
+
+  def binaryFiles(path: String):
+  JavaPairRDD[String,PortableDataStream] =
+    new JavaPairRDD(sc.binaryFiles(path,defaultMinPartitions))
+
+  /**
+   * Load data from a flat binary file, assuming each record is a set of numbers
+   * with the specified numerical format (see ByteBuffer), and the number of
+   * bytes per record is constant (see FixedLengthBinaryInputFormat)
+   *
+   * @param path Directory to the input data files
+   * @return An RDD of data with values, JavaRDD[(Array[Byte])]
+   */
+  def binaryRecords(path: String,recordLength: Int): JavaRDD[Array[Byte]] = {
+    new JavaRDD(sc.binaryRecords(path,recordLength))
+  }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *

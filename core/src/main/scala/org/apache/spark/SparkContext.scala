@@ -41,7 +41,7 @@ import akka.actor.Props
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.input.WholeTextFileInputFormat
+import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat, FixedLengthBinaryInputFormat}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -531,6 +531,52 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
       classOf[String],
       updateConf,
       minPartitions).setName(path)
+  }
+
+
+  /**
+   * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
+   * (useful for binary data)
+   *
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   */
+  @DeveloperApi
+  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  RDD[(String, PortableDataStream)] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new BinaryFileRDD(
+      this,
+      classOf[StreamInputFormat],
+      classOf[String],
+      classOf[PortableDataStream],
+      updateConf,
+      minPartitions).setName(path)
+  }
+
+  /**
+   * Load data from a flat binary file, assuming each record is a set of numbers
+   * with the specified numerical format (see ByteBuffer), and the number of
+   * bytes per record is constant (see FixedLengthBinaryInputFormat)
+   *
+   * @param path Directory to the input data files
+   * @param recordLength The length at which to split the records
+   * @return An RDD of data with values, RDD[(Array[Byte])]
+   */
+  def binaryRecords(path: String, recordLength: Int,
+                    conf: Configuration = hadoopConfiguration): RDD[Array[Byte]] = {
+    conf.setInt("recordLength",recordLength)
+    val br = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path,
+      classOf[FixedLengthBinaryInputFormat],
+      classOf[LongWritable],
+      classOf[BytesWritable],
+      conf=conf)
+    val data = br.map{ case (k, v) => v.getBytes}
+    data
   }
 
   /**
