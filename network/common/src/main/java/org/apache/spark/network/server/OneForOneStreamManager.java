@@ -30,10 +30,10 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
  * StreamManager which allows registration of an Iterator<ManagedBuffer>, which are individually
- * fetched as chunks by the client.
+ * fetched as chunks by the client. Each registered buffer is one chunk.
  */
-public class DefaultStreamManager extends StreamManager {
-  private final Logger logger = LoggerFactory.getLogger(DefaultStreamManager.class);
+public class OneForOneStreamManager extends StreamManager {
+  private final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
 
   private final AtomicLong nextStreamId;
   private final Map<Long, StreamState> streams;
@@ -51,7 +51,7 @@ public class DefaultStreamManager extends StreamManager {
     }
   }
 
-  public DefaultStreamManager() {
+  public OneForOneStreamManager() {
     // For debugging purposes, start with a random stream id to help identifying different streams.
     // This does not need to be globally unique, only unique to this class.
     nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);

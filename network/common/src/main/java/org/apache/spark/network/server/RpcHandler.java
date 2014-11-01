@@ -35,4 +35,10 @@ public interface RpcHandler {
    *                 RPC.
    */
   void receive(TransportClient client, byte[] message, RpcResponseCallback callback);
+
+  /**
+   * Returns the StreamManager which contains the state about which streams are currently being
+   * fetched by a TransportClient.
+   */
+  StreamManager getStreamManager();
 }

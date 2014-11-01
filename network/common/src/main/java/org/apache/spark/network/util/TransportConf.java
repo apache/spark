@@ -27,9 +27,6 @@ public class TransportConf {
     this.conf = conf;
   }
 
-  /** Port the server listens on. Default to a random port. */
-  public int serverPort() { return conf.getInt("spark.shuffle.io.port", 0); }
-
   /** IO mode: nio or epoll */
   public String ioMode() { return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase(); }
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.network.util;
 
 import java.util.NoSuchElementException;
 

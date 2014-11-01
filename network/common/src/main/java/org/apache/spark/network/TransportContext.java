@@ -52,15 +52,13 @@ public class TransportContext {
   private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
   private final TransportConf conf;
-  private final StreamManager streamManager;
   private final RpcHandler rpcHandler;
 
   private final MessageEncoder encoder;
   private final MessageDecoder decoder;
 
-  public TransportContext(TransportConf conf, StreamManager streamManager, RpcHandler rpcHandler) {
+  public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this.conf = conf;
-    this.streamManager = streamManager;
     this.rpcHandler = rpcHandler;
     this.encoder = new MessageEncoder();
     this.decoder = new MessageDecoder();
@@ -70,8 +68,14 @@ public class TransportContext {
     return new TransportClientFactory(this);
   }
 
+  /** Create a server which will attempt to bind to a specific port. */
+  public TransportServer createServer(int port) {
+    return new TransportServer(this, port);
+  }
+
+  /** Creates a new server, binding to any available ephemeral port. */
   public TransportServer createServer() {
-    return new TransportServer(this);
+    return new TransportServer(this, 0);
   }
 
   /**
@@ -109,7 +113,7 @@ public class TransportContext {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      streamManager, rpcHandler);
+      rpcHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler);
   }
 

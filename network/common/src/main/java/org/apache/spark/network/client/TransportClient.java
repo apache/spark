@@ -19,9 +19,13 @@ package org.apache.spark.network.client;
 
 import java.io.Closeable;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -129,7 +133,7 @@ public class TransportClient implements Closeable {
     final long startTime = System.currentTimeMillis();
     logger.trace("Sending RPC to {}", serverAddr);
 
-    final long requestId = UUID.randomUUID().getLeastSignificantBits();
+    final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new RpcRequest(requestId, message)).addListener(
@@ -149,6 +153,32 @@ public class TransportClient implements Closeable {
           }
         }
       });
+  }
+
+  /**
+   * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
+   * a specified timeout for a response.
+   */
+  public byte[] sendRpcSync(byte[] message, long timeoutMs) {
+    final SettableFuture<byte[]> result = SettableFuture.create();
+
+    sendRpc(message, new RpcResponseCallback() {
+      @Override
+      public void onSuccess(byte[] response) {
+        result.set(response);
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+        result.setException(e);
+      }
+    });
+
+    try {
+      return result.get(timeoutMs, TimeUnit.MILLISECONDS);
+    } catch (Exception e) {
+      throw Throwables.propagate(e);
+    }
   }
 
   @Override
