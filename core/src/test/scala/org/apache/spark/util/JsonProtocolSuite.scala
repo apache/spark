@@ -107,7 +107,8 @@ class JsonProtocolSuite extends FunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19, "Some exception")
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "Some exception")
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)

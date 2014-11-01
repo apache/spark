@@ -1060,7 +1060,7 @@ class DAGScheduler(
         if (runningStages.contains(failedStage)) {
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
             s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some(failureMessage))
+          markStageAsFinished(failedStage, Some("Fetch failure: " + failureMessage))
           runningStages -= failedStage
         }
 

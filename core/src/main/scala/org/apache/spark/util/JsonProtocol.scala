@@ -630,7 +630,7 @@ private[spark] object JsonProtocol {
         val reduceId = (json \ "Reduce ID").extract[Int]
         val message = Utils.jsonOption(json \ "Message").map(_.extract[String])
         new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
-          message.getOrElse("Unknown"))
+          message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]

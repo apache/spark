@@ -321,7 +321,7 @@ object ShuffleBlockFetcherIterator {
   /**
    * Result of a fetch from a remote block.
    */
-  trait FetchResult {
+  sealed trait FetchResult {
     val blockId: BlockId
   }
 
@@ -332,7 +332,7 @@ object ShuffleBlockFetcherIterator {
    *             Note that this is NOT the exact bytes.
    * @param buf [[ManagedBuffer]] for the content.
    */
-  case class SuccessFetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer)
+  sealed case class SuccessFetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer)
     extends FetchResult {
     require(buf != null)
     require(size >= 0)
@@ -343,6 +343,5 @@ object ShuffleBlockFetcherIterator {
    * @param blockId block id
    * @param e the failure exception
    */
-  case class FailureFetchResult(blockId: BlockId, e: Throwable) extends FetchResult {
-  }
+  sealed case class FailureFetchResult(blockId: BlockId, e: Throwable) extends FetchResult
 }
