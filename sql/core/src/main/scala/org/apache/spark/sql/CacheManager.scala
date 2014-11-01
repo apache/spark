@@ -104,7 +104,9 @@ private[sql] trait CacheManager {
   }
 
   /** Tries to remove the data for the given SchemaRDD from the cache if it's cached */
-  private[sql] def tryUncacheQuery(query: SchemaRDD, blocking: Boolean = true): Boolean = writeLock {
+  private[sql] def tryUncacheQuery(
+      query: SchemaRDD,
+      blocking: Boolean = true): Boolean = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     val found = dataIndex >= 0
