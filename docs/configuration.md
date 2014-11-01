@@ -359,16 +359,6 @@ Apart from these, the following properties are also available, and may be useful
     map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
-<tr>
-  <td><code>spark.shuffle.blockTransferService</code></td>
-  <td>netty</td>
-  <td>
-    Implementation to use for transferring shuffle and cached blocks between executors. There
-    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
-    block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
-  </td>
-</tr>
 </table>
 
 #### Spark UI
