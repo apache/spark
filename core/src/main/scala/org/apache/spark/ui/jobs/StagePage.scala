@@ -288,7 +288,6 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           val shuffleWriteSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
           }
-
           val shuffleWriteQuantiles = <td>Shuffle Write</td> +:
             getFormattedSizeQuantiles(shuffleWriteSizes)
 
@@ -362,7 +361,6 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val executorLaunchTime = metrics.map(_.executorLaunchTime).getOrElse(0L)
       val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
-
       val gettingResultTime = info.gettingResultTime
 
       val maybeAccumulators = info.accumulables
