@@ -25,7 +25,7 @@ import org.apache.spark.SparkConf
 
 /**
  * Samples a Twitter stream with a bounding box of supplied (latitude, longitude) pairs over
- * a sliding 10 second window. The stream is instantiated with credentials supplied by the
+ * a sliding two second window. The stream is instantiated with credentials supplied by the
  * command line arguments. Latitude and longitude values should be set on the command line as
  * <latitude>,<longitude> with the bounding box beginning in the southwest corner. For each
  * interval, will return the first ten tweets bounded by the coordinates provided.
@@ -66,13 +66,13 @@ object TwitterGeoBounding {
     val sparkConf = new SparkConf().setAppName("TwitterGeoBounding")
     val ssc = new StreamingContext(sparkConf, Seconds(2))
     val stream = TwitterUtils.createStream(ssc, None, latLons=latLons)
-
     val tweets = stream.map(status => status.getText)
 
     // Print first ten tweets
     tweets.foreachRDD(rdd => {
       val topList = rdd.take(10)
-      println("\nTweets in the last 10 seconds bounded by: %s".format(latLons))
+      println("\nTweets in the last two seconds bounded by: %s"
+              .format(latLons.map(_.mkString("(",", ",")")).mkString(" ")))
       topList.foreach{tweet => println("  %s".format(tweet))}
     })
 
