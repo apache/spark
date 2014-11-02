@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.api.java;
 
-import java.io.Serializable;
 import java.util.*;
 
 /**
@@ -201,5 +200,4 @@ public abstract class DataType {
 
     return new StructType(fields);
   }
-
 }

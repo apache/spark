@@ -451,5 +451,4 @@ package object sql {
    * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
    */
   type MetadataBuilder = catalyst.util.MetadataBuilder
-
 }
