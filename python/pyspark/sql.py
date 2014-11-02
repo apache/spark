@@ -313,12 +313,15 @@ class StructField(DataType):
 
     """
 
-    def __init__(self, name, dataType, nullable):
+    def __init__(self, name, dataType, nullable, metadata=None):
         """Creates a StructField
         :param name: the name of this field.
         :param dataType: the data type of this field.
         :param nullable: indicates whether values of this field
                          can be null.
+        :param metadata: metadata of this field, which is a map from string
+                         to simple type that can be serialized to JSON
+                         automatically
 
         >>> (StructField("f1", StringType, True)
         ...      == StructField("f1", StringType, True))
@@ -330,6 +333,7 @@ class StructField(DataType):
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
+        self.metadata = metadata or {}
 
     def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
@@ -338,13 +342,15 @@ class StructField(DataType):
     def jsonValue(self):
         return {"name": self.name,
                 "type": self.dataType.jsonValue(),
-                "nullable": self.nullable}
+                "nullable": self.nullable,
+                "metadata": self.metadata}
 
     @classmethod
     def fromJson(cls, json):
         return StructField(json["name"],
                            _parse_datatype_json_value(json["type"]),
-                           json["nullable"])
+                           json["nullable"],
+                           json["metadata"])
 
 
 class StructType(DataType):
@@ -423,7 +429,8 @@ def _parse_datatype_json_string(json_string):
     ...     StructField("simpleArray", simple_arraytype, True),
     ...     StructField("simpleMap", simple_maptype, True),
     ...     StructField("simpleStruct", simple_structtype, True),
-    ...     StructField("boolean", BooleanType(), False)])
+    ...     StructField("boolean", BooleanType(), False),
+    ...     StructField("withMeta", DoubleType(), False, {"name": "age"})])
     >>> check_datatype(complex_structtype)
     True
     >>> # Complex ArrayType.
@@ -1399,33 +1406,6 @@ class HiveContext(SQLContext):
 
 
 class LocalHiveContext(HiveContext):
-
-    """Starts up an instance of hive where metadata is stored locally.
-
-    An in-process metadata data is created with data stored in ./metadata.
-    Warehouse data is stored in in ./warehouse.
-
-    >>> import os
-    >>> hiveCtx = LocalHiveContext(sc)
-    >>> try:
-    ...     supress = hiveCtx.sql("DROP TABLE src")
-    ... except Exception:
-    ...     pass
-    >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
-    ...        'examples/src/main/resources/kv1.txt')
-    >>> supress = hiveCtx.sql(
-    ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
-    ...        % kv1)
-    >>> results = hiveCtx.sql("FROM src SELECT value"
-    ...      ).map(lambda r: int(r.value.split('_')[1]))
-    >>> num = results.count()
-    >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    >>> num
-    500
-    >>> reduce_sum
-    130091
-    """
 
     def __init__(self, sparkContext, sqlContext=None):
         HiveContext.__init__(self, sparkContext, sqlContext)

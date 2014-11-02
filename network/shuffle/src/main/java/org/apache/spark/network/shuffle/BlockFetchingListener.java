@@ -1,4 +1,4 @@
-package org.apache.spark.network;/*
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,14 +15,22 @@ package org.apache.spark.network;/*
  * limitations under the License.
  */
 
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.server.RpcHandler;
+package org.apache.spark.network.shuffle;
 
-/** Test RpcHandler which always returns a zero-sized success. */
-public class NoOpRpcHandler implements RpcHandler {
-  @Override
-  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    callback.onSuccess(new byte[0]);
-  }
+import java.util.EventListener;
+
+import org.apache.spark.network.buffer.ManagedBuffer;
+
+public interface BlockFetchingListener extends EventListener {
+  /**
+   * Called once per successfully fetched block. After this call returns, data will be released
+   * automatically. If the data will be passed to another thread, the receiver should retain()
+   * and release() the buffer on their own, or copy the data to a new buffer.
+   */
+  void onBlockFetchSuccess(String blockId, ManagedBuffer data);
+
+  /**
+   * Called at least once per block upon failures.
+   */
+  void onBlockFetchFailure(String blockId, Throwable exception);
 }

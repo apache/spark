@@ -65,6 +65,10 @@
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>com.esotericsoftware.kryo</groupId>
+          <artifactId>kryo</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>

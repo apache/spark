@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
@@ -51,24 +48,12 @@ object HiveThriftServer2 extends Logging {
 
   def main(args: Array[String]) {
     val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
-
     if (!optionsProcessor.process(args)) {
       System.exit(-1)
     }
 
-    val ss = new SessionState(new HiveConf(classOf[SessionState]))
-
-    // Set all properties specified via command line.
-    val hiveConf: HiveConf = ss.getConf
-    hiveConf.getAllProperties.toSeq.sortBy(_._1).foreach { case (k, v) =>
-      logDebug(s"HiveConf var: $k=$v")
-    }
-
-    SessionState.start(ss)
-
     logInfo("Starting SparkContext")
     SparkSQLEnv.init()
-    SessionState.start(ss)
 
     Runtime.getRuntime.addShutdownHook(
       new Thread() {
@@ -80,7 +65,7 @@ object HiveThriftServer2 extends Logging {
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
-      server.init(hiveConf)
+      server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
     } catch {
