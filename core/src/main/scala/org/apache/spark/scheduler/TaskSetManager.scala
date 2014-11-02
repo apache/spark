@@ -529,10 +529,17 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskGettingResult(info)
   }
 
-  private def progressBar(curr: Int, total: Int): Unit = {
+  /**
+   * Show progress in console (also in title). The progress bar is displayed in the next line
+   * after your last output, keeps overwriting itself to hold in one line. The logging will follow
+   * the progress bar, then progress bar will be showed in next line without overwrite loggings.
+   * @param finished the number of finished tasks
+   * @param total total number of tasks
+   */
+  private def showProgressBar(finished: Int, total: Int): Unit = {
     val now = clock.getTime()
-    // Only update title once in one second
-    if (now - lastUpdate < 100 && curr < total) {
+    // Only update title once in 100 milliseconds
+    if (now - lastUpdate < 100 && finished < total) {
       return
     }
     lastUpdate = now
@@ -540,8 +547,8 @@ private[spark] class TaskSetManager(
     // show progress in title
     if (Terminal.getTerminal.isANSISupported) {
       val ESC = "\033"
-      val title = if (curr < total) {
-        s"Spark Job: $curr/$total Finished, $runningTasks are running"
+      val title = if (finished < total) {
+        s"Spark Job: $finished/$total Finished, $runningTasks are running"
       } else {
         s"Spark Job: Finished in ${Utils.msDurationToString(now - startTime)}"
       }
@@ -550,11 +557,11 @@ private[spark] class TaskSetManager(
 
     // show one line progress bar
     if (!log.isInfoEnabled) {
-      if (curr < total) {
+      if (finished < total) {
         val header = s"Stage $stageId: ["
-        val tailer = s"] $curr+$runningTasks/$total - ${Utils.msDurationToString(now - startTime)}"
+        val tailer = s"] $finished+$runningTasks/$total - ${Utils.msDurationToString(now - startTime)}"
         val width = Terminal.getTerminal.getTerminalWidth - header.size - tailer.size
-        val percent = curr * width / total;
+        val percent = finished * width / total;
         val bar = (0 until width).map { i =>
           if (i < percent) "=" else if (i==percent) ">" else " "
         }.mkString("")
@@ -597,7 +604,7 @@ private[spark] class TaskSetManager(
         " because task " + index + " has already completed successfully")
     }
     if (showProgress) {
-      progressBar(tasksSuccessful, numTasks)
+      showProgressBar(tasksSuccessful, numTasks)
     }
     sched.dagScheduler.taskEnded(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
