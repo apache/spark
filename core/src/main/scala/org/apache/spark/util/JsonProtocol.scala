@@ -272,7 +272,7 @@ private[spark] object JsonProtocol {
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
     val reason = Utils.getFormattedClassName(taskEndReason)
-    val json = taskEndReason match {
+    val json: JObject = taskEndReason match {
       case fetchFailed: FetchFailed =>
         val blockManagerAddress = Option(fetchFailed.bmAddress).
           map(blockManagerIdToJson).getOrElse(JNothing)
@@ -287,6 +287,8 @@ private[spark] object JsonProtocol {
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
         ("Metrics" -> metrics)
+      case ExecutorLostFailure(executorId) =>
+        ("Executor ID" -> executorId)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -636,7 +638,9 @@ private[spark] object JsonProtocol {
         new ExceptionFailure(className, description, stackTrace, metrics)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
-      case `executorLostFailure` => ExecutorLostFailure
+      case `executorLostFailure` =>
+        val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
+        ExecutorLostFailure(executorId.getOrElse("Unknown"))
       case `unknownReason` => UnknownReason
     }
   }

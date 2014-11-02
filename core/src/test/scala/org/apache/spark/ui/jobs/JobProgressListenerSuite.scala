@@ -119,7 +119,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       new ExceptionFailure("Exception", "description", null, None),
       TaskResultLost,
       TaskKilled,
-      ExecutorLostFailure,
+      ExecutorLostFailure("0"),
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {

@@ -115,7 +115,7 @@ class JsonProtocolSuite extends FunSuite {
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
-    testTaskEndReason(ExecutorLostFailure)
+    testTaskEndReason(ExecutorLostFailure("100"))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -403,7 +403,8 @@ class JsonProtocolSuite extends FunSuite {
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
-      case (ExecutorLostFailure, ExecutorLostFailure) =>
+      case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
+        assert(execId1 === execId2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }

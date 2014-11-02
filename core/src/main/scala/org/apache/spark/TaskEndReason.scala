@@ -117,8 +117,8 @@ case object TaskKilled extends TaskFailedReason {
  * the task crashed the JVM.
  */
 @DeveloperApi
-case object ExecutorLostFailure extends TaskFailedReason {
-  override def toErrorString: String = "ExecutorLostFailure (executor lost)"
+case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
+  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost)"
 }
 
 /**
