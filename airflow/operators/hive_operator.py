@@ -18,6 +18,7 @@ class HiveOperator(BaseOperator):
         'polymorphic_identity': 'HiveOperator'
     }
     template_fields = ('hql',)
+    template_ext = ('.hql', '.sql',)
 
     def __init__(
             self, hql, hive_dbid=settings.HIVE_DEFAULT_DBID,
@@ -30,4 +31,4 @@ class HiveOperator(BaseOperator):
 
     def execute(self, execution_date):
         logging.info('Executing: ' + self.hql)
-        self.hook.run_cli(hql=self.hql, schema=self.hive_dbid)
+        self.hook.run_cli(hql=self.hql)

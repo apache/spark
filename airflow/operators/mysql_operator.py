@@ -12,6 +12,7 @@ class MySqlOperator(BaseOperator):
         'polymorphic_identity': 'MySqlOperator'
     }
     template_fields = ('sql',)
+    template_ext = ('.sql',)
 
     def __init__(self, sql, mysql_dbid, *args, **kwargs):
         """

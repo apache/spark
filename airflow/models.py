@@ -63,8 +63,8 @@ class DagBag(object):
         else:
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
-                    dag.filepath = filepath.replace(
-                        settings.AIRFLOW_HOME + '/', '')
+                    dag.full_filepath = filepath
+                    #.replace(settings.AIRFLOW_HOME + '/', '')
                     if dag.dag_id in self.dags:
                         raise Exception(
                             'Two DAGs with the same dag_id. No good.')
@@ -396,7 +396,7 @@ class TaskInstance(Base):
                 "Not ready for retry yet. " +
                 "Next run after {0}".format(next_run)
             )
-        elif self.state in State.runnable():
+        elif force or self.state in State.runnable():
             if self.state == State.UP_FOR_RETRY:
                 self.try_number += 1
             else:
@@ -417,21 +417,35 @@ class TaskInstance(Base):
             try:
                 if not mark_success:
                     from airflow import macros
+                    env = jinja2.Environment(
+                        loader=jinja2.FileSystemLoader(
+                            self.task.dag.folder))
+                    tables = None
+                    if 'tables' in self.task.params:
+                        tables = self.task.params['tables']
                     jinja_context = {
-                        'ti': self,
-                        'execution_date': self.execution_date,
-                        'ds': self.execution_date.isoformat()[:10],
-                        'task': self.task,
                         'dag': self.task.dag,
+                        'ds': self.execution_date.isoformat()[:10],
+                        'execution_date': self.execution_date,
                         'macros': macros,
                         'params': self.task.params,
+                        'tables': tables,
+                        'task': self.task,
+                        'task_instance': self,
+                        'ti': self,
                     }
                     task_copy = copy.copy(self.task)
                     for attr in task_copy.__class__.template_fields:
                         source = getattr(task_copy, attr)
+                        template = jinja2.Template(source)
+                        for ext in task_copy.__class__.template_ext:
+                            # Magic, if field has the right extension, look
+                            # for the file.
+                            if source.strip().endswith(ext):
+                                template = env.get_template(source)
                         setattr(
                             task_copy, attr,
-                            jinja2.Template(source).render(**jinja_context)
+                            template.render(**jinja_context)
                         )
                     task_copy.execute(self.execution_date)
             except Exception as e:
@@ -663,7 +677,10 @@ class BaseOperator(Base):
     :type dag: DAG
     """
 
+    # For derived classes to define which fields will get jinjaified
     template_fields = []
+    # Defines wich files extensions to look for in the templated fields
+    template_ext = []
 
     __tablename__ = "task"
 
@@ -898,7 +915,7 @@ class DAG(Base):
     dag_id = Column(String(ID_LEN), primary_key=True)
     task_count = Column(Integer)
     parallelism = Column(Integer)
-    filepath = Column(String(2000))
+    full_filepath = Column(String(2000))
 
     tasks = relationship(
         "BaseOperator", cascade="merge, delete, delete-orphan", backref='dag')
@@ -907,14 +924,14 @@ class DAG(Base):
             self, dag_id,
             schedule_interval=timedelta(days=1),
             start_date=None, end_date=None, parallelism=0,
-            filepath=None):
+            full_filepath=None):
 
         utils.validate_key(dag_id)
         self.dag_id = dag_id
         self.end_date = end_date or datetime.now()
         self.parallelism = parallelism
         self.schedule_interval = schedule_interval
-        self.filepath = filepath if filepath else ''
+        self.full_filepath = full_filepath if full_filepath else ''
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
@@ -922,6 +939,14 @@ class DAG(Base):
     @property
     def task_ids(self):
         return [t.task_id for t in self.tasks]
+
+    @property
+    def filepath(self):
+        return self.full_filepath.replace(settings.AIRFLOW_HOME + '/', '')
+
+    @property
+    def folder(self):
+        return os.path.dirname(self.full_filepath)
 
     @property
     def latest_execution_date(self):

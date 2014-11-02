@@ -6,6 +6,7 @@ from subprocess import Popen, PIPE
 class BashOperator(BaseOperator):
 
     template_fields = ('bash_command',)
+    template_ext = ('.sh', '.bash',)
 
     __mapper_args__ = {
         'polymorphic_identity': 'BashOperator'

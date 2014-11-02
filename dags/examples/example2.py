@@ -26,7 +26,17 @@ for i in range(10):
     task.set_downstream(run_this)
     dag.add_task(task)
 
-task = BashOperator(task_id='also_run_this', bash_command='ls -l', **default_args)
+cmd = """\
+echo {{ params.tables.the_table }}
+"""
+task = BashOperator(
+    task_id='also_run_this', bash_command=cmd,
+    params={
+        'tables': {
+            'the_table': 'da_table',
+        }
+    },
+    **default_args)
 dag.add_task(task)
 task.set_downstream(run_this_last)
 task.set_upstream(run_this)

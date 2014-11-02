@@ -38,6 +38,8 @@ class SqlSensor(BaseSensorOperator):
     in (0, '0', '')
     """
     template_fields = ('sql',)
+    template_ext = ('.hql', '.sql',)
+
     __mapper_args__ = {
         'polymorphic_identity': 'SqlSensor'
     }

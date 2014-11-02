@@ -22,7 +22,7 @@ class HiveHook(BaseHook):
             DatabaseConnection).filter(
                 DatabaseConnection.db_id == hive_dbid)
         if db.count() == 0:
-            raise Exception("The presto_dbid you provided isn't defined")
+            raise Exception("The dbid you provided isn't defined")
         else:
             db = db.all()[0]
         self.host = db.host
@@ -42,8 +42,8 @@ class HiveHook(BaseHook):
         return d
 
     def __setstate__(self, d):
-        d['hive'] = self.get_hive_client()
         self.__dict__.update(d)
+        d['hive'] = self.get_hive_client()
 
     def get_hive_client(self):
         transport = TSocket.TSocket(self.host, self.port)
@@ -98,8 +98,17 @@ class HiveHook(BaseHook):
     def run_cli(self, hql, schema=None):
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
-        sp = subprocess.Popen(['hive', '-e', hql])
+        sp = subprocess.Popen(
+                ['hive', '-e', hql],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
+        all_err = ''
+        for line in iter(sp.stdout.readline, ''):
+            logging.info(line)
         sp.wait()
+
+        if sp.returncode:
+            raise Exception(all_err)
 
     def max_partition(self, schema, table):
         '''
