@@ -304,7 +304,7 @@ abstract class HiveComparisonTest
                   if (installHooksCommand.findAllMatchIn(queryString).nonEmpty)
                     sys.error("hive exec hooks not supported for tests.")
 
-                  logWarning(s"Running query ${i+1}/${queryList.size} ${queryList(i+1)} with hive.")
+                  logWarning(s"Running query ${i+1}/${queryList.size} with hive.")
                   // Analyze the query with catalyst to ensure test tables are loaded.
                   val answer = hiveQuery.analyzed match {
                     case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
