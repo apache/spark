@@ -78,7 +78,7 @@ private[spark] class Executor(
   val executorSource = new ExecutorSource(this, executorId)
 
   // Initialize Spark environment (using system properties read above)
-  conf.set("spark.executor.id", "executor." + executorId)
+  conf.set("spark.executor.id", executorId)
   private val env = {
     if (!isLocal) {
       val port = conf.getInt("spark.executor.port", 0)

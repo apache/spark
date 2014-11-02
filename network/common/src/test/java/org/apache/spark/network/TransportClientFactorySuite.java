@@ -28,11 +28,11 @@ import static org.junit.Assert.assertTrue;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
-import org.apache.spark.network.server.DefaultStreamManager;
+import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
-import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class TransportClientFactorySuite {
@@ -44,9 +44,8 @@ public class TransportClientFactorySuite {
   @Before
   public void setUp() {
     conf = new TransportConf(new SystemPropertyConfigProvider());
-    StreamManager streamManager = new DefaultStreamManager();
     RpcHandler rpcHandler = new NoOpRpcHandler();
-    context = new TransportContext(conf, streamManager, rpcHandler);
+    context = new TransportContext(conf, rpcHandler);
     server1 = context.createServer();
     server2 = context.createServer();
   }

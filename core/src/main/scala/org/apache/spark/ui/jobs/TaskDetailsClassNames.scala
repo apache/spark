@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.ui.jobs
 
-import java.util.NoSuchElementException;
-
-import org.apache.spark.network.util.ConfigProvider;
-
-/** Uses System properties to obtain config values. */
-public class SystemPropertyConfigProvider extends ConfigProvider {
-  @Override
-  public String get(String name) {
-    String value = System.getProperty(name);
-    if (value == null) {
-      throw new NoSuchElementException(name);
-    }
-    return value;
-  }
+/**
+ * Names of the CSS classes corresponding to each type of task detail. Used to allow users
+ * to optionally show/hide columns.
+ */
+private object TaskDetailsClassNames {
+  val SCHEDULER_DELAY = "scheduler_delay"
+  val GC_TIME = "gc_time"
+  val RESULT_SERIALIZATION_TIME = "serialization_time"
+  val GETTING_RESULT_TIME = "getting_result_time"
 }

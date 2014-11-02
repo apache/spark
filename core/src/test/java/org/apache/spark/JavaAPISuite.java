@@ -18,10 +18,13 @@
 package org.apache.spark;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.ByteBuffer;
 import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
+import org.apache.spark.input.PortableDataStream;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -861,6 +864,82 @@ public class JavaAPISuite implements Serializable {
       }
     });
     Assert.assertEquals(pairs, readRDD.collect());
+  }
+
+  @Test
+  public void binaryFiles() throws Exception {
+    // Reusing the wholeText files example
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+
+    String tempDirName = tempDir.getAbsolutePath();
+    File file1 = new File(tempDirName + "/part-00000");
+
+    FileOutputStream fos1 = new FileOutputStream(file1);
+
+    FileChannel channel1 = fos1.getChannel();
+    ByteBuffer bbuf = java.nio.ByteBuffer.wrap(content1);
+    channel1.write(bbuf);
+    channel1.close();
+    JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName, 3);
+    List<Tuple2<String, PortableDataStream>> result = readRDD.collect();
+    for (Tuple2<String, PortableDataStream> res : result) {
+      Assert.assertArrayEquals(content1, res._2().toArray());
+    }
+  }
+
+  @Test
+  public void binaryFilesCaching() throws Exception {
+    // Reusing the wholeText files example
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+
+    String tempDirName = tempDir.getAbsolutePath();
+    File file1 = new File(tempDirName + "/part-00000");
+
+    FileOutputStream fos1 = new FileOutputStream(file1);
+
+    FileChannel channel1 = fos1.getChannel();
+    ByteBuffer bbuf = java.nio.ByteBuffer.wrap(content1);
+    channel1.write(bbuf);
+    channel1.close();
+
+    JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName).cache();
+    readRDD.foreach(new VoidFunction<Tuple2<String,PortableDataStream>>() {
+      @Override
+      public void call(Tuple2<String, PortableDataStream> pair) throws Exception {
+        pair._2().toArray(); // force the file to read
+      }
+    });
+
+    List<Tuple2<String, PortableDataStream>> result = readRDD.collect();
+    for (Tuple2<String, PortableDataStream> res : result) {
+      Assert.assertArrayEquals(content1, res._2().toArray());
+    }
+  }
+
+  @Test
+  public void binaryRecords() throws Exception {
+    // Reusing the wholeText files example
+    byte[] content1 = "spark isn't always easy to use.\n".getBytes("utf-8");
+    int numOfCopies = 10;
+    String tempDirName = tempDir.getAbsolutePath();
+    File file1 = new File(tempDirName + "/part-00000");
+
+    FileOutputStream fos1 = new FileOutputStream(file1);
+
+    FileChannel channel1 = fos1.getChannel();
+
+    for (int i = 0; i < numOfCopies; i++) {
+      ByteBuffer bbuf = java.nio.ByteBuffer.wrap(content1);
+      channel1.write(bbuf);
+    }
+    channel1.close();
+
+    JavaRDD<byte[]> readRDD = sc.binaryRecords(tempDirName, content1.length);
+    Assert.assertEquals(numOfCopies,readRDD.count());
+    List<byte[]> result = readRDD.collect();
+    for (byte[] res : result) {
+      Assert.assertArrayEquals(content1, res);
+    }
   }
 
   @SuppressWarnings("unchecked")
