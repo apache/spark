@@ -18,6 +18,7 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
 import org.apache.spark.sql.QueryTest
@@ -44,19 +45,22 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(intNumber, enforceCorrectType(intNumber, IntegerType))
     checkTypePromotion(intNumber.toLong, enforceCorrectType(intNumber, LongType))
     checkTypePromotion(intNumber.toDouble, enforceCorrectType(intNumber, DoubleType))
-    checkTypePromotion(BigDecimal(intNumber), enforceCorrectType(intNumber, DecimalType))
+    checkTypePromotion(
+      Decimal(intNumber), enforceCorrectType(intNumber, DecimalType.Unlimited))
 
     val longNumber: Long = 9223372036854775807L
     checkTypePromotion(longNumber, enforceCorrectType(longNumber, LongType))
     checkTypePromotion(longNumber.toDouble, enforceCorrectType(longNumber, DoubleType))
-    checkTypePromotion(BigDecimal(longNumber), enforceCorrectType(longNumber, DecimalType))
+    checkTypePromotion(
+      Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.Unlimited))
 
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
-    checkTypePromotion(BigDecimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType))
-    
+    checkTypePromotion(
+      Decimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.Unlimited))
+
     checkTypePromotion(new Timestamp(intNumber), enforceCorrectType(intNumber, TimestampType))
-    checkTypePromotion(new Timestamp(intNumber.toLong), 
+    checkTypePromotion(new Timestamp(intNumber.toLong),
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
     checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
@@ -80,7 +84,7 @@ class JsonSuite extends QueryTest {
     checkDataType(NullType, IntegerType, IntegerType)
     checkDataType(NullType, LongType, LongType)
     checkDataType(NullType, DoubleType, DoubleType)
-    checkDataType(NullType, DecimalType, DecimalType)
+    checkDataType(NullType, DecimalType.Unlimited, DecimalType.Unlimited)
     checkDataType(NullType, StringType, StringType)
     checkDataType(NullType, ArrayType(IntegerType), ArrayType(IntegerType))
     checkDataType(NullType, StructType(Nil), StructType(Nil))
@@ -91,7 +95,7 @@ class JsonSuite extends QueryTest {
     checkDataType(BooleanType, IntegerType, StringType)
     checkDataType(BooleanType, LongType, StringType)
     checkDataType(BooleanType, DoubleType, StringType)
-    checkDataType(BooleanType, DecimalType, StringType)
+    checkDataType(BooleanType, DecimalType.Unlimited, StringType)
     checkDataType(BooleanType, StringType, StringType)
     checkDataType(BooleanType, ArrayType(IntegerType), StringType)
     checkDataType(BooleanType, StructType(Nil), StringType)
@@ -100,7 +104,7 @@ class JsonSuite extends QueryTest {
     checkDataType(IntegerType, IntegerType, IntegerType)
     checkDataType(IntegerType, LongType, LongType)
     checkDataType(IntegerType, DoubleType, DoubleType)
-    checkDataType(IntegerType, DecimalType, DecimalType)
+    checkDataType(IntegerType, DecimalType.Unlimited, DecimalType.Unlimited)
     checkDataType(IntegerType, StringType, StringType)
     checkDataType(IntegerType, ArrayType(IntegerType), StringType)
     checkDataType(IntegerType, StructType(Nil), StringType)
@@ -108,23 +112,23 @@ class JsonSuite extends QueryTest {
     // LongType
     checkDataType(LongType, LongType, LongType)
     checkDataType(LongType, DoubleType, DoubleType)
-    checkDataType(LongType, DecimalType, DecimalType)
+    checkDataType(LongType, DecimalType.Unlimited, DecimalType.Unlimited)
     checkDataType(LongType, StringType, StringType)
     checkDataType(LongType, ArrayType(IntegerType), StringType)
     checkDataType(LongType, StructType(Nil), StringType)
 
     // DoubleType
     checkDataType(DoubleType, DoubleType, DoubleType)
-    checkDataType(DoubleType, DecimalType, DecimalType)
+    checkDataType(DoubleType, DecimalType.Unlimited, DecimalType.Unlimited)
     checkDataType(DoubleType, StringType, StringType)
     checkDataType(DoubleType, ArrayType(IntegerType), StringType)
     checkDataType(DoubleType, StructType(Nil), StringType)
 
     // DoubleType
-    checkDataType(DecimalType, DecimalType, DecimalType)
-    checkDataType(DecimalType, StringType, StringType)
-    checkDataType(DecimalType, ArrayType(IntegerType), StringType)
-    checkDataType(DecimalType, StructType(Nil), StringType)
+    checkDataType(DecimalType.Unlimited, DecimalType.Unlimited, DecimalType.Unlimited)
+    checkDataType(DecimalType.Unlimited, StringType, StringType)
+    checkDataType(DecimalType.Unlimited, ArrayType(IntegerType), StringType)
+    checkDataType(DecimalType.Unlimited, StructType(Nil), StringType)
 
     // StringType
     checkDataType(StringType, StringType, StringType)
@@ -178,7 +182,7 @@ class JsonSuite extends QueryTest {
     checkDataType(
       StructType(
         StructField("f1", IntegerType, true) :: Nil),
-      DecimalType,
+      DecimalType.Unlimited,
       StringType)
   }
 
@@ -186,7 +190,7 @@ class JsonSuite extends QueryTest {
     val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
 
     val expectedSchema = StructType(
-      StructField("bigInteger", DecimalType, true) ::
+      StructField("bigInteger", DecimalType.Unlimited, true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", IntegerType, true) ::
@@ -216,7 +220,7 @@ class JsonSuite extends QueryTest {
     val expectedSchema = StructType(
       StructField("arrayOfArray1", ArrayType(ArrayType(StringType, false), false), true) ::
       StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, false), false), true) ::
-      StructField("arrayOfBigInteger", ArrayType(DecimalType, false), true) ::
+      StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, false), true) ::
       StructField("arrayOfBoolean", ArrayType(BooleanType, false), true) ::
       StructField("arrayOfDouble", ArrayType(DoubleType, false), true) ::
       StructField("arrayOfInteger", ArrayType(IntegerType, false), true) ::
@@ -230,7 +234,7 @@ class JsonSuite extends QueryTest {
           StructField("field3", StringType, true) :: Nil), false), true) ::
       StructField("struct", StructType(
       StructField("field1", BooleanType, true) ::
-      StructField("field2", DecimalType, true) :: Nil), true) ::
+      StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
         StructField("field1", ArrayType(IntegerType, false), true) ::
         StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
@@ -331,7 +335,7 @@ class JsonSuite extends QueryTest {
     val expectedSchema = StructType(
       StructField("num_bool", StringType, true) ::
       StructField("num_num_1", LongType, true) ::
-      StructField("num_num_2", DecimalType, true) ::
+      StructField("num_num_2", DecimalType.Unlimited, true) ::
       StructField("num_num_3", DoubleType, true) ::
       StructField("num_str", StringType, true) ::
       StructField("str_bool", StringType, true) :: Nil)
@@ -521,7 +525,7 @@ class JsonSuite extends QueryTest {
     val jsonSchemaRDD = jsonFile(path)
 
     val expectedSchema = StructType(
-      StructField("bigInteger", DecimalType, true) ::
+      StructField("bigInteger", DecimalType.Unlimited, true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", IntegerType, true) ::
@@ -551,7 +555,7 @@ class JsonSuite extends QueryTest {
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     val schema = StructType(
-      StructField("bigInteger", DecimalType, true) ::
+      StructField("bigInteger", DecimalType.Unlimited, true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", IntegerType, true) ::
