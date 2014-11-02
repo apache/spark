@@ -24,8 +24,8 @@
 # so it is completely self contained.
 # It does not contain source or *.class files.
 
-set -e
 set -o pipefail
+set -e
 
 # Figure out where the Spark framework is installed
 FWDIR="$(cd "`dirname "$0"`"; pwd)"

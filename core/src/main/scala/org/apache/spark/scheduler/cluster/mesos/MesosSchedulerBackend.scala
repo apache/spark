@@ -389,4 +389,5 @@ private[spark] class MesosSchedulerBackend(
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }
+
 }

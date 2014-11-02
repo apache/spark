@@ -29,7 +29,7 @@ SCALA_VERSION=2.10
 # Figure out where Spark is installed
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
-#Export this as SPARK_HOME unless REMOTE_SPARK_HOME is set
+# Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
 . "$FWDIR"/bin/load-spark-env.sh

@@ -275,10 +275,6 @@ private[spark] class Worker(
     case Heartbeat =>
       logInfo(s"Received heartbeat from driver ${sender.path}")
 
-    case UnregisteredWorker =>
-      logError("Worker is not registered with master. Terminating.")
-      System.exit(1)
-
     case RegisterWorkerFailed(message) =>
       if (!registered) {
         logError("Worker registration failed: " + message)
