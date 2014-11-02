@@ -30,21 +30,24 @@ import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.stats.StatsSetupConst
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.mapred.InputFormat
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
+
+import org.apache.spark.sql.catalyst.types.DecimalType
 
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
  */
 private[hive] object HiveShim {
   val version = "0.12.0"
-  val metastoreDecimal = "decimal"
 
   def getTableDesc(
     serdeClass: Class[_ <: Deserializer],
@@ -148,6 +151,19 @@ private[hive] object HiveShim {
 
   def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {
     tbl.setDataLocation(new Path(crtTbl.getLocation()).toUri())
+  }
+
+  def decimalMetastoreString(decimalType: DecimalType): String = "decimal"
+
+  def decimalTypeInfo(decimalType: DecimalType): TypeInfo =
+    TypeInfoFactory.decimalTypeInfo
+
+  def decimalTypeInfoToCatalyst(inspector: PrimitiveObjectInspector): DecimalType = {
+    DecimalType.Unlimited
+  }
+
+  def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
+    Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
   }
 }
 

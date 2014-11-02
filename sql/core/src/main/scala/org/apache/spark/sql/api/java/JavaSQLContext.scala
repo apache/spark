@@ -230,7 +230,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
         case c: Class[_] if c == classOf[java.lang.Boolean] =>
           (org.apache.spark.sql.BooleanType, true)
         case c: Class[_] if c == classOf[java.math.BigDecimal] =>
-          (org.apache.spark.sql.DecimalType, true)
+          (org.apache.spark.sql.DecimalType(), true)
         case c: Class[_] if c == classOf[java.sql.Date] =>
           (org.apache.spark.sql.DateType, true)
         case c: Class[_] if c == classOf[java.sql.Timestamp] =>

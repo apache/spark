@@ -29,15 +29,15 @@ import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Table, Hive, Partition}
 import org.apache.hadoop.hive.ql.plan.{CreateTableDesc, FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
-import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Deserializer}
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
+import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, DecimalTypeInfo, TypeInfoFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -47,11 +47,6 @@ import scala.language.implicitConversions
  */
 private[hive] object HiveShim {
   val version = "0.13.1"
-  /*
-   * TODO: hive-0.13 support DECIMAL(precision, scale), DECIMAL in hive-0.12 is actually DECIMAL(38,unbounded)
-   * Full support of new decimal feature need to be fixed in seperate PR.
-   */
-  val metastoreDecimal = "decimal\\((\\d+),(\\d+)\\)".r
 
   def getTableDesc(
     serdeClass: Class[_ <: Deserializer],
@@ -196,6 +191,30 @@ private[hive] object HiveShim {
     f.setTableInfo(w.tableInfo)
     f.setDestTableId(w.destTableId)
     f
+  }
+
+  // Precision and scale to pass for unlimited decimals; these are the same as the precision and
+  // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
+  private val UNLIMITED_DECIMAL_PRECISION = 38
+  private val UNLIMITED_DECIMAL_SCALE = 18
+
+  def decimalMetastoreString(decimalType: DecimalType): String = decimalType match {
+    case DecimalType.Fixed(precision, scale) => s"decimal($precision,$scale)"
+    case _ => s"decimal($UNLIMITED_DECIMAL_PRECISION,$UNLIMITED_DECIMAL_SCALE)"
+  }
+
+  def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
+    case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
+    case _ => new DecimalTypeInfo(UNLIMITED_DECIMAL_PRECISION, UNLIMITED_DECIMAL_SCALE)
+  }
+
+  def decimalTypeInfoToCatalyst(inspector: PrimitiveObjectInspector): DecimalType = {
+    val info = inspector.getTypeInfo.asInstanceOf[DecimalTypeInfo]
+    DecimalType(info.precision(), info.scale())
+  }
+
+  def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
+    Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
   }
 }
 

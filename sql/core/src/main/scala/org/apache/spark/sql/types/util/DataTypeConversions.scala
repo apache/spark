@@ -19,6 +19,8 @@ package org.apache.spark.sql.types.util
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField, MetadataBuilder => JMetaDataBuilder}
+import org.apache.spark.sql.api.java.{DecimalType => JDecimalType}
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.collection.JavaConverters._
 
@@ -44,7 +46,8 @@ protected[sql] object DataTypeConversions {
     case BooleanType => JDataType.BooleanType
     case DateType => JDataType.DateType
     case TimestampType => JDataType.TimestampType
-    case DecimalType => JDataType.DecimalType
+    case DecimalType.Fixed(precision, scale) => new JDecimalType(precision, scale)
+    case DecimalType.Unlimited => new JDecimalType()
     case DoubleType => JDataType.DoubleType
     case FloatType => JDataType.FloatType
     case ByteType => JDataType.ByteType
@@ -88,7 +91,11 @@ protected[sql] object DataTypeConversions {
     case timestampType: org.apache.spark.sql.api.java.TimestampType =>
       TimestampType
     case decimalType: org.apache.spark.sql.api.java.DecimalType =>
-      DecimalType
+      if (decimalType.isFixed) {
+        DecimalType(decimalType.getPrecision, decimalType.getScale)
+      } else {
+        DecimalType.Unlimited
+      }
     case doubleType: org.apache.spark.sql.api.java.DoubleType =>
       DoubleType
     case floatType: org.apache.spark.sql.api.java.FloatType =>
@@ -115,7 +122,7 @@ protected[sql] object DataTypeConversions {
 
   /** Converts Java objects to catalyst rows / types */
   def convertJavaToCatalyst(a: Any): Any = a match {
-    case d: java.math.BigDecimal => BigDecimal(d)
+    case d: java.math.BigDecimal => Decimal(BigDecimal(d))
     case other => other
   }
 

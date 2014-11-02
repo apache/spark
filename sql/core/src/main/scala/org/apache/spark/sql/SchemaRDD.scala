@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
 
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.JavaConversions._
@@ -113,7 +114,7 @@ class SchemaRDD(
   // =========================================================================================
 
   override def compute(split: Partition, context: TaskContext): Iterator[Row] =
-    firstParent[Row].compute(split, context).map(_.copy())
+    firstParent[Row].compute(split, context).map(ScalaReflection.convertRowToScala)
 
   override def getPartitions: Array[Partition] = firstParent[Row].partitions
 

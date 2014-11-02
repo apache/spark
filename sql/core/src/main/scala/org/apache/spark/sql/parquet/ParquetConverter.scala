@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
 
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
@@ -117,6 +119,12 @@ private[sql] object CatalystConverter {
             parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
         }
       }
+      case d: DecimalType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addBinary(value: Binary): Unit =
+            parent.updateDecimal(fieldIndex, value, d)
+        }
+      }
       // All other primitive types use the default converter
       case ctype: PrimitiveType => { // note: need the type tag here!
         new CatalystPrimitiveConverter(parent, fieldIndex)
@@ -191,6 +199,10 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
   protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit =
     updateField(fieldIndex, value.toStringUsingUTF8)
 
+  protected[parquet] def updateDecimal(fieldIndex: Int, value: Binary, ctype: DecimalType): Unit = {
+    updateField(fieldIndex, readDecimal(new Decimal(), value, ctype))
+  }
+
   protected[parquet] def isRootConverter: Boolean = parent == null
 
   protected[parquet] def clearBuffer(): Unit
@@ -201,6 +213,27 @@ private[parquet] abstract class CatalystConverter extends GroupConverter {
    * @return
    */
   def getCurrentRecord: Row = throw new UnsupportedOperationException
+
+  /**
+   * Read a decimal value from a Parquet Binary into "dest". Only supports decimals that fit in
+   * a long (i.e. precision <= 18)
+   */
+  protected[parquet] def readDecimal(dest: Decimal, value: Binary, ctype: DecimalType): Unit = {
+    val precision = ctype.precisionInfo.get.precision
+    val scale = ctype.precisionInfo.get.scale
+    val bytes = value.getBytes
+    require(bytes.length <= 16, "Decimal field too large to read")
+    var unscaled = 0L
+    var i = 0
+    while (i < bytes.length) {
+      unscaled = (unscaled << 8) | (bytes(i) & 0xFF)
+      i += 1
+    }
+    // Make sure unscaled has the right sign, by sign-extending the first bit
+    val numBits = 8 * bytes.length
+    unscaled = (unscaled << (64 - numBits)) >> (64 - numBits)
+    dest.set(unscaled, precision, scale)
+  }
 }
 
 /**
@@ -352,6 +385,16 @@ private[parquet] class CatalystPrimitiveRowConverter(
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit =
     current.setString(fieldIndex, value.toStringUsingUTF8)
+
+  override protected[parquet] def updateDecimal(
+      fieldIndex: Int, value: Binary, ctype: DecimalType): Unit = {
+    var decimal = current(fieldIndex).asInstanceOf[Decimal]
+    if (decimal == null) {
+      decimal = new Decimal
+      current(fieldIndex) = decimal
+    }
+    readDecimal(decimal, value, ctype)
+  }
 }
 
 /**

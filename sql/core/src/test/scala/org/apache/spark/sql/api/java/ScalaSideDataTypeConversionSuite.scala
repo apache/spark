@@ -38,7 +38,7 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
     checkDataType(org.apache.spark.sql.BooleanType)
     checkDataType(org.apache.spark.sql.DateType)
     checkDataType(org.apache.spark.sql.TimestampType)
-    checkDataType(org.apache.spark.sql.DecimalType)
+    checkDataType(org.apache.spark.sql.DecimalType.Unlimited)
     checkDataType(org.apache.spark.sql.DoubleType)
     checkDataType(org.apache.spark.sql.FloatType)
     checkDataType(org.apache.spark.sql.ByteType)
@@ -58,7 +58,7 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
 
     // Simple StructType.
     val simpleScalaStructType = SStructType(
-      SStructField("a", org.apache.spark.sql.DecimalType, false) ::
+      SStructField("a", org.apache.spark.sql.DecimalType.Unlimited, false) ::
       SStructField("b", org.apache.spark.sql.BooleanType, true) ::
       SStructField("c", org.apache.spark.sql.LongType, true) ::
       SStructField("d", org.apache.spark.sql.BinaryType, false) :: Nil)

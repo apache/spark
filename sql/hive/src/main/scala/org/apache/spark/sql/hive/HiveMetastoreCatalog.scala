@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
+import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.hadoop.util.ReflectionUtils
@@ -321,10 +322,17 @@ object HiveMetastoreTypes extends RegexParsers {
     "bigint" ^^^ LongType |
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
-    HiveShim.metastoreDecimal ^^^ DecimalType |
+    fixedDecimalType |                     // Hive 0.13+ decimal with precision/scale
+    "decimal" ^^^ DecimalType.Unlimited |  // Hive 0.12 decimal with no precision/scale
     "date" ^^^ DateType |
     "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
+
+  protected lazy val fixedDecimalType: Parser[DataType] =
+    ("decimal" ~> "(" ~> "\\d+".r) ~ ("," ~> "\\d+".r <~ ")") ^^ {
+      case precision ~ scale =>
+        DecimalType(precision.toInt, scale.toInt)
+    }
 
   protected lazy val arrayType: Parser[DataType] =
     "array" ~> "<" ~> dataType <~ ">" ^^ {
@@ -373,7 +381,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BinaryType => "binary"
     case BooleanType => "boolean"
     case DateType => "date"
-    case DecimalType => "decimal"
+    case d: DecimalType => HiveShim.decimalMetastoreString(d)
     case TimestampType => "timestamp"
     case NullType => "void"
   }
@@ -441,7 +449,7 @@ private[hive] case class MetastoreRelation
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = hiveQlTable.getCols.map(_.toAttribute) 
+  val attributes = hiveQlTable.getCols.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 

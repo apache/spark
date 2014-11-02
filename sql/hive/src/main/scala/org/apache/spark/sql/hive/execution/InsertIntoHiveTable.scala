@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.execution.{Command, SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
@@ -76,7 +77,7 @@ case class InsertIntoHiveTable(
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[BigDecimal].underlying())
+      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toBigDecimal.underlying())
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))

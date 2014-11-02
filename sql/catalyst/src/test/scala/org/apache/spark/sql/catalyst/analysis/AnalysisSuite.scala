@@ -38,7 +38,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("a", StringType)(),
     AttributeReference("b", StringType)(),
     AttributeReference("c", DoubleType)(),
-    AttributeReference("d", DecimalType)(),
+    AttributeReference("d", DecimalType.Unlimited)(),
     AttributeReference("e", ShortType)())
 
   before {
@@ -119,7 +119,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       AttributeReference("a", StringType)(),
       AttributeReference("b", StringType)(),
       AttributeReference("c", DoubleType)(),
-      AttributeReference("d", DecimalType)(),
+      AttributeReference("d", DecimalType.Unlimited)(),
       AttributeReference("e", ShortType)())
 
     val expr0 = 'a / 2
@@ -137,7 +137,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    assert(pl(3).dataType == DecimalType)
+    assert(pl(3).dataType == DecimalType.Unlimited)
     assert(pl(4).dataType == DoubleType)
   }
 }
