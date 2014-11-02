@@ -39,7 +39,7 @@ private[spark] class WholeTextFileInputFormat
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
 
   private var conf: Configuration = _
-  def setConf(c: Configuration) = {
+  def setConf(c: Configuration) {
     conf = c
   }
   def getConf: Configuration = conf

@@ -39,7 +39,7 @@ private[spark] class WholeTextFileRecordReader(
   extends RecordReader[String, String] with Configurable {
 
   private var conf: Configuration = _
-  def setConf(c: Configuration) = {
+  def setConf(c: Configuration) {
     conf = c
   }
   def getConf: Configuration = conf
@@ -101,7 +101,7 @@ private[spark] class WholeCombineFileRecordReader(
   ) with Configurable {
 
   private var conf: Configuration = _
-  def setConf(c: Configuration) = {
+  def setConf(c: Configuration) {
     conf = c
   }
   def getConf: Configuration = conf
