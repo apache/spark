@@ -20,10 +20,11 @@ package org.apache.spark.sql.types.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField,
-  MetadataBuilder => JMetaDataBuilder, UDTWrappers}
+import org.apache.spark.sql.api.java.{DataType => JDataType, DecimalType => JDecimalType,
+  MetadataBuilder => JMetaDataBuilder, StructField => JStructField, UDTWrappers}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types.UserDefinedType
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 
 protected[sql] object DataTypeConversions {
@@ -52,7 +53,8 @@ protected[sql] object DataTypeConversions {
     case BooleanType => JDataType.BooleanType
     case DateType => JDataType.DateType
     case TimestampType => JDataType.TimestampType
-    case DecimalType => JDataType.DecimalType
+    case DecimalType.Fixed(precision, scale) => new JDecimalType(precision, scale)
+    case DecimalType.Unlimited => new JDecimalType()
     case DoubleType => JDataType.DoubleType
     case FloatType => JDataType.FloatType
     case ByteType => JDataType.ByteType
@@ -100,7 +102,11 @@ protected[sql] object DataTypeConversions {
     case timestampType: org.apache.spark.sql.api.java.TimestampType =>
       TimestampType
     case decimalType: org.apache.spark.sql.api.java.DecimalType =>
-      DecimalType
+      if (decimalType.isFixed) {
+        DecimalType(decimalType.getPrecision, decimalType.getScale)
+      } else {
+        DecimalType.Unlimited
+      }
     case doubleType: org.apache.spark.sql.api.java.DoubleType =>
       DoubleType
     case floatType: org.apache.spark.sql.api.java.FloatType =>
@@ -128,7 +134,7 @@ protected[sql] object DataTypeConversions {
   /** Converts Java objects to catalyst rows / types */
   def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
     case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
-    case (d: java.math.BigDecimal, _) => BigDecimal(d)
+    case (d: java.math.BigDecimal, _) => Decimal(BigDecimal(d))
     case (other, _) => other
   }
 

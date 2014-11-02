@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.json
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 import scala.math.BigDecimal
@@ -175,9 +177,9 @@ private[sql] object JsonRDD extends Logging {
     ScalaReflection.typeOfObject orElse {
       // Since we do not have a data type backed by BigInteger,
       // when we see a Java BigInteger, we use DecimalType.
-      case value: java.math.BigInteger => DecimalType
+      case value: java.math.BigInteger => DecimalType.Unlimited
       // DecimalType's JVMType is scala BigDecimal.
-      case value: java.math.BigDecimal => DecimalType
+      case value: java.math.BigDecimal => DecimalType.Unlimited
       // Unexpected data type.
       case _ => StringType
     }
@@ -319,13 +321,13 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toDecimal(value: Any): BigDecimal = {
+  private def toDecimal(value: Any): Decimal = {
     value match {
-      case value: java.lang.Integer => BigDecimal(value)
-      case value: java.lang.Long => BigDecimal(value)
-      case value: java.math.BigInteger => BigDecimal(value)
-      case value: java.lang.Double => BigDecimal(value)
-      case value: java.math.BigDecimal => BigDecimal(value)
+      case value: java.lang.Integer => Decimal(value)
+      case value: java.lang.Long => Decimal(value)
+      case value: java.math.BigInteger => Decimal(BigDecimal(value))
+      case value: java.lang.Double => Decimal(value)
+      case value: java.math.BigDecimal => Decimal(BigDecimal(value))
     }
   }
 
@@ -391,7 +393,7 @@ private[sql] object JsonRDD extends Logging {
         case IntegerType => value.asInstanceOf[IntegerType.JvmType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
-        case DecimalType => toDecimal(value)
+        case DecimalType() => toDecimal(value)
         case BooleanType => value.asInstanceOf[BooleanType.JvmType]
         case NullType => null
 

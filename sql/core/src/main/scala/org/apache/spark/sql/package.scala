@@ -183,6 +183,20 @@ package object sql {
    *
    * The data type representing `scala.math.BigDecimal` values.
    *
+   * TODO(matei): explain precision and scale
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  type DecimalType = catalyst.types.DecimalType
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * The data type representing `scala.math.BigDecimal` values.
+   *
+   * TODO(matei): explain precision and scale
+   *
    * @group dataType
    */
   @DeveloperApi

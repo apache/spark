@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -325,7 +326,11 @@ private[hive] object HiveQl {
   }
 
   protected def nodeToDataType(node: Node): DataType = node match {
-    case Token("TOK_DECIMAL", Nil) => DecimalType
+    case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
+      DecimalType(precision.getText.toInt, scale.getText.toInt)
+    case Token("TOK_DECIMAL", precision :: Nil) =>
+      DecimalType(precision.getText.toInt, 0)
+    case Token("TOK_DECIMAL", Nil) => DecimalType.Unlimited
     case Token("TOK_BIGINT", Nil) => LongType
     case Token("TOK_INT", Nil) => IntegerType
     case Token("TOK_TINYINT", Nil) => ByteType
@@ -942,8 +947,12 @@ private[hive] object HiveQl {
       Cast(nodeToExpr(arg), BinaryType)
     case Token("TOK_FUNCTION", Token("TOK_BOOLEAN", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), BooleanType)
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: scale :: nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, scale.getText.toInt))
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, 0))
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DecimalType)
+      Cast(nodeToExpr(arg), DecimalType.Unlimited)
     case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), TimestampType)
     case Token("TOK_FUNCTION", Token("TOK_DATE", Nil) :: arg :: Nil) =>
@@ -1063,7 +1072,7 @@ private[hive] object HiveQl {
         } else if (ast.getText.endsWith("BD") || ast.getText.endsWith("D")) {
           // Literal decimal
           val strVal = ast.getText.stripSuffix("D").stripSuffix("B")
-          v = Literal(BigDecimal(strVal))
+          v = Literal(Decimal(strVal))
         } else {
           v = Literal(ast.getText.toDouble, DoubleType)
           v = Literal(ast.getText.toLong, LongType)

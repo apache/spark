@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
@@ -27,7 +26,8 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, SinglePartition, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution,
+  SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
 /**
@@ -176,10 +176,10 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   override def output = child.output
   override def outputPartitioning = SinglePartition
 
-  val ordering = new RowOrdering(sortOrder, child.output)
+  val ord = new RowOrdering(sortOrder, child.output)
 
   // TODO: Is this copying for no reason?
-  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
+  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     .map(ScalaReflection.convertRowToScala(_, this.schema))
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
