@@ -88,9 +88,8 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   /**
    * Applies a schema to an RDD of Java Beans.
    *
-   * WARNING: The ordering of elements in the schema may differ from Scala.
-   *          If you create a [[org.apache.spark.sql.SchemaRDD]] using [[SQLContext]]
-   *          with the same Java Bean, row elements may be in a different order.
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
    */
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): JavaSchemaRDD = {
     val attributeSeq = getSchema(beanClass)

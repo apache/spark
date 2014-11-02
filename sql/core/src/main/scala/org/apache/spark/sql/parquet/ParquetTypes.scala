@@ -253,7 +253,6 @@ private[parquet] object ParquetTypesConverter extends Logging {
         new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
     }.getOrElse {
       ctype match {
-        // Check UDT first since UDTs can override other types
         case udt: UserDefinedType[_] => {
           fromDataType(udt.sqlType, name, nullable, inArray)
         }

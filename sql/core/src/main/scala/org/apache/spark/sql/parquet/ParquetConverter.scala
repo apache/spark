@@ -75,7 +75,6 @@ private[sql] object CatalystConverter {
       parent: CatalystConverter): Converter = {
     val fieldType: DataType = field.dataType
     fieldType match {
-      // Check UDT first since UDTs can override other types
       case udt: UserDefinedType[_] => {
         createConverter(field.copy(dataType = udt.sqlType), fieldIndex, parent)
       }
