@@ -332,7 +332,7 @@ object ShuffleBlockFetcherIterator {
    *             Note that this is NOT the exact bytes.
    * @param buf [[ManagedBuffer]] for the content.
    */
-  sealed case class SuccessFetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer)
+  private[storage] case class SuccessFetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer)
     extends FetchResult {
     require(buf != null)
     require(size >= 0)
@@ -343,5 +343,6 @@ object ShuffleBlockFetcherIterator {
    * @param blockId block id
    * @param e the failure exception
    */
-  sealed case class FailureFetchResult(blockId: BlockId, e: Throwable) extends FetchResult
+  private[storage] case class FailureFetchResult(blockId: BlockId, e: Throwable)
+    extends FetchResult
 }
