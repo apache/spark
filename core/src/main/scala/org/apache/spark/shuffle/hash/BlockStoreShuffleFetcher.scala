@@ -67,7 +67,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
               throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
             case _ =>
               throw new SparkException(
-                "Failed to get block " + blockId + ", which is not a shuffle block")
+                "Failed to get block " + blockId + ", which is not a shuffle block", e)
           }
         }
       }
