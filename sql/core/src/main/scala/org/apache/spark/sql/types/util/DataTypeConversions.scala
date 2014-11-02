@@ -44,7 +44,6 @@ protected[sql] object DataTypeConversions {
    * Returns the equivalent DataType in Java for the given DataType in Scala.
    */
   def asJavaDataType(scalaDataType: DataType): JDataType = scalaDataType match {
-    // Check UDT first since UDTs can override other types
     case udtType: UserDefinedType[_] =>
       UDTWrappers.wrapAsJava(udtType)
 
@@ -87,7 +86,6 @@ protected[sql] object DataTypeConversions {
    * Returns the equivalent DataType in Scala for the given DataType in Java.
    */
   def asScalaDataType(javaDataType: JDataType): DataType = javaDataType match {
-    // Check UDT first since UDTs can override other types
     case udtType: org.apache.spark.sql.api.java.UserDefinedType[_] =>
       UDTWrappers.wrapAsScala(udtType)
 

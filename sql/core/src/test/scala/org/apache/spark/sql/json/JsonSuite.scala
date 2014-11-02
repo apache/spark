@@ -233,8 +233,8 @@ class JsonSuite extends QueryTest {
           StructField("field2", StringType, true) ::
           StructField("field3", StringType, true) :: Nil), false), true) ::
       StructField("struct", StructType(
-      StructField("field1", BooleanType, true) ::
-      StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
+        StructField("field1", BooleanType, true) ::
+        StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
         StructField("field1", ArrayType(IntegerType, false), true) ::
         StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
