@@ -66,8 +66,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, scheduler: TaskSchedule
   }
   
   override def receiveWithLogging = {
-    case Heartbeat(executorId, taskMetrics, blockManagerId,
-      broadcastInfo) =>
+    case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val response = HeartbeatResponse(
         !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
       sender ! response

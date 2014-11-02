@@ -438,8 +438,6 @@ private[spark] class BlockManagerInfo(
     var blockStatus: BlockStatus = null
 
     updateLastSeenMs()
-    println("updating block %s in BlockManagerMasterActor with storageLevel %s".
-      format(blockId, storageLevel))
     if (_blocks.containsKey(blockId)) {
       // The block exists on the slave already.
       val blockStatus: BlockStatus = _blocks.get(blockId)
