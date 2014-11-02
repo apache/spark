@@ -21,11 +21,12 @@ import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
+/* Implicits */
+import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
@@ -719,7 +720,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
     validateMetadata(sql("SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
   }
-  
+
   test("SPARK-3371 Renaming a function expression with group by gives error") {
     registerFunction("len", (s: String) => s.length)
     checkAnswer(
@@ -934,7 +935,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
-    checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"), 
+    checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"),
         (11 to 100).map(i => Seq(i)))
   }
 }

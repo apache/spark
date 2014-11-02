@@ -161,6 +161,9 @@ private[sql] case class InMemoryRelation(
   }
 
   def cachedColumnBuffers = _cachedColumnBuffers
+
+  override protected def otherCopyArgs: Seq[AnyRef] =
+    Seq(_cachedColumnBuffers, statisticsToBePropagated)
 }
 
 private[sql] case class InMemoryColumnarTableScan(
