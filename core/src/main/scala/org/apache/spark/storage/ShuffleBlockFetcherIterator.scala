@@ -321,7 +321,7 @@ object ShuffleBlockFetcherIterator {
   /**
    * Result of a fetch from a remote block.
    */
-  sealed trait FetchResult {
+  private[storage] sealed trait FetchResult {
     val blockId: BlockId
   }
 
