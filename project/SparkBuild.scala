@@ -367,6 +367,8 @@ object TestSettings {
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+    // TODO: Remove this - it is a hack
+    retrievePattern := "[conf]s/[artifact](-[revision])(-[classifier]).[ext]",
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
       "-groups",
