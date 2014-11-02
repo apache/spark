@@ -95,6 +95,16 @@ case class Join(
   }
 }
 
+case class RangeJoin(
+  left: LogicalPlan,
+  right: LogicalPlan,
+  condition: Seq[Expression]) extends BinaryNode{
+
+  override def output = {
+    left.output ++ right.output
+  }
+}
+
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   def output = left.output
 }

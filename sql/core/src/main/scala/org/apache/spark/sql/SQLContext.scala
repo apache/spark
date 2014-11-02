@@ -302,6 +302,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
+      RangeJoin ::
       BroadcastNestedLoopJoin :: Nil
 
     /**
