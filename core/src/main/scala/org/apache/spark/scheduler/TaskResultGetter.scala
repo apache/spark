@@ -49,12 +49,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         try {
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
-              if (!taskSetManager.canFetchMoreResult(serializedData.limit())) {
+              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
                 return
               }
               (directResult, serializedData.limit())
             case IndirectTaskResult(blockId, size) =>
-              if (!taskSetManager.canFetchMoreResult(size)) {
+              if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)
                 return
