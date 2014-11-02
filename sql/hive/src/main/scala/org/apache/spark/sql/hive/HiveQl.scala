@@ -44,6 +44,8 @@ private[hive] case class SourceCommand(filePath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
+private[hive] case class AddJar(path: String) extends Command
+
 private[hive] case class DropTable(tableName: String, ifExists: Boolean) extends Command
 
 private[hive] case class AnalyzeTable(tableName: String) extends Command
@@ -54,6 +56,7 @@ private[hive] object HiveQl {
     "TOK_DESCFUNCTION",
     "TOK_DESCDATABASE",
     "TOK_SHOW_CREATETABLE",
+    "TOK_SHOWCOLUMNS",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOWDATABASES",
     "TOK_SHOWFUNCTIONS",
@@ -61,6 +64,7 @@ private[hive] object HiveQl {
     "TOK_SHOWINDEXES",
     "TOK_SHOWPARTITIONS",
     "TOK_SHOWTABLES",
+    "TOK_SHOW_TBLPROPERTIES",
 
     "TOK_LOCKTABLE",
     "TOK_SHOWLOCKS",
@@ -122,6 +126,9 @@ private[hive] object HiveQl {
     "TOK_CREATETABLE",
     "TOK_DESCTABLE"
   ) ++ nativeCommands
+  
+  // It parses hive sql query along with with several Spark SQL specific extensions
+  protected val hiveSqlParser = new ExtendedHiveQlParser
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
@@ -211,42 +218,18 @@ private[hive] object HiveQl {
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
   /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = {
+  def parseSql(sql: String): LogicalPlan = hiveSqlParser(sql)
+
+  /** Creates LogicalPlan for a given HiveQL string. */
+  def createPlan(sql: String) = {
     try {
-      if (sql.trim.toLowerCase.startsWith("set")) {
-        // Split in two parts since we treat the part before the first "="
-        // as key, and the part after as value, which may contain other "=" signs.
-        sql.trim.drop(3).split("=", 2).map(_.trim) match {
-          case Array("") => // "set"
-            SetCommand(None, None)
-          case Array(key) => // "set key"
-            SetCommand(Some(key), None)
-          case Array(key, value) => // "set key=value"
-            SetCommand(Some(key), Some(value))
-        }
-      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        CacheCommand(sql.trim.drop(12).trim, true)
-      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
-        CacheCommand(sql.trim.drop(14).trim, false)
-      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
+      val tree = getAst(sql)
+      if (nativeCommands contains tree.getText) {
         NativeCommand(sql)
-      } else if (sql.trim.toLowerCase.startsWith("add file")) {
-        AddFile(sql.trim.drop(9))
-      } else if (sql.trim.toLowerCase.startsWith("dfs")) {
-        NativeCommand(sql)
-      } else if (sql.trim.startsWith("source")) {
-        SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.trim.startsWith("!")) {
-        ShellCommand(sql.drop(1))
       } else {
-        val tree = getAst(sql)
-        if (nativeCommands contains tree.getText) {
-          NativeCommand(sql)
-        } else {
-          nodeToPlan(tree) match {
-            case NativePlaceholder => NativeCommand(sql)
-            case other => other
-          }
+        nodeToPlan(tree) match {
+          case NativePlaceholder => NativeCommand(sql)
+          case other => other
         }
       }
     } catch {
@@ -409,10 +392,9 @@ private[hive] object HiveQl {
       ExplainCommand(NoRelation)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
-      val Some(query) :: _ :: _ :: Nil =
+      val Some(query) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
-      // TODO: support EXTENDED?
-      ExplainCommand(nodeToPlan(query))
+      ExplainCommand(nodeToPlan(query), extended != None)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -486,7 +468,7 @@ private[hive] object HiveQl {
 
       val (db, tableName) = extractDbNameTableName(tableNameParts)
 
-      InsertIntoCreatedTable(db, tableName, nodeToPlan(query))
+      CreateTableAsSelect(db, tableName, nodeToPlan(query))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
@@ -773,6 +755,7 @@ private[hive] object HiveQl {
 
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
+        case "TOK_CROSSJOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
@@ -823,11 +806,6 @@ private[hive] object HiveQl {
           cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
-      if (partitionKeys.values.exists(p => p.isEmpty)) {
-        throw new NotImplementedError(s"Do not support INSERT INTO/OVERWRITE with" +
-          s"dynamic partitioning.")
-      }
-
       InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query, overwrite)
 
     case a: ASTNode =>
@@ -841,7 +819,7 @@ private[hive] object HiveQl {
 
     case Token("TOK_SELEXPR",
            e :: Token(alias, Nil) :: Nil) =>
-      Some(Alias(nodeToExpr(e), alias)())
+      Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None
@@ -887,6 +865,7 @@ private[hive] object HiveQl {
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
+  val SQRT = "(?i)SQRT".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -956,6 +935,7 @@ private[hive] object HiveQl {
     case Token(DIV(), left :: right:: Nil) =>
       Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
+    case Token("TOK_FUNCTION", Token(SQRT(), Nil) :: arg :: Nil) => Sqrt(nodeToExpr(arg))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
@@ -1014,9 +994,9 @@ private[hive] object HiveQl {
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) => 
+    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) => 
+    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
 
     /* UDFs - Must be last otherwise will preempt built in functions */

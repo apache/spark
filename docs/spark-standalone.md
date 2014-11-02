@@ -62,7 +62,12 @@ Finally, the following configuration options can be passed to the master and wor
 
 # Cluster Launch Scripts
 
-To launch a Spark standalone cluster with the launch scripts, you need to create a file called `conf/slaves` in your Spark directory, which should contain the hostnames of all the machines where you would like to start Spark workers, one per line. The master machine must be able to access each of the slave machines via password-less `ssh` (using a private key). For testing, you can just put `localhost` in this file.
+To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/slaves in your Spark directory,
+which must contain the hostnames of all the machines where you intend to start Spark workers, one per line.
+If conf/slaves does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
+Note, the master machine accesses each of the worker machines via ssh. By default, ssh is run in parallel and requires password-less (using a private key) access to be setup.
+If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
+
 
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
 
@@ -242,14 +247,16 @@ To run an interactive Spark shell against the cluster, run the following command
 
     ./bin/spark-shell --master spark://IP:PORT
 
-You can also pass an option `--cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
 # Launching Compiled Spark Applications
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
-only supports deploying the driver inside the client process that is submitting the application
-(`client` deploy mode).
+supports two deploy modes. In `client` mode, the driver is launched in the same process as the
+client that submits the application. In `cluster` mode, however, the driver is launched from one
+of the Worker processes inside the cluster, and the client process exits as soon as it fulfills
+its responsibility of submitting the application without waiting for the application to finish.
 
 If your application is launched through Spark submit, then the application jar is automatically
 distributed to all worker nodes. For any additional jars that your application depends on, you
@@ -307,7 +314,7 @@ tight firewall settings. For a complete list of ports to configure, see the
 
 By default, standalone scheduling clusters are resilient to Worker failures (insofar as Spark itself is resilient to losing work by moving it to other workers). However, the scheduler uses a Master to make scheduling decisions, and this (by default) creates a single point of failure: if the Master crashes, no new applications can be created. In order to circumvent this, we have two high availability schemes, detailed below.
 
-# Standby Masters with ZooKeeper
+## Standby Masters with ZooKeeper
 
 **Overview**
 
@@ -347,7 +354,7 @@ There's an important distinction to be made between "registering with a Master" 
 
 Due to this property, new Masters can be created at any time, and the only thing you need to worry about is that _new_ applications and Workers can find it to register with in case it becomes the leader. Once registered, you're taken care of.
 
-# Single-Node Recovery with Local File System
+## Single-Node Recovery with Local File System
 
 **Overview**
 

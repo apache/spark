@@ -71,6 +71,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
+  // TODO: This is not really valid...
   def clustering = ordering.map(_.child).toSet
 }
 
@@ -139,7 +140,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   with Partitioning {
 
   override def children = expressions
-  override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
 
@@ -179,7 +179,6 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   with Partitioning {
 
   override def children = ordering
-  override def references = ordering.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
 

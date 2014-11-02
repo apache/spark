@@ -26,7 +26,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
 
-class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
+abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   val conf = new SparkConf(loadDefaults = false)
 

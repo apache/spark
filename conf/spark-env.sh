@@ -52,3 +52,5 @@ else
   export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
   export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/latest.tgz
 fi
+
+export HADOOP_CONF_DIR=$FWDIR/conf/chicago_hadoop

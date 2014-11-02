@@ -25,7 +25,7 @@ import org.scalatest.FunSuite
 
 import com.google.common.io.Files
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.util.Utils
 
 class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
@@ -57,7 +57,7 @@ class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("ReplFakeClass2").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
@@ -65,7 +65,7 @@ class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
 
   test("parent first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(url1, parentLoader, false)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, false)
     val fakeClass = classLoader.loadClass("ReplFakeClass1").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
@@ -73,7 +73,7 @@ class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
 
   test("child first can fall back") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("ReplFakeClass3").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
@@ -81,7 +81,7 @@ class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
 
   test("child first can fail") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorClassLoader(url1, parentLoader, true)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("ReplFakeClassDoesNotExist").newInstance()
     }

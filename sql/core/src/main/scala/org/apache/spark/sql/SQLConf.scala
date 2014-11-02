@@ -26,6 +26,7 @@ import java.util.Properties
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
   val COLUMN_BATCH_SIZE = "spark.sql.inMemoryColumnarStorage.batchSize"
+  val IN_MEMORY_PARTITION_PRUNING = "spark.sql.inMemoryColumnarStorage.partitionPruning"
   val AUTO_BROADCASTJOIN_THRESHOLD = "spark.sql.autoBroadcastJoinThreshold"
   val DEFAULT_SIZE_IN_BYTES = "spark.sql.defaultSizeInBytes"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
@@ -33,6 +34,7 @@ private[spark] object SQLConf {
   val DIALECT = "spark.sql.dialect"
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
+  val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -51,9 +53,10 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-trait SQLConf {
+private[sql] trait SQLConf {
   import SQLConf._
 
+  /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
@@ -77,6 +80,9 @@ trait SQLConf {
   /** When true tables cached using the in-memory columnar caching will be compressed. */
   private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED, "false").toBoolean
 
+  /** The compression codec for writing to a Parquetfile */
+  private[spark] def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION, "snappy")
+
   /** The number of rows that will be  */
   private[spark] def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE, "1000").toInt
 
@@ -87,7 +93,7 @@ trait SQLConf {
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
    * than interpreted evaluation, but there are significant start-up costs due to compilation.
-   * As a result codegen is only benificial when queries run for a long time, or when the same
+   * As a result codegen is only beneficial when queries run for a long time, or when the same
    * expressions are used multiple times.
    *
    * Defaults to false as this feature is currently experimental.
@@ -106,8 +112,9 @@ trait SQLConf {
 
   /**
    * The default size in bytes to assign to a logical operator's estimation statistics.  By default,
-   * it is set to a larger value than `autoConvertJoinSize`, hence any logical operator without a
-   * properly implemented estimation of this statistic will not be incorrectly broadcasted in joins.
+   * it is set to a larger value than `autoBroadcastJoinThreshold`, hence any logical operator
+   * without a properly implemented estimation of this statistic will not be incorrectly broadcasted
+   * in joins.
    */
   private[spark] def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, (autoBroadcastJoinThreshold + 1).toString).toLong
@@ -117,6 +124,12 @@ trait SQLConf {
    */
   private[spark] def isParquetBinaryAsString: Boolean =
     getConf(PARQUET_BINARY_AS_STRING, "false").toBoolean
+
+  /**
+   * When set to true, partition pruning for in-memory columnar tables is enabled.
+   */
+  private[spark] def inMemoryPartitionPruning: Boolean =
+    getConf(IN_MEMORY_PARTITION_PRUNING, "false").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 

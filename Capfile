@@ -7,6 +7,7 @@ set :user, "deploy"
 task :production do
   role :app, *((4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn05.chi.shopify.com"])
   role :master, "dn05.chi.shopify.com"
+  role :history, "dn05.chi.shopify.com"
   role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl2.chi.shopify.com", "platfora2.chi.shopify.com"
 end
 
@@ -14,6 +15,7 @@ task :staging do
   role :app, "54.197.179.141", "107.21.65.199", "54.166.211.228"
   role :master, "54.167.53.104"
 end
+
 
 namespace :deploy do
   task :setup_spark_paths do
@@ -27,6 +29,10 @@ namespace :deploy do
     run "sv-sudo restart spark-master"
   end
 
+  task :restart_history, :roles => :history do
+    run "sv-sudo restart spark-history"
+  end
+
   task :restart, :roles => :app do
     run "sv-sudo restart spark-worker"
   end
@@ -37,6 +43,6 @@ namespace :deploy do
       run "rm -rf #{release_path}/conf && ln -nfs #{shared_conf_path} #{release_path}/conf"
   end
 
-  before 'deploy:restart', 'deploy:symlink_shared', 'deploy:restart_master'
+  before 'deploy:restart', 'deploy:symlink_shared', 'deploy:restart_master', 'deploy:restart_history'
   after  'deploy:initialize_variables', 'deploy:setup_spark_paths'
 end

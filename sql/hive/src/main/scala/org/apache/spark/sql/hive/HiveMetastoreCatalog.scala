@@ -54,8 +54,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = synchronized {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+    val (databaseName, tblName) = processDatabaseAndTableName(
+                                    db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
     val table = client.getTable(databaseName, tblName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
@@ -96,10 +96,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     serDeInfo.setParameters(Map[String, String]())
     sd.setSerdeInfo(serDeInfo)
 
-    try client.createTable(table) catch {
-      case e: org.apache.hadoop.hive.ql.metadata.HiveException
-        if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
-           allowExisting => // Do nothing.
+    synchronized {
+      try client.createTable(table) catch {
+        case e: org.apache.hadoop.hive.ql.metadata.HiveException
+          if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
+             allowExisting => // Do nothing.
+      }
     }
   }
 
@@ -109,18 +111,14 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case InsertIntoCreatedTable(db, tableName, child) =>
+      // Wait until children are resolved.
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case CreateTableAsSelect(db, tableName, child) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        createTable(databaseName, tblName, child.output)
-
-        InsertIntoTable(
-          EliminateAnalysisOperators(
-            lookupRelation(Some(databaseName), tblName, None)),
-          Map.empty,
-          child,
-          overwrite = false)
+        CreateTableAsSelect(Some(databaseName), tableName, child)
     }
   }
 
@@ -130,15 +128,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    */
   object PreInsertionCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-      // Wait until children are resolved
+      // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
-        castChildOutput(p, table, child)
-
-      case p @ logical.InsertIntoTable(
-                 InMemoryRelation(_, _, _,
-                   HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -146,7 +139,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       val childOutputDataTypes = child.output.map(_.dataType)
       // Only check attributes, not partitionKeys since they are always strings.
       // TODO: Fully support inserting into partitioned tables.
-      val tableOutputDataTypes = table.attributes.map(_.dataType)
+      val tableOutputDataTypes =
+        table.attributes.map(_.dataType) ++ table.partitionKeys.map(_.dataType)
 
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
@@ -248,6 +242,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BooleanType => "boolean"
     case DecimalType => "decimal"
     case TimestampType => "timestamp"
+    case NullType => "void"
   }
 }
 
@@ -265,9 +260,9 @@ private[hive] case class MetastoreRelation
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
 
-  @transient lazy val hiveQlTable = new Table(table)
+  @transient val hiveQlTable = new Table(table)
 
-  def hiveQlPartitions = partitions.map { p =>
+  @transient val hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
 
@@ -306,7 +301,7 @@ private[hive] case class MetastoreRelation
       HiveMetastoreTypes.toDataType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = tableName +: alias.toSeq)
+    )(qualifiers = Seq(alias.getOrElse(tableName)))
   }
 
   // Must be a stable value since new attributes are born here.

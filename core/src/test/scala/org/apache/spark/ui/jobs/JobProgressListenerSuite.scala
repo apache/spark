@@ -34,12 +34,12 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val listener = new JobProgressListener(conf)
 
     def createStageStartEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, stageId.toString, 0, null, "")
+      val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
       SparkListenerStageSubmitted(stageInfo)
     }
 
     def createStageEndEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, stageId.toString, 0, null, "")
+      val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
       SparkListenerStageCompleted(stageInfo)
     }
 
@@ -70,33 +70,37 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     taskInfo.finishTime = 1
     var task = new ShuffleMapTask(0)
     val taskType = Utils.getFormattedClassName(task)
-    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToData.getOrElse(0, fail()).executorSummary.getOrElse("exe-1", fail())
-      .shuffleRead === 1000)
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, Success, taskInfo, taskMetrics))
+    assert(listener.stageIdToData.getOrElse((0, 0), fail())
+      .executorSummary.getOrElse("exe-1", fail()).shuffleRead === 1000)
 
     // finish a task with unknown executor-id, nothing should happen
     taskInfo =
       new TaskInfo(1234L, 0, 1, 1000L, "exe-unknown", "host1", TaskLocality.NODE_LOCAL, true)
     taskInfo.finishTime = 1
     task = new ShuffleMapTask(0)
-    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, Success, taskInfo, taskMetrics))
     assert(listener.stageIdToData.size === 1)
 
     // finish this task, should get updated duration
     taskInfo = new TaskInfo(1235L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     task = new ShuffleMapTask(0)
-    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToData.getOrElse(0, fail()).executorSummary.getOrElse("exe-1", fail())
-      .shuffleRead === 2000)
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, Success, taskInfo, taskMetrics))
+    assert(listener.stageIdToData.getOrElse((0, 0), fail())
+      .executorSummary.getOrElse("exe-1", fail()).shuffleRead === 2000)
 
     // finish this task, should get updated duration
     taskInfo = new TaskInfo(1236L, 0, 2, 0L, "exe-2", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     task = new ShuffleMapTask(0)
-    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
-    assert(listener.stageIdToData.getOrElse(0, fail()).executorSummary.getOrElse("exe-2", fail())
-      .shuffleRead === 1000)
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, Success, taskInfo, taskMetrics))
+    assert(listener.stageIdToData.getOrElse((0, 0), fail())
+      .executorSummary.getOrElse("exe-2", fail()).shuffleRead === 1000)
   }
 
   test("test task success vs failure counting for different task end reasons") {
@@ -119,16 +123,18 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {
-      listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, reason, taskInfo, metrics))
+      listener.onTaskEnd(
+        SparkListenerTaskEnd(task.stageId, 0, taskType, reason, taskInfo, metrics))
       failCount += 1
-      assert(listener.stageIdToData(task.stageId).numCompleteTasks === 0)
-      assert(listener.stageIdToData(task.stageId).numFailedTasks === failCount)
+      assert(listener.stageIdToData((task.stageId, 0)).numCompleteTasks === 0)
+      assert(listener.stageIdToData((task.stageId, 0)).numFailedTasks === failCount)
     }
 
     // Make sure we count success as success.
-    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, metrics))
-    assert(listener.stageIdToData(task.stageId).numCompleteTasks === 1)
-    assert(listener.stageIdToData(task.stageId).numFailedTasks === failCount)
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 1, taskType, Success, taskInfo, metrics))
+    assert(listener.stageIdToData((task.stageId, 1)).numCompleteTasks === 1)
+    assert(listener.stageIdToData((task.stageId, 0)).numFailedTasks === failCount)
   }
 
   test("test update metrics") {
@@ -163,18 +169,18 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       taskInfo
     }
 
-    listener.onTaskStart(SparkListenerTaskStart(0, makeTaskInfo(1234L)))
-    listener.onTaskStart(SparkListenerTaskStart(0, makeTaskInfo(1235L)))
-    listener.onTaskStart(SparkListenerTaskStart(1, makeTaskInfo(1236L)))
-    listener.onTaskStart(SparkListenerTaskStart(1, makeTaskInfo(1237L)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, makeTaskInfo(1234L)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, makeTaskInfo(1235L)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1236L)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1237L)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1234L, 0, makeTaskMetrics(0)),
-      (1235L, 0, makeTaskMetrics(100)),
-      (1236L, 1, makeTaskMetrics(200)))))
+      (1234L, 0, 0, makeTaskMetrics(0)),
+      (1235L, 0, 0, makeTaskMetrics(100)),
+      (1236L, 1, 0, makeTaskMetrics(200)))))
 
-    var stage0Data = listener.stageIdToData.get(0).get
-    var stage1Data = listener.stageIdToData.get(1).get
+    var stage0Data = listener.stageIdToData.get((0, 0)).get
+    var stage1Data = listener.stageIdToData.get((1, 0)).get
     assert(stage0Data.shuffleReadBytes == 102)
     assert(stage1Data.shuffleReadBytes == 201)
     assert(stage0Data.shuffleWriteBytes == 106)
@@ -195,14 +201,14 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       .totalBlocksFetched == 202)
 
     // task that was included in a heartbeat
-    listener.onTaskEnd(SparkListenerTaskEnd(0, taskType, Success, makeTaskInfo(1234L, 1),
+    listener.onTaskEnd(SparkListenerTaskEnd(0, 0, taskType, Success, makeTaskInfo(1234L, 1),
       makeTaskMetrics(300)))
     // task that wasn't included in a heartbeat
-    listener.onTaskEnd(SparkListenerTaskEnd(1, taskType, Success, makeTaskInfo(1237L, 1),
+    listener.onTaskEnd(SparkListenerTaskEnd(1, 0, taskType, Success, makeTaskInfo(1237L, 1),
       makeTaskMetrics(400)))
 
-    stage0Data = listener.stageIdToData.get(0).get
-    stage1Data = listener.stageIdToData.get(1).get
+    stage0Data = listener.stageIdToData.get((0, 0)).get
+    stage1Data = listener.stageIdToData.get((1, 0)).get
     assert(stage0Data.shuffleReadBytes == 402)
     assert(stage1Data.shuffleReadBytes == 602)
     assert(stage0Data.shuffleWriteBytes == 406)

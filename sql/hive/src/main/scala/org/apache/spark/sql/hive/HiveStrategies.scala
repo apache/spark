@@ -18,17 +18,18 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types.StringType
+import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
+import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.parquet.{ParquetRelation, ParquetTableScan}
+import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
 import scala.collection.JavaConversions._
 
@@ -53,7 +54,7 @@ private[hive] trait HiveStrategies {
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: SchemaRDD) {
       def lowerCase =
-        new SchemaRDD(s.sqlContext, LowerCaseSchema(s.logicalPlan))
+        new SchemaRDD(s.sqlContext, s.logicalPlan)
 
       def addPartitioningAttributes(attrs: Seq[Attribute]) =
         new SchemaRDD(
@@ -79,9 +80,9 @@ private[hive] trait HiveStrategies {
              hiveContext.convertMetastoreParquet =>
 
         // Filter out all predicates that only deal with partition keys
-        val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
+        val partitionsKeys = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.map(_.exprId).subsetOf(partitionKeyIds)
+          _.references.subsetOf(partitionsKeys)
         }
 
         // We are going to throw the predicates and projection back at the whole optimization
@@ -135,7 +136,7 @@ private[hive] trait HiveStrategies {
             .fakeOutput(projectList.map(_.toAttribute)):: Nil
         } else {
           hiveContext
-            .parquetFile(relation.hiveQlTable.getDataLocation.getPath)
+            .parquetFile(relation.hiveQlTable.getDataLocation.toString)
             .lowerCase
             .where(unresolvedOtherPredicates)
             .select(unresolvedProjection:_*)
@@ -159,10 +160,17 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-      case logical.InsertIntoTable(
-             InMemoryRelation(_, _, _,
-               HiveTableScan(_, table, _)), partition, child, overwrite) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+
+      case logical.CreateTableAsSelect(database, tableName, child) =>
+        val query = planLater(child)
+        CreateTableAsSelect(
+          database.get,
+          tableName,
+          query,
+          InsertIntoHiveTable(_: MetastoreRelation, 
+            Map(), 
+            query, 
+            true)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
@@ -176,9 +184,9 @@ private[hive] trait HiveStrategies {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
-        val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
+        val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.map(_.exprId).subsetOf(partitionKeyIds)
+          _.references.subsetOf(partitionKeyIds)
         }
 
         pruneFilterProject(
@@ -193,12 +201,13 @@ private[hive] trait HiveStrategies {
 
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.NativeCommand(sql) =>
-        NativeCommand(sql, plan.output)(context) :: Nil
+      case logical.NativeCommand(sql) => NativeCommand(sql, plan.output)(context) :: Nil
 
-      case DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
+      case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
-      case AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
+      case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
+      case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 
       case describe: logical.DescribeCommand =>
         val resolvedTable = context.executePlan(describe.table).analyzed

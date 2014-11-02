@@ -29,8 +29,9 @@ import org.apache.spark.util.Utils
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
+ * The env argument is used for testing.
  */
-private[spark] class SparkSubmitArguments(args: Seq[String]) {
+private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env) {
   var master: String = null
   var deployMode: String = null
   var executorMemory: String = null
@@ -57,12 +58,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
-  parseOpts(args.toList)
-  mergeSparkProperties()
-  checkRequiredArguments()
-
-  /** Return default present in the currently defined defaults file. */
-  def getDefaultSparkProperties = {
+  /** Default properties present in the currently defined defaults file. */
+  lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
@@ -79,6 +76,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     defaultProperties
   }
 
+  // Respect SPARK_*_MEMORY for cluster mode
+  driverMemory = sys.env.get("SPARK_DRIVER_MEMORY").orNull
+  executorMemory = sys.env.get("SPARK_EXECUTOR_MEMORY").orNull
+
+  parseOpts(args.toList)
+  mergeSparkProperties()
+  checkRequiredArguments()
+
   /**
    * Fill in any undefined values based on the default properties file or options passed in through
    * the '--conf' flag.
@@ -86,8 +91,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   private def mergeSparkProperties(): Unit = {
     // Use common defaults file, if not specified by user
     if (propertiesFile == null) {
-      sys.env.get("SPARK_CONF_DIR").foreach { sparkConfDir =>
-        val sep = File.separator
+      val sep = File.separator
+      val sparkHomeConfig = env.get("SPARK_HOME").map(sparkHome => s"${sparkHome}${sep}conf")
+      val confDir = env.get("SPARK_CONF_DIR").orElse(sparkHomeConfig)
+
+      confDir.foreach { sparkConfDir =>
         val defaultPath = s"${sparkConfDir}${sep}spark-defaults.conf"
         val file = new File(defaultPath)
         if (file.exists()) {
@@ -96,35 +104,24 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       }
     }
 
-    if (propertiesFile == null) {
-      sys.env.get("SPARK_HOME").foreach { sparkHome =>
-        val sep = File.separator
-        val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.conf"
-        val file = new File(defaultPath)
-        if (file.exists()) {
-          propertiesFile = file.getAbsolutePath
-        }
-      }
-    }
-
-    val properties = getDefaultSparkProperties
+    val properties = HashMap[String, String]()
+    properties.putAll(defaultSparkProperties)
     properties.putAll(sparkProperties)
 
     // Use properties file as fallback for values which have a direct analog to
     // arguments in this script.
-    master = Option(master).getOrElse(properties.get("spark.master").orNull)
-    executorMemory = Option(executorMemory)
-      .getOrElse(properties.get("spark.executor.memory").orNull)
-    executorCores = Option(executorCores)
-      .getOrElse(properties.get("spark.executor.cores").orNull)
+    master = Option(master).orElse(properties.get("spark.master")).orNull
+    executorMemory = Option(executorMemory).orElse(properties.get("spark.executor.memory")).orNull
+    executorCores = Option(executorCores).orElse(properties.get("spark.executor.cores")).orNull
     totalExecutorCores = Option(totalExecutorCores)
-      .getOrElse(properties.get("spark.cores.max").orNull)
-    name = Option(name).getOrElse(properties.get("spark.app.name").orNull)
-    jars = Option(jars).getOrElse(properties.get("spark.jars").orNull)
+      .orElse(properties.get("spark.cores.max"))
+      .orNull
+    name = Option(name).orElse(properties.get("spark.app.name")).orNull
+    jars = Option(jars).orElse(properties.get("spark.jars")).orNull
 
     // This supports env vars in older versions of Spark
-    master = Option(master).getOrElse(System.getenv("MASTER"))
-    deployMode = Option(deployMode).getOrElse(System.getenv("DEPLOY_MODE"))
+    master = Option(master).orElse(env.get("MASTER")).orNull
+    deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && primaryResource != null) {
@@ -177,7 +174,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
 
     if (master.startsWith("yarn")) {
-      val hasHadoopEnv = sys.env.contains("HADOOP_CONF_DIR") || sys.env.contains("YARN_CONF_DIR")
+      val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
       if (!hasHadoopEnv && !Utils.isTesting) {
         throw new Exception(s"When running with master '$master' " +
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
@@ -213,7 +210,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  verbose                 $verbose
     |
     |Default properties from $propertiesFile:
-    |${getDefaultSparkProperties.mkString("  ", "\n  ", "\n")}
+    |${defaultSparkProperties.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 

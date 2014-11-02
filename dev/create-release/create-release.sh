@@ -60,14 +60,14 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Dmaven.javadoc.skip=true \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
-    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     --batch-mode release:prepare
 
   mvn -DskipTests \
     -Darguments="-DskipTests=true -Dmaven.javadoc.skip=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dmaven.javadoc.skip=true \
-    -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     release:perform
 
   cd ..
@@ -117,12 +117,13 @@ make_binary_release() {
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
 }
 
-make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
-make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
-make_binary_release "hadoop2" \
-  "-Phive -Phive-thriftserver -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0" &
-make_binary_release "hadoop2-without-hive" \
-  "-Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -Pyarn.version=2.2.0" &
+make_binary_release "hadoop1" "-Phive -Dhadoop.version=1.0.4" &
+make_binary_release "cdh4" "-Phive -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
+make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Pyarn" &
+make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Pyarn" &
+make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
+make_binary_release "mapr3" "-Pmapr3 -Phive" &
+make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive" &
 wait
 
 # Copy data
