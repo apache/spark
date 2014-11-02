@@ -184,7 +184,7 @@ object FlumeUtils {
       hostname: String,
       port: Int
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc, hostname, port, StorageLevel.MEMORY_AND_DISK_SER_2)
+    createPollingStream(jssc.ssc, hostname, port, StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
   /**
@@ -202,7 +202,7 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc, Array(new InetSocketAddress(hostname, port)), storageLevel)
+    createPollingStream(jssc.ssc, Array(new InetSocketAddress(hostname, port)), storageLevel)
   }
 
   /**
@@ -218,7 +218,7 @@ object FlumeUtils {
       addresses: Array[InetSocketAddress],
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createPollingStream(jssc, addresses, storageLevel,
+    createPollingStream(jssc.ssc, addresses, storageLevel,
       DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
   }
 
