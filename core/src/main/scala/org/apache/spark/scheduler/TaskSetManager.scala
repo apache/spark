@@ -559,7 +559,8 @@ private[spark] class TaskSetManager(
     if (!log.isInfoEnabled) {
       if (finished < total) {
         val header = s"Stage $stageId: ["
-        val tailer = s"] $finished+$runningTasks/$total - ${Utils.msDurationToString(now - startTime)}"
+        val tailer = s"] $finished+$runningTasks/$total - " +
+          s"${Utils.msDurationToString(now - startTime)}"
         val width = Terminal.getTerminal.getTerminalWidth - header.size - tailer.size
         val percent = finished * width / total;
         val bar = (0 until width).map { i =>
