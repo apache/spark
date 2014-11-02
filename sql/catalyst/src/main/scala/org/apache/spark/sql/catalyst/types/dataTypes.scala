@@ -19,20 +19,21 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.{Date, Timestamp}
 
-import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
+import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
 
-import org.json4s.JsonAST.JValue
 import org.json4s._
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
-
+import org.apache.spark.sql.catalyst.types.decimal._
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -70,13 +71,14 @@ object DataType {
 
   private def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
+        ("metadata", metadata: JObject),
         ("name", JString(name)),
         ("nullable", JBool(nullable)),
         ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable)
+      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
   }
 
-  @deprecated("Use DataType.fromJson instead")
+  @deprecated("Use DataType.fromJson instead", "1.2.0")
   def fromCaseClassString(string: String): DataType = CaseClassStringParser(string)
 
   private object CaseClassStringParser extends RegexParsers {
@@ -90,10 +92,16 @@ object DataType {
       | "LongType" ^^^ LongType
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
-      | "DecimalType" ^^^ DecimalType
       | "DateType" ^^^ DateType
+      | "DecimalType()" ^^^ DecimalType.Unlimited
+      | fixedDecimalType
       | "TimestampType" ^^^ TimestampType
       )
+
+    protected lazy val fixedDecimalType: Parser[DataType] =
+      ("DecimalType(" ~> "[0-9]+".r) ~ ("," ~> "[0-9]+".r <~ ")") ^^ {
+        case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
+      }
 
     protected lazy val arrayType: Parser[DataType] =
       "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
@@ -199,10 +207,18 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private[sql] val all = Seq(DecimalType, DateType, TimestampType, BinaryType) ++
-    NativeType.all
+  private val nonDecimals = Seq(DateType, TimestampType, BinaryType) ++ NativeType.all
+  private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
 
-  private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
+  /** Given the string representation of a type, return its DataType */
+  private[sql] def nameToType(name: String): DataType = {
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    name match {
+      case "decimal" => DecimalType.Unlimited
+      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
+      case other => nonDecimalNameToType(other)
+    }
+  }
 }
 
 abstract class NativeType extends DataType {
@@ -331,13 +347,58 @@ abstract class FractionalType extends NumericType {
   private[sql] val asIntegral: Integral[JvmType]
 }
 
-case object DecimalType extends FractionalType {
-  private[sql] type JvmType = BigDecimal
+/** Precision parameters for a Decimal */
+case class PrecisionInfo(precision: Int, scale: Int)
+
+/** A Decimal that might have fixed precision and scale, or unlimited values for these */
+case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+  private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  private[sql] val numeric = implicitly[Numeric[BigDecimal]]
-  private[sql] val fractional = implicitly[Fractional[BigDecimal]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
-  private[sql] val asIntegral = BigDecimalAsIfIntegral
+  private[sql] val numeric = Decimal.DecimalIsFractional
+  private[sql] val fractional = Decimal.DecimalIsFractional
+  private[sql] val ordering = Decimal.DecimalIsFractional
+  private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
+
+  override def typeName: String = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
+    case None => "decimal"
+  }
+
+  override def toString: String = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
+    case None => "DecimalType()"
+  }
+}
+
+/** Extra factory methods and pattern matchers for Decimals */
+object DecimalType {
+  val Unlimited: DecimalType = DecimalType(None)
+
+  object Fixed {
+    def unapply(t: DecimalType): Option[(Int, Int)] =
+      t.precisionInfo.map(p => (p.precision, p.scale))
+  }
+
+  object Expression {
+    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
+      case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale))
+      case _ => None
+    }
+  }
+
+  def apply(): DecimalType = Unlimited
+
+  def apply(precision: Int, scale: Int): DecimalType =
+    DecimalType(Some(PrecisionInfo(precision, scale)))
+
+  def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
+
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
+
+  def isFixed(dataType: DataType): Boolean = dataType match {
+    case DecimalType.Fixed(_, _) => true
+    case _ => false
+  }
 }
 
 case object DoubleType extends FractionalType {
@@ -388,24 +449,34 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
+ * @param metadata The metadata of this field. The metadata should be preserved during
+ *                 transformation if the content of the column is not modified, e.g, in selection.
  */
-case class StructField(name: String, dataType: DataType, nullable: Boolean) {
+case class StructField(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean,
+    metadata: Metadata = Metadata.empty) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
 
+  // override the default toString to be compatible with legacy parquet files.
+  override def toString: String = s"StructField($name,$dataType,$nullable)"
+
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
-      ("nullable" -> nullable)
+      ("nullable" -> nullable) ~
+      ("metadata" -> metadata.jsonValue)
   }
 }
 
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
-    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
@@ -439,7 +510,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   }
 
   protected[sql] def toAttributes =
-    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   def treeString: String = {
     val builder = new StringBuilder
