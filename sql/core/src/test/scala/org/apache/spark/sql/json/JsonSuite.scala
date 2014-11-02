@@ -483,7 +483,8 @@ class JsonSuite extends QueryTest {
     val expectedSchema = StructType(
       StructField("array1", ArrayType(StringType, true), true) ::
       StructField("array2", ArrayType(StructType(
-        StructField("field", LongType, true) :: Nil), false), true) :: Nil)
+        StructField("field", LongType, true) :: Nil), false), true) ::
+      StructField("array3", ArrayType(StringType, false), true) :: Nil)
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
@@ -492,12 +493,14 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select * from jsonTable"),
       Seq(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
-        """{"field":str}"""), Seq(Seq(214748364700L), Seq(1))) :: Nil
+        """{"field":"str"}"""), Seq(Seq(214748364700L), Seq(1)), null) ::
+      Seq(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
+      Seq(null, null, Seq("1", "2", "3")) :: Nil
     )
 
     // Treat an element as a number.
     checkAnswer(
-      sql("select array1[0] + 1 from jsonTable"),
+      sql("select array1[0] + 1 from jsonTable where array1 is not null"),
       2
     )
   }
