@@ -46,6 +46,10 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   after {
     if (ssc != null) {
       ssc.stop()
+      if (ssc.sc != null) {
+        // Calling ssc.stop() does not always not stop the associated SparkContext.
+        ssc.sc.stop()
+      }
       ssc = null
     }
     if (sc != null) {
@@ -133,10 +137,15 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()
   }
 
-  test("stop before start") {
+  test("stop before start and start after stop") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()  // stop before start should not throw exception
+    ssc.start()
+    ssc.stop()
+    intercept[SparkException] {
+      ssc.start() // start after stop should throw exception
+    }
   }
 
   test("stop only streaming context") {
