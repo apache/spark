@@ -52,11 +52,13 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COUNT = Keyword("COUNT")
+  protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
   protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
+  protected val DOUBLE = Keyword("DOUBLE")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
   protected val FROM = Keyword("FROM")
@@ -385,5 +387,15 @@ class SqlParser extends AbstractSparkSQLParser {
     }
 
   protected lazy val dataType: Parser[DataType] =
-    STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
+    ( STRING ^^^ StringType
+    | TIMESTAMP ^^^ TimestampType
+    | DOUBLE ^^^ DoubleType
+    | fixedDecimalType
+    | DECIMAL ^^^ DecimalType.Unlimited
+    )
+
+  protected lazy val fixedDecimalType: Parser[DataType] =
+    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
+    }
 }

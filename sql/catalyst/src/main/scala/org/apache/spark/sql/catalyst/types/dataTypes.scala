@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.{Date, Timestamp}
 
-import scala.math.Numeric.{BigDecimalAsIfIntegral, DoubleAsIfIntegral, FloatAsIfIntegral}
+import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.types.decimal._
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -91,10 +92,16 @@ object DataType {
       | "LongType" ^^^ LongType
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
-      | "DecimalType" ^^^ DecimalType
       | "DateType" ^^^ DateType
+      | "DecimalType()" ^^^ DecimalType.Unlimited
+      | fixedDecimalType
       | "TimestampType" ^^^ TimestampType
       )
+
+    protected lazy val fixedDecimalType: Parser[DataType] =
+      ("DecimalType(" ~> "[0-9]+".r) ~ ("," ~> "[0-9]+".r <~ ")") ^^ {
+        case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
+      }
 
     protected lazy val arrayType: Parser[DataType] =
       "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
@@ -200,10 +207,18 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private[sql] val all = Seq(DecimalType, DateType, TimestampType, BinaryType) ++
-    NativeType.all
+  private val nonDecimals = Seq(DateType, TimestampType, BinaryType) ++ NativeType.all
+  private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
 
-  private[sql] val nameToType = all.map(t => t.typeName -> t).toMap
+  /** Given the string representation of a type, return its DataType */
+  private[sql] def nameToType(name: String): DataType = {
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    name match {
+      case "decimal" => DecimalType.Unlimited
+      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
+      case other => nonDecimalNameToType(other)
+    }
+  }
 }
 
 abstract class NativeType extends DataType {
@@ -332,13 +347,58 @@ abstract class FractionalType extends NumericType {
   private[sql] val asIntegral: Integral[JvmType]
 }
 
-case object DecimalType extends FractionalType {
-  private[sql] type JvmType = BigDecimal
+/** Precision parameters for a Decimal */
+case class PrecisionInfo(precision: Int, scale: Int)
+
+/** A Decimal that might have fixed precision and scale, or unlimited values for these */
+case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
+  private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
-  private[sql] val numeric = implicitly[Numeric[BigDecimal]]
-  private[sql] val fractional = implicitly[Fractional[BigDecimal]]
-  private[sql] val ordering = implicitly[Ordering[JvmType]]
-  private[sql] val asIntegral = BigDecimalAsIfIntegral
+  private[sql] val numeric = Decimal.DecimalIsFractional
+  private[sql] val fractional = Decimal.DecimalIsFractional
+  private[sql] val ordering = Decimal.DecimalIsFractional
+  private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
+
+  override def typeName: String = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
+    case None => "decimal"
+  }
+
+  override def toString: String = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
+    case None => "DecimalType()"
+  }
+}
+
+/** Extra factory methods and pattern matchers for Decimals */
+object DecimalType {
+  val Unlimited: DecimalType = DecimalType(None)
+
+  object Fixed {
+    def unapply(t: DecimalType): Option[(Int, Int)] =
+      t.precisionInfo.map(p => (p.precision, p.scale))
+  }
+
+  object Expression {
+    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
+      case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale))
+      case _ => None
+    }
+  }
+
+  def apply(): DecimalType = Unlimited
+
+  def apply(precision: Int, scale: Int): DecimalType =
+    DecimalType(Some(PrecisionInfo(precision, scale)))
+
+  def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
+
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
+
+  def isFixed(dataType: DataType): Boolean = dataType match {
+    case DecimalType.Fixed(_, _) => true
+    case _ => false
+  }
 }
 
 case object DoubleType extends FractionalType {
