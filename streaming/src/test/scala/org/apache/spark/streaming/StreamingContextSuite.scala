@@ -47,7 +47,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     if (ssc != null) {
       ssc.stop()
       if (ssc.sc != null) {
-        // Calling ssc.stop() does not always not stop the associated SparkContext.
+        // Calling ssc.stop() does not always stop the associated SparkContext.
         ssc.sc.stop()
       }
       ssc = null
