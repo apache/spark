@@ -99,8 +99,6 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-<!--- TODO: Update this when Hive 0.13 JDBC is added -->
-
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` profile to your existing build options. By default Spark
