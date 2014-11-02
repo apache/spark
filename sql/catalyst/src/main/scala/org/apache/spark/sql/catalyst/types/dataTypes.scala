@@ -30,7 +30,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.{UDTRegistry, ScalaReflectionLock}
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
 import org.apache.spark.sql.catalyst.types.decimal._
 import org.apache.spark.sql.catalyst.util.Metadata
