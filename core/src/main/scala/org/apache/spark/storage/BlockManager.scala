@@ -360,8 +360,8 @@ private[spark] class BlockManager(
     def ifAsync: Boolean = {
       blockId.isBroadcast
     }
-    // asynchronously report broadcast variables, in future we only need to change the implementation
-    // of ifAsync
+    // asynchronously report broadcast variables, in future we only need to change the
+    // implementation of ifAsync
     val needReregister = !tryToReportBlockStatus(blockId, info, status, droppedMemorySize,
       async = ifAsync)
     if (needReregister) {
