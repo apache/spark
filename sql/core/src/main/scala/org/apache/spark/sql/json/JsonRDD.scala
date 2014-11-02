@@ -73,16 +73,18 @@ private[sql] object JsonRDD extends Logging {
 
     def makeStruct(values: Seq[Seq[String]], prefix: Seq[String]): StructType = {
       val (topLevel, structLike) = values.partition(_.size == 1)
+
       val topLevelFields = topLevel.filter {
         name => resolved.get(prefix ++ name).get match {
           case ArrayType(elementType, _) => {
             def hasInnerStruct(t: DataType): Boolean = t match {
-              case s: StructType => false
+              case s: StructType => true
               case ArrayType(t1, _) => hasInnerStruct(t1)
-              case o => true
+              case o => false
             }
 
-            hasInnerStruct(elementType)
+            // Check if this array has inner struct.
+            !hasInnerStruct(elementType)
           }
           case struct: StructType => false
           case _ => true
@@ -90,8 +92,11 @@ private[sql] object JsonRDD extends Logging {
       }.map {
         a => StructField(a.head, resolved.get(prefix ++ a).get, nullable = true)
       }
+      val topLevelFieldNameSet = topLevelFields.map(_.name)
 
-      val structFields: Seq[StructField] = structLike.groupBy(_(0)).map {
+      val structFields: Seq[StructField] = structLike.groupBy(_(0)).filter {
+        case (name, _) => !topLevelFieldNameSet.contains(name)
+      }.map {
         case (name, fields) => {
           val nestedFields = fields.map(_.tail)
           val structType = makeStruct(nestedFields, prefix :+ name)
@@ -354,7 +359,8 @@ private[sql] object JsonRDD extends Logging {
       case (key, value) =>
         if (count > 0) builder.append(",")
         count += 1
-        builder.append(s"""\"${key}\":${toString(value)}""")
+        val stringValue = if (value.isInstanceOf[String]) s"""\"$value\"""" else toString(value)
+        builder.append(s"""\"${key}\":${stringValue}""")
     }
     builder.append("}")
 
