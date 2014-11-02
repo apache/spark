@@ -519,6 +519,9 @@ private[spark] class TaskSetManager(
     index
   }
 
+  /**
+   * Marks the task as getting result and notifies the DAG Scheduler
+   */
   def handleTaskGettingResult(tid: Long) = {
     val info = taskInfos(tid)
     info.markGettingResult()
@@ -528,7 +531,7 @@ private[spark] class TaskSetManager(
   /**
    * Check whether has enough quota to fetch the result with `size` bytes
    */
-  def canFetchMoreResult(size: Long): Boolean = synchronized {
+  def canFetchMoreResults(size: Long): Boolean = synchronized {
     totalResultSize += size
     calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
