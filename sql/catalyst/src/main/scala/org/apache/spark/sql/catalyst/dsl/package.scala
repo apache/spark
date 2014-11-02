@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.language.implicitConversions
 
@@ -62,12 +64,16 @@ package object dsl {
 
     def unary_- = UnaryMinus(expr)
     def unary_! = Not(expr)
+    def unary_~ = BitwiseNot(expr)
 
     def + (other: Expression) = Add(expr, other)
     def - (other: Expression) = Subtract(expr, other)
     def * (other: Expression) = Multiply(expr, other)
     def / (other: Expression) = Divide(expr, other)
     def % (other: Expression) = Remainder(expr, other)
+    def & (other: Expression) = BitwiseAnd(expr, other)
+    def | (other: Expression) = BitwiseOr(expr, other)
+    def ^ (other: Expression) = BitwiseXor(expr, other)
 
     def && (other: Expression) = And(expr, other)
     def || (other: Expression) = Or(expr, other)
@@ -119,7 +125,9 @@ package object dsl {
     implicit def floatToLiteral(f: Float) = Literal(f)
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
-    implicit def decimalToLiteral(d: BigDecimal) = Literal(d)
+    implicit def dateToLiteral(d: Date) = Literal(d)
+    implicit def bigDecimalToLiteral(d: BigDecimal) = Literal(d)
+    implicit def decimalToLiteral(d: Decimal) = Literal(d)
     implicit def timestampToLiteral(t: Timestamp) = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
@@ -174,8 +182,15 @@ package object dsl {
       /** Creates a new AttributeReference of type string */
       def string = AttributeReference(s, StringType, nullable = true)()
 
+      /** Creates a new AttributeReference of type date */
+      def date = AttributeReference(s, DateType, nullable = true)()
+
       /** Creates a new AttributeReference of type decimal */
-      def decimal = AttributeReference(s, DecimalType, nullable = true)()
+      def decimal = AttributeReference(s, DecimalType.Unlimited, nullable = true)()
+
+      /** Creates a new AttributeReference of type decimal */
+      def decimal(precision: Int, scale: Int) =
+        AttributeReference(s, DecimalType(precision, scale), nullable = true)()
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp = AttributeReference(s, TimestampType, nullable = true)()

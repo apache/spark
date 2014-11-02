@@ -55,4 +55,34 @@ class DataTypeSuite extends FunSuite {
       struct(Set("b", "d", "e", "f"))
     }
   }
+
+  def checkDataTypeJsonRepr(dataType: DataType): Unit = {
+    test(s"JSON - $dataType") {
+      assert(DataType.fromJson(dataType.json) === dataType)
+    }
+  }
+
+  checkDataTypeJsonRepr(BooleanType)
+  checkDataTypeJsonRepr(ByteType)
+  checkDataTypeJsonRepr(ShortType)
+  checkDataTypeJsonRepr(IntegerType)
+  checkDataTypeJsonRepr(LongType)
+  checkDataTypeJsonRepr(FloatType)
+  checkDataTypeJsonRepr(DoubleType)
+  checkDataTypeJsonRepr(DecimalType.Unlimited)
+  checkDataTypeJsonRepr(TimestampType)
+  checkDataTypeJsonRepr(StringType)
+  checkDataTypeJsonRepr(BinaryType)
+  checkDataTypeJsonRepr(ArrayType(DoubleType, true))
+  checkDataTypeJsonRepr(ArrayType(StringType, false))
+  checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))
+  checkDataTypeJsonRepr(MapType(IntegerType, ArrayType(DoubleType), false))
+  val metadata = new MetadataBuilder()
+    .putString("name", "age")
+    .build()
+  checkDataTypeJsonRepr(
+    StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", ArrayType(DoubleType), nullable = false),
+      StructField("c", DoubleType, nullable = false, metadata))))
 }

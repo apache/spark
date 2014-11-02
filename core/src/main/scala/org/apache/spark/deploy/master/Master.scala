@@ -341,8 +341,14 @@ private[spark] class Master(
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
-          logWarning("Got heartbeat from unregistered worker " + workerId)
-          sender ! UnregisteredWorker
+          if (workers.map(_.id).contains(workerId)) {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " Asking it to re-register.")
+            sender ! ReconnectWorker(masterUrl)
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
+          }
       }
     }
 
@@ -715,8 +721,8 @@ private[spark] class Master(
 
     try {
       val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)",
-        HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       replayBus.replay()
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)

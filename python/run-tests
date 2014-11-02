@@ -25,22 +25,23 @@ FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
 cd "$FWDIR/python"
 
 FAILED=0
+LOG_FILE=unit-tests.log
 
-rm -f unit-tests.log
+rm -f $LOG_FILE
 
 # Remove the metastore and warehouse directory created by the HiveContext tests in Spark SQL
 rm -rf metastore warehouse
 
 function run_test() {
-    echo "Running test: $1"
+    echo "Running test: $1" | tee -a $LOG_FILE
 
-    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 2>&1 | tee -a unit-tests.log
+    SPARK_TESTING=1 time "$FWDIR"/bin/pyspark $1 2>&1 | tee -a $LOG_FILE
 
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
     # Fail and exit on the first test failure.
     if [[ $FAILED != 0 ]]; then
-        cat unit-tests.log | grep -v "^[0-9][0-9]*" # filter all lines starting with a number.
+        cat $LOG_FILE | grep -v "^[0-9][0-9]*" # filter all lines starting with a number.
         echo -en "\033[31m"  # Red
         echo "Had test failures; see logs."
         echo -en "\033[0m"  # No color
@@ -80,7 +81,13 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/tests.py"
 }
 
-echo "Running PySpark tests. Output is in python/unit-tests.log."
+function run_streaming_tests() {
+    echo "Run streaming tests ..."
+    run_test "pyspark/streaming/util.py"
+    run_test "pyspark/streaming/tests.py"
+}
+
+echo "Running PySpark tests. Output is in python/$LOG_FILE."
 
 export PYSPARK_PYTHON="python"
 
@@ -95,6 +102,7 @@ $PYSPARK_PYTHON --version
 run_core_tests
 run_sql_tests
 run_mllib_tests
+run_streaming_tests
 
 # Try to test with PyPy
 if [ $(which pypy) ]; then
@@ -104,6 +112,7 @@ if [ $(which pypy) ]; then
 
     run_core_tests
     run_sql_tests
+    run_streaming_tests
 fi
 
 if [[ $FAILED == 0 ]]; then

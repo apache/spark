@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types.StringType
 
 /**
@@ -39,9 +39,18 @@ case class NativeCommand(cmd: String) extends Command {
 }
 
 /**
- * Commands of the form "SET (key) (= value)".
+ * Commands of the form "SET [key [= value] ]".
  */
-case class SetCommand(key: Option[String], value: Option[String]) extends Command {
+case class DFSCommand(kv: Option[(String, Option[String])]) extends Command {
+  override def output = Seq(
+    AttributeReference("DFS output", StringType, nullable = false)())
+}
+
+/**
+ *
+ * Commands of the form "SET [key [= value] ]".
+ */
+case class SetCommand(kv: Option[(String, Option[String])]) extends Command {
   override def output = Seq(
     AttributeReference("", StringType, nullable = false)())
 }

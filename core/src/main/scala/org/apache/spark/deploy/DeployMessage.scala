@@ -71,6 +71,8 @@ private[deploy] object DeployMessages {
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage
 
+  case class ReconnectWorker(masterUrl: String) extends DeployMessage
+
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 
   case class LaunchExecutor(

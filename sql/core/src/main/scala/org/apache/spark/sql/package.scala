@@ -125,6 +125,9 @@ package object sql {
   @DeveloperApi
   type DataType = catalyst.types.DataType
 
+  @DeveloperApi
+  val DataType = catalyst.types.DataType
+
   /**
    * :: DeveloperApi ::
    *
@@ -168,7 +171,31 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
+   * The data type representing `java.sql.Date` values.
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  val DateType = catalyst.types.DateType
+
+  /**
+   * :: DeveloperApi ::
+   *
    * The data type representing `scala.math.BigDecimal` values.
+   *
+   * TODO(matei): explain precision and scale
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  type DecimalType = catalyst.types.DecimalType
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * The data type representing `scala.math.BigDecimal` values.
+   *
+   * TODO(matei): explain precision and scale
    *
    * @group dataType
    */
@@ -404,4 +431,24 @@ package object sql {
    */
   @DeveloperApi
   val StructField = catalyst.types.StructField
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
+   * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
+   * Array[Metadata]. JSON is used for serialization.
+   *
+   * The default constructor is private. User should use either [[MetadataBuilder]] or
+   * [[Metadata$#fromJson]] to create Metadata instances.
+   *
+   * @param map an immutable map that stores the data
+   */
+  @DeveloperApi
+  type Metadata = catalyst.util.Metadata
+
+  /**
+   * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
+   */
+  type MetadataBuilder = catalyst.util.MetadataBuilder
 }

@@ -143,7 +143,7 @@ case class Limit(limit: Int, child: SparkPlan)
       partsScanned += numPartsToTry
     }
 
-    buf.toArray
+    buf.toArray.map(ScalaReflection.convertRowToScala)
   }
 
   override def execute() = {
@@ -176,10 +176,11 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   override def output = child.output
   override def outputPartitioning = SinglePartition
 
-  val ordering = new RowOrdering(sortOrder, child.output)
+  val ord = new RowOrdering(sortOrder, child.output)
 
   // TODO: Is this copying for no reason?
-  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
+  override def executeCollect() =
+    child.execute().map(_.copy()).takeOrdered(limit)(ord).map(ScalaReflection.convertRowToScala)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.

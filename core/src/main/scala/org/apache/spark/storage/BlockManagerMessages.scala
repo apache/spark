@@ -21,6 +21,8 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import akka.actor.ActorRef
 
+import org.apache.spark.util.Utils
+
 private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
@@ -65,7 +67,7 @@ private[spark] object BlockManagerMessages {
 
     def this() = this(null, null, null, 0, 0, 0)  // For deserialization only
 
-    override def writeExternal(out: ObjectOutput) {
+    override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
       blockManagerId.writeExternal(out)
       out.writeUTF(blockId.name)
       storageLevel.writeExternal(out)
@@ -74,7 +76,7 @@ private[spark] object BlockManagerMessages {
       out.writeLong(tachyonSize)
     }
 
-    override def readExternal(in: ObjectInput) {
+    override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
       blockManagerId = BlockManagerId(in)
       blockId = BlockId(in.readUTF())
       storageLevel = StorageLevel(in)

@@ -80,6 +80,7 @@ class SpecialLengths(object):
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
+    END_OF_STREAM = -4
 
 
 class Serializer(object):
@@ -113,6 +114,9 @@ class Serializer(object):
 
     def __repr__(self):
         return "<%s object>" % self.__class__.__name__
+
+    def __hash__(self):
+        return hash(str(self))
 
 
 class FramedSerializer(Serializer):
@@ -228,7 +232,7 @@ class AutoBatchedSerializer(BatchedSerializer):
     Choose the size of batch automatically based on the size of object
     """
 
-    def __init__(self, serializer, bestSize=1 << 20):
+    def __init__(self, serializer, bestSize=1 << 16):
         BatchedSerializer.__init__(self, serializer, -1)
         self.bestSize = bestSize
 
@@ -255,7 +259,7 @@ class AutoBatchedSerializer(BatchedSerializer):
                 other.serializer == self.serializer)
 
     def __str__(self):
-        return "BatchedSerializer<%s>" % str(self.serializer)
+        return "AutoBatchedSerializer<%s>" % str(self.serializer)
 
 
 class CartesianDeserializer(FramedSerializer):

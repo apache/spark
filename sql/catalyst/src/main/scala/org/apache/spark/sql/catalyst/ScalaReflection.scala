@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /**
  * Provides experimental support for generating catalyst schemas for scala objects.
  */
 object ScalaReflection {
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
   import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
@@ -37,13 +41,24 @@ object ScalaReflection {
     case s: Seq[_] => s.map(convertToCatalyst)
     case m: Map[_, _] => m.map { case (k, v) => convertToCatalyst(k) -> convertToCatalyst(v) }
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
+    case d: BigDecimal => Decimal(d)
     case other => other
   }
+
+  /** Converts Catalyst types used internally in rows to standard Scala types */
+  def convertToScala(a: Any): Any = a match {
+    case s: Seq[_] => s.map(convertToScala)
+    case m: Map[_, _] => m.map { case (k, v) => convertToScala(k) -> convertToScala(v) }
+    case d: Decimal => d.toBigDecimal
+    case other => other
+  }
+
+  def convertRowToScala(r: Row): Row = new GenericRow(r.toArray.map(convertToScala))
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+      s.fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -77,9 +92,11 @@ object ScalaReflection {
       val Schema(valueDataType, valueNullable) = schemaFor(valueType)
       Schema(MapType(schemaFor(keyType).dataType,
         valueDataType, valueContainsNull = valueNullable), nullable = true)
-    case t if t <:< typeOf[String]            => Schema(StringType, nullable = true)
+    case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
     case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
-    case t if t <:< typeOf[BigDecimal] => Schema(DecimalType, nullable = true)
+    case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
+    case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
+    case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
     case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
     case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
     case t if t <:< typeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
@@ -107,7 +124,9 @@ object ScalaReflection {
     case obj: LongType.JvmType => LongType
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
-    case obj: DecimalType.JvmType => DecimalType
+    case obj: DateType.JvmType => DateType
+    case obj: BigDecimal => DecimalType.Unlimited
+    case obj: Decimal => DecimalType.Unlimited
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a

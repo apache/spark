@@ -1,0 +1,1 @@
+named_struct(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values

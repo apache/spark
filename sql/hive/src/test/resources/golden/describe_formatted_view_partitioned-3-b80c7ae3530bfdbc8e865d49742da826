@@ -1,19 +1,19 @@
 # col_name            	data_type           	comment             
 	 	 
-key                 	int                 	None                
+key                 	int                 	                    
 	 	 
 # Partition Information	 	 
 # col_name            	data_type           	comment             
 	 	 
-value               	string              	None                
+value               	string              	                    
 	 	 
 # Detailed Partition Information	 	 
 Partition Value:    	[val_86]            	 
 Database:           	default             	 
 Table:              	view_partitioned    	 
-CreateTime:         	Fri Feb 07 15:09:16 PST 2014	 
+CreateTime:         	Tue Oct 21 01:26:15 PDT 2014	 
 LastAccessTime:     	UNKNOWN             	 
 Protect Mode:       	None                	 
 Location:           	null                	 
 Partition Parameters:	 	 
-	transient_lastDdlTime	1391814556          
+	transient_lastDdlTime	1413879975          
