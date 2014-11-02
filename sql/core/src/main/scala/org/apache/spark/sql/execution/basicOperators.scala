@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkEnv, HashPartitioner, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
@@ -27,7 +26,8 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, SinglePartition, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution,
+  SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
 /**
@@ -143,7 +143,7 @@ case class Limit(limit: Int, child: SparkPlan)
       partsScanned += numPartsToTry
     }
 
-    buf.toArray.map(ScalaReflection.convertRowToScala)
+    buf.toArray.map(ScalaReflection.convertRowToScala(_, this.schema))
   }
 
   override def execute() = {
@@ -179,8 +179,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
   val ord = new RowOrdering(sortOrder, child.output)
 
   // TODO: Is this copying for no reason?
-  override def executeCollect() =
-    child.execute().map(_.copy()).takeOrdered(limit)(ord).map(ScalaReflection.convertRowToScala)
+  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ord)
+    .map(ScalaReflection.convertRowToScala(_, this.schema))
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
