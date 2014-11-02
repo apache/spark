@@ -84,50 +84,35 @@ case class SetCommand(kv: Option[(String, Option[String])], output: Seq[Attribut
   extends LeafNode with Command with Logging {
 
   override protected lazy val sideEffectResult: Seq[Row] = kv match {
-    // Set value for the key.
-    case Some((key, Some(value))) =>
-      if (key == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
-        logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+    // Configures the deprecated "mapred.reduce.tasks" property.
+    case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
+      logWarning(
+        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-        context.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
-        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
-      } else {
-        context.setConf(key, value)
-        Seq(Row(s"$key=$value"))
-      }
+      context.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
 
-    // Query the value bound to the key.
+    // Configures a single property.
+    case Some((key, Some(value))) =>
+      context.setConf(key, value)
+      Seq(Row(s"$key=$value"))
+
+    // Queries all key-value pairs that are set in the SQLConf of the context. Notice that different
+    // from Hive, here "SET -v" is an alias of "SET". (In Hive, "SET" returns all changed properties
+    // while "SET -v" returns all properties.)
+    case Some(("-v", None)) | None =>
+      context.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
+
+    // Queries the deprecated "mapred.reduce.tasks" property.
+    case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
+      logWarning(
+        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+          s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}"))
+
+    // Queries a single property.
     case Some((key, None)) =>
-      // TODO (lian) This is just a workaround to make the Simba ODBC driver work.
-      // Should remove this once we get the ODBC driver updated.
-      if (key == "-v") {
-        val hiveJars = Seq(
-          "hive-exec-0.12.0.jar",
-          "hive-service-0.12.0.jar",
-          "hive-common-0.12.0.jar",
-          "hive-hwi-0.12.0.jar",
-          "hive-0.12.0.jar").mkString(":")
-
-        context.getAllConfs.map { case (k, v) =>
-          Row(s"$k=$v")
-        }.toSeq ++ Seq(
-          Row("system:java.class.path=" + hiveJars),
-          Row("system:sun.java.command=shark.SharkServer2"))
-      } else {
-        if (key == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
-          logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-            s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-          Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}"))
-        } else {
-          Seq(Row(s"$key=${context.getConf(key, "<undefined>")}"))
-        }
-      }
-
-    // Query all key-value pairs that are set in the SQLConf of the context.
-    case _ =>
-      context.getAllConfs.map { case (k, v) =>
-        Row(s"$k=$v")
-      }.toSeq
+      Seq(Row(s"$key=${context.getConf(key, "<undefined>")}"))
   }
 
   override def otherCopyArgs = context :: Nil

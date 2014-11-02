@@ -20,8 +20,10 @@ package org.apache.spark.util
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
+import java.util.jar.Attributes.Name
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.util.jar.{Manifest => JarManifest}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -1759,6 +1761,12 @@ private[spark] object Utils extends Logging {
     s"$libraryPathEnvName=$libraryPath$ampersand"
   }
 
+  lazy val sparkVersion =
+    SparkContext.jarOfObject(this).map { path =>
+      val manifestUrl = new URL(s"jar:file:$path!/META-INF/MANIFEST.MF")
+      val manifest = new JarManifest(manifestUrl.openStream())
+      manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
+    }.getOrElse("Unknown")
 }
 
 /**
