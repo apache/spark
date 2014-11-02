@@ -51,7 +51,7 @@ case class InsertIntoHiveTable(
     child: SparkPlan,
     overwrite: Boolean)
     (@transient sc: HiveContext)
-  extends UnaryNode with Command {
+  extends UnaryNode with Command with HiveInspectors {
 
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
@@ -66,46 +66,6 @@ case class InsertIntoHiveTable(
   override def otherCopyArgs = sc :: Nil
 
   def output = child.output
-
-  /**
-   * Wraps with Hive types based on object inspector.
-   * TODO: Consolidate all hive OI/data interface code.
-   */
-  protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
-    case _: JavaHiveVarcharObjectInspector =>
-      (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
-
-    case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[BigDecimal].underlying())
-
-    case soi: StandardStructObjectInspector =>
-      val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
-      (o: Any) => {
-        val struct = soi.create()
-        (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
-          (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
-        }
-        struct
-      }
-
-    case loi: ListObjectInspector =>
-      val wrapper = wrapperFor(loi.getListElementObjectInspector)
-      (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
-
-    case moi: MapObjectInspector =>
-      // The Predef.Map is scala.collection.immutable.Map.
-      // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
-      import scala.collection.Map
-
-      val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
-      val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
-      (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
-        keyWrapper(key) -> valueWrapper(value)
-      })
-
-    case _ =>
-      identity[Any]
-  }
 
   def saveAsHiveFile(
       rdd: RDD[Row],
