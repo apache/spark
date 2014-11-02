@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources.{DataSourceStrategy, BaseRelation, DDLParser, LogicalRelation}
 
 /**
  * :: AlphaComponent ::
@@ -69,12 +70,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
+  protected[sql] val ddlParser = new DDLParser
+
+  @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
     new catalyst.SparkSQLParser(fallback(_))
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = {
+    ddlParser(sql).getOrElse(sqlParser(sql))
+  }
+
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -102,6 +109,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     SparkPlan.currentContext.set(self)
     new SchemaRDD(this,
       LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+  }
+
+  implicit def baseRelationToSchemaRDD(baseRelation: BaseRelation): SchemaRDD = {
+    logicalPlanToSparkQuery(LogicalRelation(baseRelation))
   }
 
   /**
@@ -283,6 +294,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
 
+  /**
+   * :: DeveloperApi ::
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @DeveloperApi
+  var extraStrategies: Seq[Strategy] = Nil
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
 
@@ -293,7 +312,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
+      extraStrategies ++ (
       CommandStrategy(self) ::
+      DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
       LeftSemiJoin ::
@@ -302,7 +323,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil
+      BroadcastNestedLoopJoin :: Nil)
 
     /**
      * Used to build table scan operators where complex projection and filtering are done using
