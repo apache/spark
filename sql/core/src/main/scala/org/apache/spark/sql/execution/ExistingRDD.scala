@@ -50,12 +50,6 @@ object RDDConversions {
       }
     }
   }
-
-  /*
-  def toLogicalPlan[A <: Product : TypeTag](productRdd: RDD[A]): LogicalPlan = {
-    LogicalRDD(ScalaReflection.attributesFor[A], productToRowRdd(productRdd))
-  }
-  */
 }
 
 case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
