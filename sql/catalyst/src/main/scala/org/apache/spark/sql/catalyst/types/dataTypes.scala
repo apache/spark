@@ -462,7 +462,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 case class StructField(
     name: String,
     dataType: DataType,
-    nullable: Boolean,
+    nullable: Boolean = true,
     metadata: Metadata = Metadata.empty) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {

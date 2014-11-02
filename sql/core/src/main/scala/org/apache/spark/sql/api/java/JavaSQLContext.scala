@@ -23,12 +23,13 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.{StructType => SStructType, SQLContext}
+import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation}
 import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
 import org.apache.spark.util.Utils
@@ -39,6 +40,10 @@ import org.apache.spark.util.Utils
 class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
+
+  def baseRelationToSchemaRDD(baseRelation: BaseRelation): JavaSchemaRDD = {
+    new JavaSchemaRDD(sqlContext, LogicalRelation(baseRelation))
+  }
 
   /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
