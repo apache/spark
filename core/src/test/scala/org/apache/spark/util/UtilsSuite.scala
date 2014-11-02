@@ -23,7 +23,7 @@ import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStr
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
@@ -118,7 +118,7 @@ class UtilsSuite extends FunSuite {
     tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(Charsets.UTF_8))
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
     f1.close()
 
     // Read first few bytes
@@ -146,9 +146,9 @@ class UtilsSuite extends FunSuite {
     val tmpDir = Utils.createTempDir()
     tmpDir.deleteOnExit()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), Charsets.UTF_8)
-    Files.write("abcdefghij", files(1), Charsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), Charsets.UTF_8)
+    Files.write("0123456789", files(0), UTF_8)
+    Files.write("abcdefghij", files(1), UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), UTF_8)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
@@ -217,9 +217,14 @@ class UtilsSuite extends FunSuite {
 
   test("resolveURI") {
     def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
-      assume(before.split(",").length == 1)
-      assert(Utils.resolveURI(before, testWindows) === new URI(after))
-      assert(Utils.resolveURI(after, testWindows) === new URI(after))
+      // This should test only single paths
+      assume(before.split(",").length === 1)
+      // Repeated invocations of resolveURI should yield the same result
+      def resolve(uri: String): String = Utils.resolveURI(uri, testWindows).toString
+      assert(resolve(after) === after)
+      assert(resolve(resolve(after)) === after)
+      assert(resolve(resolve(resolve(after))) === after)
+      // Also test resolveURIs with single paths
       assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
       assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
     }
@@ -235,16 +240,27 @@ class UtilsSuite extends FunSuite {
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
     intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
     intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+  }
 
-    // Test resolving comma-delimited paths
-    assert(Utils.resolveURIs("jar1,jar2") === s"file:$cwd/jar1,file:$cwd/jar2")
-    assert(Utils.resolveURIs("file:/jar1,file:/jar2") === "file:/jar1,file:/jar2")
-    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3") ===
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
-    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,jar4#jar5") ===
+  test("resolveURIs with multiple paths") {
+    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+      assume(before.split(",").length > 1)
+      assert(Utils.resolveURIs(before, testWindows) === after)
+      assert(Utils.resolveURIs(after, testWindows) === after)
+      // Repeated invocations of resolveURIs should yield the same result
+      def resolve(uri: String): String = Utils.resolveURIs(uri, testWindows)
+      assert(resolve(after) === after)
+      assert(resolve(resolve(after)) === after)
+      assert(resolve(resolve(resolve(after))) === after)
+    }
+    val cwd = System.getProperty("user.dir")
+    assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
+    assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
+    assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5",
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
+    assertResolves("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi",
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi", testWindows = true)
   }
 
   test("nonLocalPaths") {
@@ -339,7 +355,7 @@ class UtilsSuite extends FunSuite {
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, Charsets.UTF_8)
+        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
@@ -350,5 +366,16 @@ class UtilsSuite extends FunSuite {
     } finally {
       outFile.delete()
     }
+  }
+
+  test("timeIt with prepare") {
+    var cnt = 0
+    val prepare = () => {
+      cnt += 1
+      Thread.sleep(1000)
+    }
+    val time = Utils.timeIt(2)({}, Some(prepare))
+    require(cnt === 2, "prepare should be called twice")
+    require(time < 500, "preparation time should not count")
   }
 }

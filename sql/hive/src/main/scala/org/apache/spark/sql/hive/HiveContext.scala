@@ -21,6 +21,10 @@ import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList}
 
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -224,21 +228,29 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
-   * SQLConf and HiveConf contracts: when the hive session is first initialized, params in
-   * HiveConf will get picked up by the SQLConf.  Additionally, any properties set by
-   * set() or a SET command inside sql() will be set in the SQLConf *as well as*
-   * in the HiveConf.
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. reuse existing started SessionState if any
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   *    set in the SQLConf *as well as* in the HiveConf.
    */
-  @transient lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient protected[hive] lazy val sessionState = {
-    val ss = new SessionState(hiveconf)
-    setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
-    SessionState.start(ss)
-    ss.err = new PrintStream(outputBuffer, true, "UTF-8")
-    ss.out = new PrintStream(outputBuffer, true, "UTF-8")
-
-    ss
-  }
+  @transient protected[hive] lazy val (hiveconf, sessionState) =
+    Option(SessionState.get())
+      .orElse {
+        val newState = new SessionState(new HiveConf(classOf[SessionState]))
+        // Only starts newly created `SessionState` instance.  Any existing `SessionState` instance
+        // returned by `SessionState.get()` must be the most recently started one.
+        SessionState.start(newState)
+        Some(newState)
+      }
+      .map { state =>
+        setConf(state.getConf.getAllProperties)
+        if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
+        if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
+        (state.getConf, state)
+      }
+      .get
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
@@ -287,6 +299,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hiveconf)
+
+      // Makes sure the session represented by the `sessionState` field is activated. This implies
+      // Spark SQL Hive support uses a single `SessionState` for all Hive operations and breaks
+      // session isolation under multi-user scenarios (i.e. HiveThriftServer2).
+      // TODO Fix session isolation
+      if (SessionState.get() != sessionState) {
+        SessionState.start(sessionState)
+      }
 
       proc match {
         case driver: Driver =>
@@ -354,7 +374,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType, DateType, TimestampType, BinaryType)
+        ShortType, DateType, TimestampType, BinaryType)
 
     protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -372,6 +392,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       case (d: Date, DateType) => new DateWritable(d).toString
       case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
       case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
+      case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
+        HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -390,6 +412,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "null"
       case (s: String, StringType) => "\"" + s + "\""
+      case (decimal, DecimalType()) => decimal.toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 

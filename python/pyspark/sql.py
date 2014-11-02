@@ -35,6 +35,7 @@ import datetime
 import keyword
 import warnings
 import json
+import re
 from array import array
 from operator import itemgetter
 from itertools import imap
@@ -49,7 +50,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 
 
 __all__ = [
-    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
+    "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
     "SQLContext", "HiveContext", "SchemaRDD", "Row"]
@@ -132,6 +133,14 @@ class BooleanType(PrimitiveType):
     """
 
 
+class DateType(PrimitiveType):
+
+    """Spark SQL DateType
+
+    The data type representing datetime.date values.
+    """
+
+
 class TimestampType(PrimitiveType):
 
     """Spark SQL TimestampType
@@ -140,12 +149,29 @@ class TimestampType(PrimitiveType):
     """
 
 
-class DecimalType(PrimitiveType):
+class DecimalType(DataType):
 
     """Spark SQL DecimalType
 
     The data type representing decimal.Decimal values.
     """
+
+    def __init__(self, precision=None, scale=None):
+        self.precision = precision
+        self.scale = scale
+        self.hasPrecisionInfo = precision is not None
+
+    def jsonValue(self):
+        if self.hasPrecisionInfo:
+            return "decimal(%d,%d)" % (self.precision, self.scale)
+        else:
+            return "decimal"
+
+    def __repr__(self):
+        if self.hasPrecisionInfo:
+            return "DecimalType(%d,%d)" % (self.precision, self.scale)
+        else:
+            return "DecimalType()"
 
 
 class DoubleType(PrimitiveType):
@@ -305,12 +331,15 @@ class StructField(DataType):
 
     """
 
-    def __init__(self, name, dataType, nullable):
+    def __init__(self, name, dataType, nullable, metadata=None):
         """Creates a StructField
         :param name: the name of this field.
         :param dataType: the data type of this field.
         :param nullable: indicates whether values of this field
                          can be null.
+        :param metadata: metadata of this field, which is a map from string
+                         to simple type that can be serialized to JSON
+                         automatically
 
         >>> (StructField("f1", StringType, True)
         ...      == StructField("f1", StringType, True))
@@ -322,6 +351,7 @@ class StructField(DataType):
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
+        self.metadata = metadata or {}
 
     def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
@@ -330,13 +360,15 @@ class StructField(DataType):
     def jsonValue(self):
         return {"name": self.name,
                 "type": self.dataType.jsonValue(),
-                "nullable": self.nullable}
+                "nullable": self.nullable,
+                "metadata": self.metadata}
 
     @classmethod
     def fromJson(cls, json):
         return StructField(json["name"],
                            _parse_datatype_json_value(json["type"]),
-                           json["nullable"])
+                           json["nullable"],
+                           json["metadata"])
 
 
 class StructType(DataType):
@@ -415,7 +447,8 @@ def _parse_datatype_json_string(json_string):
     ...     StructField("simpleArray", simple_arraytype, True),
     ...     StructField("simpleMap", simple_maptype, True),
     ...     StructField("simpleStruct", simple_structtype, True),
-    ...     StructField("boolean", BooleanType(), False)])
+    ...     StructField("boolean", BooleanType(), False),
+    ...     StructField("withMeta", DoubleType(), False, {"name": "age"})])
     >>> check_datatype(complex_structtype)
     True
     >>> # Complex ArrayType.
@@ -431,14 +464,25 @@ def _parse_datatype_json_string(json_string):
     return _parse_datatype_json_value(json.loads(json_string))
 
 
+_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
+
+
 def _parse_datatype_json_value(json_value):
-    if type(json_value) is unicode and json_value in _all_primitive_types.keys():
-        return _all_primitive_types[json_value]()
+    if type(json_value) is unicode:
+        if json_value in _all_primitive_types.keys():
+            return _all_primitive_types[json_value]()
+        elif json_value == u'decimal':
+            return DecimalType()
+        elif _FIXED_DECIMAL.match(json_value):
+            m = _FIXED_DECIMAL.match(json_value)
+            return DecimalType(int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Could not parse datatype: %s" % json_value)
     else:
         return _all_complex_types[json_value["type"]].fromJson(json_value)
 
 
-# Mapping Python types to Spark SQL DateType
+# Mapping Python types to Spark SQL DataType
 _type_mappings = {
     bool: BooleanType,
     int: IntegerType,
@@ -448,8 +492,8 @@ _type_mappings = {
     unicode: StringType,
     bytearray: BinaryType,
     decimal.Decimal: DecimalType,
+    datetime.date: DateType,
     datetime.datetime: TimestampType,
-    datetime.date: TimestampType,
     datetime.time: TimestampType,
 }
 
@@ -656,10 +700,10 @@ def _infer_schema_type(obj, dataType):
     """
     Fill the dataType with types infered from obj
 
-    >>> schema = _parse_schema_abstract("a b c")
-    >>> row = (1, 1.0, "str")
+    >>> schema = _parse_schema_abstract("a b c d")
+    >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
     >>> _infer_schema_type(row, schema)
-    StructType...IntegerType...DoubleType...StringType...
+    StructType...IntegerType...DoubleType...StringType...DateType...
     >>> row = [[1], {"key": (1, 2.0)}]
     >>> schema = _parse_schema_abstract("a[] b{c d}")
     >>> _infer_schema_type(row, schema)
@@ -703,6 +747,7 @@ _acceptable_types = {
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
     BinaryType: (bytearray,),
+    DateType: (datetime.date,),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
@@ -740,7 +785,7 @@ def _verify_type(obj, dataType):
 
     # subclass of them can not be deserialized in JVM
     if type(obj) not in _acceptable_types[_type]:
-        raise TypeError("%s can not accept abject in type %s"
+        raise TypeError("%s can not accept object in type %s"
                         % (dataType, type(obj)))
 
     if isinstance(dataType, ArrayType):
@@ -767,7 +812,7 @@ def _restore_object(dataType, obj):
     """ Restore object during unpickling. """
     # use id(dataType) as key to speed up lookup in dict
     # Because of batched pickling, dataType will be the
-    # same object in mose cases.
+    # same object in most cases.
     k = id(dataType)
     cls = _cached_cls.get(k)
     if cls is None:
@@ -782,6 +827,10 @@ def _restore_object(dataType, obj):
 
 def _create_object(cls, v):
     """ Create an customized object with class `cls`. """
+    # datetime.date would be deserialized as datetime.datetime
+    # from java type, so we need to set it back.
+    if cls is datetime.date and isinstance(v, datetime.datetime):
+        return v.date()
     return cls(v) if v is not None else v
 
 
@@ -795,14 +844,16 @@ def _create_getter(dt, i):
     return getter
 
 
-def _has_struct(dt):
-    """Return whether `dt` is or has StructType in it"""
+def _has_struct_or_date(dt):
+    """Return whether `dt` is or has StructType/DateType in it"""
     if isinstance(dt, StructType):
         return True
     elif isinstance(dt, ArrayType):
-        return _has_struct(dt.elementType)
+        return _has_struct_or_date(dt.elementType)
     elif isinstance(dt, MapType):
-        return _has_struct(dt.valueType)
+        return _has_struct_or_date(dt.valueType)
+    elif isinstance(dt, DateType):
+        return True
     return False
 
 
@@ -815,7 +866,7 @@ def _create_properties(fields):
                 or keyword.iskeyword(name)):
             warnings.warn("field name %s can not be accessed in Python,"
                           "use position to access it instead" % name)
-        if _has_struct(f.dataType):
+        if _has_struct_or_date(f.dataType):
             # delay creating object until accessing it
             getter = _create_getter(f.dataType, i)
         else:
@@ -869,6 +920,9 @@ def _create_cls(dataType):
             return dict((k, _create_object(cls, v)) for k, v in d.items())
 
         return Dict
+
+    elif isinstance(dataType, DateType):
+        return datetime.date
 
     elif not isinstance(dataType, StructType):
         raise Exception("unexpected data type: %s" % dataType)
@@ -1068,8 +1122,9 @@ class SQLContext(object):
         >>> srdd2.collect()
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
 
-        >>> from datetime import datetime
+        >>> from datetime import date, datetime
         >>> rdd = sc.parallelize([(127, -128L, -32768, 32767, 2147483647L, 1.0,
+        ...     date(2010, 1, 1),
         ...     datetime(2010, 1, 1, 1, 1, 1),
         ...     {"a": 1}, (2,), [1, 2, 3], None)])
         >>> schema = StructType([
@@ -1079,6 +1134,7 @@ class SQLContext(object):
         ...     StructField("short2", ShortType(), False),
         ...     StructField("int", IntegerType(), False),
         ...     StructField("float", FloatType(), False),
+        ...     StructField("date", DateType(), False),
         ...     StructField("time", TimestampType(), False),
         ...     StructField("map",
         ...         MapType(StringType(), IntegerType(), False), False),
@@ -1088,10 +1144,11 @@ class SQLContext(object):
         ...     StructField("null", DoubleType(), True)])
         >>> srdd = sqlCtx.applySchema(rdd, schema)
         >>> results = srdd.map(
-        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.time,
-        ...         x.map["a"], x.struct.b, x.list, x.null))
-        >>> results.collect()[0]
-        (127, -128, -32768, 32767, 2147483647, 1.0, ...(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
+        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.date,
+        ...         x.time, x.map["a"], x.struct.b, x.list, x.null))
+        >>> results.collect()[0] # doctest: +NORMALIZE_WHITESPACE
+        (127, -128, -32768, 32767, 2147483647, 1.0, datetime.date(2010, 1, 1),
+             datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
 
         >>> srdd.registerTempTable("table2")
         >>> sqlCtx.sql(
@@ -1378,33 +1435,6 @@ class HiveContext(SQLContext):
 
 
 class LocalHiveContext(HiveContext):
-
-    """Starts up an instance of hive where metadata is stored locally.
-
-    An in-process metadata data is created with data stored in ./metadata.
-    Warehouse data is stored in in ./warehouse.
-
-    >>> import os
-    >>> hiveCtx = LocalHiveContext(sc)
-    >>> try:
-    ...     supress = hiveCtx.sql("DROP TABLE src")
-    ... except Exception:
-    ...     pass
-    >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
-    ...        'examples/src/main/resources/kv1.txt')
-    >>> supress = hiveCtx.sql(
-    ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
-    ...        % kv1)
-    >>> results = hiveCtx.sql("FROM src SELECT value"
-    ...      ).map(lambda r: int(r.value.split('_')[1]))
-    >>> num = results.count()
-    >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    >>> num
-    500
-    >>> reduce_sum
-    130091
-    """
 
     def __init__(self, sparkContext, sqlContext=None):
         HiveContext.__init__(self, sparkContext, sqlContext)

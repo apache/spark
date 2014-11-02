@@ -21,10 +21,27 @@ import scala.util.Random
 
 import org.scalatest.{Assertions, FunSuite}
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkEnv}
 import org.apache.spark.io.SnappyCompressionCodec
+import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
+
+// Dummy class that creates a broadcast variable but doesn't use it
+class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
+  @transient val list = List(1, 2, 3, 4)
+  val broadcast = rdd.context.broadcast(list)
+  val bid = broadcast.id
+
+  def doSomething() = {
+    rdd.map { x =>
+      val bm = SparkEnv.get.blockManager
+      // Check if broadcast block was fetched
+      val isFound = bm.getLocal(BroadcastBlockId(bid)).isDefined
+      (x, isFound)
+    }.collect().toSet
+  }
+}
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
 
@@ -103,6 +120,17 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       val unblockified = unBlockifyObject[Array[Byte]](blocks, serializer, compressionCodec)
       assert(unblockified === data)
     }
+  }
+
+  test("Test Lazy Broadcast variables with TorrentBroadcast") {
+    val numSlaves = 2
+    val conf = torrentConf.clone
+    sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test", conf)
+    val rdd = sc.parallelize(1 to numSlaves)
+
+    val results = new DummyBroadcastClass(rdd).doSomething()
+
+    assert(results.toSet === (1 to numSlaves).map(x => (x, false)).toSet)
   }
 
   test("Unpersisting HttpBroadcast on executors only in local mode") {
