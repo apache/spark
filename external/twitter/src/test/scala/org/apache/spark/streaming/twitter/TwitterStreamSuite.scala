@@ -28,20 +28,43 @@ class TwitterStreamSuite extends TestSuiteBase {
   test("twitter input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val filters = Seq("filter1", "filter2")
+    // bounding box around Tokyo, Japan
+    val latLons = Seq(Array(139.325823, 35.513041), Array(139.908099, 35.952258))
     val authorization: Authorization = NullAuthorization.getInstance()
 
     // tests the API, does not actually test data receiving
     val test1: ReceiverInputDStream[Status] = TwitterUtils.createStream(ssc, None)
+    // testing filters without Twitter OAuth
     val test2: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, None, filters)
     val test3: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_AND_DISK_SER_2)
+      TwitterUtils.createStream(ssc, None, filters, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2)
+    // testing longitude, latitude bounding without Twitter OAuth
     val test4: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, Some(authorization))
+      TwitterUtils.createStream(ssc, None, latLons=latLons)
     val test5: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, latLons=latLons, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2)
+    // testing both filters and lonLat bounding without Twitter OAuth
+    val test6: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, filters, latLons)
+    val test7: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, filters, latLons, StorageLevel.MEMORY_AND_DISK_SER_2)
+    // testing with Twitter OAuth
+    val test8: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, Some(authorization))
+    // testing filters with Twitter OAuth
+    val test9: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), filters)
-    val test6: ReceiverInputDStream[Status] = TwitterUtils.createStream(
-      ssc, Some(authorization), filters, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test10: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), filters, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2)
+    // testing longitude, latitude bounding with Twitter OAuth
+    val test11: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, Some(authorization), latLons=latLons)
+    val test12: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), latLons=latLons, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2)
+    // testing both filters and lonLat bounding with Twitter OAuth
+    val test13: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), filters, latLons, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // Note that actually testing the data receiving is hard as authentication keys are
     // necessary for accessing Twitter live stream

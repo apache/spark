@@ -31,16 +31,36 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
+    // bounding box around Tokyo, Japan
+    Double[][] latLons = {{139.325823, 35.513041}, {139.908099, 35.952258}};
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
     JavaDStream<Status> test1 = TwitterUtils.createStream(ssc);
+    // testing filters without Twitter OAuth
     JavaDStream<Status> test2 = TwitterUtils.createStream(ssc, filters);
     JavaDStream<Status> test3 = TwitterUtils.createStream(
       ssc, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test4 = TwitterUtils.createStream(ssc, auth);
-    JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth, filters);
-    JavaDStream<Status> test6 = TwitterUtils.createStream(ssc,
+    // testing longitude, latitude bounding without Twitter OAuth
+    JavaDStream<Status> test4 = TwitterUtils.createStream(ssc, latLons);
+    JavaDStream<Status> test5 = TwitterUtils.createStream(
+      ssc, latLons, StorageLevel.MEMORY_AND_DISK_SER_2());
+    // testing both filters and lonLat bounding without Twitter OAuth
+    JavaDStream<Status> test6 = TwitterUtils.createStream(ssc, filters, latLons);
+    JavaDStream<Status> test7 = TwitterUtils.createStream(
+      ssc, filters, latLons, StorageLevel.MEMORY_AND_DISK_SER_2());
+    // testing with Twitter OAuth
+    JavaDStream<Status> test8 = TwitterUtils.createStream(ssc, auth);
+    // testing filters with Twitter OAuth
+    JavaDStream<Status> test9 = TwitterUtils.createStream(ssc, auth, filters);
+    JavaDStream<Status> test10 = TwitterUtils.createStream(ssc,
       auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+    // testing longitude, latitude bounding with Twitter OAuth
+    JavaDStream<Status> test11 = TwitterUtils.createStream(ssc, auth, latLons);
+    JavaDStream<Status> test12 = TwitterUtils.createStream(ssc,
+      auth, latLons, StorageLevel.MEMORY_AND_DISK_SER_2());
+    // testing both filters and lonLat bounding with Twitter OAuth
+    JavaDStream<Status> test13 = TwitterUtils.createStream(ssc,
+      auth, filters, latLons, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }

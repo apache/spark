@@ -47,7 +47,7 @@ write Spark Streaming programs in Scala or Java, both of which are presented in 
 will find tabs throughout this guide that let you choose between Scala and Java
 code snippets.
 
-***************************************************************************************************  
+***************************************************************************************************
 
 # A Quick Example
 Before we go into the details of how to write your own Spark Streaming program,
@@ -370,7 +370,7 @@ Time: 2014-10-14 15:25:21
 ...
 {% endhighlight %}
 </div>
-</div>    
+</div>
     </td>
 </table>
 
@@ -444,7 +444,7 @@ val ssc = new StreamingContext(conf, Seconds(1))
 
 The `appName` parameter is a name for your application to show on the cluster UI.
 `master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
-or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster, 
+or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
 receive it there. However, for local testing and unit tests, you can pass "local[\*]" to run Spark Streaming
@@ -479,7 +479,7 @@ JavaStreamingContext ssc = new JavaStreamingContext(conf, Duration(1000));
 
 The `appName` parameter is a name for your application to show on the cluster UI.
 `master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
-or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster, 
+or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
 receive it there. However, for local testing and unit tests, you can pass "local[*]" to run Spark Streaming
@@ -496,7 +496,7 @@ import org.apache.spark.streaming.api.java.*;
 
 JavaSparkContext sc = ...   //existing JavaSparkContext
 JavaStreamingContext ssc = new JavaStreamingContext(sc, new Duration(1000));
-{% endhighlight %} 
+{% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
 
@@ -512,7 +512,7 @@ ssc = StreamingContext(sc, 1)
 
 The `appName` parameter is a name for your application to show on the cluster UI.
 `master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
-or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster, 
+or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
 receive it there. However, for local testing and unit tests, you can pass "local[\*]" to run Spark Streaming
@@ -664,9 +664,10 @@ Some of these advanced sources are as follows.
 - **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j 3.0.3 to get the public stream of tweets using
     [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
     can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
-    Twitter4J library. You can either get the public stream, or get the filtered stream based on a
-    keywords. See the API documentation ([Scala](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$), [Java](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html)) and examples ([TwitterPopularTags]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala) and
-    [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala)).
+    Twitter4J library. You can either get a sampled public stream, or get a filtered stream based on
+    keywords and / or latitude, longitude pairs. See the API documentation ([Scala](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$), [Java](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html)) and examples ([TwitterPopularTags]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala),
+    [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala), and
+    [TwitterGeoBounding]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterGeoBounding.scala)) for more details.
 
 - **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} can received data from Flume 1.4.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
 
@@ -683,7 +684,7 @@ Input DStreams can also be created out of custom data sources. All you have to d
 
 ## Transformations on DStreams
 Similar to that of RDDs, transformations allow the data from the input DStream to be modified.
-DStreams support many of the transformations available on normal Spark RDD's. 
+DStreams support many of the transformations available on normal Spark RDD's.
 Some of the common ones are as follows.
 
 <table class="table">
@@ -1029,15 +1030,15 @@ For the Python API, see [DStream](api/python/pyspark.streaming.html#pyspark.stre
 ## Output Operations on DStreams
 Output operations allow DStream's data to be pushed out external systems like a database or a file systems.
 Since the output operations actually allow the transformed data to be consumed by external systems,
-they trigger the actual execution of all the DStream transformations (similar to actions for RDDs). 
+they trigger the actual execution of all the DStream transformations (similar to actions for RDDs).
 Currently, the following output operations are defined:
 
 <table class="table">
 <tr><th style="width:30%">Output Operation</th><th>Meaning</th></tr>
 <tr>
   <td> <b>print</b>()</td>
-  <td> Prints first ten elements of every batch of data in a DStream on the driver. 
-  This is useful for development and debugging. 
+  <td> Prints first ten elements of every batch of data in a DStream on the driver.
+  This is useful for development and debugging.
   <br/>
   <b>PS</b>: called <b>pprint</b>() in Python)
   </td>
@@ -1101,7 +1102,7 @@ def sendRecord(rdd):
     connection = createNewConnection()  # executed at the driver
     rdd.foreach(lambda record: connection.send(record))
     connection.close()
-        
+
 dstream.foreachRDD(sendRecord)
 {% endhighlight %}
 
@@ -1133,7 +1134,7 @@ def sendRecord(record):
     connection = createNewConnection()
     connection.send(record)
     connection.close()
-        
+
 dstream.foreachRDD(lambda rdd: rdd.foreach(sendRecord))
 {% endhighlight %}
 
@@ -1162,18 +1163,18 @@ def sendPartition(iter):
     for record in iter:
         connection.send(record)
     connection.close()
-    
+
 dstream.foreachRDD(lambda rdd: rdd.foreachPartition(sendPartition))
 {% endhighlight %}
 </div>
-</div>    
+</div>
 
   This amortizes the connection creation overheads over many records.
 
 - Finally, this can be further optimized by reusing connection objects across multiple RDDs/batches.
 	One can maintain a static pool of connection objects than can be reused as
     RDDs of multiple batches are pushed to the external system, thus further reducing the overheads.
-    
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
@@ -1197,11 +1198,11 @@ def sendPartition(iter):
         connection.send(record)
     # return to the pool for future reuse
     ConnectionPool.returnConnection(connection)
-    
+
 dstream.foreachRDD(lambda rdd: rdd.foreachPartition(sendPartition))
 {% endhighlight %}
 </div>
-</div> 
+</div>
 
 Note that the connections in the pool should be lazily created on demand and timed out if not used for a while. This achieves the most efficient sending of data to external systems.
 
@@ -1628,7 +1629,7 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 # Function to create and setup a new StreamingContext
 def functionToCreateContext():
     sc = SparkContext(...)   # new context
-    ssc = new StreamingContext(...)  
+    ssc = new StreamingContext(...)
     lines = ssc.socketTextStream(...) # create DStreams
     ...
     ssc.checkpoint(checkpointDirectory)   # set checkpoint directory
