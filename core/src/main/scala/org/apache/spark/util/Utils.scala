@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.util.jar.Attributes.Name
@@ -1613,10 +1614,13 @@ private[spark] object Utils extends Logging {
 
   /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
   def getThreadDump(): Array[ThreadStackTrace] = {
-    Thread.getAllStackTraces.toArray.sortBy(_._1.getId).map {
-      case (thread, stackElements) =>
-        val stackTrace = stackElements.map(_.toString).mkString("\n")
-        ThreadStackTrace(thread.getId, thread.getName, thread.getState.toString, stackTrace)
+    // We need to filter out null values here because dumpAllThreads() may return null array
+    // elements for threads that are dead / don't exist.
+    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
+      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
+        threadInfo.getThreadState, stackTrace)
     }
   }
 

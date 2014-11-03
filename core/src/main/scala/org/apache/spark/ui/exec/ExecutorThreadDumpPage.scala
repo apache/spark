@@ -24,7 +24,7 @@ import scala.xml.{Text, Node}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-class ThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
+private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
 
   private val sc = parent.sc
 
@@ -33,17 +33,19 @@ class ThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
       return Text(s"Missing executorId parameter")
     }
     val time = System.currentTimeMillis()
-    val maybeThreadDump = Try(sc.get.getExecutorThreadDump(executorId))
+    val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
     val content = maybeThreadDump.map { threadDump =>
       val dumpRows = threadDump.map { thread =>
         <div class="accordion-group">
           <div class="accordion-heading" onclick="$(this).next().toggleClass('hidden')">
-            <a class="accordion-toggle">Thread {thread.id}: {thread.name} ({thread.state})</a>
+            <a class="accordion-toggle">
+              Thread {thread.threadId}: {thread.threadName} ({thread.threadState})
+            </a>
           </div>
           <div class="accordion-body hidden">
             <div class="accordion-inner">
-              <pre>{thread.trace}</pre>
+              <pre>{thread.stackTrace}</pre>
             </div>
           </div>
         </div>

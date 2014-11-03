@@ -361,15 +361,26 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     override protected def childValue(parent: Properties): Properties = new Properties(parent)
   }
 
-  /** Called by the web UI to obtain executor thread dumps */
-  private[spark] def getExecutorThreadDump(executorId: String): Array[ThreadStackTrace] = {
-    if (executorId == SparkContext.DRIVER_IDENTIFIER) {
-      Utils.getThreadDump()
-    } else {
-      val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
-      val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
-      AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump(), actorRef,
-        AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf))
+  /**
+   * Called by the web UI to obtain executor thread dumps.  This method may be expensive.
+   * Logs an error and returns None if we failed to obtain a thread dump, which could occur due
+   * to an executor being dead or unresponsive or due to network issues while sending the thread
+   * dump message back to the driver.
+   */
+  private[spark] def getExecutorThreadDump(executorId: String): Option[Array[ThreadStackTrace]] = {
+    try {
+      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+        Some(Utils.getThreadDump())
+      } else {
+        val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
+        val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
+        Some(AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump, actorRef,
+          AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf)))
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Exception getting thread dump from executor $executorId", e)
+        None
     }
   }
 

@@ -25,7 +25,7 @@ import org.apache.spark.util.{Utils, ActorLogReceive}
 /**
  * Driver -> Executor message to trigger a thread dump.
  */
-private[spark] case class TriggerThreadDump()
+private[spark] case object TriggerThreadDump
 
 /**
  * Actor that runs inside of executors to enable driver -> executor RPC.
@@ -34,7 +34,7 @@ private[spark]
 class ExecutorActor(executorId: String) extends Actor with ActorLogReceive with Logging {
 
   override def receiveWithLogging = {
-    case TriggerThreadDump() =>
+    case TriggerThreadDump =>
       sender ! Utils.getThreadDump()
   }
 

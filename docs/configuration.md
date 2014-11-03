@@ -417,13 +417,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.ui.threadDumpsEnabled</code></td>
-  <td>true</td>
-  <td>
-    Allows executor and driver thread dumps to be collected and viewed from the web ui.
-  </td>
-</tr>
-<tr>
   <td><code>spark.eventLog.enabled</code></td>
   <td>false</td>
   <td>
