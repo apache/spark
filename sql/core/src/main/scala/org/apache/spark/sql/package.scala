@@ -433,6 +433,9 @@ package object sql {
   @DeveloperApi
   val StructField = catalyst.types.StructField
 
+  @DeveloperApi
+  type UserDefinedType[T] = catalyst.types.UserDefinedType[T]
+
   /**
    * Converts a logical plan into zero or more SparkPlans.
    */

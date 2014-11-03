@@ -483,6 +483,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
       case StructType(_) => true
+      case udt: UserDefinedType[_] => true
       case other => false
     }
 
