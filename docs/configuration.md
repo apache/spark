@@ -112,6 +112,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.maxResultSize</code></td>
+  <td>1g</td>
+  <td>
+    Limit of total size of serialized results of all partitions for each Spark action (e.g. collect).
+    Should be at least 1M, or 0 for unlimited. Jobs will be aborted if the total size
+    is above this limit. 
+    Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
+    and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
+    out-of-memory errors.
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
@@ -357,6 +369,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
     map-side aggregation and there are at most this many reduce partitions.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.blockTransferService</code></td>
+  <td>netty</td>
+  <td>
+    Implementation to use for transferring shuffle and cached blocks between executors. There
+    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
+    block transfer is intended to be simpler but equally efficient and is the default option
+    starting in 1.2.
   </td>
 </tr>
 </table>

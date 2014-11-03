@@ -1359,7 +1359,7 @@
         <activeByDefault>false</activeByDefault>
       </activation>
       <properties>
-        <hive.version>0.13.1</hive.version>
+        <hive.version>0.13.1a</hive.version>
         <hive.version.short>0.13.1</hive.version.short>
         <derby.version>10.10.1.1</derby.version>
       </properties>

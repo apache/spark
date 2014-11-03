@@ -50,6 +50,7 @@ import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.sources.DataSourceStrategy
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -99,7 +100,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (dialect == "sql") {
       super.sql(sqlText)
     } else if (dialect == "hiveql") {
-      new SchemaRDD(this, HiveQl.parseSql(sqlText))
+      new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
     }  else {
       sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
     }
@@ -322,7 +323,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           driver.close()
           HiveShim.processResults(results)
         case _ =>
-          sessionState.out.println(tokens(0) + " " + cmd_1)
+          if (sessionState.out != null) {
+            sessionState.out.println(tokens(0) + " " + cmd_1)
+          }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }
     } catch {
@@ -345,7 +348,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override val strategies: Seq[Strategy] = Seq(
+    override val strategies: Seq[Strategy] = extraStrategies ++ Seq(
+      DataSourceStrategy,
       CommandStrategy(self),
       HiveCommandStrategy(self),
       TakeOrdered,
@@ -369,8 +373,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
-
-    override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
@@ -429,7 +431,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         command.executeCollect().map(_.head.toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.collect().toSeq
+        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.

@@ -20,8 +20,10 @@ package org.apache.spark.util
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
+import java.util.jar.Attributes.Name
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.util.jar.{Manifest => JarManifest}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -1595,7 +1597,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(e: Exception): String = {
+  def exceptionString(e: Throwable): String = {
     if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
   }
 
@@ -1729,6 +1731,11 @@ private[spark] object Utils extends Logging {
     method.invoke(obj, values.toSeq: _*)
   }
 
+  // Limit of bytes for total size of results (default is 1GB)
+  def getMaxResultSize(conf: SparkConf): Long = {
+    memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
+  }
+
   /**
    * Return the current system LD_LIBRARY_PATH name
    */
@@ -1763,6 +1770,12 @@ private[spark] object Utils extends Logging {
     s"$libraryPathEnvName=$libraryPath$ampersand"
   }
 
+  lazy val sparkVersion =
+    SparkContext.jarOfObject(this).map { path =>
+      val manifestUrl = new URL(s"jar:file:$path!/META-INF/MANIFEST.MF")
+      val manifest = new JarManifest(manifestUrl.openStream())
+      manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
+    }.getOrElse("Unknown")
 }
 
 /**
