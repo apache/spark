@@ -145,11 +145,9 @@ abstract class RDD[T: ClassTag](
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
-    sc.persistRDD(this)
-    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
-    sc.cleaner.foreach(_.registerRDDForCleanup(this))
+    val persistedRdd = sc.executionContext.persist(sc, this, newLevel)
     storageLevel = newLevel
-    this
+    persistedRdd.asInstanceOf[this.type]
   }
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
@@ -166,9 +164,9 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.unpersistRDD(id, blocking)
+    val unpersistedRdd = sc.executionContext.unpersist(sc, this, blocking)
     storageLevel = StorageLevel.NONE
-    this
+    unpersistedRdd.asInstanceOf[this.type]
   }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
