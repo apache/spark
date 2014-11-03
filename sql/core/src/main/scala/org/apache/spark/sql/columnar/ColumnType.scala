@@ -372,6 +372,11 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 12) {
   override def setField(row: MutableRow, ordinal: Int, value: Timestamp): Unit = {
     row(ordinal) = value
   }
+
+  def append(v: Date, buffer: ByteBuffer) {
+    buffer.putLong(v.getTime)
+  }
+
 }
 
 private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](

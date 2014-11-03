@@ -31,8 +31,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   override def nullable = (child.dataType, dataType) match {
     case (StringType, _: NumericType) => true
-    case (StringType, TimestampType)  => true
     case (StringType, DateType)       => true
+    case (StringType, TimestampType)  => true
     case (_: NumericType, DateType)   => true
     case (BooleanType, DateType)      => true
     case (DateType, _: NumericType)   => true
@@ -333,8 +333,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case dt if dt == child.dataType => identity[Any]
     case StringType    => castToString
     case BinaryType    => castToBinary
-    case DateType      => castToDate
     case decimal: DecimalType => castToDecimal(decimal)
+    case DateType      => castToDate
     case TimestampType => castToTimestamp
     case BooleanType   => castToBoolean
     case ByteType      => castToByte

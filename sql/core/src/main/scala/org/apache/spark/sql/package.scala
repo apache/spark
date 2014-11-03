@@ -162,22 +162,22 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `java.sql.Timestamp` values.
-   *
-   * @group dataType
-   */
-  @DeveloperApi
-  val TimestampType = catalyst.types.TimestampType
-
-  /**
-   * :: DeveloperApi ::
-   *
    * The data type representing `java.sql.Date` values.
    *
    * @group dataType
    */
   @DeveloperApi
   val DateType = catalyst.types.DateType
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * The data type representing `java.sql.Timestamp` values.
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  val TimestampType = catalyst.types.TimestampType
 
   /**
    * :: DeveloperApi ::
@@ -460,4 +460,34 @@ package object sql {
    */
   @DeveloperApi
   type MetadataBuilder = catalyst.util.MetadataBuilder
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * A Timestamp class which support the standard comparison
+   * operators, for use in DSL expressions.  Implicit conversions to
+   * java.sql.Date are provided.  The class intializer accepts a
+   * String, e.g.
+   *
+   * val ts = Date("2014-01-01")
+   * 
+   * @group dataType
+   */
+  @DeveloperApi
+  val Date = catalyst.expressions.Date
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * A Timestamp class which support the standard comparison
+   * operators, for use in DSL expressions.  Implicit conversions to
+   * java.sql.timestamp are provided.  The class intializer accepts a
+   * String, e.g.
+   *
+   * val ts = Timestamp("2014-01-01 12:34:56.78")
+   * 
+   * @group timeClasses
+   */
+  @DeveloperApi
+  val Timestamp = catalyst.expressions.Timestamp
 }

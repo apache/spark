@@ -127,9 +127,9 @@ package object dsl {
     implicit def floatToLiteral(f: Float) = Literal(f)
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
-    implicit def dateToLiteral(d: Date) = Literal(d)
     implicit def bigDecimalToLiteral(d: BigDecimal) = Literal(d)
     implicit def decimalToLiteral(d: Decimal) = Literal(d)
+    implicit def dateToLiteral(d: Date) = Literal(d)
     implicit def timestampToLiteral(t: Timestamp) = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
@@ -147,6 +147,31 @@ package object dsl {
     def max(e: Expression) = Max(e)
     def upper(e: Expression) = Upper(e)
     def lower(e: Expression) = Lower(e)
+
+    /*
+     * Conversions to provide the standard operators in the special case
+     * where a literal is being combined with a symbol. Without these an
+     * expression such as 0 < 'x is not recognized.
+     */
+    implicit class InitialLiteral(x: Any) {
+      val literal = Literal(x)
+      def + (other: Symbol):Expression = {literal + other}
+      def - (other: Symbol):Expression = {literal - other}
+      def * (other: Symbol):Expression = {literal * other}
+      def / (other: Symbol):Expression = {literal / other}
+      def % (other: Symbol):Expression = {literal % other}
+
+      def && (other: Symbol):Expression = {literal && other}
+      def || (other: Symbol):Expression = {literal || other}
+
+      def < (other: Symbol):Expression  = {literal < other}
+      def <= (other: Symbol):Expression = {literal <= other}
+      def > (other: Symbol):Expression  = {literal > other}
+      def >= (other: Symbol):Expression = {literal >= other}
+      def === (other: Symbol):Expression = {literal === other}
+      def <=> (other: Symbol):Expression = {literal <=> other}
+      def !== (other: Symbol):Expression = {literal !== other}
+    }
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?
@@ -184,15 +209,15 @@ package object dsl {
       /** Creates a new AttributeReference of type string */
       def string = AttributeReference(s, StringType, nullable = true)()
 
-      /** Creates a new AttributeReference of type date */
-      def date = AttributeReference(s, DateType, nullable = true)()
-
       /** Creates a new AttributeReference of type decimal */
       def decimal = AttributeReference(s, DecimalType.Unlimited, nullable = true)()
 
       /** Creates a new AttributeReference of type decimal */
       def decimal(precision: Int, scale: Int) =
         AttributeReference(s, DecimalType(precision, scale), nullable = true)()
+
+      /** Creates a new AttributeReference of type date */
+      def date = AttributeReference(s, DateType, nullable = true)()
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp = AttributeReference(s, TimestampType, nullable = true)()

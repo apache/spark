@@ -100,9 +100,9 @@ object DataType {
       | "LongType" ^^^ LongType
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
-      | "DateType" ^^^ DateType
       | "DecimalType()" ^^^ DecimalType.Unlimited
       | fixedDecimalType
+      | "DateType" ^^^ DateType
       | "TimestampType" ^^^ TimestampType
       )
 
@@ -195,7 +195,8 @@ case object NullType extends DataType
 
 object NativeType {
   val all = Seq(
-    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType,
+    ByteType, StringType, DateType, TimestampType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
 
