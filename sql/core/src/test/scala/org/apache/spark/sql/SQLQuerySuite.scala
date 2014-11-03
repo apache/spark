@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql
 
+import java.util.TimeZone
+
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
-import org.apache.spark.sql.test._
-import org.scalatest.BeforeAndAfterAll
-import java.util.TimeZone
 
 /* Implicits */
-import TestSQLContext._
-import TestData._
+import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -697,6 +697,30 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       ("true", "false") :: Nil)
   }
 
+  test("metadata is propagated correctly") {
+    val person = sql("SELECT * FROM person")
+    val schema = person.schema
+    val docKey = "doc"
+    val docValue = "first name"
+    val metadata = new MetadataBuilder()
+      .putString(docKey, docValue)
+      .build()
+    val schemaWithMeta = new StructType(Seq(
+      schema("id"), schema("name").copy(metadata = metadata), schema("age")))
+    val personWithMeta = applySchema(person, schemaWithMeta)
+    def validateMetadata(rdd: SchemaRDD): Unit = {
+      assert(rdd.schema("name").metadata.getString(docKey) == docValue)
+    }
+    personWithMeta.registerTempTable("personWithMeta")
+    validateMetadata(personWithMeta.select('name))
+    validateMetadata(personWithMeta.select("name".attr))
+    validateMetadata(personWithMeta.select('id, 'name))
+    validateMetadata(sql("SELECT * FROM personWithMeta"))
+    validateMetadata(sql("SELECT id, name FROM personWithMeta"))
+    validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
+    validateMetadata(sql("SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
+  }
+
   test("SPARK-3371 Renaming a function expression with group by gives error") {
     registerFunction("len", (s: String) => s.length)
     checkAnswer(
@@ -882,5 +906,41 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
     sql("SELECT `key?number1` FROM records")
+  }
+
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(sql("SELECT key&1 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(sql("SELECT key|0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(sql("SELECT key^0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), -2)
+  }
+
+  test("SPARK-4120 Join of multiple tables does not work in SparkSQL") {
+    checkAnswer(
+      sql(
+        """SELECT a.key, b.key, c.key
+          |FROM testData a,testData b,testData c
+          |where a.key = b.key and a.key = c.key
+        """.stripMargin),
+      (1 to 100).map(i => Seq(i, i, i)))
+  }
+
+  test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"),
+        (11 to 100).map(i => Seq(i)))
+  }
+
+  test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
+    checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
+        (1 to 99).map(i => Seq(i)))
   }
 }

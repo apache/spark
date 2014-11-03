@@ -32,10 +32,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{Optimizer, DefaultOptimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources.{DataSourceStrategy, BaseRelation, DDLParser, LogicalRelation}
 
 /**
  * :: AlphaComponent ::
@@ -70,12 +70,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
+  protected[sql] val ddlParser = new DDLParser
+
+  @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
     new catalyst.SparkSQLParser(fallback(_))
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = {
+    ddlParser(sql).getOrElse(sqlParser(sql))
+  }
+
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -101,8 +107,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
     SparkPlan.currentContext.set(self)
-    new SchemaRDD(this,
-      LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+    val attributeSeq = ScalaReflection.attributesFor[A]
+    val schema = StructType.fromAttributes(attributeSeq)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    new SchemaRDD(this, LogicalRDD(attributeSeq, rowRDD)(self))
+  }
+
+  implicit def baseRelationToSchemaRDD(baseRelation: BaseRelation): SchemaRDD = {
+    logicalPlanToSparkQuery(LogicalRelation(baseRelation))
   }
 
   /**
@@ -267,6 +279,19 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the name of the table to be unregistered.
+   *
+   * @group userf
+   */
+  def dropTempTable(tableName: String): Unit = {
+    tryUncacheQuery(table(tableName))
+    catalog.unregisterTable(None, tableName)
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
@@ -284,6 +309,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
 
+  /**
+   * :: DeveloperApi ::
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @DeveloperApi
+  var extraStrategies: Seq[Strategy] = Nil
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
 
@@ -294,7 +327,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
+      extraStrategies ++ (
       CommandStrategy(self) ::
+      DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
       LeftSemiJoin ::
@@ -303,7 +338,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil
+      BroadcastNestedLoopJoin :: Nil)
 
     /**
      * Used to build table scan operators where complex projection and filtering are done using
@@ -438,12 +473,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schema: StructType): SchemaRDD = {
-    import scala.collection.JavaConversions._
 
     def needsConversion(dataType: DataType): Boolean = dataType match {
       case ByteType => true
       case ShortType => true
       case FloatType => true
+      case DateType => true
       case TimestampType => true
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
@@ -451,46 +486,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case other => false
     }
 
-    // Converts value to the type specified by the data type.
-    // Because Python does not have data types for TimestampType, FloatType, ShortType, and
-    // ByteType, we need to explicitly convert values in columns of these data types to the desired
-    // JVM data types.
-    def convert(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-      // TODO: We should check nullable
-      case (null, _) => null
-
-      case (c: java.util.List[_], ArrayType(elementType, _)) =>
-        c.map { e => convert(e, elementType)}: Seq[Any]
-
-      case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-        c.asInstanceOf[Array[_]].map(e => convert(e, elementType)): Seq[Any]
-
-      case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
-          case (key, value) => (convert(key, keyType), convert(value, valueType))
-        }.toMap
-
-      case (c, StructType(fields)) if c.getClass.isArray =>
-        new GenericRow(c.asInstanceOf[Array[_]].zip(fields).map {
-          case (e, f) => convert(e, f.dataType)
-        }): Row
-
-      case (c: java.util.Calendar, TimestampType) =>
-        new java.sql.Timestamp(c.getTime().getTime())
-
-      case (c: Int, ByteType) => c.toByte
-      case (c: Long, ByteType) => c.toByte
-      case (c: Int, ShortType) => c.toShort
-      case (c: Long, ShortType) => c.toShort
-      case (c: Long, IntegerType) => c.toInt
-      case (c: Double, FloatType) => c.toFloat
-      case (c, StringType) if !c.isInstanceOf[String] => c.toString
-
-      case (c, _) => c
-    }
-
     val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
       rdd.map(m => m.zip(schema.fields).map {
-        case (value, field) => convert(value, field.dataType)
+        case (value, field) => EvaluatePython.fromJava(value, field.dataType)
       })
     } else {
       rdd

@@ -52,11 +52,13 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COUNT = Keyword("COUNT")
+  protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
   protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
+  protected val DOUBLE = Keyword("DOUBLE")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
   protected val FROM = Keyword("FROM")
@@ -166,7 +168,8 @@ class SqlParser extends AbstractSparkSQLParser {
   // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
   protected lazy val relations: Parser[LogicalPlan] =
-    ( relation ~ ("," ~> relation) ^^ { case r1 ~ r2 => Join(r1, r2, Inner, None) }
+    ( relation ~ rep1("," ~> relation) ^^ {
+        case r1 ~ joins => joins.foldLeft(r1) { case(lhs, r) => Join(lhs, r, Inner, None) } }
     | relation
     )
 
@@ -231,12 +234,15 @@ class SqlParser extends AbstractSparkSQLParser {
     | termExpression ~ (">=" ~> termExpression) ^^ { case e1 ~ e2 => GreaterThanOrEqual(e1, e2) }
     | termExpression ~ ("!=" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
     | termExpression ~ ("<>" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
-    | termExpression ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
-        case e ~ el ~ eu => And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
+    | termExpression ~ NOT.? ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
+        case e ~ not ~ el ~ eu =>
+          val betweenExpr: Expression = And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
+          not.fold(betweenExpr)(f=> Not(betweenExpr))
       }
     | termExpression ~ (RLIKE  ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (REGEXP ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (LIKE   ~> termExpression) ^^ { case e1 ~ e2 => Like(e1, e2) }
+    | termExpression ~ (NOT ~ LIKE ~> termExpression) ^^ { case e1 ~ e2 => Not(Like(e1, e2)) }
     | termExpression ~ (IN ~ "(" ~> rep1sep(termExpression, ",")) <~ ")" ^^ {
         case e1 ~ e2 => In(e1, e2)
       }
@@ -260,6 +266,9 @@ class SqlParser extends AbstractSparkSQLParser {
       ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
       | "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1, e2) }
       | "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1, e2) }
+      | "&" ^^^ { (e1: Expression, e2: Expression) => BitwiseAnd(e1, e2) }
+      | "|" ^^^ { (e1: Expression, e2: Expression) => BitwiseOr(e1, e2) }
+      | "^" ^^^ { (e1: Expression, e2: Expression) => BitwiseXor(e1, e2) }
       )
 
   protected lazy val function: Parser[Expression] =
@@ -370,6 +379,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | dotExpressionHeader
     | ident ^^ UnresolvedAttribute
     | signedPrimary
+    | "~" ~> expression ^^ BitwiseNot
     )
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
@@ -378,5 +388,15 @@ class SqlParser extends AbstractSparkSQLParser {
     }
 
   protected lazy val dataType: Parser[DataType] =
-    STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
+    ( STRING ^^^ StringType
+    | TIMESTAMP ^^^ TimestampType
+    | DOUBLE ^^^ DoubleType
+    | fixedDecimalType
+    | DECIMAL ^^^ DecimalType.Unlimited
+    )
+
+  protected lazy val fixedDecimalType: Parser[DataType] =
+    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
+    }
 }
