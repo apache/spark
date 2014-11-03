@@ -44,31 +44,6 @@ object Row {
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
-
-  /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of Strings,
-   * converting each item to the type specified in a [[StructType]] schema.
-   * Only primitive types can be used.
-   */
-  def fromStringsBySchema(strings: Seq[String], schema: StructType): Row = {
-     val values = for {
-       (field, str) <- schema.fields zip strings
-       item = field.dataType match {
-         case IntegerType    => str.toInt
-         case LongType       => str.toLong
-         case DoubleType     => str.toDouble
-         case FloatType      => str.toFloat
-         case ByteType       => str.toByte
-         case ShortType      => str.toShort
-         case StringType     => str
-         case BooleanType    => (str != "")
-         case DateType       => Date.valueOf(str)
-         case TimestampType  => Timestamp.valueOf(str)
-         case DecimalType()  => new BigDecimal(str)
-       }
-     } yield item
-     new GenericRow(values.toArray)
-  }
 }
 
 /**
@@ -91,8 +66,6 @@ trait Row extends Seq[Any] with Serializable {
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
   def getString(i: Int): String
-  def getDate(i: Int): Date
-  def getTimestamp(i: Int): Timestamp
   def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
 
   override def toString() =

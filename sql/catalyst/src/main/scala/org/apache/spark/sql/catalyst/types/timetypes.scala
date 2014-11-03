@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date => JDate, Timestamp => JTimestamp}
+import java.sql.{Date, Timestamp}
 import scala.language.implicitConversions
 
 /*
@@ -35,7 +35,7 @@ import scala.language.implicitConversions
  * res1: Boolean = true
  */
 
-class Date(milliseconds: Long) extends JDate(milliseconds) {
+class RichDate(milliseconds: Long) extends Date(milliseconds) {
   def <(that: Date): Boolean = this.before(that)
   def >(that: Date): Boolean  = this.after(that)
   def <=(that: Date): Boolean = (this.before(that) || this.equals(that))
@@ -43,8 +43,8 @@ class Date(milliseconds: Long) extends JDate(milliseconds) {
   def ===(that: Date): Boolean = this.equals(that)
 }
 
-object Date {
-  def apply(init: String) = new Date(JDate.valueOf(init).getTime)
+object RichDate {
+  def apply(init: String) = new RichDate(Date.valueOf(init).getTime)
 }
 
 /*
@@ -60,7 +60,7 @@ object Date {
  * res13: Boolean = true
  */
 
-class Timestamp(milliseconds: Long) extends JTimestamp(milliseconds) {
+class RichTimestamp(milliseconds: Long) extends Timestamp(milliseconds) {
   def <(that: Timestamp): Boolean = this.before(that)
   def >(that: Timestamp): Boolean  = this.after(that)
   def <=(that: Timestamp): Boolean = (this.before(that) || this.equals(that))
@@ -68,8 +68,8 @@ class Timestamp(milliseconds: Long) extends JTimestamp(milliseconds) {
   def ===(that: Timestamp): Boolean = this.equals(that)
 }
 
-object Timestamp {
-  def apply(init: String) = new Timestamp(JTimestamp.valueOf(init).getTime)
+object RichTimestamp {
+  def apply(init: String) = new RichTimestamp(Timestamp.valueOf(init).getTime)
 }
 
 /*
@@ -78,20 +78,20 @@ object Timestamp {
 
 object TimeConversions {
 
-  implicit def JDateToDate(jdate: JDate): Date = {
+  implicit def javaDateToRichDate(jdate: Date): RichDate = {
     new Date(jdate.getTime)
   }
 
-  implicit def JTimestampToTimestamp(jtimestamp: JTimestamp): Timestamp = {
+  implicit def javaTimestampToRichTimestamp(jtimestamp: Timestamp): RichTimestamp = {
     new Timestamp(jtimestamp.getTime)
   }
 
-  implicit def DateToJDate(date: Date): JDate = {
-    new JDate(date.getTime)
+  implicit def richDateToJavaDate(date: RichDate): Date = {
+    new Date(date.getTime)
   }
 
-  implicit def TimestampToJTimestamp(timestamp: Timestamp): JTimestamp = {
-    new JTimestamp(timestamp.getTime)
+  implicit def richTimestampToJavaTimestamp(timestamp: RichTimestamp): Timestamp = {
+    new Timestamp(timestamp.getTime)
   }
 
 }
