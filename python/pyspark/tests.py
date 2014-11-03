@@ -733,7 +733,6 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
-        cls.sc._jvm.WriteInputFormatTestDataGenerator.generateData(cls.tempdir.name, cls.sc._jsc)
 
     @classmethod
     def tearDownClass(cls):
