@@ -464,10 +464,9 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * A Timestamp class which support the standard comparison
-   * operators, for use in DSL expressions.  Implicit conversions to
-   * java.sql.Date are provided.  The class intializer accepts a
-   * String, e.g.
+   * A Date class which support the standard comparison operators, for
+   * use in DSL expressions.  Implicit conversions to java.sql.Date
+   * are provided.  The class intializer accepts a String, e.g.
    *
    * val ts = Date("2014-01-01")
    * 
