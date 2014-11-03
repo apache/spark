@@ -130,7 +130,7 @@ class ArtificialNeuralNetwork private[mllib](
     setConvergenceTol(convergenceTol).
     setMaxNumIterations(maxNumIterations)
 
- /**
+  /**
    * Trains the ANN model.
    * Uses default convergence tolerance 1e-4 for LBFGS.
    *
@@ -304,10 +304,10 @@ object ArtificialNeuralNetwork {
    * @return random weights vector.
    */
   def randomWeights(
-                     inputLayerSize: Int,
-                     outputLayerSize: Int,
-                     hiddenLayersTopology: Array[Int],
-                     seed: Int): Vector = {
+      inputLayerSize: Int,
+      outputLayerSize: Int,
+      hiddenLayersTopology: Array[Int],
+      seed: Int): Vector = {
     val topology = inputLayerSize +: hiddenLayersTopology :+ outputLayerSize
     return randomWeights(topology, true, seed)
   }
