@@ -90,7 +90,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * SerDe.
    */
   private[spark] def convertMetastoreParquet: Boolean =
-    getConf("spark.sql.hive.convertMetastoreParquet", "false") == "true"
+    getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
