@@ -234,32 +234,6 @@ setMethod("checkpoint",
             rdd
           })
 
-#' Create a new RDD in serialized form.
-#'
-#' @param rdd The RDD to reserialize.
-#' @rdname reserialize
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:10, 2L)
-#' reserialize(rdd)
-#'}
-setGeneric("reserialize", function(rdd) { standardGeneric("reserialize") })
-
-#' @rdname reserialize
-#' @aliases reserialize,RDD-method
-setMethod("reserialize",
-          signature(rdd = "RDD"),
-          function(rdd) {
-            if (rdd@env$serialized) {
-              return(rdd)
-            } else {
-              ser.rdd <- lapply(rdd, function(x) { x })
-              return(ser.rdd)
-            }
-          })
-
 #' Collect elements of an RDD
 #'
 #' @description

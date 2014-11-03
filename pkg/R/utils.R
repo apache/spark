@@ -189,3 +189,17 @@ hashCode <- function(key) {
     as.integer(0)
   }
 }
+
+# Create a new RDD in serialized form.
+# Return itself if already in serialized form.
+reserialize <- function(rdd) {
+  if (!inherits(rdd, "RDD")) {
+    stop("Argument 'rdd' is not an RDD type.")
+  }
+  if (rdd@env$serialized) {
+    return(rdd)
+  } else {
+    ser.rdd <- lapply(rdd, function(x) { x })
+    return(ser.rdd)
+  }
+}
