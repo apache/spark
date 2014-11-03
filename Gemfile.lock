@@ -1,5 +1,7 @@
-PATH
-  remote: ~/Code/capistrano-recipes
+GIT
+  remote: git@github.com:Shopify/capistrano-recipes
+  revision: 70deadc36f3b9333efd8763a79594046d7dfd6e7
+  ref: 70deadc36f3b9333efd8763a79594046d7dfd6e7
   specs:
     capistrano-recipes (1.1.0)
       capistrano (~> 2.15.5)
