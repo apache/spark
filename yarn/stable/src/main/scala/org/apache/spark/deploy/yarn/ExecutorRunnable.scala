@@ -89,6 +89,8 @@ class ExecutorRunnable(
 
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
+    ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> ByteBuffer.allocate(0)))
+
     // Send the start request to the ContainerManager
     nmClient.startContainer(container, ctx)
   }
