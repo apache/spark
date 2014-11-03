@@ -273,3 +273,56 @@ private[spark] class WholeTextFileRDD(
   }
 }
 
+private[spark] class PartialHadoopRDD[K, V](
+    sc : SparkContext,
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    @transient conf: Configuration)
+  extends NewHadoopRDD[K, V](sc, inputFormatClass, keyClass, valueClass, conf) {
+
+  /**
+   * cut the range of split to make sure that they fall into [begin, end)
+   */
+  def cutInput(sp: FileSplit, begin: Long, end: Long): FileSplit = {
+    if (sp.getStart >= begin && sp.getStart + sp.getLength <= end) {
+      sp  // fast path, do not create object
+    } else {
+      val s = math.max(begin, sp.getStart)
+      val e = math.min(sp.getStart + sp.getLength, end)
+      if (e > s) {
+        new FileSplit(sp.getPath, s, e - s, sp.getLocations)
+      } else {
+        null
+      }
+    }
+  }
+
+  override def getPartitions: Array[Partition] = {
+    val inputFormat = inputFormatClass.newInstance
+    inputFormat match {
+      case configurable: Configurable =>
+        configurable.setConf(conf)
+      case _ =>
+    }
+    val jobContext = newJobContext(conf, jobId)
+    val rawSplits = inputFormat.getSplits(jobContext).toArray
+    val start = conf.get(PartialHadoopRDD.START_KEY).toLong
+    val length = conf.get(PartialHadoopRDD.LENGTH_KEY).toLong
+    val result = new Array[Partition](rawSplits.size)
+    for (i <- 0 until rawSplits.size) {
+      val split = cutInput(rawSplits(i).asInstanceOf[FileSplit], start, start + length)
+      if (split != null) {
+        result(i) = new NewHadoopPartition(id, i, split)
+      } else {
+        result(i) = null
+      }
+    }
+    result.filter(_ != null)
+  }
+}
+
+private[spark] object PartialHadoopRDD {
+  val START_KEY = "spark.rdd.partial.start"
+  val LENGTH_KEY = "spark.rdd.partial.length"
+}
