@@ -679,6 +679,7 @@ class ProfilerTests(PySparkTestCase):
         self.sc.dump_profiles(d)
         self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
+
 class ExamplePointUDT(UserDefinedType):
     """
     User-defined type (UDT) for ExamplePoint.
@@ -702,6 +703,7 @@ class ExamplePointUDT(UserDefinedType):
     def scalaUDT(cls):
         return 'org.apache.spark.sql.test.ExamplePointUDT'
 
+
 class ExamplePoint:
     """
     An example class to demonstrate UDT in Scala, Java, and Python.
@@ -721,7 +723,7 @@ class ExamplePoint:
 
     def __eq__(self, other):
         return isinstance(other, ExamplePoint) and \
-               other.x == self.x and other.y == self.y
+            other.x == self.x and other.y == self.y
 
 
 class SQLTests(ReusedPySparkTestCase):

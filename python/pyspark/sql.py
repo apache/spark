@@ -637,6 +637,7 @@ def _infer_schema(row):
     fields = [StructField(k, _infer_type(v), True) for k, v in items]
     return StructType(fields)
 
+
 def _need_python_to_sql_conversion(dataType):
     """
     Checks whether we need python to sql conversion for the given type.
@@ -665,11 +666,12 @@ def _need_python_to_sql_conversion(dataType):
         return _need_python_to_sql_conversion(dataType.elementType)
     elif isinstance(dataType, MapType):
         return _need_python_to_sql_conversion(dataType.keyType) or \
-               _need_python_to_sql_conversion(dataType.valueType)
+            _need_python_to_sql_conversion(dataType.valueType)
     elif isinstance(dataType, UserDefinedType):
         return True
     else:
         return False
+
 
 def _python_to_sql_converter(dataType):
     """
@@ -697,13 +699,14 @@ def _python_to_sql_converter(dataType):
     if isinstance(dataType, StructType):
         names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
         converters = map(_python_to_sql_converter, types)
+
         def converter(obj):
             if isinstance(obj, dict):
                 return tuple(c(obj.get(n)) for n, c in zip(names, converters))
             elif isinstance(obj, tuple):
                 if hasattr(obj, "_fields") or hasattr(obj, "__FIELDS__"):
                     return tuple(c(v) for c, v in zip(converters, obj))
-                elif all(isinstance(x, tuple) and len(x) == 2 for x in obj): # k-v pairs
+                elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):  # k-v pairs
                     d = dict(obj)
                     return tuple(c(d.get(n)) for n, c in zip(names, converters))
                 else:
@@ -722,6 +725,7 @@ def _python_to_sql_converter(dataType):
         return lambda obj: dataType.serialize(obj)
     else:
         raise ValueError("Unexpected type %r" % dataType)
+
 
 def _create_converter(obj, dataType):
     """Create an converter to drop the names of fields in obj"""
