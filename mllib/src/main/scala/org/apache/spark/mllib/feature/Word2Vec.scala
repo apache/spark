@@ -432,7 +432,7 @@ class Word2VecModel private[mllib] (
         throw new IllegalStateException(s"$word not in vocabulary")
     }
   }
-  
+
   /**
    * Find synonyms of a word
    * @param word a word
@@ -443,7 +443,7 @@ class Word2VecModel private[mllib] (
     val vector = transform(word)
     findSynonyms(vector,num)
   }
-  
+
   /**
    * Find synonyms of the vector representation of a word
    * @param vector vector representation of a word

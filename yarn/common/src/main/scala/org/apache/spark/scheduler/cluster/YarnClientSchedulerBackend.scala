@@ -17,27 +17,23 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
-import scala.collection.mutable.ArrayBuffer
-
 private[spark] class YarnClientSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends YarnSchedulerBackend(scheduler, sc)
   with Logging {
-
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
 
   private var client: Client = null
   private var appId: ApplicationId = null
   private var stopping: Boolean = false
-  private var totalExpectedExecutors = 0
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -48,7 +44,7 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
-    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIHostPort) }
+    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIAddress) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
@@ -151,14 +147,11 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
-  override def sufficientResourcesRegistered(): Boolean = {
-    totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
-  }
-
-  override def applicationId(): String =
+  override def applicationId(): String = {
     Option(appId).map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }
+  }
 
 }

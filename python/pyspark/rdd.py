@@ -1867,11 +1867,11 @@ class RDD(object):
         Assign a name to this RDD.
 
         >>> rdd1 = sc.parallelize([1,2])
-        >>> rdd1.setName('RDD1')
-        >>> rdd1.name()
+        >>> rdd1.setName('RDD1').name()
         'RDD1'
         """
         self._jrdd.setName(name)
+        return self
 
     def toDebugString(self):
         """
