@@ -31,6 +31,8 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets.UTF_8
+
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
@@ -117,7 +119,16 @@ private[nio] class ConnectionManager(
     conf.getInt("spark.core.connection.connect.threads.max", 8),
     conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-connect-executor"))
+    Utils.namedThreadFactory("handle-connect-executor")) {
+
+    override def afterExecute(r: Runnable, t: Throwable): Unit = {
+      super.afterExecute(r, t)
+      if (t != null && NonFatal(t)) {
+        logError("Error in handleConnectExecutor is not handled properly", t)
+      }
+    }
+
+  }
 
   private val serverChannel = ServerSocketChannel.open()
   // used to track the SendingConnections waiting to do SASL negotiation
@@ -914,7 +925,7 @@ private[nio] class ConnectionManager(
             val errorMsgByteBuf = ackMessage.asInstanceOf[BufferMessage].buffers.head
             val errorMsgBytes = new Array[Byte](errorMsgByteBuf.limit())
             errorMsgByteBuf.get(errorMsgBytes)
-            val errorMsg = new String(errorMsgBytes, "utf-8")
+            val errorMsg = new String(errorMsgBytes, UTF_8)
             val e = new IOException(
               s"sendMessageReliably failed with ACK that signalled a remote error: $errorMsg")
             if (!promise.tryFailure(e)) {

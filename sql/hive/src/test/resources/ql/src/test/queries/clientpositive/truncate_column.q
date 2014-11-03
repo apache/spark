@@ -5,7 +5,7 @@ ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe' STORED A
 
 set hive.stats.autogather=true;
 
-INSERT OVERWRITE TABLE test_tab SELECT * FROM src LIMIT 10;
+INSERT OVERWRITE TABLE test_tab SELECT * FROM src tablesample (10 rows);
 
 DESC FORMATTED test_tab;
 
@@ -20,7 +20,7 @@ DESC FORMATTED test_tab;
 SELECT * FROM test_tab ORDER BY value;
 
 -- Truncate multiple columns
-INSERT OVERWRITE TABLE test_tab SELECT * FROM src LIMIT 10;
+INSERT OVERWRITE TABLE test_tab SELECT * FROM src tablesample (10 rows);
 
 TRUNCATE TABLE test_tab COLUMNS (key, value);
 
@@ -40,7 +40,7 @@ SELECT * FROM test_tab ORDER BY value;
 -- Test truncating with a binary serde
 ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe';
 
-INSERT OVERWRITE TABLE test_tab SELECT * FROM src LIMIT 10;
+INSERT OVERWRITE TABLE test_tab SELECT * FROM src tablesample (10 rows);
 
 DESC FORMATTED test_tab;
 
@@ -65,7 +65,7 @@ SELECT * FROM test_tab ORDER BY value;
 -- Test truncating a partition
 CREATE TABLE test_tab_part (key STRING, value STRING) PARTITIONED BY (part STRING) STORED AS RCFILE;
 
-INSERT OVERWRITE TABLE test_tab_part PARTITION (part = '1') SELECT * FROM src LIMIT 10;
+INSERT OVERWRITE TABLE test_tab_part PARTITION (part = '1') SELECT * FROM src tablesample (10 rows);
 
 DESC FORMATTED test_tab_part PARTITION (part = '1');
 
