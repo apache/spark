@@ -67,6 +67,7 @@ object ScalaReflection {
     case (m: Map[_, _], mapType: MapType) => m.map { case (k, v) =>
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
+    case (r: Row, s: StructType) => convertRowToScala(r, s)
     case (d: Decimal, _: DecimalType) => d.toBigDecimal
     case (other, _) => other
   }
