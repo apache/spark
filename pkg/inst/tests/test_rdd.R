@@ -10,9 +10,6 @@ rdd <- parallelize(sc, nums, 2L)
 intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
 intRdd <- parallelize(sc, intPairs, 2L)
 
-# File content
-mockFile <- c("Spark is pretty.", "Spark is awesome.")
-
 test_that("count and length on RDD", {
    expect_equal(count(rdd), 10)
    expect_equal(length(rdd), 10)
