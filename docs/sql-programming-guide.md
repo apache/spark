@@ -589,7 +589,7 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
-  <td>snappy</td>
+  <td>gzip</td>
   <td>
     Sets the compression codec use when writing Parquet files. Acceptable values include: 
     uncompressed, snappy, gzip, lzo.
