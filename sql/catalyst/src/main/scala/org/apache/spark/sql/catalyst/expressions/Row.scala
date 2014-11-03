@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.sql.catalyst.types._
+import java.sql.{Date, Timestamp}
+import java.math.BigDecimal
 
 object Row {
   /**
@@ -42,6 +44,31 @@ object Row {
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
+
+  /**
+   * This method can be used to construct a [[Row]] from a [[Seq]] of Strings,
+   * converting each item to the type specified in a [[StructType]] schema.
+   * Only primitive types can be used.
+   */
+  def fromStringsBySchema(strings: Seq[String], schema: StructType): Row = {
+     val values = for {
+       (field, str) <- schema.fields zip strings
+       item = field.dataType match {
+         case IntegerType    => str.toInt
+         case LongType       => str.toLong
+         case DoubleType     => str.toDouble
+         case FloatType      => str.toFloat
+         case ByteType       => str.toByte
+         case ShortType      => str.toShort
+         case StringType     => str
+         case BooleanType    => (str != "")
+         case DateType       => Date.valueOf(str)
+         case TimestampType  => Timestamp.valueOf(str)
+         case DecimalType()  => new BigDecimal(str)
+       }
+     } yield item
+     new GenericRow(values.toArray)
+  }
 }
 
 /**
@@ -64,6 +91,8 @@ trait Row extends Seq[Any] with Serializable {
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
   def getString(i: Int): String
+  def getDate(i: Int): Date
+  def getTimestamp(i: Int): Timestamp
   def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
 
   override def toString() =
@@ -99,6 +128,8 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
+  def setDate(ordinal: Int, value: Date)
+  def setTimestamp(ordinal: Int, value: Timestamp)
 }
 
 /**
@@ -119,6 +150,9 @@ object EmptyRow extends Row {
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
   def getString(i: Int): String = throw new UnsupportedOperationException
+  def getDate(i: Int): Date = throw new UnsupportedOperationException
+  def getTimestamp(i: Int): Timestamp = throw new UnsupportedOperationException
+
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
 
   def copy() = this
@@ -183,6 +217,16 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
+  def getDate(i: Int): Date = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
+    values(i).asInstanceOf[Date]
+  }
+
+  def getTimestamp(i: Int): Timestamp = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
+    values(i).asInstanceOf[Timestamp]
+  }
+
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode(): Int = {
     var result: Int = 37
@@ -226,6 +270,8 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
   override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
+  override def setDate(ordinal: Int,value: Date): Unit = { values(ordinal) = value }
+  override def setTimestamp(ordinal: Int,value: Timestamp): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 

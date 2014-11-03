@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types._
+import java.sql.{Date, Timestamp}
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -169,6 +170,35 @@ final class MutableByte extends MutableValue {
     newCopy.asInstanceOf[this.type]
   }
 }
+final class MutableDate extends MutableValue {
+  var value: Date = new Date(0)
+  def boxed = if (isNull) null else value
+  def update(v: Any) = value = {
+    isNull = false
+    v.asInstanceOf[Date]
+  }
+  def copy() = {
+    val newCopy = new MutableDate
+    newCopy.isNull = isNull
+    newCopy.value = value
+    newCopy.asInstanceOf[this.type]
+  }
+}
+
+final class MutableTimestamp extends MutableValue {
+  var value: Timestamp = new Timestamp(0)
+  def boxed = if (isNull) null else value
+  def update(v: Any) = value = {
+    isNull = false
+    v.asInstanceOf[Timestamp]
+  }
+  def copy() = {
+    val newCopy = new MutableTimestamp
+    newCopy.isNull = isNull
+    newCopy.value = value
+    newCopy.asInstanceOf[this.type]
+  }
+}
 
 final class MutableAny extends MutableValue {
   var value: Any = _
@@ -305,6 +335,25 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
+  }
+
+  override def setDate(ordinal: Int, value: Date): Unit = {
+    val currentValue = values(ordinal).asInstanceOf[MutableDate]
+    currentValue.isNull = false
+    currentValue.value = value
+  }
+
+  override def getDate(i: Int): Date = {
+    values(i).asInstanceOf[MutableDate].value
+  }
+  override def setTimestamp(ordinal: Int, value: Timestamp): Unit = {
+    val currentValue = values(ordinal).asInstanceOf[MutableTimestamp]
+    currentValue.isNull = false
+    currentValue.value = value
+  }
+
+  override def getTimestamp(i: Int): Timestamp = {
+    values(i).asInstanceOf[MutableTimestamp].value
   }
 
   override def getAs[T](i: Int): T = {
