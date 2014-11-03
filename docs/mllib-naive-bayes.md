@@ -90,7 +90,7 @@ JavaPairRDD<Double, Double> predictionAndLabel =
   });
 double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() == pl._2();
+      return pl._1().doubleValue() == pl._2().doubleValue();
     }
   }).count() / test.count();
 {% endhighlight %}
