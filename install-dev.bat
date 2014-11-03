@@ -5,5 +5,4 @@ rem
 
 MKDIR .\lib
 
-R.exe CMD INSTALL pkg\
-:: R.exe CMD INSTALL --library=".\lib" pkg\
+R.exe CMD INSTALL --library=".\lib" pkg\

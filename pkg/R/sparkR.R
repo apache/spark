@@ -5,7 +5,6 @@ assemblyJarName <- "sparkr-assembly-0.1.jar"
 sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
   assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed=T)
-  # assemblyJarPath <- shQuote(gsub(" ", "\\ ", assemblyJarPath, fixed=T))
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
