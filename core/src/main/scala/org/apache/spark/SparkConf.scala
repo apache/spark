@@ -244,6 +244,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val executorClasspathKey = "spark.executor.extraClassPath"
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
+    val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+
+    // Used by Yarn in 1.1 and before
+    sys.props.get("spark.driver.libraryPath").foreach { value =>
+      val warning =
+        s"""
+          |spark.driver.libraryPath was detected (set to '$value').
+          |This is deprecated in Spark 1.2+.
+          |
+          |Please instead use: $driverLibraryPathKey
+        """.stripMargin
+      logWarning(warning)
+    }
 
     // Validate spark.executor.extraJavaOptions
     settings.get(executorOptsKey).map { javaOpts =>

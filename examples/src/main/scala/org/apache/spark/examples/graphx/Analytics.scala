@@ -77,7 +77,7 @@ object Analytics extends Logging {
         val sc = new SparkContext(conf.setAppName("PageRank(" + fname + ")"))
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart,
+          numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
@@ -110,7 +110,7 @@ object Analytics extends Logging {
 
         val sc = new SparkContext(conf.setAppName("ConnectedComponents(" + fname + ")"))
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart,
+          numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
@@ -131,7 +131,7 @@ object Analytics extends Logging {
         val sc = new SparkContext(conf.setAppName("TriangleCount(" + fname + ")"))
         val graph = GraphLoader.edgeListFile(sc, fname,
           canonicalOrientation = true,
-          minEdgePartitions = numEPart,
+          numEdgePartitions = numEPart,
           edgeStorageLevel = edgeStorageLevel,
           vertexStorageLevel = vertexStorageLevel)
           // TriangleCount requires the graph to be partitioned

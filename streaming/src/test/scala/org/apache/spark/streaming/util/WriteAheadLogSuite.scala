@@ -58,7 +58,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   test("WriteAheadLogWriter - writing data") {
     val dataToWrite = generateRandomData()
     val segments = writeDataUsingWriter(testFile, dataToWrite)
-    val writtenData = readDataManually(testFile, segments)
+    val writtenData = readDataManually(segments)
     assert(writtenData === dataToWrite)
   }
 
@@ -67,7 +67,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     val writer = new WriteAheadLogWriter(testFile, hadoopConf)
     dataToWrite.foreach { data =>
       val segment = writer.write(stringToByteBuffer(data))
-      val dataRead = readDataManually(testFile, Seq(segment)).head
+      val dataRead = readDataManually(Seq(segment)).head
       assert(data === dataRead)
     }
     writer.close()
@@ -281,14 +281,20 @@ object WriteAheadLogSuite {
   }
 
   /** Read data from a segments of a log file directly and return the list of byte buffers.*/
-  def readDataManually(file: String, segments: Seq[WriteAheadLogFileSegment]): Seq[String] = {
-    val reader = HdfsUtils.getInputStream(file, hadoopConf)
-    segments.map { x =>
-      reader.seek(x.offset)
-      val data = new Array[Byte](x.length)
-      reader.readInt()
-      reader.readFully(data)
-      Utils.deserialize[String](data)
+  def readDataManually(segments: Seq[WriteAheadLogFileSegment]): Seq[String] = {
+    segments.map { segment =>
+      val reader = HdfsUtils.getInputStream(segment.path, hadoopConf)
+      try {
+        reader.seek(segment.offset)
+        val bytes = new Array[Byte](segment.length)
+        reader.readInt()
+        reader.readFully(bytes)
+        val data = Utils.deserialize[String](bytes)
+        reader.close()
+        data
+      } finally {
+        reader.close()
+      }
     }
   }
 
@@ -335,9 +341,11 @@ object WriteAheadLogSuite {
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
     if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
-      fileSystem.listStatus(logDirectoryPath).map {
-        _.getPath.toString.stripPrefix("file:")
-      }.sorted
+      fileSystem.listStatus(logDirectoryPath).map { _.getPath() }.sortBy {
+        _.getName().split("-")(1).toLong
+      }.map {
+        _.toString.stripPrefix("file:")
+      }
     } else {
       Seq.empty
     }

@@ -41,7 +41,7 @@ import akka.actor.Props
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.input.WholeTextFileInputFormat
+import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat, FixedLengthBinaryInputFormat}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -330,6 +330,15 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     } else None
   }
 
+  // Optionally scale number of executors dynamically based on workload. Exposed for testing.
+  private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      Some(new ExecutorAllocationManager(this))
+    } else {
+      None
+    }
+  executorAllocationManager.foreach(_.start())
+
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
 
@@ -522,6 +531,69 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
       classOf[String],
       updateConf,
       minPartitions).setName(path)
+  }
+
+
+  /**
+   * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
+   * (useful for binary data)
+   *
+   * For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do
+   * `val rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   *
+   * then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   *
+   * @note Small files are preferred; very large files may cause bad performance.
+   */
+  @Experimental
+  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+      RDD[(String, PortableDataStream)] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new BinaryFileRDD(
+      this,
+      classOf[StreamInputFormat],
+      classOf[String],
+      classOf[PortableDataStream],
+      updateConf,
+      minPartitions).setName(path)
+  }
+
+  /**
+   * Load data from a flat binary file, assuming the length of each record is constant.
+   *
+   * @param path Directory to the input data files
+   * @param recordLength The length at which to split the records
+   * @return An RDD of data with values, represented as byte arrays
+   */
+  @Experimental
+  def binaryRecords(path: String, recordLength: Int, conf: Configuration = hadoopConfiguration)
+      : RDD[Array[Byte]] = {
+    conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
+    val br = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path,
+      classOf[FixedLengthBinaryInputFormat],
+      classOf[LongWritable],
+      classOf[BytesWritable],
+      conf=conf)
+    val data = br.map{ case (k, v) => v.getBytes}
+    data
   }
 
   /**
@@ -860,36 +932,42 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in Yarn mode.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def requestExecutors(numAdditionalExecutors: Int): Unit = {
+  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend => b.requestExecutors(numAdditionalExecutors)
-      case _ => logWarning("Requesting executors is only supported in coarse-grained mode")
+      case b: CoarseGrainedSchedulerBackend =>
+        b.requestExecutors(numAdditionalExecutors)
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+        false
     }
   }
 
   /**
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
-   * This is currently only supported in Yarn mode.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutors(executorIds: Seq[String]): Unit = {
+  def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend => b.killExecutors(executorIds)
-      case _ => logWarning("Killing executors is only supported in coarse-grained mode")
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(executorIds)
+      case _ =>
+        logWarning("Killing executors is only supported in coarse-grained mode")
+        false
     }
   }
 
   /**
    * :: DeveloperApi ::
    * Request that cluster manager the kill the specified executor.
-   * This is currently only supported in Yarn mode.
+   * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutor(executorId: String): Unit = killExecutors(Seq(executorId))
+  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
@@ -1317,6 +1395,8 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
 
   private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
+
+  private[spark] val DRIVER_IDENTIFIER = "<driver>"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2

@@ -22,7 +22,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 
 import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.network.{BlockFetchingListener, BlockTransferService}
+import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{CompletionIterator, Utils}
@@ -38,8 +39,8 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * using too much memory.
  *
  * @param context [[TaskContext]], used for metrics update
- * @param blockTransferService [[BlockTransferService]] for fetching remote blocks
- * @param blockManager  [[BlockManager]] for reading local blocks
+ * @param shuffleClient [[ShuffleClient]] for fetching remote blocks
+ * @param blockManager [[BlockManager]] for reading local blocks
  * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage.
@@ -49,7 +50,7 @@ import org.apache.spark.util.{CompletionIterator, Utils}
 private[spark]
 final class ShuffleBlockFetcherIterator(
     context: TaskContext,
-    blockTransferService: BlockTransferService,
+    shuffleClient: ShuffleClient,
     blockManager: BlockManager,
     blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
     serializer: Serializer,
@@ -140,7 +141,8 @@ final class ShuffleBlockFetcherIterator(
     val sizeMap = req.blocks.map { case (blockId, size) => (blockId.toString, size) }.toMap
     val blockIds = req.blocks.map(_._1.toString)
 
-    blockTransferService.fetchBlocks(req.address.host, req.address.port, blockIds,
+    val address = req.address
+    shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
       new BlockFetchingListener {
         override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
           // Only add the buffer to results queue if the iterator is not zombie,
@@ -179,7 +181,7 @@ final class ShuffleBlockFetcherIterator(
     var totalBlocks = 0
     for ((address, blockInfos) <- blocksByAddress) {
       totalBlocks += blockInfos.size
-      if (address == blockManager.blockManagerId) {
+      if (address.executorId == blockManager.blockManagerId.executorId) {
         // Filter out zero-sized blocks
         localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
         numBlocksToFetch += localBlocks.size
