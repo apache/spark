@@ -15,28 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
-
-import java.util.EventListener
-
-import org.apache.spark.network.buffer.ManagedBuffer
-
+package org.apache.spark.sql.api.java;
 
 /**
- * Listener callback interface for [[BlockTransferService.fetchBlocks]].
+ * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
+ * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
+ * Array[Metadata]. JSON is used for serialization.
+ *
+ * The default constructor is private. User should use [[MetadataBuilder]].
  */
-private[spark]
-trait BlockFetchingListener extends EventListener {
-
-  /**
-   * Called once per successfully fetched block. After this call returns, data will be released
-   * automatically. If the data will be passed to another thread, the receiver should retain()
-   * and release() the buffer on their own, or copy the data to a new buffer.
-   */
-  def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit
-
-  /**
-   * Called at least once per block upon failures.
-   */
-  def onBlockFetchFailure(blockId: String, exception: Throwable): Unit
+class Metadata extends org.apache.spark.sql.catalyst.util.Metadata {
+  Metadata(scala.collection.immutable.Map<String, Object> map) {
+    super(map);
+  }
 }

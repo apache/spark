@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network;
+package org.apache.spark.mllib.tree.loss
 
-import java.util.NoSuchElementException;
+object Losses {
 
-import org.apache.spark.network.util.ConfigProvider;
-
-/** Uses System properties to obtain config values. */
-public class SystemPropertyConfigProvider extends ConfigProvider {
-  @Override
-  public String get(String name) {
-    String value = System.getProperty(name);
-    if (value == null) {
-      throw new NoSuchElementException(name);
-    }
-    return value;
+  def fromString(name: String): Loss = name match {
+    case "leastSquaresError" => SquaredError
+    case "leastAbsoluteError" => AbsoluteError
+    case "logLoss" => LogLoss
+    case _ => throw new IllegalArgumentException(s"Did not recognize Loss name: $name")
   }
+
 }

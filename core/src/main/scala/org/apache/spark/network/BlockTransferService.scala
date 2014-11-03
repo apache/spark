@@ -20,16 +20,16 @@ package org.apache.spark.network
 import java.io.Closeable
 import java.nio.ByteBuffer
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Promise, Await, Future}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.Logging
 import org.apache.spark.network.buffer.{NioManagedBuffer, ManagedBuffer}
-import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.Utils
+import org.apache.spark.network.shuffle.{ShuffleClient, BlockFetchingListener}
+import org.apache.spark.storage.{BlockManagerId, BlockId, StorageLevel}
 
 private[spark]
-abstract class BlockTransferService extends Closeable with Logging {
+abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
@@ -60,10 +60,11 @@ abstract class BlockTransferService extends Closeable with Logging {
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
    * the data of a block is fetched, rather than waiting for all blocks to be fetched.
    */
-  def fetchBlocks(
-      hostName: String,
+  override def fetchBlocks(
+      host: String,
       port: Int,
-      blockIds: Seq[String],
+      execId: String,
+      blockIds: Array[String],
       listener: BlockFetchingListener): Unit
 
   /**
@@ -81,43 +82,23 @@ abstract class BlockTransferService extends Closeable with Logging {
    *
    * It is also only available after [[init]] is invoked.
    */
-  def fetchBlockSync(hostName: String, port: Int, blockId: String): ManagedBuffer = {
+  def fetchBlockSync(host: String, port: Int, execId: String, blockId: String): ManagedBuffer = {
     // A monitor for the thread to wait on.
-    val lock = new Object
-    @volatile var result: Either[ManagedBuffer, Throwable] = null
-    fetchBlocks(hostName, port, Seq(blockId), new BlockFetchingListener {
-      override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
-        lock.synchronized {
-          result = Right(exception)
-          lock.notify()
+    val result = Promise[ManagedBuffer]()
+    fetchBlocks(host, port, execId, Array(blockId),
+      new BlockFetchingListener {
+        override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
+          result.failure(exception)
         }
-      }
-      override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
-        lock.synchronized {
+        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
           val ret = ByteBuffer.allocate(data.size.toInt)
           ret.put(data.nioByteBuffer())
           ret.flip()
-          result = Left(new NioManagedBuffer(ret))
-          lock.notify()
+          result.success(new NioManagedBuffer(ret))
         }
-      }
-    })
+      })
 
-    // Sleep until result is no longer null
-    lock.synchronized {
-      while (result == null) {
-        try {
-          lock.wait()
-        } catch {
-          case e: InterruptedException =>
-        }
-      }
-    }
-
-    result match {
-      case Left(data) => data
-      case Right(e) => throw e
-    }
+    Await.result(result.future, Duration.Inf)
   }
 
   /**
