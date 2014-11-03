@@ -80,7 +80,7 @@ private[spark] object ResultTask {
  *
  * See [[org.apache.spark.scheduler.Task]] for more information.
  *
- * @param stageId id of the stage this task belongs to
+ * @param _stageId id of the stage this task belongs to
  * @param rdd input to func
  * @param func a function to apply on a partition of the RDD
  * @param _partitionId index of the number in the RDD
@@ -89,13 +89,13 @@ private[spark] object ResultTask {
  *                 input RDD's partitions).
  */
 private[spark] class ResultTask[T, U](
-    stageId: Int,
+    _stageId: Int,
     var rdd: RDD[T],
     var func: (TaskContext, Iterator[T]) => U,
     _partitionId: Int,
     @transient locs: Seq[TaskLocation],
     var outputId: Int)
-  extends Task[U](stageId, _partitionId) with Externalizable {
+  extends Task[U](_stageId, _partitionId) with Externalizable {
 
   def this() = this(0, null, null, 0, null, 0)
 
@@ -134,7 +134,7 @@ private[spark] class ResultTask[T, U](
   }
 
   override def readExternal(in: ObjectInput) {
-    val stageId = in.readInt()
+    stageId = in.readInt()
     val numBytes = in.readInt()
     val bytes = new Array[Byte](numBytes)
     in.readFully(bytes)
