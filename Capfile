@@ -29,7 +29,7 @@ namespace :deploy do
     run "sv-sudo restart spark-master"
   end
 
-  task :restart_history, :roles => :history do
+  task :restart_history, :roles => :history, :on_no_matching_servers => :continue do
     run "sv-sudo restart spark-history"
   end
 
