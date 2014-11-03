@@ -102,7 +102,7 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     for (i <- 0 until 5) {
       assert(iterator.hasNext, s"iterator should have 5 elements but actually has $i elements")
       val (blockId, subIterator) = iterator.next()
-      assert(subIterator.isDefined,
+      assert(subIterator.isSuccess,
         s"iterator should have 5 elements defined but actually has $i elements")
 
       // Make sure we release the buffer once the iterator is exhausted.
@@ -230,8 +230,8 @@ class ShuffleBlockFetcherIteratorSuite extends FunSuite {
     sem.acquire()
 
     // The first block should be defined, and the last two are not defined (due to failure)
-    assert(iterator.next()._2.isDefined === true)
-    assert(iterator.next()._2.isDefined === false)
-    assert(iterator.next()._2.isDefined === false)
+    assert(iterator.next()._2.isSuccess)
+    assert(iterator.next()._2.isFailure)
+    assert(iterator.next()._2.isFailure)
   }
 }

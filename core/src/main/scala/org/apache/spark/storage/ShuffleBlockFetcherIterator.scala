@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.network.BlockTransferService
@@ -55,7 +56,7 @@ final class ShuffleBlockFetcherIterator(
     blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
     serializer: Serializer,
     maxBytesInFlight: Long)
-  extends Iterator[(BlockId, Option[Iterator[Any]])] with Logging {
+  extends Iterator[(BlockId, Try[Iterator[Any]])] with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -118,16 +119,18 @@ final class ShuffleBlockFetcherIterator(
   private[this] def cleanup() {
     isZombie = true
     // Release the current buffer if necessary
-    if (currentResult != null && !currentResult.failed) {
-      currentResult.buf.release()
+    currentResult match {
+      case SuccessFetchResult(_, _, buf) => buf.release()
+      case _ =>
     }
 
     // Release buffers in the results queue
     val iter = results.iterator()
     while (iter.hasNext) {
       val result = iter.next()
-      if (!result.failed) {
-        result.buf.release()
+      result match {
+        case SuccessFetchResult(_, _, buf) => buf.release()
+        case _ =>
       }
     }
   }
@@ -151,7 +154,7 @@ final class ShuffleBlockFetcherIterator(
             // Increment the ref count because we need to pass this to a different thread.
             // This needs to be released after use.
             buf.retain()
-            results.put(new FetchResult(BlockId(blockId), sizeMap(blockId), buf))
+            results.put(new SuccessFetchResult(BlockId(blockId), sizeMap(blockId), buf))
             shuffleMetrics.remoteBytesRead += buf.size
             shuffleMetrics.remoteBlocksFetched += 1
           }
@@ -160,7 +163,7 @@ final class ShuffleBlockFetcherIterator(
 
         override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
           logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-          results.put(new FetchResult(BlockId(blockId), -1, null))
+          results.put(new FailureFetchResult(BlockId(blockId), e))
         }
       }
     )
@@ -231,12 +234,12 @@ final class ShuffleBlockFetcherIterator(
         val buf = blockManager.getBlockData(blockId)
         shuffleMetrics.localBlocksFetched += 1
         buf.retain()
-        results.put(new FetchResult(blockId, 0, buf))
+        results.put(new SuccessFetchResult(blockId, 0, buf))
       } catch {
         case e: Exception =>
           // If we see an exception, stop immediately.
           logError(s"Error occurred while fetching local blocks", e)
-          results.put(new FetchResult(blockId, -1, null))
+          results.put(new FailureFetchResult(blockId, e))
           return
       }
     }
@@ -267,15 +270,17 @@ final class ShuffleBlockFetcherIterator(
 
   override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
 
-  override def next(): (BlockId, Option[Iterator[Any]]) = {
+  override def next(): (BlockId, Try[Iterator[Any]]) = {
     numBlocksProcessed += 1
     val startFetchWait = System.currentTimeMillis()
     currentResult = results.take()
     val result = currentResult
     val stopFetchWait = System.currentTimeMillis()
     shuffleMetrics.fetchWaitTime += (stopFetchWait - startFetchWait)
-    if (!result.failed) {
-      bytesInFlight -= result.size
+
+    result match {
+      case SuccessFetchResult(_, size, _) => bytesInFlight -= size
+      case _ =>
     }
     // Send fetch requests up to maxBytesInFlight
     while (fetchRequests.nonEmpty &&
@@ -283,20 +288,21 @@ final class ShuffleBlockFetcherIterator(
       sendRequest(fetchRequests.dequeue())
     }
 
-    val iteratorOpt: Option[Iterator[Any]] = if (result.failed) {
-      None
-    } else {
-      val is = blockManager.wrapForCompression(result.blockId, result.buf.createInputStream())
-      val iter = serializer.newInstance().deserializeStream(is).asIterator
-      Some(CompletionIterator[Any, Iterator[Any]](iter, {
-        // Once the iterator is exhausted, release the buffer and set currentResult to null
-        // so we don't release it again in cleanup.
-        currentResult = null
-        result.buf.release()
-      }))
+    val iteratorTry: Try[Iterator[Any]] = result match {
+      case FailureFetchResult(_, e) => Failure(e)
+      case SuccessFetchResult(blockId, _, buf) => {
+        val is = blockManager.wrapForCompression(blockId, buf.createInputStream())
+        val iter = serializer.newInstance().deserializeStream(is).asIterator
+        Success(CompletionIterator[Any, Iterator[Any]](iter, {
+          // Once the iterator is exhausted, release the buffer and set currentResult to null
+          // so we don't release it again in cleanup.
+          currentResult = null
+          buf.release()
+        }))
+      }
     }
 
-    (result.blockId, iteratorOpt)
+    (result.blockId, iteratorTry)
   }
 }
 
@@ -315,14 +321,30 @@ object ShuffleBlockFetcherIterator {
   }
 
   /**
-   * Result of a fetch from a remote block. A failure is represented as size == -1.
+   * Result of a fetch from a remote block.
+   */
+  private[storage] sealed trait FetchResult {
+    val blockId: BlockId
+  }
+
+  /**
+   * Result of a fetch from a remote block successfully.
    * @param blockId block id
    * @param size estimated size of the block, used to calculate bytesInFlight.
-   *             Note that this is NOT the exact bytes. -1 if failure is present.
-   * @param buf [[ManagedBuffer]] for the content. null is error.
+   *             Note that this is NOT the exact bytes.
+   * @param buf [[ManagedBuffer]] for the content.
    */
-  case class FetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer) {
-    def failed: Boolean = size == -1
-    if (failed) assert(buf == null) else assert(buf != null)
+  private[storage] case class SuccessFetchResult(blockId: BlockId, size: Long, buf: ManagedBuffer)
+    extends FetchResult {
+    require(buf != null)
+    require(size >= 0)
   }
+
+  /**
+   * Result of a fetch from a remote block unsuccessfully.
+   * @param blockId block id
+   * @param e the failure exception
+   */
+  private[storage] case class FailureFetchResult(blockId: BlockId, e: Throwable)
+    extends FetchResult
 }
