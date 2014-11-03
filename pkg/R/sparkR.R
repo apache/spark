@@ -4,6 +4,8 @@ assemblyJarName <- "sparkr-assembly-0.1.jar"
 
 sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
+  assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed=T)
+  # assemblyJarPath <- shQuote(gsub(" ", "\\ ", assemblyJarPath, fixed=T))
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
@@ -67,8 +69,10 @@ sparkR.init <- function(
   }
   
   .jaddClassPath(sparkJars)
-  jars=c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
-  
+  jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
+
+  localJarPaths <- sapply(jars, function(j) { paste("file://", j, sep="") })
+
   assign(
     ".sparkRjsc",
     J("edu.berkeley.cs.amplab.sparkr.RRDD",
@@ -76,7 +80,7 @@ sparkR.init <- function(
       master,
       appName,
       as.character(sparkHome),
-      .jarray(jars, "java/lang/String"),
+      .jarray(localJarPaths, "java/lang/String"),
       sparkEnvirMap,
       sparkExecutorEnvMap),
     envir=.sparkREnv
