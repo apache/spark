@@ -2,15 +2,15 @@ library(SparkR)
 
 args <- commandArgs(trailing = TRUE)
 
-if (length(args) != 3) {
-  print("Usage: logistic_regression <master> <file> <iters>")
+if (length(args) != 4) {
+  print("Usage: logistic_regression <master> <file> <iters> <dimension>")
   q("no")
 }
 
 # Initialize Spark context
 sc <- sparkR.init(args[[1]], "LogisticRegressionR")
 iterations <- as.integer(args[[3]])
-D <- 10
+D <- as.integer(args[[4]])
 
 readPartition <- function(part){
   part = strsplit(part, " ", fixed = T)
