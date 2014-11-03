@@ -30,9 +30,9 @@ import org.apache.spark.util.Utils
  * Stores BlockManager blocks on Tachyon.
  */
 private[spark] class TachyonStore(
-    blockManager: BlockManager,
+    blockSerde: BlockSerializer,
     tachyonManager: TachyonBlockManager)
-  extends BlockStore(blockManager: BlockManager) with Logging {
+  extends BlockStore with Logging {
 
   logInfo("TachyonStore started")
 
@@ -40,32 +40,28 @@ private[spark] class TachyonStore(
     tachyonManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
-    putIntoTachyonStore(blockId, bytes, returnValues = true)
+  override def put(
+      blockId: BlockId,
+      value: BlockValue,
+      level: StorageLevel,
+      pin: Boolean): PutResult = value match {
+    case ByteBufferValue(bytes) =>
+      putIntoTachyonStore(blockId, bytes)
+    case IteratorValue(iterator) =>
+      putIterator(blockId, iterator)
+    case ArrayValue(array) =>
+      putIterator(blockId, array.iterator)
   }
 
-  override def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIterator(blockId, values.toIterator, level, returnValues)
-  }
-
-  override def putIterator(
-      blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
+  private def putIterator(blockId: BlockId, iterator: Iterator[Any]): PutResult = {
     logDebug(s"Attempting to write values for block $blockId")
-    val bytes = blockManager.dataSerialize(blockId, values)
-    putIntoTachyonStore(blockId, bytes, returnValues)
+    val bytes = blockSerde.dataSerialize(blockId, iterator)
+    putIntoTachyonStore(blockId, bytes)
   }
 
   private def putIntoTachyonStore(
       blockId: BlockId,
-      bytes: ByteBuffer,
-      returnValues: Boolean): PutResult = {
+      bytes: ByteBuffer): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val byteBuffer = bytes.duplicate()
@@ -79,12 +75,7 @@ private[spark] class TachyonStore(
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
       blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
-
-    if (returnValues) {
-      PutResult(bytes.limit(), Right(bytes.duplicate()))
-    } else {
-      PutResult(bytes.limit(), null)
-    }
+    SuccessfulPut(PutStatistics(bytes.limit(), Nil))
   }
 
   override def remove(blockId: BlockId): Boolean = {
@@ -96,11 +87,7 @@ private[spark] class TachyonStore(
     }
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
-  }
-
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  private def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = tachyonManager.getFile(blockId)
     if (file == null || file.getLocationHosts.size == 0) {
       return None
@@ -122,5 +109,9 @@ private[spark] class TachyonStore(
   override def contains(blockId: BlockId): Boolean = {
     val file = tachyonManager.getFile(blockId)
     tachyonManager.fileExists(file)
+  }
+
+  override def get(blockId: BlockId): Option[BlockValue] = {
+    getBytes(blockId).map(ByteBufferValue.apply)
   }
 }

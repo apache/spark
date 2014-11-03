@@ -144,9 +144,9 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     // Serialize the block so that it can be inserted into both
     val serializedBlock = block match {
       case ArrayBufferBlock(arrayBuffer) =>
-        blockManager.dataSerialize(blockId, arrayBuffer.iterator)
+        blockManager.blockSerde.dataSerialize(blockId, arrayBuffer.iterator)
       case IteratorBlock(iterator) =>
-        blockManager.dataSerialize(blockId, iterator)
+        blockManager.blockSerde.dataSerialize(blockId, iterator)
       case ByteBufferBlock(byteBuffer) =>
         byteBuffer
       case _ =>

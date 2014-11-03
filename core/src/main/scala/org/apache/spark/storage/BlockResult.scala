@@ -19,20 +19,31 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-/**
- * Result of adding a block into a BlockStore. This case class contains a few things:
- *   (1) The estimated size of the put,
- *   (2) The values put if the caller asked for them to be returned (e.g. for chaining
- *       replication), and
- *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
- */
-case class PutStatistics(size: Long, droppedBlocks: Seq[(BlockId, BlockStatus)])
+import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 
-trait PutResult {
-  def statistics: PutStatistics
+/* Class for returning a fetched block and associated metrics. */
+private[spark] case class BlockResult
+    (data: BlockValue, inputMetrics: InputMetrics)
+    (blockId: BlockId, blockSerde: BlockSerializer) {
+
+  def dataAsIterator(): Iterator[Any] = {
+    data.asIterator(blockId, blockSerde)
+  }
+
+  def dataAsBytes(): ByteBuffer = {
+    data.asBytes(blockId, blockSerde)
+  }
 }
 
-case class SuccessfulPut(statistics: PutStatistics) extends PutResult
-case class OutOfSpaceFailure(
-    recoveredIterator: Iterator[_],
-    statistics: PutStatistics) extends PutResult
+object BlockResult {
+  def apply(
+      blockId: BlockId,
+      data: BlockValue,
+      blockSerde: BlockSerializer,
+      readMethod: DataReadMethod.Value,
+      bytes: Long): BlockResult = {
+    val metrics = new InputMetrics(readMethod)
+    metrics.bytesRead = bytes
+    new BlockResult(data, metrics)(blockId, blockSerde)
+  }
+}

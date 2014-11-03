@@ -59,6 +59,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   var actorSystem: ActorSystem = null
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
+  var blockSerde: BlockSerializer = null
   var tempDirectory: File = null
 
   before {
@@ -74,6 +75,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
     blockManager = new BlockManager("bm", actorSystem, blockManagerMaster, serializer,
       blockManagerSize, conf, mapOutputTracker, shuffleManager,
       new NioBlockTransferService(conf, securityMgr))
+    blockSerde = blockManager.blockSerde
 
     tempDirectory = Files.createTempDir()
     manualClock.setTime(0)
@@ -103,7 +105,9 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map { _.data.map {_.toString}.toList }.getOrElse(List.empty)
+          blockManager.getLocal(blockId).map {
+            _.dataAsIterator().map(_.toString).toList
+          }.getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -127,7 +131,9 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map { _.data.map {_.toString}.toList }.getOrElse(List.empty)
+          blockManager.getLocal(blockId).map {
+            _.dataAsIterator().map(_.toString).toList
+          }.getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -142,7 +148,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
           val reader = new WriteAheadLogRandomReader(segment.path, hadoopConf)
           val bytes = reader.read(segment)
           reader.close()
-          blockManager.dataDeserialize(generateBlockId(), bytes).toList
+          blockManager.blockSerde.dataDeserialize(generateBlockId(), bytes).toList
         }
         loggedData shouldEqual data
       }
@@ -194,7 +200,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       }
     }
 
-    def dataToByteBuffer(b: Seq[String]) = blockManager.dataSerialize(generateBlockId, b.iterator)
+    def dataToByteBuffer(b: Seq[String]) = blockSerde.dataSerialize(generateBlockId, b.iterator)
 
     val blocks = data.grouped(10).toSeq
 

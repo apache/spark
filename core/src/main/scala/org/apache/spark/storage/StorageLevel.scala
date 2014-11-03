@@ -22,6 +22,10 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
+trait StorageDescriptor
+case class SparkStorage(level: StorageLevel)
+case class OffHeapStorage(name: String)
+
 /**
  * :: DeveloperApi ::
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,

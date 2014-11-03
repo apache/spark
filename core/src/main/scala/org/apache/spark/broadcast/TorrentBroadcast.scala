@@ -27,7 +27,7 @@ import scala.util.Random
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockResult, BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.{ByteBufferInputStream, Utils}
 import org.apache.spark.util.io.ByteArrayChunkOutputStream
 
@@ -122,8 +122,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       // First try getLocalBytes because there is a chance that previous attempts to fetch the
       // broadcast blocks have already fetched some of the blocks. In that case, some blocks
       // would be available locally (on this executor).
-      def getLocal: Option[ByteBuffer] = bm.getLocalBytes(pieceId)
-      def getRemote: Option[ByteBuffer] = bm.getRemoteBytes(pieceId).map { block =>
+      def getLocal: Option[ByteBuffer] = bm.getLocal(pieceId).map(_.dataAsBytes())
+      def getRemote: Option[ByteBuffer] = bm.getRemote(pieceId).map(_.dataAsBytes()).map { block =>
         // If we found the block from remote executors/driver's BlockManager, put the block
         // in this executor's BlockManager.
         SparkEnv.get.blockManager.putBytes(
@@ -164,9 +164,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.synchronized {
       setConf(SparkEnv.get.conf)
-      SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
-        case Some(x) =>
-          x.asInstanceOf[T]
+      SparkEnv.get.blockManager.getLocal(broadcastId) match {
+        case Some(result) =>
+          result.dataAsIterator().next().asInstanceOf[T]
 
         case None =>
           logInfo("Started reading broadcast variable " + id)
@@ -184,7 +184,6 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       }
     }
   }
-
 }
 
 

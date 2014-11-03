@@ -29,16 +29,18 @@ import org.apache.spark.util.Utils
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
  */
-private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
+private[spark] class TaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
   extends Logging {
 
-  private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
+  private val blockManager = env.blockManager
+
+  private val THREADS = env.conf.getInt("spark.resultGetter.threads", 4)
   private val getTaskResultExecutor = Utils.newDaemonFixedThreadPool(
     THREADS, "task-result-getter")
 
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
-      sparkEnv.closureSerializer.newInstance()
+      env.closureSerializer.newInstance()
     }
   }
 
@@ -56,12 +58,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
-                sparkEnv.blockManager.master.removeBlock(blockId)
+                blockManager.master.removeBlock(blockId)
                 return
               }
               logDebug("Fetching indirect task result for TID %s".format(tid))
               scheduler.handleTaskGettingResult(taskSetManager, tid)
-              val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
+              val serializedTaskResult = blockManager.getRemote(blockId).map(_.dataAsBytes())
               if (!serializedTaskResult.isDefined) {
                 /* We won't be able to get the task result if the machine that ran the task failed
                  * between when the task ended and when we tried to fetch the result, or if the
@@ -72,7 +74,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               }
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
                 serializedTaskResult.get)
-              sparkEnv.blockManager.master.removeBlock(blockId)
+              blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }
 
