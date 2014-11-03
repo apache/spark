@@ -37,7 +37,9 @@ approximation to arbitrary input values.
 
 The approximations can be calculated as follows:
 
+```
 val v_out = annModel.predict(v_in)
+```
 
 where v_in is either a Vector or an RDD of Vectors, and v_out respectively a Vector or RDD of
 (Vector,Vector) pairs, corresponding to input and output values.
@@ -101,9 +103,6 @@ The ANN also implements bias units. These are nodes that always output the value
 units are in all layers except the output layer. They act similar to other nodes, but do not
 have input.
 
-The "hiddenLayersTopology" array is converted into the "topology" array by adding the number of
-input nodes in front, and the number of output nodes at the end.
-
 The value of node N_{j,l} is calculated  as follows:
 
 `$N_{j,l} = g( \sum_{i=0}^{topology_l} W_{i,j,l)*N_{i,l-1} )$`
@@ -143,22 +142,39 @@ stop. A lower value of "convergenceTol" will give a higher precision.
 ## The "ArtificialNeuralNetwork" object
 
 The object "ArtificialNeuralNetwork" is the interface to the "ArtificialNeuralNetwork" class.
-The object contains the training function. There are four different instances of the training
+The object contains the training function. There are six different instances of the training
 function, each for use with different parameters. All take as the first parameter the RDD
 "input", which contains pairs of input and output vectors.
 
-* `def train(input: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
+In addition, there are three functions for generating random weights. Two take a fixed seed,
+which is useful for testing if one wants to start with the same weights in every test.
+
+* `def train(trainingRDD: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
 Int): ArtificialNeuralNetworkModel`: starts training with random initial weights, and a default
 convergenceTol=1e-4.
-* `def train(input: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
+* `def train(trainingRDD: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
 maxNumIterations: Int): ArtificialNeuralNetworkModel`: resumes training given an earlier
 calculated model, and a default convergenceTol=1e-4.
-* `def train(input: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
+* `def train(trainingRDD: RDD[(Vector,Vector)], hiddenLayersTopology: Array[Int],
+initialWeights: Vector, maxNumIterations: Int): ArtificialNeuralNetworkModel`: Trains an ANN
+with given initial weights, and a default convergenceTol=1e-4.
+* `def train(trainingRDD: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
 Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: starts training with random
 initial weights. Allows setting a customised "convergenceTol".
-* `def train(input: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
+* `def train(trainingRDD: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
 maxNumIterations: Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: resumes training
 given an earlier calculated model. Allows setting a customised "convergenceTol".
+* `def train(trainingRDD: RDD[(Vector,Vector)], hiddenLayersTopology: Array[Int],
+initialWeights: Vector, maxNumIterations: Int, convergenceTol: Double): 
+ArtificialNeuralNetworkModel`: Trains an ANN with given initial weights. Allows setting a
+customised "convergenceTol".
+* `def randomWeights(trainingRDD: RDD[(Vector,Vector)], hiddenLayersTopology: Array[Int]):
+Vector`: Generates a random weights vector.
+*`def randomWeights(trainingRDD: RDD[(Vector,Vector)], hiddenLayersTopology: Array[Int],
+seed: Int): Vector`: Generates a random weights vector with given seed.
+*`def randomWeights(inputLayerSize: Int, outputLayerSize: Int, hiddenLayersTopology: Array[Int],
+seed: Int): Vector`: Generates a random weights vector, using given random seed, input layer
+size, hidden layers topology and output layer size.
 
 Notice that the "hiddenLayersTopology" differs from the "topology" array. The
 "hiddenLayersTopology" does not include the number of nodes in the input and output layers. The
