@@ -457,16 +457,18 @@ class UserDefinedType(DataType):
     def jsonValue(self):
         schema = {
             "type": "udt",
-            "pyModule": self.module(),
-            "pyClass": type(self).__name__,
-            "class": self.scalaUDT()
+            "class": self.scalaUDT(),
+            "pyClass": "%s.%s" % (self.module(), type(self).__name__),
+            "sqlType": self.sqlType().jsonValue()
         }
         return schema
 
     @classmethod
     def fromJson(cls, json):
-        pyModule = json['pyModule']
-        pyClass = json['pyClass']
+        pyUDT = json["pyClass"]
+        split = pyUDT.rfind(".")
+        pyModule = pyUDT[:split]
+        pyClass = pyUDT[split+1:]
         m = __import__(pyModule, globals(), locals(), [pyClass], -1)
         UDT = getattr(m, pyClass)
         return UDT()
@@ -962,6 +964,7 @@ def _verify_type(obj, dataType):
     if isinstance(dataType, UserDefinedType):
         if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
             raise ValueError("%r is not an instance of type %r" % (obj, dataType))
+        _verify_type(dataType.serialize(obj), dataType.sqlType())
         return
 
     _type = type(dataType)
