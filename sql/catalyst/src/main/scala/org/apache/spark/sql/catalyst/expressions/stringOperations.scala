@@ -24,7 +24,6 @@ import scala.collection.IndexedSeqOptimized
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types._
-import org.apache.commons.lang.StringUtils
 
 trait StringRegexExpression {
   self: BinaryExpression =>
@@ -172,7 +171,7 @@ case class RLike(left: Expression, right: Expression)
  */
 case class Ltrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = StringUtils.stripStart(v, " ");
+    override def convert(v: String): String = v.dropWhile(_ == ' ')
 
     override def toString() = s"Ltrim($child)"
 }
@@ -182,7 +181,7 @@ case class Ltrim(child: Expression) extends UnaryExpression with StringTransform
  */
 case class Rtrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = StringUtils.stripEnd(v, " ");
+    override def convert(v: String): String = v.reverse.dropWhile(_ == ' ').reverse
 
     override def toString() = s"Rtrim($child)"
 }
