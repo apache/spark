@@ -35,7 +35,7 @@ find * -maxdepth 0 -name 'dist' -o -name 'conf' -prune -o -exec rm -rf '{}' ';'
 
 # Copy everything out of dist that doesn't exist already
 mv -n dist/* .
-echo $SHA > ./GIT_SHA
+echo $GIT_SHA > ./GIT_SHA
 echo $GIT_BRANCH >> ./GIT_DESC
 echo $GIT_DESC >> ./GIT_DESC
 echo $GIT_HUMAN >> ./GIT_DESC
