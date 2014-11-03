@@ -595,6 +595,14 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
     uncompressed, snappy, gzip, lzo.
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
+  <td>true</td>
+  <td>
+    When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of the built in
+    support.
+  </td>
+</tr>
 </table>
 
 ## JSON Datasets
