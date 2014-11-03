@@ -122,6 +122,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
 
 # train_func should take two parameters, namely data and initial_weights, and
 # return the result of a call to the appropriate JVM stub.
+# _regression_train_wrapper is responsible for setup and error checking.
 def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
     initial_weights = initial_weights or [0.0] * len(data.first().features)
     weights, intercept = train_func(_to_java_object_rdd(data, cache=True),
