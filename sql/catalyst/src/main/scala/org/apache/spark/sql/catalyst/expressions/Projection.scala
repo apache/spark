@@ -140,12 +140,6 @@ class JoinedRow extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
-  def getDate(i: Int): Date =
-    if (i < row1.size) row1.getDate(i) else row2.getDate(i - row1.size)
-
-  def getTimestamp(i: Int): Timestamp =
-    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
-
   override def getAs[T](i: Int): T =
     if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
 
@@ -238,13 +232,6 @@ class JoinedRow2 extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
-
-  def getDate(i: Int): Date =
-    if (i < row1.size) row1.getDate(i) else row2.getDate(i - row1.size)
-
-  def getTimestamp(i: Int): Timestamp =
-    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
-
   override def getAs[T](i: Int): T =
     if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
 
@@ -330,13 +317,6 @@ class JoinedRow3 extends Row {
 
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-
-  def getDate(i: Int): Date =
-    if (i < row1.size) row1.getDate(i) else row2.getDate(i - row1.size)
-
-  def getTimestamp(i: Int): Timestamp =
-    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
 
   override def getAs[T](i: Int): T =
     if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
@@ -424,13 +404,6 @@ class JoinedRow4 extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
-
-  def getDate(i: Int): Date =
-    if (i < row1.size) row1.getDate(i) else row2.getDate(i - row1.size)
-
-  def getTimestamp(i: Int): Timestamp =
-    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
-
   override def getAs[T](i: Int): T =
     if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
 
@@ -516,13 +489,6 @@ class JoinedRow5 extends Row {
 
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
-
-
-  def getDate(i: Int): Date =
-    if (i < row1.size) row1.getDate(i) else row2.getDate(i - row1.size)
-
-  def getTimestamp(i: Int): Timestamp =
-    if (i < row1.size) row1.getTimestamp(i) else row2.getTimestamp(i - row1.size)
 
   override def getAs[T](i: Int): T =
     if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)

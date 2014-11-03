@@ -459,12 +459,14 @@ package object sql {
    * use in DSL expressions.  Implicit conversions to java.sql.Date
    * are provided.  The class intializer accepts a String, e.g.
    *
-   * val ts = Date("2014-01-01")
+   * {{{
+   * val d = Date("2014-01-01")
+   * }}}
    * 
    * @group dataType
    */
   @DeveloperApi
-  val Date = catalyst.expressions.Date
+  val Date = catalyst.expressions.RichDate
 
   /**
    * :: DeveloperApi ::
@@ -474,10 +476,12 @@ package object sql {
    * java.sql.timestamp are provided.  The class intializer accepts a
    * String, e.g.
    *
+   * {{{
    * val ts = Timestamp("2014-01-01 12:34:56.78")
+   * }}}
    * 
    * @group timeClasses
    */
   @DeveloperApi
-  val Timestamp = catalyst.expressions.Timestamp
+  val Timestamp = catalyst.expressions.RichTimestamp
 }
