@@ -57,6 +57,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
+  def tableExists(db: Option[String], tableName: String): Boolean = {
+    val (databaseName, tblName) = processDatabaseAndTableName(
+      db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
+    client.getTable(databaseName, tblName, false) != null
+  }
+
   def lookupRelation(
       db: Option[String],
       tableName: String,
