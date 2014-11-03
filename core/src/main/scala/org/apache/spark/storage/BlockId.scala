@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
  * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
  */
 @DeveloperApi
-sealed abstract class BlockId extends Serializable {
+sealed abstract class BlockId {
   /** A globally unique identifier for this Block. Can be used for ser/de. */
   def name: String
 

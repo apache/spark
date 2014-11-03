@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.{BlockStatus, BlockId, BlockManagerId}
+import org.apache.spark.storage.BlockManagerId
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.
