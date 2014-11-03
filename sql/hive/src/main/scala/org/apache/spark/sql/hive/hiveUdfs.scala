@@ -198,12 +198,13 @@ private[hive] case class HiveGenericUdaf(
 
   @transient
   protected lazy val objectInspector  = {
-    resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray,false,false)
+    resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
   @transient
-  protected lazy val inspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val inspectors = children.map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
 
@@ -233,7 +234,7 @@ private[hive] case class HiveUdaf(
   }
 
   @transient
-  protected lazy val inspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val inspectors = children.map(ex => toInspector(ex.dataType))
 
   def dataType: DataType = inspectorToDataType(objectInspector)
 
@@ -266,7 +267,7 @@ private[hive] case class HiveGenericUdtf(
   protected lazy val function: GenericUDTF = createFunction()
 
   @transient
-  protected lazy val inputInspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val inputInspectors = children.map( ex => toInspector(ex.dataType))
 
   @transient
   protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
@@ -341,9 +342,15 @@ private[hive] case class HiveUdafFunction(
       createFunction[AbstractGenericUDAFResolver]()
     }
 
-  private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
-
-  private val function = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
+  
+  private val inspectors = 
+    if(isUDAFBridgeRequired) exprs.map(ex => toInspector(ex.dataType)).toArray
+    else exprs.map(toInspector).toArray
+    
+  private val function = { 
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors,false,false)
+    resolver.getEvaluator(parameterInfo) 
+  }
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
@@ -356,8 +363,11 @@ private[hive] case class HiveUdafFunction(
   @transient
   val inputProjection = new InterpretedProjection(exprs)
 
+  @transient
+  protected lazy val cached = new Array[AnyRef](exprs.length)
+  
   def update(input: Row): Unit = {
     val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
-    function.iterate(buffer, inputs)
+    function.iterate(buffer, wrap(inputs,inspectors,cached))
   }
 }
