@@ -32,10 +32,30 @@ private[spark] class FetchFailedException(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    message: String)
-  extends Exception(message) {
+    message: String,
+    cause: Throwable)
+  extends Exception(message, cause) {
 
-  def toTaskEndReason: TaskEndReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId, message)
+  def this(
+      bmAddress: BlockManagerId,
+      shuffleId: Int,
+      mapId: Int,
+      reduceId: Int,
+      message: String) {
+    this(bmAddress, shuffleId, mapId, reduceId, message, null)
+  }
+
+  def this(
+      bmAddress: BlockManagerId,
+      shuffleId: Int,
+      mapId: Int,
+      reduceId: Int,
+      cause: Throwable) {
+    this(bmAddress, shuffleId, mapId, reduceId, cause.getMessage, cause)
+  }
+
+  def toTaskEndReason: TaskEndReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId,
+    Utils.exceptionString(this))
 }
 
 /**

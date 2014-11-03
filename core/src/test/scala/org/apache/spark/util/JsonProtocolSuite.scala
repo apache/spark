@@ -109,7 +109,8 @@ class JsonProtocolSuite extends FunSuite {
     // TaskEndReason
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "Some exception")
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
+    val exceptionFailure = ExceptionFailure("To be", "or not to be",
+      Utils.exceptionString(exception), None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
     testTaskEndReason(fetchFailed)
@@ -125,6 +126,23 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
+  }
+
+  test("ExceptionFailure backward compatibility") {
+    val exceptionFailureJson =
+      """{"Reason":"ExceptionFailure","Class Name":"To be","Description":"or not to be",
+        |"Stack Trace":[{"Declaring Class":"Apollo","Method Name":"Venus","File Name":"Mercury",
+        |"Line Number":42},{"Declaring Class":"Afollo","Method Name":"Vemus","File Name":"Mercurry"
+        |,"Line Number":420},{"Declaring Class":"Ayollo","Method Name":"Vesus","File Name":"Blackbe
+        |rry","Line Number":4200}]}""".stripMargin.replaceAll("\r|\n", "")
+
+    val exception = new Exception("Out of Memory! Please restock film.")
+    exception.setStackTrace(stackTrace)
+    val expectedExceptionFailure = ExceptionFailure("To be", "or not to be",
+      Utils.exceptionString("To be", "or not to be", stackTrace), None)
+
+    val exceptionFailure = JsonProtocol.taskEndReasonFromJson(parse(exceptionFailureJson))
+    assertEquals(expectedExceptionFailure, exceptionFailure)
   }
 
   test("StageInfo backward compatibility") {
@@ -401,7 +419,7 @@ class JsonProtocolSuite extends FunSuite {
       case (r1: ExceptionFailure, r2: ExceptionFailure) =>
         assert(r1.className === r2.className)
         assert(r1.description === r2.description)
-        assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
+        assert(r1.stackTrace === r2.stackTrace)
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>

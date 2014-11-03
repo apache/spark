@@ -22,6 +22,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
@@ -409,11 +411,33 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             {diskBytesSpilledReadable}
           </td>
         }}
-        <td>
-          {errorMessage.map { e => <pre>{e}</pre> }.getOrElse("")}
-        </td>
+        {errorMessageCell(errorMessage)}
       </tr>
     }
+  }
+
+  private def errorMessageCell(errorMessage: Option[String]): Seq[Node] = {
+    val error = errorMessage.getOrElse("")
+    val isMultiline = error.indexOf('\n') >= 0
+    // Display the first line by default
+    val errorSummary = StringEscapeUtils.escapeHtml4(
+      if (isMultiline) {
+        error.substring(0, error.indexOf('\n'))
+      } else {
+        error
+      })
+    val details = if (isMultiline) {
+      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stage-details collapsed">
+          <pre>{error}</pre>
+        </div>
+    } else {
+      ""
+    }
+    <td>{errorSummary}{details}</td>
   }
 
   private def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {

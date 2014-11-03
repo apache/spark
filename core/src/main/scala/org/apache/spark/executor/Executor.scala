@@ -257,7 +257,8 @@ private[spark] class Executor(
             m.executorRunTime = serviceTime
             m.jvmGCTime = gcTime - startGCTime
           }
-          val reason = ExceptionFailure(t.getClass.getName, t.getMessage, t.getStackTrace, metrics)
+          val reason = ExceptionFailure(t.getClass.getName, t.getMessage, Utils.exceptionString(t),
+            metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
