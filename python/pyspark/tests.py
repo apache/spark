@@ -689,12 +689,6 @@ class ExamplePointUDT(UserDefinedType):
     def sqlType(self):
         return ArrayType(DoubleType(), False)
 
-    def serialize(self, obj):
-        return [obj.x, obj.y]
-
-    def deserialize(self, datum):
-        return ExamplePoint(datum[0], datum[1])
-
     @classmethod
     def module(cls):
         return 'pyspark.tests'
@@ -702,6 +696,12 @@ class ExamplePointUDT(UserDefinedType):
     @classmethod
     def scalaUDT(cls):
         return 'org.apache.spark.sql.test.ExamplePointUDT'
+
+    def serialize(self, obj):
+        return [obj.x, obj.y]
+
+    def deserialize(self, datum):
+        return ExamplePoint(datum[0], datum[1])
 
 
 class ExamplePoint:

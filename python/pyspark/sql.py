@@ -39,7 +39,6 @@ import re
 from array import array
 from operator import itemgetter
 from itertools import imap
-import importlib
 
 from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
@@ -416,25 +415,15 @@ class UserDefinedType(DataType):
     """
 
     @classmethod
-    def sqlType(self):
+    def typeName(cls):
+        return cls.__name__.lower()
+
+    @classmethod
+    def sqlType(cls):
         """
         Underlying SQL storage type for this UDT.
         """
         raise NotImplementedError("UDT must implement sqlType().")
-
-    @classmethod
-    def serialize(self, obj):
-        """
-        Converts the a user-type object into a SQL datum.
-        """
-        raise NotImplementedError("UDT must implement serialize().")
-
-    @classmethod
-    def deserialize(self, datum):
-        """
-        Converts a SQL datum into a user-type object.
-        """
-        raise NotImplementedError("UDT must implement deserialize().")
 
     @classmethod
     def module(cls):
@@ -450,25 +439,35 @@ class UserDefinedType(DataType):
         """
         raise NotImplementedError("UDT must have a paired Scala UDT.")
 
-    @classmethod
-    def json(cls):
-        return json.dumps(cls.jsonValue(), separators=(',', ':'), sort_keys=True)
+    def serialize(self, obj):
+        """
+        Converts the a user-type object into a SQL datum.
+        """
+        raise NotImplementedError("UDT must implement serialize().")
 
-    @classmethod
-    def jsonValue(cls):
+    def deserialize(self, datum):
+        """
+        Converts a SQL datum into a user-type object.
+        """
+        raise NotImplementedError("UDT must implement deserialize().")
+
+    def json(self):
+        return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
+
+    def jsonValue(self):
         schema = {
             "type": "udt",
-            "pyModule": cls.module(),
-            "pyClass": cls.__name__}
-        if cls.scalaUDT() is not None:
-            schema['class'] = cls.scalaUDT()
+            "pyModule": self.module(),
+            "pyClass": type(self).__name__,
+            "class": self.scalaUDT()
+        }
         return schema
 
     @classmethod
     def fromJson(cls, json):
         pyModule = json['pyModule']
         pyClass = json['pyClass']
-        m = importlib.import_module(pyModule)
+        m = __import__(pyModule, globals(), locals(), [pyClass], -1)
         UDT = getattr(m, pyClass)
         return UDT()
 
