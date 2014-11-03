@@ -61,7 +61,7 @@ class HadoopTableReader(
   // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
-  private val _minSplitsPerRDD = if (sc.isLocal) {
+  private val _minSplitsPerRDD = if (sc.sparkContext.isLocal) {
     0 // will splitted based on block by default.
   } else {
     math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
