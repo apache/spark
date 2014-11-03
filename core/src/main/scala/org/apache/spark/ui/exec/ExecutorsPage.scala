@@ -31,7 +31,6 @@ private[ui] case class ExecutorSummaryInfo(
     id: String,
     hostPort: String,
     rddBlocks: Int,
-    broadcastBlocks: Int,
     memoryUsed: Long,
     diskUsed: Long,
     activeTasks: Int,
@@ -66,7 +65,6 @@ private[ui] class ExecutorsPage(
           <th>Executor ID</th>
           <th>Address</th>
           <th>RDD Blocks</th>
-          <th>Broadcast Blocks</th>
           <th>Memory Used</th>
           <th>Disk Used</th>
           <th>Active Tasks</th>
@@ -121,7 +119,6 @@ private[ui] class ExecutorsPage(
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
       <td>{info.rddBlocks}</td>
-      <td>{info.broadcastBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
         {Utils.bytesToString(memoryUsed)} /
         {Utils.bytesToString(maximumMemory)}
@@ -197,7 +194,6 @@ private[ui] class ExecutorsPage(
       execId,
       hostPort,
       rddBlocks,
-      broadcastBlocks,
       memUsed,
       diskUsed,
       activeTasks,
