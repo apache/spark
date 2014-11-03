@@ -231,4 +231,24 @@ class CachedTableSuite extends QueryTest {
         assert(cached.statistics.sizeInBytes === actualSizeInBytes)
     }
   }
+
+  test("Drops temporary table") {
+    testData.select('key).registerTempTable("t1")
+    table("t1")
+    dropTempTable("t1")
+    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
+  }
+
+  test("Drops cached temporary table") {
+    testData.select('key).registerTempTable("t1")
+    testData.select('key).registerTempTable("t2")
+    cacheTable("t1")
+
+    assert(isCached("t1"))
+    assert(isCached("t2"))
+
+    dropTempTable("t1")
+    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
+    assert(!isCached("t2"))
+  }
 }
