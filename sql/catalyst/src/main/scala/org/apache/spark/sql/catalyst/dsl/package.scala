@@ -153,22 +153,22 @@ package object dsl {
      */
     case class LhsLiteral(x: Any) {
       val literal = Literal(x)
-      def + (other: Symbol): Expression = literal + other
-      def - (other: Symbol): Expression = literal - other
-      def * (other: Symbol): Expression = literal * other
-      def / (other: Symbol): Expression = literal / other
-      def % (other: Symbol): Expression = literal % other
+      def + (other: Symbol) = Add(literal, other)
+      def - (other: Symbol) = Subtract(literal, other)
+      def * (other: Symbol) = Multiply(literal, other)
+      def / (other: Symbol) = Divide(literal, other)
+      def % (other: Symbol) = Remainder(literal, other)
 
-      def && (other: Symbol): Expression = literal && other
-      def || (other: Symbol): Expression = literal || other
+      def && (other: Symbol) = And(literal, other)
+      def || (other: Symbol) = Or(literal, other)
 
-      def < (other: Symbol): Expression  = literal < other
-      def <= (other: Symbol): Expression = literal <= other
-      def > (other: Symbol): Expression  = literal > other
-      def >= (other: Symbol): Expression = literal >= other
-      def === (other: Symbol): Expression = literal === other
-      def <=> (other: Symbol): Expression = literal <=> other
-      def !== (other: Symbol): Expression = literal !== other
+      def < (other: Symbol)   = LessThan(literal, other)
+      def <= (other: Symbol)  = LessThanOrEqual(literal, other)
+      def > (other: Symbol)   = GreaterThan(literal, other)
+      def >= (other: Symbol)  = GreaterThanOrEqual(literal, other)
+      def === (other: Symbol) = EqualTo(literal, other)
+      def <=> (other: Symbol) = EqualNullSafe(literal, other)
+      def !== (other: Symbol) = Not(EqualTo(literal, other))
     }
 
     implicit def booleanToLhsLiteral(b: Boolean) = new LhsLiteral(b)
