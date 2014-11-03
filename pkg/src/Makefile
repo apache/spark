@@ -28,7 +28,7 @@ endif
 ifdef USE_YARN
 	MAVEN_YARN_FLAG := "-Pyarn"
 else
-	MAVEN_YARN_FLAG := ""
+	MAVEN_YARN_FLAG := 
 endif
 
 all: $(TARGET_NAME)
