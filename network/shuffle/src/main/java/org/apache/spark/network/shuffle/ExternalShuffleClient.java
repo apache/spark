@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.Closeable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,5 +86,10 @@ public class ExternalShuffleClient implements ShuffleClient {
     byte[] registerExecutorMessage =
       JavaUtils.serialize(new RegisterExecutor(appId, execId, executorInfo));
     client.sendRpcSync(registerExecutorMessage, 5000 /* timeoutMs */);
+  }
+
+  @Override
+  public void close() {
+    clientFactory.close();
   }
 }

@@ -106,5 +106,8 @@ class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
     result.future
   }
 
-  override def close(): Unit = server.close()
+  override def close(): Unit = {
+    server.close()
+    clientFactory.close()
+  }
 }

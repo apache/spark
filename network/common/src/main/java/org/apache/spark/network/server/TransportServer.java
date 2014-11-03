@@ -49,6 +49,7 @@ public class TransportServer implements Closeable {
   private ChannelFuture channelFuture;
   private int port = -1;
 
+  /** Creates a TransportServer that binds to the given port, or to any available if 0. */
   public TransportServer(TransportContext context, int portToBind) {
     this.context = context;
     this.conf = context.getConf();
@@ -67,7 +68,7 @@ public class TransportServer implements Closeable {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
-        NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
+      NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
     EventLoopGroup workerGroup = bossGroup;
 
     bootstrap = new ServerBootstrap()
@@ -105,7 +106,7 @@ public class TransportServer implements Closeable {
   @Override
   public void close() {
     if (channelFuture != null) {
-      // close is a local operation and should finish with milliseconds; timeout just to be safe
+      // close is a local operation and should finish within milliseconds; timeout just to be safe
       channelFuture.channel().close().awaitUninterruptibly(10, TimeUnit.SECONDS);
       channelFuture = null;
     }

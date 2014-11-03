@@ -1178,6 +1178,10 @@ private[spark] class BlockManager(
 
   def stop(): Unit = {
     blockTransferService.close()
+    if (shuffleClient ne blockTransferService) {
+      // Closing should be idempotent, but maybe not for the NioBlockTransferService.
+      shuffleClient.close()
+    }
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

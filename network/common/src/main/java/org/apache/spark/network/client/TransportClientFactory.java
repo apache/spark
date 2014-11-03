@@ -58,7 +58,7 @@ public class TransportClientFactory implements Closeable {
   private final ConcurrentHashMap<SocketAddress, TransportClient> connectionPool;
 
   private final Class<? extends Channel> socketChannelClass;
-  private final EventLoopGroup workerGroup;
+  private EventLoopGroup workerGroup;
 
   public TransportClientFactory(TransportContext context) {
     this.context = context;
@@ -150,6 +150,7 @@ public class TransportClientFactory implements Closeable {
 
     if (workerGroup != null) {
       workerGroup.shutdownGracefully();
+      workerGroup = null;
     }
   }
 
