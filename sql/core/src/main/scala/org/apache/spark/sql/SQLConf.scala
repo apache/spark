@@ -106,7 +106,7 @@ private[sql] trait SQLConf {
    * a broadcast value during the physical executions of join operations.  Setting this to -1
    * effectively disables auto conversion.
    *
-   * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is also 10000.
+   * Hive setting: hive.auto.convert.join.noconditionaltask.size, whose default value is 10000.
    */
   private[spark] def autoBroadcastJoinThreshold: Int =
     getConf(AUTO_BROADCASTJOIN_THRESHOLD, (10 * 1024 * 1024).toString).toInt
