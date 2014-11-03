@@ -213,10 +213,9 @@ class HadoopRDD[K, V](
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
 
-      // Instantiate input metrics before RecordReader, because RecordReader's constructor might
-      // read some bytes
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      // Find a function that will return the FileSystem bytes read by this thread.
+      // Find a function that will return the FileSystem bytes read by this thread. Do this before
+      // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
         SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
           split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf)
