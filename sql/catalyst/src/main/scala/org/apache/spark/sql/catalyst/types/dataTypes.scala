@@ -213,7 +213,7 @@ trait PrimitiveType extends DataType {
 }
 
 object PrimitiveType {
-  private val nonDecimals = Seq(DateType, TimestampType, BinaryType) ++ NativeType.all
+  private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
   private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
 
   /** Given the string representation of a type, return its DataType */
