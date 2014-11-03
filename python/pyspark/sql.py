@@ -472,6 +472,9 @@ class UserDefinedType(DataType):
         UDT = getattr(m, pyClass)
         return UDT()
 
+    def __eq__(self, other):
+        return type(self) == type(other)
+
 
 _all_primitive_types = dict((v.typeName(), v)
                             for v in globals().itervalues()
@@ -947,13 +950,20 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
+    >>> from pyspark.tests import ExamplePoint, ExamplePointUDT
+    >>> _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
+    >>> _verify_type([1.0, 2.0], ExamplePointUDT()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
     # all objects are nullable
     if obj is None:
         return
 
     if isinstance(dataType, UserDefinedType):
-        # TODO: check UDT
+        if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
+            raise ValueError("%r is not an instance of type %r" % (obj, dataType))
         return
 
     _type = type(dataType)
@@ -1620,33 +1630,6 @@ class HiveContext(SQLContext):
 
 
 class LocalHiveContext(HiveContext):
-
-    """Starts up an instance of hive where metadata is stored locally.
-
-    An in-process metadata data is created with data stored in ./metadata.
-    Warehouse data is stored in in ./warehouse.
-
-    # >>> import os
-    # >>> hiveCtx = LocalHiveContext(sc)
-    # >>> try:
-    # ...     supress = hiveCtx.sql("DROP TABLE src")
-    # ... except Exception:
-    # ...     pass
-    # >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
-    # ...        'examples/src/main/resources/kv1.txt')
-    # >>> supress = hiveCtx.sql(
-    # ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    # >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
-    # ...        % kv1)
-    # >>> results = hiveCtx.sql("FROM src SELECT value"
-    # ...      ).map(lambda r: int(r.value.split('_')[1]))
-    # >>> num = results.count()
-    # >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    # >>> num
-    # 500
-    # >>> reduce_sum
-    # 130091
-    """
 
     def __init__(self, sparkContext, sqlContext=None):
         HiveContext.__init__(self, sparkContext, sqlContext)
