@@ -234,7 +234,6 @@ setMethod("checkpoint",
             rdd
           })
 
-
 #' Collect elements of an RDD
 #'
 #' @description
@@ -1182,3 +1181,44 @@ setMethod("combineByKey",
             combined
           })
 
+############ Binary Functions #############
+
+#' Return the union RDD of two RDDs.
+#' The same as union() in Spark.
+#'
+#' @param x An RDD.
+#' @param y An RDD.
+#' @return a new RDD created by performing the simple union (witout removing 
+#' duplicates) of two input RDDs.
+#' @rdname unionRDD
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:3)
+#' unionRDD(rdd, rdd) # 1, 2, 3, 1, 2, 3
+#'}
+setGeneric("unionRDD", function(x, y) { standardGeneric("unionRDD") })
+
+#' @rdname unionRDD
+#' @aliases unionRDD,RDD,RDD-method
+setMethod("unionRDD",
+          signature(x = "RDD", y = "RDD"),
+          function(x, y) {
+            if (x@env$serialized == y@env$serialized) {
+              jrdd <- .jcall(getJRDD(x), "Lorg/apache/spark/api/java/JavaRDD;",
+                             "union", getJRDD(y))
+              union.rdd <- RDD(jrdd, x@env$serialized)
+            } else {
+              # One of the RDDs is not serialized, we need to serialize it first.
+              if (!x@env$serialized) {
+                x <- reserialize(x)
+              } else {
+                y <- reserialize(y)
+              }
+              jrdd <- .jcall(getJRDD(x), "Lorg/apache/spark/api/java/JavaRDD;",
+                             "union", getJRDD(y))
+              union.rdd <- RDD(jrdd, TRUE)
+            }  
+            union.rdd
+          })
