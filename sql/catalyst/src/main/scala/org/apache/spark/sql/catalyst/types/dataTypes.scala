@@ -29,11 +29,12 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
+import org.apache.spark.sql.catalyst.types.decimal._
 import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.types.decimal._
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -67,6 +68,11 @@ object DataType {
         ("fields", JArray(fields)),
         ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
+
+    case JSortedObject(
+        ("class", JString(udtClass)),
+        ("type", JString("udt"))) =>
+      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -342,6 +348,7 @@ object FractionalType {
     case _ => false
   }
 }
+
 abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
   private[sql] val asIntegral: Integral[JvmType]
@@ -564,4 +571,46 @@ case class MapType(
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+}
+
+/**
+ * ::DeveloperApi::
+ * The data type for User Defined Types (UDTs).
+ *
+ * This interface allows a user to make their own classes more interoperable with SparkSQL;
+ * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
+ * a SchemaRDD which has class X in the schema.
+ *
+ * For SparkSQL to recognize UDTs, the UDT must be annotated with
+ * [[org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType]].
+ *
+ * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
+ * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
+ */
+@DeveloperApi
+abstract class UserDefinedType[UserType] extends DataType with Serializable {
+
+  /** Underlying storage type for this UDT */
+  def sqlType: DataType
+
+  /**
+   * Convert the user type to a SQL datum
+   *
+   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
+   *       where we need to convert Any to UserType.
+   */
+  def serialize(obj: Any): Any
+
+  /** Convert a SQL datum to the user type */
+  def deserialize(datum: Any): UserType
+
+  override private[sql] def jsonValue: JValue = {
+    ("type" -> "udt") ~
+      ("class" -> this.getClass.getName)
+  }
+
+  /**
+   * Class object for the UserType
+   */
+  def userClass: java.lang.Class[UserType]
 }

@@ -23,13 +23,14 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.{SQLContext, StructType => SStructType}
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation}
 import org.apache.spark.sql.types.util.DataTypeConversions
-import org.apache.spark.sql.{SQLContext, StructType => SStructType}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
-import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
 import org.apache.spark.util.Utils
 
@@ -91,9 +92,12 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   /**
    * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
    */
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): JavaSchemaRDD = {
-    val schema = getSchema(beanClass)
+    val attributeSeq = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
@@ -104,11 +108,13 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
       iter.map { row =>
         new GenericRow(
-          extractors.map(e => DataTypeConversions.convertJavaToCatalyst(e.invoke(row))).toArray[Any]
+          extractors.zip(attributeSeq).map { case (e, attr) =>
+            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+          }.toArray[Any]
         ): ScalaRow
       }
     }
-    new JavaSchemaRDD(sqlContext, LogicalRDD(schema, rowRdd)(sqlContext))
+    new JavaSchemaRDD(sqlContext, LogicalRDD(attributeSeq, rowRdd)(sqlContext))
   }
 
   /**
@@ -195,14 +201,21 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
     sqlContext.registerRDDAsTable(rdd.baseSchemaRDD, tableName)
   }
 
-  /** Returns a Catalyst Schema for the given java bean class. */
+  /**
+   * Returns a Catalyst Schema for the given java bean class.
+   */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
     val beanInfo = Introspector.getBeanInfo(beanClass)
 
+    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
+    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
+    //       element ordering.
     val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
     fields.map { property =>
       val (dataType, nullable) = property.getPropertyType match {
+        case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+          (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
         case c: Class[_] if c == classOf[java.lang.String] =>
           (org.apache.spark.sql.StringType, true)
         case c: Class[_] if c == java.lang.Short.TYPE =>

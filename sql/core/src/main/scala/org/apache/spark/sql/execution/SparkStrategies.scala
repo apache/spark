@@ -280,7 +280,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val nPartitions = if (data.isEmpty) 1 else numPartitions
         PhysicalRDD(
           output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions),
+            StructType.fromAttributes(output))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>

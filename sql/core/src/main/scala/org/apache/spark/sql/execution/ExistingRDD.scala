@@ -19,29 +19,32 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataType, StructType, Row, SQLContext}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
 object RDDConversions {
-  def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
+  def productToRowRdd[A <: Product](data: RDD[A], schema: StructType): RDD[Row] = {
     data.mapPartitions { iterator =>
       if (iterator.isEmpty) {
         Iterator.empty
       } else {
         val bufferedIterator = iterator.buffered
         val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
-
+        val schemaFields = schema.fields.toArray
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
-            mutableRow(i) = ScalaReflection.convertToCatalyst(r.productElement(i))
+            mutableRow(i) =
+              ScalaReflection.convertToCatalyst(r.productElement(i), schemaFields(i).dataType)
             i += 1
           }
 
