@@ -277,6 +277,19 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the name of the table to be unregistered.
+   *
+   * @group userf
+   */
+  def dropTempTable(tableName: String): Unit = {
+    tryUncacheQuery(table(tableName))
+    catalog.unregisterTable(None, tableName)
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
