@@ -71,7 +71,8 @@ sparkR.init <- function(
   .jaddClassPath(sparkJars)
   jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
 
-  localJarPaths <- sapply(jars, function(j) { paste("file://", j, sep="") })
+  nonEmptyJars <- Filter(function(x) { x != "" }, jars)
+  localJarPaths <- sapply(nonEmptyJars, function(j) { paste("file://", j, sep="") })
 
   assign(
     ".sparkRjsc",
