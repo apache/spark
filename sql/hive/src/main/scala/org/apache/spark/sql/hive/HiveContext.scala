@@ -374,8 +374,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
 
-    override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
-
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
         ShortType, DateType, TimestampType, BinaryType)
@@ -433,7 +431,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         command.executeCollect().map(_.head.toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.collect().toSeq
+        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.

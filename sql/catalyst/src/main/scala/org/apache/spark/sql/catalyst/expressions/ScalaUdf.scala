@@ -21,6 +21,10 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.util.ClosureCleaner
 
+/**
+ * User-defined function.
+ * @param dataType  Return type of function.
+ */
 case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
   extends Expression {
 
@@ -347,6 +351,6 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     }
     // scalastyle:on
 
-    ScalaReflection.convertToCatalyst(result)
+    ScalaReflection.convertToCatalyst(result, dataType)
   }
 }

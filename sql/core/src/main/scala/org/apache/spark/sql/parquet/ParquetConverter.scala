@@ -77,6 +77,9 @@ private[sql] object CatalystConverter {
       parent: CatalystConverter): Converter = {
     val fieldType: DataType = field.dataType
     fieldType match {
+      case udt: UserDefinedType[_] => {
+        createConverter(field.copy(dataType = udt.sqlType), fieldIndex, parent)
+      }
       // For native JVM types we use a converter with native arrays
       case ArrayType(elementType: NativeType, false) => {
         new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
@@ -255,8 +258,8 @@ private[parquet] class CatalystGroupConverter(
       schema,
       index,
       parent,
-      current=null,
-      buffer=new ArrayBuffer[Row](
+      current = null,
+      buffer = new ArrayBuffer[Row](
         CatalystArrayConverter.INITIAL_ARRAY_SIZE))
 
   /**
@@ -301,7 +304,7 @@ private[parquet] class CatalystGroupConverter(
 
   override def end(): Unit = {
     if (!isRootConverter) {
-      assert(current!=null) // there should be no empty groups
+      assert(current != null) // there should be no empty groups
       buffer.append(new GenericRow(current.toArray))
       parent.updateField(index, new GenericRow(buffer.toArray.asInstanceOf[Array[Any]]))
     }
@@ -358,7 +361,7 @@ private[parquet] class CatalystPrimitiveRowConverter(
 
   override def end(): Unit = {}
 
-  // Overriden here to avoid auto-boxing for primitive types
+  // Overridden here to avoid auto-boxing for primitive types
   override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit =
     current.setBoolean(fieldIndex, value)
 
@@ -533,7 +536,7 @@ private[parquet] class CatalystNativeArrayConverter(
   override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit =
     throw new UnsupportedOperationException
 
-  // Overriden here to avoid auto-boxing for primitive types
+  // Overridden here to avoid auto-boxing for primitive types
   override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
     checkGrowBuffer()
     buffer(elements) = value.asInstanceOf[NativeType]

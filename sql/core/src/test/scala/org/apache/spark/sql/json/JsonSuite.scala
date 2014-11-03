@@ -21,8 +21,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
@@ -233,8 +232,8 @@ class JsonSuite extends QueryTest {
           StructField("field2", StringType, true) ::
           StructField("field3", StringType, true) :: Nil), false), true) ::
       StructField("struct", StructType(
-      StructField("field1", BooleanType, true) ::
-      StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
+        StructField("field1", BooleanType, true) ::
+        StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
         StructField("field1", ArrayType(IntegerType, false), true) ::
         StructField("field2", ArrayType(StringType, false), true) :: Nil), true) :: Nil)
@@ -292,8 +291,8 @@ class JsonSuite extends QueryTest {
     // Access a struct and fields inside of it.
     checkAnswer(
       sql("select struct, struct.field1, struct.field2 from jsonTable"),
-      (
-        Seq(true, BigDecimal("92233720368547758070")),
+      Row(
+        Row(true, BigDecimal("92233720368547758070")),
         true,
         BigDecimal("92233720368547758070")) :: Nil
     )
