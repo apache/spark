@@ -595,7 +595,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Underlying storage type for this UDT */
   def sqlType: DataType
 
-  def pyUDT: (String, String) = (null, null)
+  /** Paired Python UDT class, if exists. */
+  def pyUDT: String = null
 
   /**
    * Convert the user type to a SQL datum
@@ -609,7 +610,12 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   def deserialize(datum: Any): UserType
 
   override private[sql] def jsonValue: JValue = {
-    val (pyModule, pyClass) = pyUDT
+    val (pyModule, pyClass) = pyUDT match {
+      case null => (null, null)
+      case udt =>
+        val split = udt.lastIndexOf(".")
+        (udt.substring(0, split), udt.substring(split + 1))
+    }
     ("type" -> "udt") ~
       ("class" -> this.getClass.getName) ~
       ("pyClass" -> pyClass) ~
