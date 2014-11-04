@@ -130,7 +130,7 @@ object SparkBuild extends PomBuild {
 
     javacOptions in (Compile, doc) ++= {
       val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
-      if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:none") else Seq.empty
+      if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:-missing") else Seq.empty
     }
   )
 
