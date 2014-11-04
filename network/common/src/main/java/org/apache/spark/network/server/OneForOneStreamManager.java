@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * StreamManager which allows registration of an Iterator<ManagedBuffer>, which are individually
+ * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are individually
  * fetched as chunks by the client. Each registered buffer is one chunk.
  */
 public class OneForOneStreamManager extends StreamManager {
