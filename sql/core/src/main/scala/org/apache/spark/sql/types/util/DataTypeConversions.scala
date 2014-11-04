@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types.UserDefinedType
 
-
 protected[sql] object DataTypeConversions {
 
   /**
