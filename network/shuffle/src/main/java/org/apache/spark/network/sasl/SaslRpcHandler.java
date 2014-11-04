@@ -42,6 +42,8 @@ public class SaslRpcHandler implements RpcHandler {
 
   private final RpcHandler delegate;
   private final SecretKeyHolder secretKeyHolder;
+
+  // TODO: Invalidate channels that have closed!
   private final ConcurrentMap<String, SparkSaslServer> channelAuthenticationMap;
 
   public SaslRpcHandler(RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
@@ -81,51 +83,3 @@ public class SaslRpcHandler implements RpcHandler {
   }
 }
 
-/**
- * Encodes a Sasl-related message which is attempting to authenticate using some credentials tagged
- * with the given id. This 'id' allows a single SaslRpcHandler to multiplex different applications
- * who may be using different sets of credentials.
- */
-class SaslMessage implements Encodable {
-
-  private static final byte TAG_BYTE = (byte) 0xEA;
-
-  public final String appId;
-  public final byte[] payload;
-
-  public SaslMessage(String appId, byte[] payload) {
-    this.appId = appId;
-    this.payload = payload;
-  }
-
-  @Override
-  public int encodedLength() {
-    return 1 + 4 + appId.getBytes(Charsets.UTF_8).length + 4 + payload.length;
-  }
-
-  @Override
-  public void encode(ByteBuf buf) {
-    buf.writeByte(TAG_BYTE);
-    byte[] idBytes = appId.getBytes(Charsets.UTF_8);
-    buf.writeInt(idBytes.length);
-    buf.writeBytes(appId.getBytes(Charsets.UTF_8));
-    buf.writeInt(payload.length);
-    buf.writeBytes(payload);
-  }
-
-  public static SaslMessage decode(ByteBuf buf) {
-    if (buf.readByte() != TAG_BYTE) {
-      throw new IllegalStateException("Expected SaslMessage, received something else");
-    }
-
-    int idLength = buf.readInt();
-    byte[] idBytes = new byte[idLength];
-    buf.readBytes(idBytes);
-
-    int payloadLength = buf.readInt();
-    byte[] payload = new byte[payloadLength];
-    buf.readBytes(payload);
-
-    return new SaslMessage(new String(idBytes, Charsets.UTF_8), payload);
-  }
-}

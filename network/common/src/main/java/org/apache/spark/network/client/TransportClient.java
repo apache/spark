@@ -189,6 +189,7 @@ public class TransportClient implements Closeable {
 
   /** Returns a stable key for the given channel. Only valid after the channel is connected. */
   public String getChannelKey() {
-    return channel.toString();
+    return String.format("[%s, %s, %s]", channel.remoteAddress(), channel.localAddress(),
+      channel.hashCode());
   }
 }

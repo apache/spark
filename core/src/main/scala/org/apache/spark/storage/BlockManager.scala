@@ -107,7 +107,6 @@ private[spark] class BlockManager(
   }
 
   var blockManagerId: BlockManagerId = _
-//  BlockManagerId(executorId, blockTransferService.hostName, blockTransferService.port)
 
   // Address of the server that serves this executor's shuffle files. This is either an external
   // service, or just our own Executor's BlockManager.
@@ -149,8 +148,6 @@ private[spark] class BlockManager(
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
 
-//  initialize()
-
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
    * program could be using a user-defined codec in a third party jar, which is loaded in
@@ -179,7 +176,7 @@ private[spark] class BlockManager(
    * the appId may not be known at BlockManager instantiation time (in particular for the driver,
    * where it is only learned after registration with the TaskScheduler).
    *
-   * This method initialies the BlockTransferService and ShuffleClient registers with the
+   * This method initializes the BlockTransferService and ShuffleClient registers with the
    * BlockManagerMaster, starts theBlockManagerWorker actor, and registers with a local shuffle
    * service if configured.
    */
