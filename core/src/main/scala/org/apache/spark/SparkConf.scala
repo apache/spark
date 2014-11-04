@@ -218,8 +218,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getAll.filter { case (k, _) => isAkkaConf(k) }
 
   /**
-   * Returns the Spark application id, valid in the Driver after TaskScheduler registration in the
-   * driver and from the start in the Executor.
+   * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
+   * from the start in the Executor.
    */
   def getAppId: String = get("spark.app.id")
 

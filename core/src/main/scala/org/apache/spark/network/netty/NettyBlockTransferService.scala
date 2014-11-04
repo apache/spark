@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.netty
 
+import org.apache.spark.network.util.TransportConf
+
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, Promise}
 
@@ -41,6 +43,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
+  private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -53,10 +56,10 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
         (nettyRpcHandler, None)
       } else {
         (new SaslRpcHandler(nettyRpcHandler, securityManager),
-          Some(new SaslBootstrap(conf.getAppId, securityManager)))
+          Some(new SaslBootstrap(transportConf, conf.getAppId, securityManager)))
       }
     }
-    transportContext = new TransportContext(SparkTransportConf.fromSparkConf(conf), rpcHandler)
+    transportContext = new TransportContext(transportConf, rpcHandler)
     clientFactory = transportContext.createClientFactory(bootstrap.toList)
     server = transportContext.createServer()
     logInfo("Server created on " + server.getPort)

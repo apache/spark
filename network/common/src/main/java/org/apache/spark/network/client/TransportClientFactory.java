@@ -26,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -42,6 +44,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.IOMode;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -60,8 +63,8 @@ public class TransportClientFactory implements Closeable {
 
   private final TransportContext context;
   private final TransportConf conf;
-  private final ConcurrentHashMap<SocketAddress, TransportClient> connectionPool;
   private final List<TransportClientBootstrap> clientBootstraps;
+  private final ConcurrentHashMap<SocketAddress, TransportClient> connectionPool;
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
@@ -69,10 +72,10 @@ public class TransportClientFactory implements Closeable {
   public TransportClientFactory(
       TransportContext context,
       List<TransportClientBootstrap> clientBootstraps) {
-    this.context = context;
+    this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
+    this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<SocketAddress, TransportClient>();
-    this.clientBootstraps = Lists.newArrayList(clientBootstraps);
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
@@ -138,10 +141,16 @@ public class TransportClientFactory implements Closeable {
     TransportClient client = clientRef.get();
     assert client != null : "Channel future completed successfully with null client";
 
-    logger.debug("Connection to {} successful, running bootstraps...", address);
     // Execute any client bootstraps synchronously before marking the Client as successful.
-    for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
-      clientBootstrap.doBootstrap(client);
+    logger.debug("Connection to {} successful, running bootstraps...", address);
+    try {
+      for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
+        clientBootstrap.doBootstrap(client);
+      }
+    } catch (Exception e) { // catch Exception as the bootstrap may be written in Scala
+      logger.error("Exception while bootstrapping client", e);
+      client.close();
+      throw Throwables.propagate(e);
     }
 
     logger.debug("Successfully executed {} bootstraps for {}", clientBootstraps.size(), address);

@@ -24,31 +24,43 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.util.TransportConf;
 
+/**
+ * Bootstraps a {@link TransportClient} by performing SASL authentication on the connection. The
+ * server should be setup with a {@link SaslRpcHandler} with matching keys for the given appId.
+ */
 public class SaslBootstrap implements TransportClientBootstrap {
   private final Logger logger = LoggerFactory.getLogger(SaslBootstrap.class);
 
-  private final String secretKeyId;
+  private final TransportConf conf;
+  private final String appId;
   private final SecretKeyHolder secretKeyHolder;
 
-  public SaslBootstrap(String secretKeyId, SecretKeyHolder secretKeyHolder) {
-    this.secretKeyId = secretKeyId;
+  public SaslBootstrap(TransportConf conf, String appId, SecretKeyHolder secretKeyHolder) {
+    this.conf = conf;
+    this.appId = appId;
     this.secretKeyHolder = secretKeyHolder;
   }
 
+  /**
+   * Performs SASL authentication by sending a token, and then proceeding with the SASL
+   * challenge-response tokens until we either successfully authenticate or throw an exception
+   * due to mismatch.
+   */
   public void doBootstrap(TransportClient client) {
-    SparkSaslClient saslClient = new SparkSaslClient(secretKeyId, secretKeyHolder);
+    SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder);
     try {
       byte[] payload = saslClient.firstToken();
 
       while (!saslClient.isComplete()) {
-        SaslMessage msg = new SaslMessage(secretKeyId, payload);
-        logger.info("Sending msg {} {}", secretKeyId, payload.length);
+        SaslMessage msg = new SaslMessage(appId, payload);
+        logger.info("Sending msg {} {}", appId, payload.length);
         ByteBuf buf = Unpooled.buffer(msg.encodedLength());
         msg.encode(buf);
 
-        byte[] response = client.sendRpcSync(buf.array(), 300000);
-        logger.info("Got response {} {}", secretKeyId, response.length);
+        byte[] response = client.sendRpcSync(buf.array(), conf.saslRTTimeout());
+        logger.info("Got response {} {}", appId, response.length);
         payload = saslClient.response(response);
       }
     } finally {
