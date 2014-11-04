@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.ActorSystem
+import akka.actor.{Props, ActorSystem}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -92,6 +92,10 @@ private[spark] class Executor(
     }
   }
 
+  // Create an actor for receiving RPCs from the driver
+  private val executorActor = env.actorSystem.actorOf(
+    Props(new ExecutorActor(executorId)), "ExecutorActor")
+
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
@@ -131,6 +135,7 @@ private[spark] class Executor(
 
   def stop() {
     env.metricsSystem.report()
+    env.actorSystem.stop(executorActor)
     isStopped = true
     threadPool.shutdown()
     if (!isLocal) {
