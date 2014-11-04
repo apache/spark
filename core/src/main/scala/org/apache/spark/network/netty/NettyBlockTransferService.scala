@@ -17,8 +17,6 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.network.util.TransportConf
-
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, Promise}
 
@@ -27,7 +25,7 @@ import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClientFactory}
 import org.apache.spark.network.netty.NettyMessages.{OpenBlocks, UploadBlock}
-import org.apache.spark.network.sasl.{SecretKeyHolder, SaslRpcHandler, SaslBootstrap}
+import org.apache.spark.network.sasl.{SaslRpcHandler, SaslClientBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher}
 import org.apache.spark.serializer.JavaSerializer
@@ -56,7 +54,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
         (nettyRpcHandler, None)
       } else {
         (new SaslRpcHandler(nettyRpcHandler, securityManager),
-          Some(new SaslBootstrap(transportConf, conf.getAppId, securityManager)))
+          Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager)))
       }
     }
     transportContext = new TransportContext(transportConf, rpcHandler)

@@ -96,7 +96,7 @@ public class SaslIntegrationSuite {
   public void testGoodClient() {
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslBootstrap(conf, "app-id", new TestSecretKeyHolder("good-key"))));
+        new SaslClientBootstrap(conf, "app-id", new TestSecretKeyHolder("good-key"))));
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     String msg = "Hello, World!";
@@ -108,7 +108,7 @@ public class SaslIntegrationSuite {
   public void testBadClient() {
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslBootstrap(conf, "app-id", new TestSecretKeyHolder("bad-key"))));
+        new SaslClientBootstrap(conf, "app-id", new TestSecretKeyHolder("bad-key"))));
 
     try {
       // Bootstrap should fail on startup.
@@ -146,7 +146,7 @@ public class SaslIntegrationSuite {
     TransportContext context = new TransportContext(conf, handler);
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslBootstrap(conf, "app-id", new TestSecretKeyHolder("key"))));
+        new SaslClientBootstrap(conf, "app-id", new TestSecretKeyHolder("key"))));
     TransportServer server = context.createServer();
     try {
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());

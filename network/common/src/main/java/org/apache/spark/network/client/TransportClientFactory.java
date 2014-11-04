@@ -130,6 +130,7 @@ public class TransportClientFactory implements Closeable {
     });
 
     // Connect to the remote server
+    long preConnect = System.currentTimeMillis();
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
       throw new RuntimeException(
@@ -142,25 +143,30 @@ public class TransportClientFactory implements Closeable {
     assert client != null : "Channel future completed successfully with null client";
 
     // Execute any client bootstraps synchronously before marking the Client as successful.
+    long preBootstrap = System.currentTimeMillis();
     logger.debug("Connection to {} successful, running bootstraps...", address);
     try {
       for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
         clientBootstrap.doBootstrap(client);
       }
-    } catch (Exception e) { // catch Exception as the bootstrap may be written in Scala
-      logger.error("Exception while bootstrapping client", e);
+    } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
+      long bootstrapTime = System.currentTimeMillis() - preBootstrap;
+      logger.error("Exception while bootstrapping client after " + bootstrapTime + " ms", e);
       client.close();
       throw Throwables.propagate(e);
     }
+    long postBootstrap = System.currentTimeMillis();
 
-    logger.debug("Successfully executed {} bootstraps for {}", clientBootstraps.size(), address);
     // Successful connection & bootstrap -- in the event that two threads raced to create a client,
     // use the first one that was put into the connectionPool and close the one we made here.
     TransportClient oldClient = connectionPool.putIfAbsent(address, client);
     if (oldClient == null) {
+      logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
+        address, postBootstrap - preConnect, postBootstrap - preBootstrap);
       return client;
     } else {
-      logger.debug("Two clients were created concurrently, second one will be disposed.");
+      logger.debug("Two clients were created concurrently after {} ms, second will be disposed.",
+        postBootstrap - preConnect);
       client.close();
       return oldClient;
     }

@@ -43,7 +43,7 @@ import org.apache.spark.network.server.StreamManager;
 public class SaslRpcHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
-  /** RpcHandler we will delegate for authenticated connections. */
+  /** RpcHandler we will delegate to for authenticated connections. */
   private final RpcHandler delegate;
 
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */

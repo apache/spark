@@ -30,14 +30,14 @@ import org.apache.spark.network.util.TransportConf;
  * Bootstraps a {@link TransportClient} by performing SASL authentication on the connection. The
  * server should be setup with a {@link SaslRpcHandler} with matching keys for the given appId.
  */
-public class SaslBootstrap implements TransportClientBootstrap {
-  private final Logger logger = LoggerFactory.getLogger(SaslBootstrap.class);
+public class SaslClientBootstrap implements TransportClientBootstrap {
+  private final Logger logger = LoggerFactory.getLogger(SaslClientBootstrap.class);
 
   private final TransportConf conf;
   private final String appId;
   private final SecretKeyHolder secretKeyHolder;
 
-  public SaslBootstrap(TransportConf conf, String appId, SecretKeyHolder secretKeyHolder) {
+  public SaslClientBootstrap(TransportConf conf, String appId, SecretKeyHolder secretKeyHolder) {
     this.conf = conf;
     this.appId = appId;
     this.secretKeyHolder = secretKeyHolder;
@@ -48,6 +48,7 @@ public class SaslBootstrap implements TransportClientBootstrap {
    * challenge-response tokens until we either successfully authenticate or throw an exception
    * due to mismatch.
    */
+  @Override
   public void doBootstrap(TransportClient client) {
     SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder);
     try {
