@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.columnar
 
+import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
 class InMemoryColumnarQuerySuite extends QueryTest {
-  import org.apache.spark.sql.TestData._
-  import org.apache.spark.sql.test.TestSQLContext._
+  // Make sure the tables are loaded.
+  TestData
 
   test("simple columnar query") {
-    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
+    val plan = executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -42,7 +43,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   }
 
   test("projection") {
-    val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
+    val plan = executePlan(testData.select('value, 'key).logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
 
     checkAnswer(scan, testData.collect().map {
@@ -51,7 +52,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
+    val plan = executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -63,7 +64,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM repeatedData"),
       repeatedData.collect().toSeq)
 
-    TestSQLContext.cacheTable("repeatedData")
+    cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
@@ -75,7 +76,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq)
 
-    TestSQLContext.cacheTable("nullableRepeatedData")
+    cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
@@ -87,7 +88,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq)
 
-    TestSQLContext.cacheTable("timestamps")
+    cacheTable("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
@@ -99,10 +100,17 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq)
 
-    TestSQLContext.cacheTable("withEmptyParts")
+    cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq)
+  }
+
+  test("SPARK-4182 Caching complex types") {
+    complexData.cache().count()
+    // Shouldn't throw
+    complexData.count()
+    complexData.unpersist()
   }
 }

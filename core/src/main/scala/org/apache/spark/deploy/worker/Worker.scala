@@ -186,11 +186,11 @@ private[spark] class Worker(
   private def retryConnectToMaster() {
     Utils.tryOrExit {
       connectionAttemptCount += 1
-      logInfo(s"Attempting to connect to master (attempt # $connectionAttemptCount")
       if (registered) {
         registrationRetryTimer.foreach(_.cancel())
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
+        logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
         tryRegisterAllMasters()
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel())

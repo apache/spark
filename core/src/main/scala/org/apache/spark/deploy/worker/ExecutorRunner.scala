@@ -19,8 +19,10 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
+import scala.collection.JavaConversions._
+
 import akka.actor.ActorRef
-import com.google.common.base.Charsets
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkConf, Logging}
@@ -115,33 +117,21 @@ private[spark] class ExecutorRunner(
     case other => other
   }
 
-  def getCommandSeq = {
-    val command = Command(
-      appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables),
-      appDesc.command.environment,
-      appDesc.command.classPathEntries,
-      appDesc.command.libraryPathEntries,
-      appDesc.command.javaOpts)
-    CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
-  }
-
   /**
    * Download and run the executor described in our ApplicationDescription
    */
   def fetchAndRunExecutor() {
     try {
       // Launch the process
-      val command = getCommandSeq
+      val builder = CommandUtils.buildProcessBuilder(appDesc.command, memory,
+        sparkHome.getAbsolutePath, substituteVariables)
+      val command = builder.command()
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
-      val builder = new ProcessBuilder(command: _*).directory(executorDir)
-      val env = builder.environment()
-      for ((key, value) <- appDesc.command.environment) {
-        env.put(key, value)
-      }
+
+      builder.directory(executorDir)
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
-      env.put("SPARK_LAUNCH_WITH_SCALA", "0")
+      builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         command.mkString("\"", "\" \"", "\""), "=" * 40)
@@ -151,7 +141,7 @@ private[spark] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, Charsets.UTF_8)
+      Files.write(header, stderr, UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       state = ExecutorState.RUNNING

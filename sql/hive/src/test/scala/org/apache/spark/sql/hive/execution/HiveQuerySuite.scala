@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import scala.util.Try
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
@@ -34,6 +36,14 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+  createQueryTest("constant array",
+  """
+    |SELECT sort_array(
+    |  sort_array(
+    |    array("hadoop distributed file system",
+    |          "enterprise databases", "hadoop map-reduce")))
+    |FROM src LIMIT 1;
+  """.stripMargin)
 
   createQueryTest("count distinct 0 values",
     """
@@ -561,7 +571,7 @@ class HiveQuerySuite extends HiveComparisonTest {
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    // Now only verify 0.12.0, and ignore other versions due to binary compatability
+    // Now only verify 0.12.0, and ignore other versions due to binary compatibility
     // current TestSerDe.jar is from 0.12.0
     if (HiveShim.version == "0.12.0") {
       sql(s"ADD JAR $testJar")
@@ -571,6 +581,17 @@ class HiveQuerySuite extends HiveComparisonTest {
         """.stripMargin)
     }
     sql("DROP TABLE alter1")
+  }
+
+  test("ADD FILE command") {
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    sql(s"ADD FILE $testFile")
+
+    val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
+      Iterator.single(new File(SparkFiles.get("v1.txt")).canRead)
+    }
+
+    assert(checkAddFileRDD.first())
   }
 
   case class LogEntry(filename: String, message: String)
@@ -748,7 +769,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       }.toSet
     clear()
 
-    // "set" itself returns all config variables currently specified in SQLConf.
+    // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
 
@@ -757,44 +778,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql("SET"))
-    }
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
     }
-
-    // "set key"
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
-    }
-
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
-    }
-
-    // Assert that sql() should have the same effects as sql() by repeating the above using sql().
-    clear()
-    assert(sql("SET").collect().size == 0)
-
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
-    }
-
-    assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql("SET"))
-    }
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
+      collectResults(sql("SET -v"))
     }
 
+    // "SET key"
     assertResult(Set(testKey -> testVal)) {
       collectResults(sql(s"SET $testKey"))
     }
@@ -808,7 +804,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("select from thrift based table",
     "SELECT * from src_thrift")
-  
+
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
 }
