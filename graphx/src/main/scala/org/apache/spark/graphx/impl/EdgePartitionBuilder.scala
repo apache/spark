@@ -77,14 +77,15 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
 
 /**
  * Constructs an EdgePartition from an existing EdgePartition with the same vertex set. This enables
- * reuse of the local vertex ids.
+ * reuse of the local vertex ids. Intended for internal use in EdgePartition only.
  */
-private[graphx]
-class VertexPreservingEdgePartitionBuilder[
+private[impl]
+class ExistingEdgePartitionBuilder[
     @specialized(Long, Int, Double) ED: ClassTag, VD: ClassTag](
     global2local: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],
     local2global: Array[VertexId],
     vertexAttrs: Array[VD],
+    activeSet: Option[VertexSet],
     size: Int = 64) {
   var edges = new PrimitiveVector[EdgeWithLocalIds[ED]](size)
 
@@ -119,14 +120,14 @@ class VertexPreservingEdgePartitionBuilder[
     }
 
     new EdgePartition(
-      localSrcIds, localDstIds, data, index, global2local, local2global, vertexAttrs)
+      localSrcIds, localDstIds, data, index, global2local, local2global, vertexAttrs, activeSet)
   }
 }
 
-private[graphx] case class EdgeWithLocalIds[@specialized ED](
+private[impl] case class EdgeWithLocalIds[@specialized ED](
     srcId: VertexId, dstId: VertexId, localSrcId: Int, localDstId: Int, attr: ED)
 
-private[graphx] object EdgeWithLocalIds {
+private[impl] object EdgeWithLocalIds {
   implicit def lexicographicOrdering[ED] = new Ordering[EdgeWithLocalIds[ED]] {
     override def compare(a: EdgeWithLocalIds[ED], b: EdgeWithLocalIds[ED]): Int = {
       if (a.srcId == b.srcId) {
