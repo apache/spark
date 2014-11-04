@@ -343,10 +343,28 @@ class ClusterTree private (
   private[mllib] var dataSize: Option[Long],
   private[mllib] var children: List[ClusterTree],
   private[mllib] var parent: Option[ClusterTree],
-  private[mllib] var isVisited: Boolean) extends Serializable {
+  private[mllib] var isVisited: Boolean) extends Serializable with Cloneable {
 
   def this(center: Vector, data: RDD[BV[Double]]) =
     this(center, data, None, None, None, List.empty[ClusterTree], None, false)
+
+  override def clone(): ClusterTree = {
+    val cloned = new ClusterTree(
+      this.center,
+      this.data,
+      this.height,
+      this.variance,
+      this.dataSize,
+      List.empty[ClusterTree],
+      None,
+      this.isVisited
+    )
+    if (this.children.size > 0) {
+      val clonedChildren = this.children.map(_.clone()).toList
+      cloned.insert(clonedChildren)
+    }
+    cloned
+  }
 
   override def toString(): String = {
     val elements = Array(

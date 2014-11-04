@@ -95,4 +95,13 @@ class HierarchicalClusteringModelSuite
     assert(denseModel.computeCost() === 0.0)
     assert(sparseModel.computeCost() === 0.0)
   }
+
+  test("ClusterTree should be clonable") {
+    val denseClone = denseModel.clusterTree.clone()
+    val sparseClone = sparseModel.clusterTree.clone()
+    assert(denseModel.clusterTree.hashCode() != denseClone.hashCode())
+    assert(sparseModel.clusterTree.hashCode() != sparseClone.hashCode())
+    assert(denseModel.clusterTree.getTreeSize() === denseClone.getTreeSize())
+    assert(sparseModel.clusterTree.getTreeSize() === sparseClone.getTreeSize())
+  }
 }
