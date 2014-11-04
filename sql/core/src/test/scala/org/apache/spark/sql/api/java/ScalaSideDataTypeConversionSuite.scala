@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.sql.types.util.DataTypeConversions
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.{DataType => SDataType, StructField => SStructField}
-import org.apache.spark.sql.{StructType => SStructType}
-import DataTypeConversions._
+import org.apache.spark.sql.{DataType => SDataType, StructField => SStructField, StructType => SStructType}
+import org.apache.spark.sql.types.util.DataTypeConversions._
 
 class ScalaSideDataTypeConversionSuite extends FunSuite {
 
@@ -38,8 +36,9 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
     checkDataType(org.apache.spark.sql.StringType)
     checkDataType(org.apache.spark.sql.BinaryType)
     checkDataType(org.apache.spark.sql.BooleanType)
+    checkDataType(org.apache.spark.sql.DateType)
     checkDataType(org.apache.spark.sql.TimestampType)
-    checkDataType(org.apache.spark.sql.DecimalType)
+    checkDataType(org.apache.spark.sql.DecimalType.Unlimited)
     checkDataType(org.apache.spark.sql.DoubleType)
     checkDataType(org.apache.spark.sql.FloatType)
     checkDataType(org.apache.spark.sql.ByteType)
@@ -59,18 +58,22 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
 
     // Simple StructType.
     val simpleScalaStructType = SStructType(
-      SStructField("a", org.apache.spark.sql.DecimalType, false) ::
+      SStructField("a", org.apache.spark.sql.DecimalType.Unlimited, false) ::
       SStructField("b", org.apache.spark.sql.BooleanType, true) ::
       SStructField("c", org.apache.spark.sql.LongType, true) ::
       SStructField("d", org.apache.spark.sql.BinaryType, false) :: Nil)
     checkDataType(simpleScalaStructType)
 
     // Complex StructType.
+    val metadata = new MetadataBuilder()
+      .putString("name", "age")
+      .build()
     val complexScalaStructType = SStructType(
       SStructField("simpleArray", simpleScalaArrayType, true) ::
       SStructField("simpleMap", simpleScalaMapType, true) ::
       SStructField("simpleStruct", simpleScalaStructType, true) ::
-      SStructField("boolean", org.apache.spark.sql.BooleanType, false) :: Nil)
+      SStructField("boolean", org.apache.spark.sql.BooleanType, false) ::
+      SStructField("withMeta", org.apache.spark.sql.DoubleType, false, metadata) :: Nil)
     checkDataType(complexScalaStructType)
 
     // Complex ArrayType.

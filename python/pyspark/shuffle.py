@@ -16,7 +16,6 @@
 #
 
 import os
-import sys
 import platform
 import shutil
 import warnings
@@ -27,7 +26,7 @@ import random
 
 import pyspark.heapq3 as heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattedValuesSerializer, \
-    CompressedSerializer
+    CompressedSerializer, AutoBatchedSerializer
 
 
 try:
@@ -162,6 +161,12 @@ class InMemoryMerger(Merger):
         return self.data.iteritems()
 
 
+def _compressed_serializer(self, serializer=None):
+    # always use PickleSerializer to simplify implementation
+    ser = PickleSerializer()
+    return AutoBatchedSerializer(CompressedSerializer(ser))
+
+
 class ExternalMerger(Merger):
 
     """
@@ -222,7 +227,7 @@ class ExternalMerger(Merger):
                  localdirs=None, scale=1, partitions=59, batch=1000):
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
-        self.serializer = self._compressed_serializer(serializer)
+        self.serializer = _compressed_serializer(serializer)
         self.localdirs = localdirs or _get_local_dirs(str(id(self)))
         # number of partitions when spill data into disks
         self.partitions = partitions
@@ -238,18 +243,6 @@ class ExternalMerger(Merger):
         self.spills = 0
         # randomize the hash of key, id(o) is the address of o (aligned by 8)
         self._seed = id(self) + 7
-
-    def _compressed_serializer(self, serializer=None):
-        # default serializer is only used for tests
-        ser = serializer or PickleSerializer()
-        # add compression
-        if isinstance(ser, BatchedSerializer):
-            if not isinstance(ser.serializer, CompressedSerializer):
-                ser = BatchedSerializer(CompressedSerializer(ser.serializer), ser.batchSize)
-        else:
-            if not isinstance(ser, CompressedSerializer):
-                ser = BatchedSerializer(CompressedSerializer(ser), 1024)
-        return ser
 
     def _get_spill_dir(self, n):
         """ Choose one directory for spill by number n """
@@ -460,8 +453,7 @@ class ExternalSorter(object):
     def __init__(self, memory_limit, serializer=None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
-        self.serializer = serializer or BatchedSerializer(
-            CompressedSerializer(PickleSerializer()), 1024)
+        self.serializer = _compressed_serializer(serializer)
 
     def _get_path(self, n):
         """ Choose one directory for spill by number n """
@@ -696,12 +688,9 @@ class ExternalGroupBy(ExternalMerger):
     SORT_KEY_LIMIT = 1000
 
     def _flatted_serializer(self):
+        assert isinstance(self.serializer, BatchedSerializer)
         ser = self.serializer
-        if not isinstance(ser, (BatchedSerializer, FlattedValuesSerializer)):
-            ser = BatchedSerializer(ser, 1024)
-        if not isinstance(ser, FlattedValuesSerializer):
-            ser = FlattedValuesSerializer(ser, 20)
-        return ser
+        return FlattedValuesSerializer(ser, 20)
 
     def _object_size(self, obj):
         return len(obj)

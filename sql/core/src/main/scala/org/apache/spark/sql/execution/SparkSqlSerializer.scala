@@ -29,6 +29,7 @@ import com.twitter.chill.{AllScalaRegistrar, ResourcePool}
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.Utils
@@ -51,6 +52,7 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[LongHashSet], new LongHashSetSerializer)
     kryo.register(classOf[org.apache.spark.util.collection.OpenHashSet[_]],
                   new OpenHashSetSerializer)
+    kryo.register(classOf[Decimal])
 
     kryo.setReferences(false)
     kryo.setClassLoader(Utils.getSparkClassLoader)

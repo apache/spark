@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.hive.serde2.objectinspector._
+import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
@@ -26,6 +28,7 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -36,7 +39,7 @@ private[hive] trait HiveInspectors {
     // writable
     case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[hiveIo.DoubleWritable] => DoubleType
-    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType
+    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType.Unlimited
     case c: Class[_] if c == classOf[hiveIo.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[hiveIo.ShortWritable] => ShortType
     case c: Class[_] if c == classOf[hiveIo.DateWritable] => DateType
@@ -52,8 +55,8 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == classOf[java.sql.Date] => DateType
     case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
-    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType
-    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType
+    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType.Unlimited
+    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType.Unlimited
     case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
     case c: Class[_] if c == classOf[java.lang.Short] => ShortType
     case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
@@ -78,88 +81,152 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
   }
 
-  /** Converts hive types to native catalyst types. */
-  def unwrap(a: Any): Any = a match {
-    case null => null
-    case i: hadoopIo.IntWritable => i.get
-    case t: hadoopIo.Text => t.toString
-    case l: hadoopIo.LongWritable => l.get
-    case d: hadoopIo.DoubleWritable => d.get
-    case d: hiveIo.DoubleWritable => d.get
-    case s: hiveIo.ShortWritable => s.get
-    case b: hadoopIo.BooleanWritable => b.get
-    case b: hiveIo.ByteWritable => b.get
-    case b: hadoopIo.FloatWritable => b.get
-    case b: hadoopIo.BytesWritable => {
-      val bytes = new Array[Byte](b.getLength)
-      System.arraycopy(b.getBytes(), 0, bytes, 0, b.getLength)
-      bytes
-    }
-    case d: hiveIo.DateWritable => d.get
-    case t: hiveIo.TimestampWritable => t.getTimestamp
-    case b: hiveIo.HiveDecimalWritable => BigDecimal(b.getHiveDecimal().bigDecimalValue())
-    case list: java.util.List[_] => list.map(unwrap)
-    case map: java.util.Map[_,_] => map.map { case (k, v) => (unwrap(k), unwrap(v)) }.toMap
-    case array: Array[_] => array.map(unwrap).toSeq
-    case p: java.lang.Short => p
-    case p: java.lang.Long => p
-    case p: java.lang.Float => p
-    case p: java.lang.Integer => p
-    case p: java.lang.Double => p
-    case p: java.lang.Byte => p
-    case p: java.lang.Boolean => p
-    case str: String => str
-    case p: java.math.BigDecimal => p
-    case p: Array[Byte] => p
-    case p: java.sql.Date => p
-    case p: java.sql.Timestamp => p
-  }
-
-  def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
+  /**
+   * Converts hive types to native catalyst types.
+   * @param data the data in Hive type
+   * @param oi   the ObjectInspector associated with the Hive Type
+   * @return     convert the data into catalyst type
+   */
+  def unwrap(data: Any, oi: ObjectInspector): Any = oi match {
     case hvoi: HiveVarcharObjectInspector =>
       if (data == null) null else hvoi.getPrimitiveJavaObject(data).getValue
     case hdoi: HiveDecimalObjectInspector =>
-      if (data == null) null else BigDecimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+      if (data == null) null else HiveShim.toCatalystDecimal(hdoi, data)
+    // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
+    // if next timestamp is null, so Timestamp object is cloned
+    case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
     case li: ListObjectInspector =>
       Option(li.getList(data))
-        .map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq)
+        .map(_.map(unwrap(_, li.getListElementObjectInspector)).toSeq)
         .orNull
     case mi: MapObjectInspector =>
       Option(mi.getMap(data)).map(
         _.map {
           case (k,v) =>
-            (unwrapData(k, mi.getMapKeyObjectInspector),
-              unwrapData(v, mi.getMapValueObjectInspector))
+            (unwrap(k, mi.getMapKeyObjectInspector),
+              unwrap(v, mi.getMapValueObjectInspector))
         }.toMap).orNull
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
       new GenericRow(
         allRefs.map(r =>
-          unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)).toArray)
+          unwrap(si.getStructFieldData(data,r), r.getFieldObjectInspector)).toArray)
   }
 
-  /** Converts native catalyst types to the types expected by Hive */
-  def wrap(a: Any): AnyRef = a match {
-    case s: String => s: java.lang.String
-    case i: Int => i: java.lang.Integer
-    case b: Boolean => b: java.lang.Boolean
-    case f: Float => f: java.lang.Float
-    case d: Double => d: java.lang.Double
-    case l: Long => l: java.lang.Long
-    case l: Short => l: java.lang.Short
-    case l: Byte => l: java.lang.Byte
-    case b: BigDecimal => HiveShim.createDecimal(b.underlying())
-    case b: Array[Byte] => b
-    case d: java.sql.Date => d
-    case t: java.sql.Timestamp => t
-    case s: Seq[_] => seqAsJavaList(s.map(wrap))
-    case m: Map[_,_] =>
-      // Some UDFs seem to assume we pass in a HashMap.
-      val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
-      hashMap.putAll(m.map { case (k, v) => wrap(k) -> wrap(v) })
-      hashMap
-    case null => null
+
+  /**
+   * Wraps with Hive types based on object inspector.
+   * TODO: Consolidate all hive OI/data interface code.
+   */
+  /**
+   * Wraps with Hive types based on object inspector.
+   * TODO: Consolidate all hive OI/data interface code.
+   */
+  protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
+    case _: JavaHiveVarcharObjectInspector =>
+      (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
+
+    case _: JavaHiveDecimalObjectInspector =>
+      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toBigDecimal.underlying())
+
+    case soi: StandardStructObjectInspector =>
+      val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
+      (o: Any) => {
+        val struct = soi.create()
+        (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
+          (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
+        }
+        struct
+      }
+
+    case loi: ListObjectInspector =>
+      val wrapper = wrapperFor(loi.getListElementObjectInspector)
+      (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
+
+    case moi: MapObjectInspector =>
+      // The Predef.Map is scala.collection.immutable.Map.
+      // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+      import scala.collection.Map
+
+      val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
+      val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
+      (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
+        keyWrapper(key) -> valueWrapper(value)
+      })
+
+    case _ =>
+      identity[Any]
+  }
+
+  /**
+   * Converts native catalyst types to the types expected by Hive
+   * @param a the value to be wrapped
+   * @param oi This ObjectInspector associated with the value returned by this function, and
+   *           the ObjectInspector should also be consistent with those returned from
+   *           toInspector: DataType => ObjectInspector and
+   *           toInspector: Expression => ObjectInspector
+   */
+  def wrap(a: Any, oi: ObjectInspector): AnyRef = if (a == null) {
+    null
+  } else {
+    oi match {
+      case x: ConstantObjectInspector => x.getWritableConstantValue
+      case x: PrimitiveObjectInspector => a match {
+        // TODO what if x.preferWritable() == true? reuse the writable?
+        case s: String => s: java.lang.String
+        case i: Int => i: java.lang.Integer
+        case b: Boolean => b: java.lang.Boolean
+        case f: Float => f: java.lang.Float
+        case d: Double => d: java.lang.Double
+        case l: Long => l: java.lang.Long
+        case l: Short => l: java.lang.Short
+        case l: Byte => l: java.lang.Byte
+        case b: BigDecimal => HiveShim.createDecimal(b.underlying())
+        case d: Decimal => HiveShim.createDecimal(d.toBigDecimal.underlying())
+        case b: Array[Byte] => b
+        case d: java.sql.Date => d
+        case t: java.sql.Timestamp => t
+      }
+      case x: StructObjectInspector =>
+        val fieldRefs = x.getAllStructFieldRefs
+        val row = a.asInstanceOf[Seq[_]]
+        val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
+        var i = 0
+        while (i < fieldRefs.length) {
+          result.add(wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+          i += 1
+        }
+
+        result
+      case x: ListObjectInspector =>
+        val list = new java.util.ArrayList[Object]
+        a.asInstanceOf[Seq[_]].foreach {
+          v => list.add(wrap(v, x.getListElementObjectInspector))
+        }
+        list
+      case x: MapObjectInspector =>
+        // Some UDFs seem to assume we pass in a HashMap.
+        val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
+        hashMap.putAll(a.asInstanceOf[Map[_, _]].map {
+          case (k, v) =>
+            wrap(k, x.getMapKeyObjectInspector) -> wrap(v, x.getMapValueObjectInspector)
+        })
+
+        hashMap
+    }
+  }
+
+  def wrap(
+      row: Seq[Any],
+      inspectors: Seq[ObjectInspector],
+      cache: Array[AnyRef]): Array[AnyRef] = {
+    var i = 0
+    while (i < inspectors.length) {
+      cache(i) = wrap(row(i), inspectors(i))
+      i += 1
+    }
+    cache
   }
 
   def toInspector(dataType: DataType): ObjectInspector = dataType match {
@@ -180,10 +247,54 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case DateType => PrimitiveObjectInspectorFactory.javaDateObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
-    case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
         fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
+  }
+
+  def toInspector(expr: Expression): ObjectInspector = expr match {
+    case Literal(value: String, StringType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Int, IntegerType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Double, DoubleType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Boolean, BooleanType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Long, LongType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Float, FloatType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Short, ShortType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Byte, ByteType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Array[Byte], BinaryType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: java.sql.Date, DateType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: java.sql.Timestamp, TimestampType) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: BigDecimal, DecimalType()) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
+    case Literal(value: Decimal, DecimalType()) =>
+      HiveShim.getPrimitiveWritableConstantObjectInspector(value.toBigDecimal)
+    case Literal(_, NullType) =>
+      HiveShim.getPrimitiveNullWritableConstantObjectInspector
+    case Literal(value: Seq[_], ArrayType(dt, _)) =>
+      val listObjectInspector = toInspector(dt)
+      val list = new java.util.ArrayList[Object]()
+      value.foreach(v => list.add(wrap(v, listObjectInspector)))
+      ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
+    case Literal(map: Map[_, _], MapType(keyType, valueType, _)) =>
+      val value = new java.util.HashMap[Object, Object]()
+      val keyOI = toInspector(keyType)
+      val valueOI = toInspector(valueType)
+      map.foreach (entry => value.put(wrap(entry._1, keyOI), wrap(entry._2, valueOI)))
+      ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, value)
+    case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
+    case _ => toInspector(expr.dataType)
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
@@ -215,8 +326,8 @@ private[hive] trait HiveInspectors {
     case _: JavaFloatObjectInspector => FloatType
     case _: WritableBinaryObjectInspector => BinaryType
     case _: JavaBinaryObjectInspector => BinaryType
-    case _: WritableHiveDecimalObjectInspector => DecimalType
-    case _: JavaHiveDecimalObjectInspector => DecimalType
+    case w: WritableHiveDecimalObjectInspector => HiveShim.decimalTypeInfoToCatalyst(w)
+    case j: JavaHiveDecimalObjectInspector => HiveShim.decimalTypeInfoToCatalyst(j)
     case _: WritableDateObjectInspector => DateType
     case _: JavaDateObjectInspector => DateType
     case _: WritableTimestampObjectInspector => TimestampType
@@ -245,7 +356,7 @@ private[hive] trait HiveInspectors {
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
       case StringType => stringTypeInfo
-      case DecimalType => decimalTypeInfo
+      case d: DecimalType => HiveShim.decimalTypeInfo(d)
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
