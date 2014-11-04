@@ -38,12 +38,12 @@ object BuildCommons {
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl, sparkKinesisAsl) =
-    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl", "kinesis-asl")
-      .map(ProjectRef(buildLocation, _))
+  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, networkYarn, java8Tests,
+    sparkGangliaLgpl, sparkKinesisAsl) = Seq("yarn", "yarn-stable", "yarn-alpha", "network-yarn",
+    "java8-tests", "ganglia-lgpl", "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn) =
-    Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
+  val assemblyProjects@Seq(assembly, examples) = Seq("assembly", "examples")
+    .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
