@@ -115,7 +115,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * If not, throw an appropriate exception.
    */
   private def validateSettings(): Unit = {
-    // Verify that bounds are valid
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
     }
@@ -126,21 +125,21 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
         s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
     }
-    // Verify that timeouts are positive
     if (schedulerBacklogTimeout <= 0) {
-      throw new SparkException(s"spark.dynamicAllocation.schedulerBacklogTimeout must be > 0!")
+      throw new SparkException("spark.dynamicAllocation.schedulerBacklogTimeout must be > 0!")
     }
     if (sustainedSchedulerBacklogTimeout <= 0) {
       throw new SparkException(
-        s"spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
+        "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
     }
     if (executorIdleTimeout <= 0) {
-      throw new SparkException(s"spark.dynamicAllocation.executorIdleTimeout must be > 0!")
+      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
     }
-    // Verify that external shuffle service is enabled
+    // Require external shuffle service for dynamic allocation
+    // Otherwise, we may lose shuffle files when killing executors
     if (!conf.getBoolean("spark.shuffle.service.enabled", false)) {
-      throw new SparkException(s"Dynamic allocation of executors requires the external " +
-        s"shuffle service. You may enable this through spark.shuffle.service.enabled.")
+      throw new SparkException("Dynamic allocation of executors requires the external " +
+        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
   }
 

@@ -22,12 +22,12 @@ import java.nio.ByteBuffer;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.AuxiliaryService;
@@ -43,10 +43,12 @@ import org.slf4j.LoggerFactory;
  */
 public class YarnShuffleService extends AuxiliaryService {
   private final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
-  private static final JobTokenSecretManager secretManager = new JobTokenSecretManager();
 
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
   private static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
+
+  // Actual server that serves the shuffle files
+  private TransportServer shuffleServer = null;
 
   public YarnShuffleService() {
     super("spark_shuffle");
@@ -64,7 +66,7 @@ public class YarnShuffleService extends AuxiliaryService {
       TransportConf transportConf = new TransportConf(new SystemPropertyConfigProvider());
       RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
       TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
-      transportContext.createServer(port);
+      shuffleServer = transportContext.createServer(port);
       logger.info("Started Yarn shuffle service for Spark on port " + port);
     } catch (Exception e) {
       logger.error("Exception in starting Yarn shuffle service for Spark", e);
@@ -99,5 +101,12 @@ public class YarnShuffleService extends AuxiliaryService {
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
     logger.debug("Stopping container " + containerId + "!");
+  }
+
+  @Override
+  protected void serviceStop() {
+    if (shuffleServer != null) {
+      shuffleServer.close();
+    }
   }
 }

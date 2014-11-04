@@ -100,7 +100,7 @@ private[spark] class BlockManager(
     val sparkPort = conf.getInt(shuffleServicePortKey, 7337)
     if (SparkHadoopUtil.get.isYarnMode) {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-      Option(hadoopConf.get(shuffleServicePortKey)).map(_.toInt).getOrElse(sparkPort)
+      hadoopConf.getInt(shuffleServicePortKey, sparkPort)
     } else {
       sparkPort
     }
