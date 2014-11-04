@@ -88,6 +88,10 @@ class BlockManagerMaster(
     askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId))
   }
 
+  def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    askDriverWithReply[Option[(String, Int)]](GetActorSystemHostPortForExecutor(executorId))
+  }
+
   /**
    * Remove a block from the slaves that have it. This can only be used to remove
    * blocks that the driver knows about.
