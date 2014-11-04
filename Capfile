@@ -8,7 +8,7 @@ task :production do
   role :app, *((4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn05.chi.shopify.com"])
   role :master, "dn05.chi.shopify.com"
   role :history, "dn05.chi.shopify.com"
-  role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl2.chi.shopify.com", "platfora2.chi.shopify.com"
+  role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "platfora2.chi.shopify.com"
 end
 
 task :staging do
