@@ -71,7 +71,17 @@ case class CreateTableAsSelect(
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    sc.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true)).toRdd
+    if (sc.catalog.tableExists(Some(database), tableName)) {
+      if (allowExisting) {
+        // table already exists, will do nothing, to keep consistent with Hive
+      } else {
+        throw
+          new org.apache.hadoop.hive.metastore.api.AlreadyExistsException(s"$database.$tableName")
+      }
+    } else {
+      sc.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true)).toRdd
+    }
+
     Seq.empty[Row]
   }
 
