@@ -450,7 +450,7 @@ class AutoSerializer(FramedSerializer):
 
 class SizeLimitedStream(object):
     """
-    Read at most `limit` bytes from underline stream
+    Read at most `limit` bytes from underlying stream
 
     >>> from StringIO import StringIO
     >>> io = StringIO()
@@ -485,6 +485,8 @@ class CompressedStream(object):
     >>> rio = CompressedStream(io, 'r')
     >>> rio.read()
     'Hello world'
+    >>> rio.read()
+    ''
     """
     MAX_BATCH = 1 << 20  # 1MB
 
