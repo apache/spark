@@ -79,6 +79,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   private val executorIdleTimeout = conf.getLong(
     "spark.dynamicAllocation.executorIdleTimeout", 600)
 
+  // Whether we are testing this class. This should only be used internally.
+  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
+
   validateSettings()
 
   // Number of executors to add in the next round
@@ -103,9 +106,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
 
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
-
-  // Whether we are testing this class. This should only be used internally.
-  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
 
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
