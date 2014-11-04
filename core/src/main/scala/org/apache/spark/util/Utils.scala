@@ -44,6 +44,7 @@ import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -1767,6 +1768,21 @@ private[spark] object Utils extends Logging {
       val manifest = new JarManifest(manifestUrl.openStream())
       manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
     }.getOrElse("Unknown")
+
+  /**
+   * Return the port used in the external shuffle service as specified through
+   * `spark.shuffle.service.port`. In Yarn, this is set in the Hadoop configuration.
+   */
+  def getExternalShuffleServicePort(conf: SparkConf): Int = {
+    val shuffleServicePortKey = "spark.shuffle.service.port"
+    val sparkPort = conf.getInt(shuffleServicePortKey, 7337)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      hadoopConf.getInt(shuffleServicePortKey, sparkPort)
+    } else {
+      sparkPort
+    }
+  }
 }
 
 /**
