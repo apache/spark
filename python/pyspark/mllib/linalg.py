@@ -29,6 +29,9 @@ import copy_reg
 
 import numpy as np
 
+from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+    IntegerType, ByteType, Row
+
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
 
@@ -106,7 +109,54 @@ def _format_float(f, digits=4):
     return s
 
 
+class VectorUDT(UserDefinedType):
+    """
+    SQL user-defined type (UDT) for Vector.
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("type", ByteType(), False),
+            StructField("size", IntegerType(), True),
+            StructField("indices", ArrayType(IntegerType(), False), True),
+            StructField("values", ArrayType(DoubleType(), False), True)])
+
+    @classmethod
+    def module(cls):
+        return "pyspark.mllib.linalg"
+
+    @classmethod
+    def scalaUDT(cls):
+        return "org.apache.spark.mllib.linalg.VectorUDT"
+
+    def serialize(self, obj):
+        if isinstance(obj, SparseVector):
+            indices = [int(i) for i in obj.indices]
+            values = [float(v) for v in obj.values]
+            return (0, obj.size, indices, values)
+        elif isinstance(obj, DenseVector):
+            values = [float(v) for v in obj]
+            return (1, None, None, values)
+        else:
+            raise ValueError("cannot serialize %r of type %r" % (obj, type(obj)))
+
+    def deserialize(self, datum):
+        assert len(datum) == 4, \
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        tpe = datum[0]
+        if tpe == 0:
+            return SparseVector(datum[1], datum[2], datum[3])
+        elif tpe == 1:
+            return DenseVector(datum[3])
+        else:
+            raise ValueError("do not recognize type %r" % tpe)
+
+
 class Vector(object):
+
+    __UDT__ = VectorUDT()
+
     """
     Abstract class for DenseVector and SparseVector
     """

@@ -180,7 +180,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   if [ -n "$_SQL_TESTS_ONLY" ]; then
     # This must be an array of individual arguments. Otherwise, having one long string
     #+ will be interpreted as a single test, which doesn't work.
-    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test")
+    SBT_MAVEN_TEST_ARGS=("catalyst/test" "sql/test" "hive/test" "mllib/test")
   else
     SBT_MAVEN_TEST_ARGS=("test")
   fi
