@@ -150,6 +150,7 @@
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
     <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
+    <snappy.version>1.1.1.6</snappy.version>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -440,7 +441,8 @@
       <dependency>
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
-        <version>1.1.1.6</version>
+        <version>${snappy.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>net.jpountz.lz4</groupId>
