@@ -58,7 +58,7 @@ private[sql] object ParquetFilters {
       case BooleanType =>
         ComparisonFilter.createBooleanFilter(
           name, 
-          literal.value.asInstanceOf[Boolean], 
+          literal.value.asInstanceOf[Boolean],
           predicate)
       case IntegerType =>
         new ComparisonFilter(
@@ -111,6 +111,11 @@ private[sql] object ParquetFilters {
           name,
           FilterApi.lt(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
+      case StringType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.lt(binaryColumn(name), Binary.fromString(literal.value.asInstanceOf[String])),
+          predicate)
     }
     def createLessThanOrEqualFilter(
         name: String,
@@ -135,6 +140,11 @@ private[sql] object ParquetFilters {
         new ComparisonFilter(
           name,
           FilterApi.ltEq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
+          predicate)
+      case StringType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.ltEq(binaryColumn(name), Binary.fromString(literal.value.asInstanceOf[String])),
           predicate)
     }
     // TODO: combine these two types somehow?
@@ -162,6 +172,11 @@ private[sql] object ParquetFilters {
           name,
           FilterApi.gt(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
+      case StringType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gt(binaryColumn(name), Binary.fromString(literal.value.asInstanceOf[String])),
+          predicate)
     }
     def createGreaterThanOrEqualFilter(
         name: String,
@@ -186,6 +201,11 @@ private[sql] object ParquetFilters {
         new ComparisonFilter(
           name,
           FilterApi.gtEq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
+          predicate)
+      case StringType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(binaryColumn(name), Binary.fromString(literal.value.asInstanceOf[String])),
           predicate)
     }
 
