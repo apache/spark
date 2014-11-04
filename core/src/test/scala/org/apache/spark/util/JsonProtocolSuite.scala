@@ -196,6 +196,15 @@ class JsonProtocolSuite extends FunSuite {
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
   }
 
+  test("ExecutorLostFailure backward compatibility") {
+    // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
+    val executorLostFailure = ExecutorLostFailure("100")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
+      .removeField({ _._1 == "Executor ID" })
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
+    assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */
