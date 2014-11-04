@@ -47,7 +47,7 @@ private[spark] class ExecutorRunner(
     val executorDir: File,
     val workerUrl: String,
     val conf: SparkConf,
-    var state: ExecutorState.Value)
+    var state: ExecutorState.ExecutorState)
   extends Logging {
 
   val fullId = appId + "/" + execId
@@ -133,15 +133,12 @@ private[spark] class ExecutorRunner(
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
       process = builder.start()
-      val header = "Spark Executor Command: %s\n%s\n\n".format(
-        command.mkString("\"", "\" \"", "\""), "=" * 40)
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       state = ExecutorState.RUNNING
