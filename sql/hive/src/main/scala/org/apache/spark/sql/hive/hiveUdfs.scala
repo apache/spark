@@ -38,6 +38,7 @@ import org.apache.spark.util.Utils.getContextOrSparkClassLoader
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
 
 private[hive] abstract class HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveInspectors {
@@ -181,6 +182,12 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
         () => {
           children(idx).eval(input)
         })
+      if (deferedObjects(i).get().isInstanceOf[java.math.BigDecimal] == true) {
+        val decimal = deferedObjects(i).get().asInstanceOf[java.math.BigDecimal]
+        deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(() => {
+          HiveDecimal.create(decimal).asInstanceOf[EvaluatedType]
+        })
+      }
       i += 1
     }
     unwrap(function.evaluate(deferedObjects), returnInspector)
