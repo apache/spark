@@ -71,6 +71,8 @@ object DataType {
 
     case JSortedObject(
         ("class", JString(udtClass)),
+        ("pyClass", _),
+        ("sqlType", _),
         ("type", JString("udt"))) =>
       Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
@@ -593,6 +595,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Underlying storage type for this UDT */
   def sqlType: DataType
 
+  /** Paired Python UDT class, if exists. */
+  def pyUDT: String = null
+
   /**
    * Convert the user type to a SQL datum
    *
@@ -606,7 +611,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   override private[sql] def jsonValue: JValue = {
     ("type" -> "udt") ~
-      ("class" -> this.getClass.getName)
+      ("class" -> this.getClass.getName) ~
+      ("pyClass" -> pyUDT) ~
+      ("sqlType" -> sqlType.jsonValue)
   }
 
   /**
