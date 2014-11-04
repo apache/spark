@@ -938,4 +938,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"),
         (11 to 100).map(i => Seq(i)))
   }
+
+  test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
+    checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
+        (1 to 99).map(i => Seq(i)))
+  }
 }

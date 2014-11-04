@@ -582,17 +582,25 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
 </tr>
 <tr>
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
   </td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
-  <td>snappy</td>
+  <td>gzip</td>
   <td>
     Sets the compression codec use when writing Parquet files. Acceptable values include: 
     uncompressed, snappy, gzip, lzo.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
+  <td>true</td>
+  <td>
+    When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of the built in
+    support.
   </td>
 </tr>
 </table>
@@ -815,7 +823,7 @@ Configuration of in-memory caching can be done using the `setConf` method on SQL
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     When set to true Spark SQL will automatically select a compression codec for each column based
     on statistics of the data.
@@ -823,7 +831,7 @@ Configuration of in-memory caching can be done using the `setConf` method on SQL
 </tr>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.batchSize</code></td>
-  <td>1000</td>
+  <td>10000</td>
   <td>
     Controls the size of batches for columnar caching.  Larger batch sizes can improve memory utilization
     and compression, but risk OOMs when caching data.
@@ -841,7 +849,7 @@ that these options will be deprecated in future release as more optimizations ar
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>10000</td>
+    <td>10485760 (10 MB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join.  By setting this value to -1 broadcasting can be disabled.  Note that currently
