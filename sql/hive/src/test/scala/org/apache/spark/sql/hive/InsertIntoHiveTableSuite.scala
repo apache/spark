@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+import java.nio.file.{Path, Files}
+
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHive
 
 /* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
+import scala.collection.JavaConversions._
 
 case class TestData(key: Int, value: String)
 
@@ -51,6 +55,9 @@ class InsertIntoHiveTableSuite extends QueryTest {
       sql("SELECT * FROM createAndInsertTest"),
       testData.collect().toSeq ++ testData.collect().toSeq
     )
+
+
+
 
     // Now overwrite.
     testData.insertInto("createAndInsertTest", overwrite = true)
@@ -91,4 +98,41 @@ class InsertIntoHiveTableSuite extends QueryTest {
 
     sql("DROP TABLE hiveTableWithMapValue")
   }
+
+  test("SPARK-4203:random partition directory order") {
+
+    createTable[TestData]("tmp_table")
+    val tmpDir = Files.createTempDirectory("hive_test")
+
+    sql(s"CREATE TABLE table_with_partition(c1 string) PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string) location '${tmpDir.toUri.toString}'  ")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='1') SELECT 'blarr' FROM tmp_table")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='2') SELECT 'blarr' FROM tmp_table")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='3') SELECT 'blarr' FROM tmp_table")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='4') SELECT 'blarr' FROM tmp_table")
+
+    def listFolders(path: Path, acc: List[String]): List[List[String]] = {
+      val dir = Files.newDirectoryStream(path)
+      try {
+        val folders = dir.filter(Files.isDirectory(_)).toList
+        if (folders.isEmpty) {
+          List(acc.reverse)
+        } else {
+          folders.flatMap(x => listFolders(x, x.getFileName.toString :: acc))
+        }
+      } finally {
+        dir.close()
+      }
+    }
+    assert(listFolders(tmpDir,List()) == List(
+     "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil ,
+       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=2"::Nil,
+       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil ,
+       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
+    ) )
+
+    sql("DROP TABLE table_with_partition")
+    sql("DROP TABLE tmp_table")
+  }
+
+
 }
