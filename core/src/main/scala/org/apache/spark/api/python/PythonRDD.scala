@@ -405,7 +405,7 @@ private[spark] object PythonRDD extends Logging {
             dataOut.writeInt(bytes.length)
             dataOut.write(bytes)
           }
-        case pair: (String, PortableDataStream) =>
+        case (key: String, stream: PortableDataStream) =>
           newIter.asInstanceOf[Iterator[(String, PortableDataStream)]].foreach {
             case (key, stream) =>
               writeUTF(key, dataOut)
@@ -413,7 +413,13 @@ private[spark] object PythonRDD extends Logging {
               dataOut.writeInt(bytes.length)
               dataOut.write(bytes)
           }
-        case pair: (Array[Byte], Array[Byte]) =>
+        case (key: String, value: String) =>
+          newIter.asInstanceOf[Iterator[(String, String)]].foreach {
+            case (key, value) =>
+              writeUTF(key, dataOut)
+              writeUTF(value, dataOut)
+          }
+        case (key: Array[Byte], value: Array[Byte]) =>
           newIter.asInstanceOf[Iterator[(Array[Byte], Array[Byte])]].foreach {
             case (key, value) =>
               dataOut.writeInt(key.length)
