@@ -28,7 +28,7 @@ import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
 
-class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
+class MapOutputTrackerSuite extends FunSuite {
   private val conf = new SparkConf
 
   test("master start and stop") {
@@ -37,6 +37,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     tracker.trackerActor =
       actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker, conf)))
     tracker.stop()
+    actorSystem.shutdown()
   }
 
   test("master register shuffle and fetch") {
@@ -56,6 +57,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     assert(statuses.toSeq === Seq((BlockManagerId("a", "hostA", 1000), size1000),
                                   (BlockManagerId("b", "hostB", 1000), size10000)))
     tracker.stop()
+    actorSystem.shutdown()
   }
 
   test("master register and unregister shuffle") {
@@ -74,6 +76,9 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     tracker.unregisterShuffle(10)
     assert(!tracker.containsShuffle(10))
     assert(tracker.getServerStatuses(10, 0).isEmpty)
+
+    tracker.stop()
+    actorSystem.shutdown()
   }
 
   test("master register shuffle and unregister map output and fetch") {
@@ -97,6 +102,9 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     // this should cause it to fail, and the scheduler will ignore the failure due to the
     // stage already being aborted.
     intercept[FetchFailedException] { tracker.getServerStatuses(10, 1) }
+
+    tracker.stop()
+    actorSystem.shutdown()
   }
 
   test("remote fetch") {
@@ -136,6 +144,11 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
     // failure should be cached
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+
+    masterTracker.stop()
+    slaveTracker.stop()
+    actorSystem.shutdown()
+    slaveSystem.shutdown()
   }
 
   test("remote fetch below akka frame size") {
@@ -154,6 +167,9 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("88", "mph", 1000), Array.fill[Long](10)(0)))
     masterActor.receive(GetMapOutputStatuses(10))
+
+//    masterTracker.stop() // this throws an exception
+    actorSystem.shutdown()
   }
 
   test("remote fetch exceeds akka frame size") {
@@ -176,5 +192,8 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
         BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
     }
     intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
+
+//    masterTracker.stop() // this throws an exception
+    actorSystem.shutdown()
   }
 }

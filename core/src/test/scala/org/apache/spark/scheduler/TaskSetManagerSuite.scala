@@ -563,6 +563,31 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.emittedTaskSizeWarning)
   }
 
+  test("abort the job if total size of results is too large") {
+    val conf = new SparkConf().set("spark.driver.maxResultSize", "2m")
+    sc = new SparkContext("local", "test", conf)
+
+    def genBytes(size: Int) = { (x: Int) =>
+      val bytes = Array.ofDim[Byte](size)
+      scala.util.Random.nextBytes(bytes)
+      bytes
+    }
+
+    // multiple 1k result
+    val r = sc.makeRDD(0 until 10, 10).map(genBytes(1024)).collect()
+    assert(10 === r.size )
+
+    // single 10M result
+    val thrown = intercept[SparkException] {sc.makeRDD(genBytes(10 << 20)(0), 1).collect()}
+    assert(thrown.getMessage().contains("bigger than maxResultSize"))
+
+    // multiple 1M results
+    val thrown2 = intercept[SparkException] {
+      sc.makeRDD(0 until 10, 10).map(genBytes(1 << 20)).collect()
+    }
+    assert(thrown2.getMessage().contains("bigger than maxResultSize"))
+  }
+
   test("speculative and noPref task should be scheduled after node-local") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))

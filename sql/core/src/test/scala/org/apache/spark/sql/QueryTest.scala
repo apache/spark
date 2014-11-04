@@ -19,8 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.columnar.InMemoryRelation
 
 class QueryTest extends PlanTest {
+
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the
    * none of keywords are listed in the answer
@@ -78,11 +80,31 @@ class QueryTest extends PlanTest {
         |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            s"== Correct Answer - ${convertedAnswer.size} ==" +:
-              prepareAnswer(convertedAnswer).map(_.toString),
-            s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+        s"== Correct Answer - ${convertedAnswer.size} ==" +:
+          prepareAnswer(convertedAnswer).map(_.toString),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
   }
+
+  def sqlTest(sqlString: String, expectedAnswer: Any)(implicit sqlContext: SQLContext): Unit = {
+    test(sqlString) {
+      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
+    }
+  }
+
+  /** Asserts that a given SchemaRDD will be executed using the given number of cached results. */
+  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val cachedData = planWithCaching collect {
+      case cached: InMemoryRelation => cached
+    }
+
+    assert(
+      cachedData.size == numCachedTables,
+      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
+        planWithCaching)
+  }
+
 }

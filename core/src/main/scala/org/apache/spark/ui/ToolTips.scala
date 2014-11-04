@@ -31,4 +31,16 @@ private[spark] object ToolTips {
   val SHUFFLE_READ =
     """Bytes read from remote executors. Typically less than shuffle write bytes
        because this does not include shuffle data read locally."""
+
+  val GETTING_RESULT_TIME =
+    """Time that the driver spends fetching task results from workers. If this is large, consider
+       decreasing the amount of data returned from each task."""
+
+  val RESULT_SERIALIZATION_TIME =
+    """Time spent serializing the task result on the executor before sending it back to the
+       driver."""
+
+  val GC_TIME =
+    """Time that the executor spent paused for Java garbage collection while the task was
+       running."""
 }

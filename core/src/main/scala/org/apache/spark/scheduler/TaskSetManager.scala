@@ -23,14 +23,13 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.math.max
-import scala.math.min
+import scala.math.{min, max}
 
 import jline.Terminal
 
 import org.apache.spark._
-import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -76,6 +75,9 @@ private[spark] class TaskSetManager(
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
+  // Limit of bytes for total size of results (default is 1GB)
+  val maxResultSize = Utils.getMaxResultSize(conf)
+
   // Serializer for closures and tasks.
   val env = SparkEnv.get
   val ser = env.closureSerializer.newInstance()
@@ -97,6 +99,8 @@ private[spark] class TaskSetManager(
   var stageId = taskSet.stageId
   var name = "TaskSet_" + taskSet.stageId.toString
   var parent: Pool = null
+  var totalResultSize = 0L
+  var calculatedTasks = 0
 
   val runningTasksSet = new HashSet[Long]
   override def runningTasks = runningTasksSet.size
@@ -523,6 +527,9 @@ private[spark] class TaskSetManager(
     index
   }
 
+  /**
+   * Marks the task as getting result and notifies the DAG Scheduler
+   */
   def handleTaskGettingResult(tid: Long) = {
     val info = taskInfos(tid)
     info.markGettingResult()
@@ -564,7 +571,7 @@ private[spark] class TaskSetManager(
         val width = Terminal.getTerminal.getTerminalWidth - header.size - tailer.size
         val percent = finished * width / total;
         val bar = (0 until width).map { i =>
-          if (i < percent) "=" else if (i==percent) ">" else " "
+          if (i < percent) "=" else if (i == percent) ">" else " "
         }.mkString("")
         console.printf("\r" + header + bar + tailer)
       } else {
@@ -579,6 +586,24 @@ private[spark] class TaskSetManager(
         console.printf("\r" + summary +
           " " * (Terminal.getTerminal.getTerminalWidth - summary.size) + "\r\n")
       }
+    }
+  }
+
+  /*
+   * Check whether has enough quota to fetch the result with `size` bytes
+   */
+  def canFetchMoreResults(size: Long): Boolean = synchronized {
+    totalResultSize += size
+    calculatedTasks += 1
+    if (maxResultSize > 0 && totalResultSize > maxResultSize) {
+      val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
+        s"(${Utils.bytesToString(totalResultSize)}) is bigger than maxResultSize " +
+        s"(${Utils.bytesToString(maxResultSize)})"
+      logError(msg)
+      abort(msg)
+      false
+    } else {
+      true
     }
   }
 
@@ -752,10 +777,11 @@ private[spark] class TaskSetManager(
       addPendingTask(index, readding=true)
     }
 
-    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage.
+    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
+    // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask]) {
+    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         if (successful(index)) {
@@ -771,7 +797,7 @@ private[spark] class TaskSetManager(
     }
     // Also re-enqueue any tasks that were running on the node
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure)
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()
