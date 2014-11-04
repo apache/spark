@@ -17,6 +17,9 @@
 
 package org.apache.spark.graphx.api.python
 
+import org.apache.spark.annotation.DeveloperApi
+
+@DeveloperApi
 abstract private[graphx] class PythonGraph (
     @transient val vertexRDD: PythonVertexRDD,
     @transient val edgeRDD: PythonEdgeRDD)

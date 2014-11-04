@@ -28,7 +28,7 @@ import operator
 from numpy.numarray.numerictypes import Long
 from pyspark.accumulators import PStatsParam
 from pyspark.rdd import PipelinedRDD
-from pyspark.serializers import CloudPickleSerializer, NoOpSerializer
+from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, BatchedSerializer
 from pyspark import RDD, PickleSerializer, StorageLevel
 from pyspark.graphx.partitionstrategy import PartitionStrategy
 from pyspark.sql import StringType, LongType
@@ -65,6 +65,11 @@ class Vertex(object):
         return self._id + self._property
 
 
+class VertexPropertySchema(object):
+    def __init__(self, tuple):
+        self.schema = list(tuple)
+
+
 class VertexRDD(object):
     """
     VertexRDD class defines vertex operations/transformation and vertex properties
@@ -74,19 +79,31 @@ class VertexRDD(object):
     in PythonVertexRDD class in [[org.apache.spark.graphx.api.python package]]
     """
 
-    def __init__(self, jrdd, ctx, jrdd_deserializer):
+    def __init__(self, vertex_property, jrdd,
+                 jrdd_deserializer = BatchedSerializer(PickleSerializer())):
+        """
+        Constructor
+        :param vertex_property: A tuple of the vertex properties, e.g.
+               vd=sc.parallelize([(3, ("rxin", "student")), (7, ("jgonzal", "postdoc"))])
+               vertices=VertexRDD(vd,("String", "String"))
+        :param jrdd:
+        :param jrdd_deserializer:
+
+        """
+
         self._jrdd = jrdd
-        self._ctx = ctx
+        self._ctx = jrdd._jrdd.context
         self._jrdd_deserializer = jrdd_deserializer
         self._preserve_partitioning = False
         self._name = "VertexRDD"
-        self.is_cached = False
-        self.is_checkpointed = False
+        self._is_cached = False
+        self._is_checkpointed = False
         self._id = jrdd.id()
         self._partitionFunc = None
         self._jrdd_val = None
         self._bypass_serializer = False
-        self._jrdd_val = self.toVertexRDD(jrdd, ctx, jrdd_deserializer)
+        self._schema = VertexPropertySchema(vertex_property)
+        self._jrdd_val = self.toVertexRDD(self._jrdd, self._ctx, self._jrdd_deserializer, self._schema)
 
 
     # TODO: Does not work
@@ -210,36 +227,11 @@ class VertexRDD(object):
             return reduce(f, vals)
         raise ValueError("Can not reduce() empty RDD")
 
-    def toVertexRDD(self, jrdd, ctx, jrdd_deserializer):
-        if self._jrdd_val:
-            return self._jrdd_val
-        if self._bypass_serializer:
-            self._jrdd_deserializer = NoOpSerializer()
-        enable_profile = self._ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self._ctx.accumulator(None, PStatsParam) if enable_profile else None
-        command = (self._jrdd_deserializer)
-        # the serialized command will be compressed by broadcast
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            self._broadcast = self._ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(self._broadcast)
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self._ctx._pickled_broadcast_vars],
-            self._ctx._gateway._gateway_client)
-        self._ctx._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self._ctx.environment,
-                                     self._ctx._gateway._gateway_client)
-        includes = ListConverter().convert(self._ctx._python_includes,
-                                           self._ctx._gateway._gateway_client)
-        python_rdd = self._ctx._jvm.PythonVertexRDD(jrdd._jrdd,
-                                                    bytearray(pickled_command),
-                                                    env, includes, self._preserve_partitioning,
-                                                    self._ctx.pythonExec,
-                                                    broadcast_vars, self._ctx._javaAccumulator)
-        if enable_profile:
-            self._id = self._jrdd_val.id()
-            self._ctx._add_profile(self._id, profileStats)
+    def toVertexRDD(self, jrdd, ctx, jrdd_deserializer, schema):
+
+        sc = jrdd.context
+        python_rdd = sc._jvm.PythonVertexRDD(bytearray(" ".join(x for x in schema.schema)))
+        print "in toVertexRDD"
 
         return python_rdd.asJavaRDD()
 

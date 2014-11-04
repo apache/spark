@@ -16,11 +16,8 @@
  */
 package org.apache.spark.graphx.api.java
 
-import org.apache.spark.Partitioner
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.graphx.impl.{DoubleAggMsgSerializer, LongAggMsgSerializer, IntAggMsgSerializer, ShippableVertexPartition}
-import org.apache.spark.graphx.{VertexId, VertexRDD}
-import org.apache.spark.rdd.{ShuffledRDD, RDD}
+import org.apache.spark.graphx.VertexId
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 import scala.reflect._
@@ -34,58 +31,76 @@ import scala.reflect._
  * [[org.apache.spark.graphx.VertexRDD]]
  */
 
-class JavaVertexRDD[VD](val rdd: RDD[(VertexId, VD)],
-                        override val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-  extends VertexRDD[VD](rdd.firstParent) {
+class JavaVertexRDD[@specialized VD: ClassTag](
+    val parent: RDD[(VertexId, VD)],
+    val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
+  extends Serializable {
 
+//  val rdd = new VertexRDD(parent, targetStorageLevel)
 
-  override def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
-                                           (f: (VertexId, VD, U) => VD2): JavaVertexRDD[VD2] = {
-    other match {
-      case other: VertexRDD[_] =>
-        innerZipJoin(other)(f)
-      case _ =>
-        this.withPartitionsRDD(
-          partitionsRDD.zipPartitions(
-            other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
-            (partIter, msgs) => partIter.map(_.innerJoin(msgs)(f))
-          }
-        )
-    }
-  }
-
-  override def diff(other: VertexRDD[VD]): JavaRDD[(VertexId, VD)] = {
-    JavaRDD.fromRDD(super[VertexRDD].diff(other))
-  }
-
-  override def mapValues[VD2: ClassTag](f: VD => VD2): JavaVertexRDD[VD2] =
-    this.mapVertexPartitions(_.map((vid, attr) => f(attr)))
-
-  override def mapVertexPartitions[VD2: ClassTag]
-    (f: ShippableVertexPartition[VD] => ShippableVertexPartition[VD2]): JavaVertexRDD[VD2] = {
-    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
-    this.withPartitionsRDD(newPartitionsRDD)
-  }
-
-  override def withPartitionsRDD[VD2: ClassTag]
-    (partitionsRDD: RDD[ShippableVertexPartition[VD2]]): JavaVertexRDD[VD2] = {
-    new JavaVertexRDD[VD2](partitionsRDD.firstParent, this.targetStorageLevel)
-  }
-
-  def copartitionWithVertices(partitioner: Partitioner): JavaRDD[(VertexId, VD)] = {
-
-    val rdd = new ShuffledRDD[VertexId, VD, VD](rdd, partitioner)
-
-    // Set a custom serializer if the data is of int or double type.
-    if (classTag[VD] == ClassTag.Int) {
-      rdd.setSerializer(new IntAggMsgSerializer)
-    } else if (classTag[VD] == ClassTag.Long) {
-      rdd.setSerializer(new LongAggMsgSerializer)
-    } else if (classTag[VD] == ClassTag.Double) {
-      rdd.setSerializer(new DoubleAggMsgSerializer)
-    }
-    rdd
-  }
+//  val wrapVertexRDD(rdd: RDD[(VertexId, VD)]): This
+//
+//  override def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
+//                                           (f: (VertexId, VD, U) => VD2): JavaVertexRDD[VD2] = {
+//    other match {
+//      case other: JavaVertexRDD[_] =>
+//        innerZipJoin(other)(f)
+//      case _ =>
+//        this.withPartitionsRDD(
+//          partitionsRDD.zipPartitions(
+//            other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
+//            (partIter, msgs) => partIter.map(_.innerJoin(msgs)(f))
+//          }
+//        )
+//    }
+//  }
+//
+//  override def diff(other: VertexRDD[VD]): JavaRDD[(VertexId, VD)] = {
+//    JavaRDD.fromRDD(super[VertexRDD].diff(other))
+//  }
+//
+//  override def mapValues[VD2: ClassTag](f: VD => VD2): JavaVertexRDD[VD2] =
+//    this.mapVertexPartitions(_.map((vid, attr) => f(attr)))
+//
+//  override def mapVertexPartitions[VD2: ClassTag]
+//    (f: ShippableVertexPartition[VD] => ShippableVertexPartition[VD2]): JavaVertexRDD[VD2] = {
+//    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
+//    this.withPartitionsRDD(newPartitionsRDD)
+//  }
+//
+//  override def withPartitionsRDD[VD2: ClassTag]
+//    (partitionsRDD: RDD[ShippableVertexPartition[VD2]]): JavaVertexRDD[VD2] = {
+//    new JavaVertexRDD[VD2](partitionsRDD.firstParent, this.targetStorageLevel)
+//  }
+//
+//  def copartitionWithVertices(partitioner: Partitioner): JavaRDD[(VertexId, VD)] = {
+//
+//    val rdd = new ShuffledRDD[VertexId, VD, VD](rdd, partitioner)
+//
+//    // Set a custom serializer if the data is of int or double type.
+//    if (classTag[VD] == ClassTag.Int) {
+//      rdd.setSerializer(new IntAggMsgSerializer)
+//    } else if (classTag[VD] == ClassTag.Long) {
+//      rdd.setSerializer(new LongAggMsgSerializer)
+//    } else if (classTag[VD] == ClassTag.Double) {
+//      rdd.setSerializer(new DoubleAggMsgSerializer)
+//    }
+//    rdd
+//  }
+//
+//  def innerZipJoin[U: ClassTag, VD2: ClassTag]
+//    (other: JavaVertexRDD[U])
+//    (f: (VertexId, VD, U) => VD2): JavaVertexRDD[VD2] = {
+//    val newPartitionsRDD = partitionsRDD.zipPartitions(
+//      other.partitionsRDD, preservesPartitioning = true
+//    ) { (thisIter, otherIter) =>
+//      val thisPart = thisIter.next()
+//      val otherPart = otherIter.next()
+//      Iterator(thisPart.innerJoin(otherPart)(f))
+//    }
+//    this.withPartitionsRDD(newPartitionsRDD)
+//  }
 
 }
+
 

@@ -32,6 +32,7 @@ class Graph(object):
         self._vertex_jrdd = VertexRDD(vertex_jrdd, vertex_jrdd.context, BatchedSerializer(PickleSerializer()))
         self._edge_jrdd = EdgeRDD(edge_jrdd, edge_jrdd.context, BatchedSerializer(PickleSerializer()))
         self._partition_strategy = partition_strategy
+        self._sc = vertex_jrdd.context
 
     def persist(self, storageLevel):
         self._vertex_jrdd.persist(storageLevel)
@@ -68,16 +69,21 @@ class Graph(object):
         :return:
         """
 
-        return
+        py_graph = self._sc._jvm.org.apache.PythonGraph.pagerank(num_iterations, reset_probability)
+        return py_graph.asJavaRDD()
 
     def connected_components(self):
-        return
+        py_graph = self._sc._jvm.org.apache.PythonGraph.connectedComponents()
+        return py_graph.asJavaRDD()
 
     def reverse(self):
-        return
+        py_graph = self._sc._jvm.org.apache.PythonGraph.reverse()
+        return py_graph.asJavaRDD()
 
     def apply(self, f):
-
-        return
+        def func(iterator):
+            return itertools.imap(f, iterator)
+        py_graph = self._sc._jvm.org.apache.PythonGraph.apply(func)
+        return py_graph.asJavaRDD()
 
 
