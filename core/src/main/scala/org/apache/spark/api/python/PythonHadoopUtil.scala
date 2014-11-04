@@ -61,8 +61,7 @@ private[python] object Converter extends Logging {
  * Other objects are passed through without conversion.
  */
 private[python] class WritableToJavaConverter(
-    conf: Broadcast[SerializableWritable[Configuration]],
-    batchSize: Int) extends Converter[Any, Any] {
+    conf: Broadcast[SerializableWritable[Configuration]]) extends Converter[Any, Any] {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
@@ -94,8 +93,7 @@ private[python] class WritableToJavaConverter(
           map.put(convertWritable(k), convertWritable(v))
         }
         map
-      case w: Writable =>
-        if (batchSize > 1) WritableUtils.clone(w, conf.value.value) else w
+      case w: Writable => WritableUtils.clone(w, conf.value.value)
       case other => other
     }
   }
