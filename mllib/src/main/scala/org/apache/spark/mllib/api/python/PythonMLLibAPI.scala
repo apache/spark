@@ -278,8 +278,10 @@ class PythonMLLibAPI extends Serializable {
       rank: Int,
       iterations: Int,
       lambda: Double,
-      blocks: Int): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(ALS.train(ratings.rdd, rank, iterations, lambda, blocks))
+      blocks: Int,
+      nonnegative: Boolean): MatrixFactorizationModel = {
+    new MatrixFactorizationModelWrapper(
+      ALS.train(ratings.rdd, rank, iterations, lambda, blocks, nonnegative))
   }
 
   /**
@@ -294,9 +296,10 @@ class PythonMLLibAPI extends Serializable {
       iterations: Int,
       lambda: Double,
       blocks: Int,
-      alpha: Double): MatrixFactorizationModel = {
+      alpha: Double,
+      nonnegative: Boolean): MatrixFactorizationModel = {
     new MatrixFactorizationModelWrapper(
-      ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha))
+      ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha, nonnegative))
   }
 
   /**

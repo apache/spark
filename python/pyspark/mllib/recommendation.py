@@ -69,6 +69,14 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> latents = first_product[1]
     >>> len(latents) == 4
     True
+
+    >>> model = ALS.train(ratings, 1, nonnegative=True)
+    >>> model.predict(2,2) is not None
+    True
+
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True)
+    >>> model.predict(2,2) is not None
+    True
     """
     def predict(self, user, product):
         return self._java_model.predict(user, product)
@@ -101,15 +109,16 @@ class ALS(object):
         return _to_java_object_rdd(ratings, True)
 
     @classmethod
-    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
+    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False):
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
-                              lambda_, blocks)
+                              lambda_, blocks, nonnegative)
         return MatrixFactorizationModel(model)
 
     @classmethod
-    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
+    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
+                      nonnegative=False):
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
-                              iterations, lambda_, blocks, alpha)
+                              iterations, lambda_, blocks, alpha, nonnegative)
         return MatrixFactorizationModel(model)
 
 
