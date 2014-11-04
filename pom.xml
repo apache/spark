@@ -93,7 +93,6 @@
     <module>tools</module>
     <module>network/common</module>
     <module>network/shuffle</module>
-    <module>network/yarn</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
@@ -1230,6 +1229,7 @@
       <id>yarn-alpha</id>
       <modules>
         <module>yarn</module>
+        <module>network/yarn</module>
       </modules>
     </profile>
 
@@ -1237,6 +1237,7 @@
       <id>yarn</id>
       <modules>
         <module>yarn</module>
+        <module>network/yarn</module>
       </modules>
     </profile>
 

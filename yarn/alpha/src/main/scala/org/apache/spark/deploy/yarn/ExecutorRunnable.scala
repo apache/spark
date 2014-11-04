@@ -90,6 +90,12 @@ class ExecutorRunnable(
 
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
+    // If external shuffle service is enabled, register with the
+    // Yarn shuffle service already started on the node manager
+    if (sparkConf.getBoolean("spark.shuffle.service.enabled", false)) {
+      ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> ByteBuffer.allocate(0)))
+    }
+
     // Send the start request to the ContainerManager
     val startReq = Records.newRecord(classOf[StartContainerRequest])
     .asInstanceOf[StartContainerRequest]
