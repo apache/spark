@@ -427,13 +427,15 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         error
       })
     val details = if (isMultiline) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
             class="expand-details">
         +details
       </span> ++
-        <div class="stage-details collapsed">
+        <div class="stacktrace-details collapsed">
           <pre>{error}</pre>
         </div>
+      // scalastyle:on
     } else {
       ""
     }

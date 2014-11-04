@@ -1598,7 +1598,9 @@ private[spark] object Utils extends Logging {
 
   /** Return a nice string representation of the exception, including the stack trace. */
   def exceptionString(e: Throwable): String = {
-    if (e == null) ""
+    if (e == null) {
+      ""
+    }
     else {
       val stringWriter = new StringWriter()
       e.printStackTrace(new PrintWriter(stringWriter))
@@ -1609,6 +1611,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return a nice string representation of the exception, including the stack trace.
    * It's only used for backward compatibility.
+   * Note: deprecated because it does not include the exception's cause.
    */
   @deprecated("Use exceptionString(Throwable) instead", "1.2.0")
   def exceptionString(
