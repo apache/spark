@@ -56,12 +56,6 @@ private[spark] class TaskSetManager(
 
   val conf = sched.sc.conf
 
-  // show progress bar in console
-  val console = System.console()
-  val showProgress = console != null && conf.getBoolean("spark.driver.showConsoleProgress", true)
-  val startTime = clock.getTime()
-  var lastUpdate = clock.getTime()
-
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
    * does not realize right away leading to repeated task failures. If enabled,
@@ -101,6 +95,13 @@ private[spark] class TaskSetManager(
   var parent: Pool = null
   var totalResultSize = 0L
   var calculatedTasks = 0
+
+  // show progress bar in console
+  private val console = System.console()
+  private val showProgress = console != null &&
+    conf.getBoolean("spark.driver.showConsoleProgress", true)
+  private val startTime = clock.getTime()
+  private var lastUpdate = clock.getTime()
 
   val runningTasksSet = new HashSet[Long]
   override def runningTasks = runningTasksSet.size
@@ -539,7 +540,10 @@ private[spark] class TaskSetManager(
   /**
    * Show progress in console (also in title). The progress bar is displayed in the next line
    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
-   * the progress bar, then progress bar will be showed in next line without overwrite loggings.
+   * the progress bar, then progress bar will be showed in next line without overwrite logs.
+   *
+   * TODO(davies): the progress will not show until success of any tasks
+   *
    * @param finished the number of finished tasks
    * @param total total number of tasks
    */
