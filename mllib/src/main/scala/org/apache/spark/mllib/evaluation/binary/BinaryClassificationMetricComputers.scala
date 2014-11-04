@@ -27,19 +27,31 @@ private[evaluation] trait BinaryClassificationMetricComputer extends Serializabl
 /** Precision. */
 private[evaluation] object Precision extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
-    c.numTruePositives.toDouble / (c.numTruePositives + c.numFalsePositives)
+    if (c.numTruePositives + c.numFalsePositives == 0) {
+      0.0
+    } else {
+      c.numTruePositives.toDouble / (c.numTruePositives + c.numFalsePositives)
+    }
 }
 
 /** False positive rate. */
 private[evaluation] object FalsePositiveRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
-    c.numFalsePositives.toDouble / c.numNegatives
+    if (c.numNegatives == 0) {
+      0.0
+    } else {
+      c.numFalsePositives.toDouble / c.numNegatives
+    }
 }
 
 /** Recall. */
 private[evaluation] object Recall extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
-    c.numTruePositives.toDouble / c.numPositives
+    if (c.numPositives == 0) {
+      0.0
+    } else {
+      c.numTruePositives.toDouble / c.numPositives
+    }
 }
 
 /**
@@ -52,6 +64,10 @@ private[evaluation] case class FMeasure(beta: Double) extends BinaryClassificati
   override def apply(c: BinaryConfusionMatrix): Double = {
     val precision = Precision(c)
     val recall = Recall(c)
-    (1.0 + beta2) * (precision * recall) / (beta2 * precision + recall)
+    if (precision + recall == 0) {
+      0.0
+    } else {
+      (1.0 + beta2) * (precision * recall) / (beta2 * precision + recall)
+    }
   }
 }

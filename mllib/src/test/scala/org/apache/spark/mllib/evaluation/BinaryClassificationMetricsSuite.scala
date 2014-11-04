@@ -59,4 +59,60 @@ class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
     assert(metrics.precisionByThreshold().collect().zip(threshold.zip(precision)).forall(cond2))
     assert(metrics.recallByThreshold().collect().zip(threshold.zip(recall)).forall(cond2))
   }
+
+  test("binary evaluation metrics for All Positive RDD") {
+    val scoreAndLabels = sc.parallelize(Seq((0.5, 1.0)), 2)
+    val metrics: BinaryClassificationMetrics = new BinaryClassificationMetrics(scoreAndLabels)
+
+    val threshold = Seq(0.5)
+    val precision = Seq(1.0)
+    val recall = Seq(1.0)
+    val fpr = Seq(0.0)
+    val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recall) ++ Seq((1.0, 1.0))
+    val pr = recall.zip(precision)
+    val prCurve = Seq((0.0, 1.0)) ++ pr
+    val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
+    val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
+
+    assert(metrics.thresholds().collect().zip(threshold).forall(cond1))
+    assert(metrics.roc().collect().zip(rocCurve).forall(cond2))
+    assert(metrics.areaUnderROC() ~== AreaUnderCurve.of(rocCurve) absTol 1E-5)
+    assert(metrics.pr().collect().zip(prCurve).forall(cond2))
+    assert(metrics.areaUnderPR() ~== AreaUnderCurve.of(prCurve) absTol 1E-5)
+    assert(metrics.fMeasureByThreshold().collect().zip(threshold.zip(f1)).forall(cond2))
+    assert(metrics.fMeasureByThreshold(2.0).collect().zip(threshold.zip(f2)).forall(cond2))
+    assert(metrics.precisionByThreshold().collect().zip(threshold.zip(precision)).forall(cond2))
+    assert(metrics.recallByThreshold().collect().zip(threshold.zip(recall)).forall(cond2))
+  }
+
+  test("binary evaluation metrics for All Negative RDD") {
+    val scoreAndLabels = sc.parallelize(Seq((0.5, 0.0)), 2)
+    val metrics: BinaryClassificationMetrics = new BinaryClassificationMetrics(scoreAndLabels)
+
+    val threshold = Seq(0.5)
+    val precision = Seq(0.0)
+    val recall = Seq(0.0)
+    val fpr = Seq(1.0)
+    val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recall) ++ Seq((1.0, 1.0))
+    val pr = recall.zip(precision)
+    val prCurve = Seq((0.0, 1.0)) ++ pr
+    val f1 = pr.map {
+      case (0,0) => 0.0
+      case (r, p) => 2.0 * (p * r) / (p + r)
+    }
+    val f2 = pr.map {
+      case (0,0) => 0.0
+      case (r, p) => 5.0 * (p * r) / (4.0 * p + r)
+    }
+
+    assert(metrics.thresholds().collect().zip(threshold).forall(cond1))
+    assert(metrics.roc().collect().zip(rocCurve).forall(cond2))
+    assert(metrics.areaUnderROC() ~== AreaUnderCurve.of(rocCurve) absTol 1E-5)
+    assert(metrics.pr().collect().zip(prCurve).forall(cond2))
+    assert(metrics.areaUnderPR() ~== AreaUnderCurve.of(prCurve) absTol 1E-5)
+    assert(metrics.fMeasureByThreshold().collect().zip(threshold.zip(f1)).forall(cond2))
+    assert(metrics.fMeasureByThreshold(2.0).collect().zip(threshold.zip(f2)).forall(cond2))
+    assert(metrics.precisionByThreshold().collect().zip(threshold.zip(precision)).forall(cond2))
+    assert(metrics.recallByThreshold().collect().zip(threshold.zip(recall)).forall(cond2))
+  }
 }
