@@ -544,7 +544,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         (4, " You !")))
 
     checkAnswer(
-      sql("SELECT n, LTRIM(s) FROM nullStrings"),
+      sql("SELECT n, RTRIM(s) FROM nullStrings"),
       Seq(
         (1, "abc"),
         (2, "ABC"),
