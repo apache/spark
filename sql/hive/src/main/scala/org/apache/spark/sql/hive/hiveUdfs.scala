@@ -341,11 +341,8 @@ private[hive] case class HiveUdafFunction(
     } else {
       createFunction[AbstractGenericUDAFResolver]()
     }
-
   
-  private val inspectors = 
-    if(isUDAFBridgeRequired) exprs.map(ex => toInspector(ex.dataType)).toArray
-    else exprs.map(toInspector).toArray
+  private val inspectors = exprs.map(toInspector).toArray
     
   private val function = { 
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors,false,false)
@@ -368,6 +365,6 @@ private[hive] case class HiveUdafFunction(
   
   def update(input: Row): Unit = {
     val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
-    function.iterate(buffer, wrap(inputs,inspectors,cached))
+    function.iterate(buffer, wrap(inputs, inspectors, cached))
   }
 }

@@ -100,8 +100,6 @@ class HiveUdfSuite extends QueryTest {
       
     checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9,0.9)) FROM src LIMIT 1"),
       sql("SELECT array(100,100) FROM src LIMIT 1").collect().toSeq)
-    
-    TestHive.reset()
    }	
   
   test("UDFIntegerToString") {
