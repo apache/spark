@@ -49,9 +49,9 @@ import org.apache.spark.util.collection.OpenHashSet
  *       Parameter allowUnknownCategories:
  *        If true, then handle unknown categories during `transform`
  *        by assigning them to an extra category index.
- *        That unknown category index will be the largest index;
- *        e.g., if 5 categories are found during `fit`, then any
- *        unknown categories will be assigned index 5.
+ *        That unknown category index should be index 1; this will allow maintaining sparsity
+ *        (reserving index 0 for value 0.0), and it will allow category indices to remain fixed
+ *        even if more categories are added later.
  *
  * @param maxCategories  Threshold for the number of values a categorical feature can take.
  *                       If a feature is found to have > maxCategories values, then it is
