@@ -17,20 +17,19 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
 import java.util
-
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.expressions.{Row, GenericMutableRow}
-import org.apache.spark.sql.catalyst.types._
+import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
-import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.SparkException
+import org.apache.spark.mllib.util.NumericParser
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Row}
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
