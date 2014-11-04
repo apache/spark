@@ -1540,9 +1540,6 @@
       <id>hbase-provided</id>
     </profile>
     <profile>
-      <id>hive</id>
-    </profile>
-    <profile>
       <id>hive-provided</id>
     </profile>
     <profile>
