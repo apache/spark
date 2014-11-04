@@ -55,12 +55,10 @@ public class SaslBootstrap implements TransportClientBootstrap {
 
       while (!saslClient.isComplete()) {
         SaslMessage msg = new SaslMessage(appId, payload);
-        logger.info("Sending msg {} {}", appId, payload.length);
         ByteBuf buf = Unpooled.buffer(msg.encodedLength());
         msg.encode(buf);
 
         byte[] response = client.sendRpcSync(buf.array(), conf.saslRTTimeout());
-        logger.info("Got response {} {}", appId, response.length);
         payload = saslClient.response(response);
       }
     } finally {

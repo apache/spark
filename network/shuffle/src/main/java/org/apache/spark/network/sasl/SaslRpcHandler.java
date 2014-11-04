@@ -43,10 +43,13 @@ import org.apache.spark.network.server.StreamManager;
 public class SaslRpcHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
+  /** RpcHandler we will delegate for authenticated connections. */
   private final RpcHandler delegate;
+
+  /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
 
-  // TODO: Invalidate channels that have closed!
+  /** Maps each channel to its SASL authentication state. */
   private final ConcurrentMap<TransportClient, SparkSaslServer> channelAuthenticationMap;
 
   public SaslRpcHandler(RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
@@ -92,4 +95,3 @@ public class SaslRpcHandler extends RpcHandler {
     }
   }
 }
-

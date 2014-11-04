@@ -18,7 +18,7 @@
 package org.apache.spark.network.sasl;
 
 /**
- * Interface for getting a secret key associated with some appId.
+ * Interface for getting a secret key associated with some application.
  */
 public interface SecretKeyHolder {
   /**

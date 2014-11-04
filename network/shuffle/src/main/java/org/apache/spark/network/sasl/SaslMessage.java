@@ -25,7 +25,7 @@ import org.apache.spark.network.protocol.Encodable;
 /**
  * Encodes a Sasl-related message which is attempting to authenticate using some credentials tagged
  * with the given appId. This appId allows a single SaslRpcHandler to multiplex different
- * applications who may be using different sets of credentials.
+ * applications which may be using different sets of credentials.
  */
 class SaslMessage implements Encodable {
 
@@ -51,7 +51,7 @@ class SaslMessage implements Encodable {
     buf.writeByte(TAG_BYTE);
     byte[] idBytes = appId.getBytes(Charsets.UTF_8);
     buf.writeInt(idBytes.length);
-    buf.writeBytes(appId.getBytes(Charsets.UTF_8));
+    buf.writeBytes(idBytes);
     buf.writeInt(payload.length);
     buf.writeBytes(payload);
   }

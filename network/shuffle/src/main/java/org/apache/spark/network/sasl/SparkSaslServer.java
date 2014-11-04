@@ -80,7 +80,6 @@ public class SparkSaslServer {
       this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, SASL_PROPS,
         new DigestCallbackHandler());
     } catch (SaslException e) {
-      System.exit(0);
       throw Throwables.propagate(e);
     }
   }
