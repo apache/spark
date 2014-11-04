@@ -65,7 +65,7 @@ class EdgePartition[
   /** Return a new `EdgePartition` with the specified active set, provided as an iterator. */
   def withActiveSet(iter: Iterator[VertexId]): EdgePartition[ED, VD] = {
     val activeSet = new VertexSet
-    iter.foreach(activeSet.add(_))
+    while (iter.hasNext) { activeSet.add(iter.next()) }
     new EdgePartition(
       localSrcIds, localDstIds, data, index, global2local, local2global, vertexAttrs,
       Some(activeSet))
@@ -81,7 +81,8 @@ class EdgePartition[
   def updateVertices(iter: Iterator[(VertexId, VD)]): EdgePartition[ED, VD] = {
     val newVertexAttrs = new Array[VD](vertexAttrs.length)
     System.arraycopy(vertexAttrs, 0, newVertexAttrs, 0, vertexAttrs.length)
-    iter.foreach { kv =>
+    while (iter.hasNext) {
+      val kv = iter.next()
       newVertexAttrs(global2local(kv._1)) = kv._2
     }
     new EdgePartition(
