@@ -486,7 +486,7 @@ class CompressedStream(object):
     >>> rio.read()
     'Hello world'
     """
-    MAX_BATCH = 1 << 20
+    MAX_BATCH = 1 << 20  # 1MB
 
     def __init__(self, stream, mode='w', level=1):
         self.stream = stream
