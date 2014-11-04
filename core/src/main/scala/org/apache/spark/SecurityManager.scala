@@ -85,7 +85,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            Authenticator installed in the SecurityManager to how it does the authentication
  *            and in this case gets the user name and password from the request.
  *
- *  - ConnectionManager -> The Spark ConnectionManager uses java nio to asynchronously
+ *  - BlockTransferService -> The Spark BlockTransferServices uses java nio to asynchronously
  *            exchange messages.  For this we use the Java SASL
  *            (Simple Authentication and Security Layer) API and again use DIGEST-MD5
  *            as the authentication mechanism. This means the shared secret is not passed
@@ -99,7 +99,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            of protection they want. If we support those, the messages will also have to
  *            be wrapped and unwrapped via the SaslServer/SaslClient.wrap/unwrap API's.
  *
- *            Since the connectionManager does asynchronous messages passing, the SASL
+ *            Since the NioBlockTransferService does asynchronous messages passing, the SASL
  *            authentication is a bit more complex. A ConnectionManager can be both a client
  *            and a Server, so for a particular connection is has to determine what to do.
  *            A ConnectionId was added to be able to track connections and is used to
@@ -107,6 +107,10 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            The ConnectionManager tracks all the sendingConnections using the ConnectionId
  *            and waits for the response from the server and does the handshake before sending
  *            the real message.
+ *
+ *            The NettyBlockTransferService ensures that SASL authentication is performed
+ *            synchronously prior to any other communication on a connection. This is done in
+ *            SaslClientBootstrap on the client side and SaslRpcHandler on the server side.
  *
  *  - HTTP for the Spark UI -> the UI was changed to use servlets so that javax servlet filters
  *            can be used. Yarn requires a specific AmIpFilter be installed for security to work
@@ -347,6 +351,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with 
 
   override def getSecretKey(appId: String): String = {
     val myAppId = sparkConf.getAppId
+    println("App id: " + appId + " / " + myAppId)
     require(appId == myAppId, s"SASL appId $appId did not match my appId ${myAppId}")
     getSecretKey()
   }
