@@ -49,10 +49,7 @@ trait StringRegexExpression {
     Pattern.compile(escape(str))
   }
 
-    /** Returns a string representation of the nodes in this tree */
-    override def treeString = ???
-
-    protected def pattern(str: String) = if(cache == null) compile(str) else cache
+  protected def pattern(str: String) = if(cache == null) compile(str) else cache
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)

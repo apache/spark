@@ -507,15 +507,48 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         (1, "Good"),
         (2, "To"),
         (3, "See"),
-        (4, "You !")
-        ))
+        (4, "You !")))
 
     checkAnswer(
       sql("SELECT n, TRIM(s) FROM nullStrings"),
-        Seq(
-          (1, "abc"),
-          (2, "ABC"),
-          (3, null)))
+      Seq(
+        (1, "abc"),
+        (2, "ABC"),
+        (3, null)))
+    }
+
+  test("system function ltrim()") {
+    checkAnswer(
+      sql("SELECT N,LTRIM(L) FROM untrimmedData"),
+      Seq(
+        (1, "Good "),
+        (2, "To "),
+        (3, "See"),
+        (4, "You ! ")))
+
+    checkAnswer(
+      sql("SELECT n, LTRIM(s) FROM nullStrings"),
+      Seq(
+        (1, "abc"),
+        (2, "ABC"),
+        (3, null)))
+    }
+
+  test("system function rtrim()") {
+    checkAnswer(
+      sql("SELECT N,RTRIM(L) FROM untrimmedData"),
+      Seq(
+        (1, " Good"),
+        (2, "To"),
+        (3, " See"),
+        (4, " You !")))
+
+    checkAnswer(
+      sql("SELECT n, LTRIM(s) FROM nullStrings"),
+      Seq(
+        (1, "abc"),
+        (2, "ABC"),
+        (3, null)))
     }
 
   test("UNION") {
