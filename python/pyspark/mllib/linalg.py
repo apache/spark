@@ -29,7 +29,9 @@ import copy_reg
 
 import numpy as np
 
-from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
+from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+    IntegerType, ByteType, Row
+
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
 
@@ -50,17 +52,6 @@ try:
 except:
     # No SciPy in environment, but that's okay
     _have_scipy = False
-
-
-# this will call the MLlib version of pythonToJava()
-def _to_java_object_rdd(rdd):
-    """ Return an JavaRDD of Object by unpickling
-
-    It will convert each Python object into Java object by Pyrolite, whenever the
-    RDD is serialized in batch or not.
-    """
-    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
 def _convert_to_vector(l):
@@ -111,7 +102,61 @@ def _vector_size(v):
         raise TypeError("Cannot treat type %s as a vector" % type(v))
 
 
+def _format_float(f, digits=4):
+    s = str(round(f, digits))
+    if '.' in s:
+        s = s[:s.index('.') + 1 + digits]
+    return s
+
+
+class VectorUDT(UserDefinedType):
+    """
+    SQL user-defined type (UDT) for Vector.
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("type", ByteType(), False),
+            StructField("size", IntegerType(), True),
+            StructField("indices", ArrayType(IntegerType(), False), True),
+            StructField("values", ArrayType(DoubleType(), False), True)])
+
+    @classmethod
+    def module(cls):
+        return "pyspark.mllib.linalg"
+
+    @classmethod
+    def scalaUDT(cls):
+        return "org.apache.spark.mllib.linalg.VectorUDT"
+
+    def serialize(self, obj):
+        if isinstance(obj, SparseVector):
+            indices = [int(i) for i in obj.indices]
+            values = [float(v) for v in obj.values]
+            return (0, obj.size, indices, values)
+        elif isinstance(obj, DenseVector):
+            values = [float(v) for v in obj]
+            return (1, None, None, values)
+        else:
+            raise ValueError("cannot serialize %r of type %r" % (obj, type(obj)))
+
+    def deserialize(self, datum):
+        assert len(datum) == 4, \
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        tpe = datum[0]
+        if tpe == 0:
+            return SparseVector(datum[1], datum[2], datum[3])
+        elif tpe == 1:
+            return DenseVector(datum[3])
+        else:
+            raise ValueError("do not recognize type %r" % tpe)
+
+
 class Vector(object):
+
+    __UDT__ = VectorUDT()
+
     """
     Abstract class for DenseVector and SparseVector
     """
@@ -228,7 +273,7 @@ class DenseVector(Vector):
         return "[" + ",".join([str(v) for v in self.array]) + "]"
 
     def __repr__(self):
-        return "DenseVector(%r)" % self.array
+        return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
         return isinstance(other, DenseVector) and self.array == other.array
@@ -416,7 +461,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(self.indices.size):
+        for i in xrange(len(self.indices)):
             arr[self.indices[i]] = self.values[i]
         return arr
 
@@ -431,7 +476,8 @@ class SparseVector(Vector):
     def __repr__(self):
         inds = self.indices
         vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
+        entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
+                             for i in xrange(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -491,7 +537,7 @@ class Vectors(object):
         returns a NumPy array.
 
         >>> Vectors.dense([1, 2, 3])
-        DenseVector(array('d', [1.0, 2.0, 3.0]))
+        DenseVector([1.0, 2.0, 3.0])
         """
         return DenseVector(elements)
 

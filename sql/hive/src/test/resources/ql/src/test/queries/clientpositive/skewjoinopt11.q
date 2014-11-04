@@ -5,11 +5,11 @@ set hive.optimize.skewjoin.compiletime = true;
 CREATE TABLE T1(key STRING, val STRING)	
 SKEWED BY (key) ON ((2)) STORED AS TEXTFILE;	
        
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T1;	
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1;	
      
 CREATE TABLE T2(key STRING, val STRING) STORED AS TEXTFILE;	
        
-LOAD DATA LOCAL INPATH '../data/files/T2.txt' INTO TABLE T2;	
+LOAD DATA LOCAL INPATH '../../data/files/T2.txt' INTO TABLE T2;	
      
 -- This test is to verify the skew join compile optimization when the join is followed
 -- by a union. Both sides of a union consist of a join, which should have used

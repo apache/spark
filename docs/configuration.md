@@ -112,6 +112,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.maxResultSize</code></td>
+  <td>1g</td>
+  <td>
+    Limit of total size of serialized results of all partitions for each Spark action (e.g. collect).
+    Should be at least 1M, or 0 for unlimited. Jobs will be aborted if the total size
+    is above this limit. 
+    Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
+    and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
+    out-of-memory errors.
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
@@ -125,11 +137,22 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.classesToRegister</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, give a comma-separated list of custom class names to register
+    with Kryo.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryo.registrator</code></td>
   <td>(none)</td>
   <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    It should be set to a class that extends
+    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
+    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
+    set to a class that extends
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
@@ -348,6 +371,16 @@ Apart from these, the following properties are also available, and may be useful
     map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.blockTransferService</code></td>
+  <td>netty</td>
+  <td>
+    Implementation to use for transferring shuffle and cached blocks between executors. There
+    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
+    block transfer is intended to be simpler but equally efficient and is the default option
+    starting in 1.2.
+  </td>
+</tr>
 </table>
 
 #### Spark UI
@@ -364,7 +397,16 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI remembers before garbage collecting.
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedJobs</code></td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
   </td>
 </tr>
 <tr>
