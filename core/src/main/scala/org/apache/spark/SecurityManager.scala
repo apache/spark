@@ -351,7 +351,6 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with 
 
   override def getSecretKey(appId: String): String = {
     val myAppId = sparkConf.getAppId
-    println("App id: " + appId + " / " + myAppId)
     require(appId == myAppId, s"SASL appId $appId did not match my appId ${myAppId}")
     getSecretKey()
   }
