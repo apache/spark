@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.{errors, trees}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
@@ -54,7 +54,6 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
-
   override def withName(newName: String) = UnresolvedAttribute(name)
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.

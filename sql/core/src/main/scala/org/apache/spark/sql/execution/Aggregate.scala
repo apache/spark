@@ -19,15 +19,11 @@ package org.apache.spark.sql.execution
 
 import java.util.HashMap
 
-import scala.collection.mutable.HashSet
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.SQLContext
 
 /**
