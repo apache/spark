@@ -88,11 +88,11 @@ JavaPairRDD<Double, Double> predictionAndLabel =
       return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() == pl._2();
+      return pl._1().equals(pl._2());
     }
-  }).count() / test.count();
+  }).count() / (double) test.count();
 {% endhighlight %}
 </div>
 
