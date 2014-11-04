@@ -362,7 +362,9 @@ object DecisionTreeRunner {
   /**
    * Calculates the mean squared error for regression.
    */
-  private[mllib] def meanSquaredError(tree: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
+  private[mllib] def meanSquaredError(
+      tree: WeightedEnsembleModel,
+      data: RDD[LabeledPoint]): Double = {
     data.map { y =>
       val err = tree.predict(y.features) - y.label
       err * err
