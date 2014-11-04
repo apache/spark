@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
 
@@ -205,6 +205,8 @@ private[hive] trait HiveStrategies {
       case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
       case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
+      case hive.AddFile(path) => execution.AddFile(path) :: Nil
 
       case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 

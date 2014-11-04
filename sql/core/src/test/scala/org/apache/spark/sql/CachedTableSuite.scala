@@ -27,18 +27,6 @@ case class BigData(s: String)
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
 
-  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
-    val planWithCaching = query.queryExecution.withCachedData
-    val cachedData = planWithCaching collect {
-      case cached: InMemoryRelation => cached
-    }
-
-    assert(
-      cachedData.size == numCachedTables,
-      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
-        planWithCaching)
-  }
-
   def rddIdOf(tableName: String): Int = {
     val executedPlan = table(tableName).queryExecution.executedPlan
     executedPlan.collect {
@@ -242,5 +230,25 @@ class CachedTableSuite extends QueryTest {
         val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
         assert(cached.statistics.sizeInBytes === actualSizeInBytes)
     }
+  }
+
+  test("Drops temporary table") {
+    testData.select('key).registerTempTable("t1")
+    table("t1")
+    dropTempTable("t1")
+    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
+  }
+
+  test("Drops cached temporary table") {
+    testData.select('key).registerTempTable("t1")
+    testData.select('key).registerTempTable("t2")
+    cacheTable("t1")
+
+    assert(isCached("t1"))
+    assert(isCached("t2"))
+
+    dropTempTable("t1")
+    assert(intercept[RuntimeException](table("t1")).getMessage.startsWith("Table Not Found"))
+    assert(!isCached("t2"))
   }
 }

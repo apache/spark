@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.jar.Attributes.Name
+
 import scala.collection.JavaConversions._
 
 import java.io.IOException
@@ -24,15 +26,17 @@ import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
 import org.apache.commons.logging.Log
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
-import org.apache.hive.service.cli.CLIService
+import org.apache.hive.service.cli._
 import org.apache.hive.service.{AbstractService, Service, ServiceException}
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.util.Utils
 
 private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
   extends CLIService
@@ -44,18 +48,29 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
     val sparkSqlSessionManager = new SparkSQLSessionManager(hiveContext)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
+    var sparkServiceUGI: UserGroupInformation = null
 
-    try {
-      HiveAuthFactory.loginFromKeytab(hiveConf)
-      val serverUserName = ShimLoader.getHadoopShims
-        .getShortUserName(ShimLoader.getHadoopShims.getUGIForConf(hiveConf))
-      setSuperField(this, "serverUserName", serverUserName)
-    } catch {
-      case e @ (_: IOException | _: LoginException) =>
-        throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
+    if (ShimLoader.getHadoopShims().isSecurityEnabled()) {
+      try {
+        HiveAuthFactory.loginFromKeytab(hiveConf)
+        sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
+        HiveThriftServerShim.setServerUserName(sparkServiceUGI, this)
+      } catch {
+        case e @ (_: IOException | _: LoginException) =>
+          throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
+      }
     }
 
     initCompositeService(hiveConf)
+  }
+
+  override def getInfo(sessionHandle: SessionHandle, getInfoType: GetInfoType): GetInfoValue = {
+    getInfoType match {
+      case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
+      case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(Utils.sparkVersion)
+      case _ => super.getInfo(sessionHandle, getInfoType)
+    }
   }
 }
 

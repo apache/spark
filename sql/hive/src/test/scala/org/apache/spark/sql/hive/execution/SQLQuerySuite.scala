@@ -56,7 +56,7 @@ class SQLQuerySuite extends QueryTest {
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
         | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect
-    // expect the string => integer for field key cause the table ctas4 already existed.
+    // do nothing cause the table ctas4 already existed.
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
         | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
@@ -78,9 +78,14 @@ class SQLQuerySuite extends QueryTest {
           SELECT key, value
           FROM src
           ORDER BY key, value""").collect().toSeq)
+    intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
+      sql(
+        """CREATE TABLE ctas4 AS
+          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+    }
     checkAnswer(
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
-      sql("SELECT CAST(key AS int) k, value FROM src ORDER BY k, value").collect().toSeq)
+      sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
 
     checkExistence(sql("DESC EXTENDED ctas2"), true,
       "name:key", "type:string", "name:value", "ctas2",
@@ -157,5 +162,10 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT case when ~1=-2 then 1 else 0 end FROM src"),
       sql("SELECT 1 FROM src").collect().toSeq)
+  }
+  
+ test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
+        sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
   }
 }

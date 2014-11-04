@@ -316,9 +316,6 @@ class RDD(object):
         """
         Return a sampled subset of this RDD (relies on numpy and falls back
         on default random generator if numpy is unavailable).
-
-        >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
-        [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
@@ -1867,11 +1864,11 @@ class RDD(object):
         Assign a name to this RDD.
 
         >>> rdd1 = sc.parallelize([1,2])
-        >>> rdd1.setName('RDD1')
-        >>> rdd1.name()
+        >>> rdd1.setName('RDD1').name()
         'RDD1'
         """
         self._jrdd.setName(name)
+        return self
 
     def toDebugString(self):
         """

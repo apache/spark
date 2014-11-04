@@ -30,6 +30,7 @@ import parquet.schema.MessageType
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -173,6 +174,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
+        case t: UserDefinedType[_] => writeValue(t.sqlType, value)
         case t @ ArrayType(_, _) => writeArray(
           t,
           value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
@@ -204,6 +206,11 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case d: DecimalType =>
+          if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+            sys.error(s"Unsupported datatype $d, cannot write to consumer")
+          }
+          writeDecimal(value.asInstanceOf[Decimal], d.precisionInfo.get.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -283,6 +290,23 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
     writer.endGroup()
   }
+
+  // Scratch array used to write decimals as fixed-length binary
+  private val scratchBytes = new Array[Byte](8)
+
+  private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
+    val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
+    val unscaledLong = decimal.toUnscaledLong
+    var i = 0
+    var shift = 8 * (numBytes - 1)
+    while (i < numBytes) {
+      scratchBytes(i) = (unscaledLong >> shift).toByte
+      i += 1
+      shift -= 8
+    }
+    writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
+  }
+
 }
 
 // Optimized for non-nested rows
@@ -326,6 +350,11 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case DoubleType => writer.addDouble(record.getDouble(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case d: DecimalType =>
+        if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+          sys.error(s"Unsupported datatype $d, cannot write to consumer")
+        }
+        writeDecimal(record(index).asInstanceOf[Decimal], d.precisionInfo.get.precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }
