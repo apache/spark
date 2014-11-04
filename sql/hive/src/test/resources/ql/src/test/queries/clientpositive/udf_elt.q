@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 DESCRIBE FUNCTION elt;
 DESCRIBE FUNCTION EXTENDED elt;
 
@@ -13,7 +15,7 @@ SELECT elt(2, 'abc', 'defg'),
        elt(null, 'abc', 'defg'),
        elt(0, 'abc', 'defg'),
        elt(3, 'abc', 'defg')
-FROM src LIMIT 1;
+FROM src tablesample (1 rows);
 
 SELECT elt(2, 'abc', 'defg'),
        elt(3, 'aa', 'bb', 'cc', 'dd', 'ee', 'ff', 'gg'),
@@ -26,4 +28,4 @@ SELECT elt(2, 'abc', 'defg'),
        elt(null, 'abc', 'defg'),
        elt(0, 'abc', 'defg'),
        elt(3, 'abc', 'defg')
-FROM src LIMIT 1;
+FROM src tablesample (1 rows);

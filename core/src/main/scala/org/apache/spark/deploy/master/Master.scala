@@ -344,7 +344,14 @@ private[spark] class Master(
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
-          logWarning("Got heartbeat from unregistered worker " + workerId)
+          if (workers.map(_.id).contains(workerId)) {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " Asking it to re-register.")
+            sender ! ReconnectWorker(masterUrl)
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
+          }
       }
     }
 
@@ -701,13 +708,13 @@ private[spark] class Master(
       val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
       val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
-      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       try {
         replayBus.replay(logInput, sparkVersion)
       } finally {
         logInput.close()
       }
-
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it

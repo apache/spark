@@ -215,7 +215,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId +
                       " STAGE_ID=" + taskEnd.stageId
         stageLogInfo(taskEnd.stageId, taskStatus)
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, message) =>
         taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" +
                       taskEnd.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
                       mapId + " REDUCE_ID=" + reduceId

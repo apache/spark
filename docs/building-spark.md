@@ -67,10 +67,12 @@ For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN
     <tr><th>YARN version</th><th>Profile required</th></tr>
   </thead>
   <tbody>
-    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha</td></tr>
+    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha (Deprecated.)</td></tr>
     <tr><td>2.2.x and later</td><td>yarn</td></tr>
   </tbody>
 </table>
+
+Note: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445).
 
 Examples:
 
@@ -99,10 +101,15 @@ mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -Dski
 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
-add the `-Phive` profile to your existing build options.
+add the `-Phive` profile to your existing build options. By default Spark
+will build with Hive 0.13.1 bindings. You can also build for Hive 0.12.0 using
+the `-Phive-0.12.0` profile.
 {% highlight bash %}
-# Apache Hadoop 2.4.X with Hive support
+# Apache Hadoop 2.4.X with Hive 13 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
+
+# Apache Hadoop 2.4.X with Hive 12 support
+mvn -Pyarn -Phive-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
 {% endhighlight %}
 
 # Spark Tests in Maven

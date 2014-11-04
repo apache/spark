@@ -315,8 +315,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   @deprecated("Use reduceByKeyLocally", "1.0.0")
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = reduceByKeyLocally(func)
 
-  /** Count the number of elements for each key, and return the result to the master as a Map. */
-  def countByKey(): Map[K, Long] = self.map(_._1).countByValue()
+  /** 
+   * Count the number of elements for each key, collecting the results to a local Map.
+   *
+   * Note that this method should only be used if the resulting map is expected to be small, as
+   * the whole thing is loaded into the driver's memory.
+   * To handle very large results, consider using rdd.mapValues(_ => 1L).reduceByKey(_ + _), which
+   * returns an RDD[T, Long] instead of a map.
+   */
+  def countByKey(): Map[K, Long] = self.mapValues(_ => 1L).reduceByKey(_ + _).collect().toMap
 
   /**
    * :: Experimental ::
@@ -956,9 +963,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.getAttemptId % Int.MaxValue).toInt
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.getPartitionId,
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
         attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outfmt.newInstance
@@ -1027,15 +1034,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val writeToFile = (context: TaskContext, iter: Iterator[(K, V)]) => {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.getAttemptId % Int.MaxValue).toInt
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
 
-      writer.setup(context.getStageId, context.getPartitionId, attemptNumber)
+      writer.setup(context.stageId, context.partitionId, attemptNumber)
       writer.open()
       try {
-        var count = 0
         while (iter.hasNext) {
           val record = iter.next()
-          count += 1
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
         }
       } finally {

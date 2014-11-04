@@ -1,3 +1,4 @@
+set hive.fetch.task.conversion=more;
 -- Check for int, bigint automatic type widening conversions in UDFs, UNIONS
 EXPLAIN SELECT COALESCE(0, 9223372036854775807) FROM src LIMIT 1;
 SELECT COALESCE(0, 9223372036854775807) FROM src LIMIT 1;

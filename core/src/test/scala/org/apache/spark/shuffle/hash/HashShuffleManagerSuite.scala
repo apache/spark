@@ -25,7 +25,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.{SparkEnv, SparkContext, LocalSparkContext, SparkConf}
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.network.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FileShuffleBlockManager
 import org.apache.spark.storage.{ShuffleBlockId, FileSegment}
@@ -36,9 +36,9 @@ class HashShuffleManagerSuite extends FunSuite with LocalSparkContext {
   private def checkSegments(expected: FileSegment, buffer: ManagedBuffer) {
     assert(buffer.isInstanceOf[FileSegmentManagedBuffer])
     val segment = buffer.asInstanceOf[FileSegmentManagedBuffer]
-    assert(expected.file.getCanonicalPath === segment.file.getCanonicalPath)
-    assert(expected.offset === segment.offset)
-    assert(expected.length === segment.length)
+    assert(expected.file.getCanonicalPath === segment.getFile.getCanonicalPath)
+    assert(expected.offset === segment.getOffset)
+    assert(expected.length === segment.getLength)
   }
 
   test("consolidated shuffle can write to shuffle group without messing existing offsets/lengths") {
