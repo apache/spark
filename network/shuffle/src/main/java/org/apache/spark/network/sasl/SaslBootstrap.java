@@ -38,17 +38,26 @@ public class SaslBootstrap implements TransportClientBootstrap {
 
   public void doBootstrap(TransportClient client) {
     SparkSaslClient saslClient = new SparkSaslClient(secretKeyId, secretKeyHolder);
-    byte[] payload = saslClient.firstToken();
+    try {
+      byte[] payload = saslClient.firstToken();
 
-    while (!saslClient.isComplete()) {
-      SaslMessage msg = new SaslMessage(secretKeyId, payload);
-      logger.info("Sending msg {} {}", secretKeyId, payload.length);
-      ByteBuf buf = Unpooled.buffer(msg.encodedLength());
-      msg.encode(buf);
+      while (!saslClient.isComplete()) {
+        SaslMessage msg = new SaslMessage(secretKeyId, payload);
+        logger.info("Sending msg {} {}", secretKeyId, payload.length);
+        ByteBuf buf = Unpooled.buffer(msg.encodedLength());
+        msg.encode(buf);
 
-      byte[] response = client.sendRpcSync(buf.array(), 300000);
-      logger.info("Got response {} {}", secretKeyId, response.length);
-      payload = saslClient.response(response);
+        byte[] response = client.sendRpcSync(buf.array(), 300000);
+        logger.info("Got response {} {}", secretKeyId, response.length);
+        payload = saslClient.response(response);
+      }
+    } finally {
+      try {
+        // Once authentication is complete, the server will trust all remaining communication.
+        saslClient.dispose();
+      } catch (RuntimeException e) {
+        logger.error("Error while disposing SASL client", e);
+      }
     }
   }
 }

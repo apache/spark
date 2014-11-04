@@ -41,7 +41,7 @@ import org.apache.spark.network.util.JavaUtils;
  * with the "one-for-one" strategy, meaning each Transport-layer Chunk is equivalent to one Spark-
  * level shuffle block.
  */
-public class ExternalShuffleBlockHandler implements RpcHandler {
+public class ExternalShuffleBlockHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
   private final ExternalShuffleBlockManager blockManager;

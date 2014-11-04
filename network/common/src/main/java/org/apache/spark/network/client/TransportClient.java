@@ -19,10 +19,9 @@ package org.apache.spark.network.client;
 
 import java.io.Closeable;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
@@ -187,9 +186,11 @@ public class TransportClient implements Closeable {
     channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
   }
 
-  /** Returns a stable key for the given channel. Only valid after the channel is connected. */
-  public String getChannelKey() {
-    return String.format("[%s, %s, %s]", channel.remoteAddress(), channel.localAddress(),
-      channel.hashCode());
+  @Override
+  public String toString() {
+    return Objects.toStringHelper(this)
+      .add("remoteAdress", channel.remoteAddress())
+      .add("isActive", isActive())
+      .toString();
   }
 }

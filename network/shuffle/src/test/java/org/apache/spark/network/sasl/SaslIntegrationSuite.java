@@ -158,7 +158,7 @@ public class SaslIntegrationSuite {
   }
 
   /** RPC handler which simply responds with the message it received. */
-  public static class TestRpcHandler implements RpcHandler {
+  public static class TestRpcHandler extends RpcHandler {
     @Override
     public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
       callback.onSuccess(message);

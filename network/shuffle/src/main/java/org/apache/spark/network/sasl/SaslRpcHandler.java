@@ -36,15 +36,18 @@ import org.apache.spark.network.server.StreamManager;
  * RPC Handler which performs SASL authentication before delegating to a child RPC handler.
  * The delegate will only receive messages if the given connection has been successfully
  * authenticated. A connection may be authenticated at most once.
+ *
+ * Note that the authentication process consists of multiple challenge-response pairs, each of
+ * which are individual RPCs.
  */
-public class SaslRpcHandler implements RpcHandler {
+public class SaslRpcHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
 
   private final RpcHandler delegate;
   private final SecretKeyHolder secretKeyHolder;
 
   // TODO: Invalidate channels that have closed!
-  private final ConcurrentMap<String, SparkSaslServer> channelAuthenticationMap;
+  private final ConcurrentMap<TransportClient, SparkSaslServer> channelAuthenticationMap;
 
   public SaslRpcHandler(RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
     this.delegate = delegate;
@@ -54,9 +57,7 @@ public class SaslRpcHandler implements RpcHandler {
 
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    String channelKey = client.getChannelKey();
-
-    SparkSaslServer saslServer = channelAuthenticationMap.get(channelKey);
+    SparkSaslServer saslServer = channelAuthenticationMap.get(client);
     if (saslServer != null && saslServer.isComplete()) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
@@ -66,13 +67,14 @@ public class SaslRpcHandler implements RpcHandler {
     SaslMessage saslMessage = SaslMessage.decode(Unpooled.wrappedBuffer(message));
 
     if (saslServer == null) {
+      // First message in the handshake, setup the necessary state.
       saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder);
-      channelAuthenticationMap.put(channelKey, saslServer);
+      channelAuthenticationMap.put(client, saslServer);
     }
 
     byte[] response = saslServer.response(saslMessage.payload);
     if (saslServer.isComplete()) {
-      logger.debug("SASL authentication successful for channel {}", channelKey);
+      logger.debug("SASL authentication successful for channel {}", client);
     }
     callback.onSuccess(response);
   }
@@ -80,6 +82,14 @@ public class SaslRpcHandler implements RpcHandler {
   @Override
   public StreamManager getStreamManager() {
     return delegate.getStreamManager();
+  }
+
+  @Override
+  public void connectionTerminated(TransportClient client) {
+    SparkSaslServer saslServer = channelAuthenticationMap.remove(client);
+    if (saslServer != null) {
+      saslServer.dispose();
+    }
   }
 }
 
