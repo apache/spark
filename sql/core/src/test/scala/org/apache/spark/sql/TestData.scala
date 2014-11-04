@@ -79,7 +79,7 @@ object TestData {
       UntrimmedData(2, "To ") ::
       UntrimmedData(3, " See") ::
       UntrimmedData(4, " You ! ") :: Nil).toSchemaRDD
-    untrimmedData.registerTempTable("untrimmedData")
+  untrimmedData.registerTempTable("untrimmedData")
 
 
   case class UpperCaseData(N: Int, L: String)

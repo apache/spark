@@ -168,9 +168,9 @@ case class RLike(left: Expression, right: Expression)
  */
 case class Ltrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = v.dropWhile(_ == ' ')
+  override def convert(v: String): String = v.dropWhile(_ == ' ')
 
-    override def toString() = s"Ltrim($child)"
+  override def toString() = s"Ltrim($child)"
 }
 
 /**
@@ -178,9 +178,9 @@ case class Ltrim(child: Expression) extends UnaryExpression with StringTransform
  */
 case class Rtrim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = v.reverse.dropWhile(_ == ' ').reverse
+  override def convert(v: String): String = v.reverse.dropWhile(_ == ' ').reverse
 
-    override def toString() = s"Rtrim($child)"
+  override def toString() = s"Rtrim($child)"
 }
 
 /**
@@ -188,9 +188,9 @@ case class Rtrim(child: Expression) extends UnaryExpression with StringTransform
  */
 case class Length(child: Expression) extends UnaryExpression with StringCalculationExpression {
 
-    override def calc(v: String): Int = v.length()
+  override def calc(v: String): Int = v.length()
 
-    override def toString() = s"Length($child)"
+  override def toString() = s"Length($child)"
 }
 
 /**
@@ -198,9 +198,9 @@ case class Length(child: Expression) extends UnaryExpression with StringCalculat
  */
 case class Trim(child: Expression) extends UnaryExpression with StringTransformationExpression {
 
-    override def convert(v: String): String = v.trim()
+  override def convert(v: String): String = v.trim()
 
-    override def toString() = s"Trim($child)"
+  override def toString() = s"Trim($child)"
 }
 
 /**
