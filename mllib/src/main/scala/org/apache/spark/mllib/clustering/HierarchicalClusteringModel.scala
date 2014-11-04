@@ -27,15 +27,13 @@ import org.apache.spark.rdd.RDD
  * this class is used for the model of the hierarchical clustering
  *
  * @param clusterTree a cluster as a tree node
- * @param trainTime the milliseconds for executing a training
  * @param isTrained if the model has been trained, the flag is true
  */
 class HierarchicalClusteringModel private (
   val clusterTree: ClusterTree,
-  private[mllib] var trainTime: Int,
   private[mllib] var isTrained: Boolean) extends Serializable with Logging {
 
-  def this(clusterTree: ClusterTree) = this(clusterTree, 0, false)
+  def this(clusterTree: ClusterTree) = this(clusterTree, false)
 
   /**
    * Predicts the closest cluster of each point
@@ -78,6 +76,4 @@ class HierarchicalClusteringModel private (
   def getClusters(): Array[ClusterTree] = clusterTree.getClusters().toArray
 
   def getCenters(): Array[Vector] = getClusters().map(_.center)
-
-  def getTrainTime() = this.trainTime
 }

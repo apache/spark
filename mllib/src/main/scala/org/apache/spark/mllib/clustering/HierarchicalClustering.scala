@@ -166,7 +166,8 @@ class HierarchicalClustering(
     }
 
     model.isTrained = true
-    model.trainTime = (System.currentTimeMillis() - startTime).toInt
+    val trainTime = (System.currentTimeMillis() - startTime).toInt
+    logInfo(s"Elapsed Time for Training: ${trainTime.toDouble / 1000} [sec]")
     model
   }
 
