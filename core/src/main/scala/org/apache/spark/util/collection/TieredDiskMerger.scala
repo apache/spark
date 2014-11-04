@@ -17,22 +17,22 @@
 
 package org.apache.spark.util.collection
 
+import java.io.{File, FileOutputStream, BufferedOutputStream}
+import java.util.Comparator
+import java.util.concurrent.{PriorityBlockingQueue, CountDownLatch}
+
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark._
 import org.apache.spark.storage.BlockId
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.CompletionIterator
 
-import java.util.Comparator
-import java.util.concurrent.{PriorityBlockingQueue, CountDownLatch}
-import java.io.{File, FileOutputStream, BufferedOutputStream}
-
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * Explain the boundaries of where this starts and why we have second thread
  *
  * Manages blocks of sorted data on disk that need to be merged together. Carries out a tiered
- * merge that will never merge more than spark.shuffle.maxMergeWidth segments at a time.  Except for
+ * merge that will never merge more than spark.shuffle.maxMergeFactor segments at a time.  Except for
  * the final merge, which merges disk blocks to a returned iterator, TieredDiskMerger merges blocks
  * from disk to disk.
  *
@@ -45,36 +45,36 @@ import scala.collection.mutable.ArrayBuffer
 private[spark] class TieredDiskMerger[K, C](
     conf: SparkConf,
     dep: ShuffleDependency[K, _, C],
+    keyComparator: Comparator[K],
     context: TaskContext) extends Logging {
 
+  /** Manage the on-disk shuffle block and related file, file size */
   case class DiskShuffleBlock(blockId: BlockId, file: File, len: Long)
       extends Comparable[DiskShuffleBlock] {
     def compareTo(o: DiskShuffleBlock): Int = len.compare(o.len)
   }
 
-  private val keyComparator: Comparator[K] = dep.keyOrdering.getOrElse(new Comparator[K] {
-    override def compare(a: K, b: K) = {
-      val h1 = if (a == null) 0 else a.hashCode()
-      val h2 = if (b == null) 0 else b.hashCode()
-      h1 - h2
-    }
-  })
-
-  private val maxMergeWidth = conf.getInt("spark.shuffle.maxMergeWidth", 10)
+  private val maxMergeFactor = conf.getInt("spark.shuffle.maxMergeFactor", 100)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
   private val blockManager = SparkEnv.get.blockManager
   private val ser = Serializer.getSerializer(dep.serializer)
 
-  private val blocks = new PriorityBlockingQueue[DiskShuffleBlock]()
+  /** PriorityQueue to store the on-disk merging blocks, blocks are merged by size ordering */
+  private val onDiskBlocks = new PriorityBlockingQueue[DiskShuffleBlock]()
 
+  /** A merging thread to merge on-disk blocks */
+  private val diskToDiskMerger = new DiskToDiskMerger
+
+  /** Signal to block/signal the merge action */
   private val mergeReadyMonitor = new AnyRef()
+
   private val mergeFinished = new CountDownLatch(1)
 
   @volatile private var doneRegistering = false
 
   def registerOnDiskBlock(blockId: BlockId, file: File): Unit = {
     assert(!doneRegistering)
-    blocks.put(new DiskShuffleBlock(blockId, file, file.length()))
+    onDiskBlocks.put(new DiskShuffleBlock(blockId, file, file.length()))
 
     mergeReadyMonitor.synchronized {
       if (shouldMergeNow()) {
@@ -97,30 +97,29 @@ private[spark] class TieredDiskMerger[K, C](
     mergeFinished.await()
 
     // Merge the final group for combiner to directly feed to the reducer
-    val finalMergedPartArray = blocks.toArray(new Array[DiskShuffleBlock](blocks.size()))
+    val finalMergedPartArray = onDiskBlocks.toArray(new Array[DiskShuffleBlock](onDiskBlocks.size()))
     val finalItrGroup = blocksToRecordIterators(finalMergedPartArray)
     val mergedItr =
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
-    blocks.clear()
+    onDiskBlocks.clear()
 
-    // Release the in-memory block and on-disk file when iteration is completed.
+    // Release the on-disk file when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
       mergedItr, releaseShuffleBlocks(finalMergedPartArray))
 
-    new InterruptibleIterator(context, completionItr.map(p => (p._1, p._2)))
-
+    new InterruptibleIterator(context, completionItr)
   }
 
   def start() {
-    new DiskToDiskMergingThread().start()
+    diskToDiskMerger.start()
   }
 
   /**
    * Release the left in-memory buffer or on-disk file after merged.
    */
   private def releaseShuffleBlocks(shufflePartGroup: Array[DiskShuffleBlock]): Unit = {
-    shufflePartGroup.map { case DiskShuffleBlock(id, file, length) =>
+    shufflePartGroup.map { case DiskShuffleBlock(_, file, _) =>
       try {
         file.delete()
       } catch {
@@ -133,11 +132,10 @@ private[spark] class TieredDiskMerger[K, C](
 
   private def blocksToRecordIterators(shufflePartGroup: Seq[DiskShuffleBlock])
     : Seq[Iterator[Product2[K, C]]] = {
-    shufflePartGroup.map { case DiskShuffleBlock(id, file, length) =>
-      val blockData = blockManager.diskStore.getBytes(id).getOrElse(
-        throw new IllegalStateException(s"cannot get data from block $id"))
-      val itr = blockManager.dataDeserialize(id, blockData, ser)
-      itr.asInstanceOf[Iterator[Product2[K, C]]]
+    shufflePartGroup.map { case DiskShuffleBlock(id, _, _) =>
+      val blockData = blockManager.getBlockData(id)
+      blockManager.dataDeserialize(id, blockData.nioByteBuffer(), ser)
+        .asInstanceOf[Iterator[Product2[K, C]]]
     }.toSeq
   }
 
@@ -146,57 +144,57 @@ private[spark] class TieredDiskMerger[K, C](
    * registering notification to come in.
    *
    * We want to avoid merging more blocks than we need to. Our last disk-to-disk merge may
-   * merge fewer than maxMergeWidth blocks, as its only requirement is that, after it has been
-   * carried out, <= maxMergeWidth blocks remain. E.g., if maxMergeWidth is 10, no more blocks
+   * merge fewer than maxMergeFactor blocks, as its only requirement is that, after it has been
+   * carried out, <= maxMergeFactor blocks remain. E.g., if maxMergeFactor is 10, no more blocks
    * will come in, and we have 13 on-disk blocks, the optimal number of blocks to include in the
    * last disk-to-disk merge is 4.
    *
    * While blocks are still coming in, we don't know the optimal number, so we hold off until we
-   * either receive the notification that no more blocks are coming in, or until maxMergeWidth
+   * either receive the notification that no more blocks are coming in, or until maxMergeFactor
    * merge is required no matter what.
    *
-   * E.g. if maxMergeWidth is 10 and we have 19 or more on-disk blocks, a 10-block merge will put us
+   * E.g. if maxMergeFactor is 10 and we have 19 or more on-disk blocks, a 10-block merge will put us
    * at 10 or more blocks, so we might as well carry it out now.
    */
-  private def shouldMergeNow(): Boolean = doneRegistering || blocks.size() >= maxMergeWidth * 2 - 1
+  private def shouldMergeNow(): Boolean = doneRegistering || onDiskBlocks.size() >= maxMergeFactor * 2 - 1
 
-  private class DiskToDiskMergingThread extends Thread {
-    // TODO: there will be more than one of these so we need more unique names?
-    setName("tiered-merge-thread")
+  private final class DiskToDiskMerger extends Thread {
+    setName(s"tiered-merge-thread-${Thread.currentThread().getId}")
     setDaemon(true)
 
     override def run() {
       // Each iteration of this loop carries out a disk-to-disk merge. We remain in this loop until
       // no more disk-to-disk merges need to be carried out, i.e. when no more blocks are coming in
-      // and the final merge won't need to merge more than maxMergeWidth blocks.
-      while (!doneRegistering || blocks.size() > maxMergeWidth) {
+      // and the final merge won't need to merge more than maxMergeFactor blocks.
+      while (!doneRegistering || onDiskBlocks.size() > maxMergeFactor) {
         while (!shouldMergeNow()) {
           mergeReadyMonitor.synchronized {
             mergeReadyMonitor.wait()
           }
         }
 
-        if (blocks.size() > maxMergeWidth) {
+        if (onDiskBlocks.size() > maxMergeFactor) {
           val blocksToMerge = new ArrayBuffer[DiskShuffleBlock]()
           // Try to pick the smallest merge width that will result in the next merge being the final
           // merge.
-          val mergeWidth = math.min(blocks.size - maxMergeWidth + 1, maxMergeWidth)
-          (0 until mergeWidth).foreach {
-            blocksToMerge += blocks.take()
+          val mergeFactor = math.min(onDiskBlocks.size - maxMergeFactor + 1, maxMergeFactor)
+          (0 until mergeFactor).foreach {
+            blocksToMerge += onDiskBlocks.take()
           }
 
           // Merge the blocks
           val itrGroup = blocksToRecordIterators(blocksToMerge)
-          val partialMergedIter =
+          val partialMergedItr =
             MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
           // Write merged blocks to disk
           val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
           val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
-          blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedIter, ser)
+          blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedItr, ser)
+
           logInfo(s"Merged ${blocksToMerge.size} on-disk blocks into file ${file.getName}")
 
           releaseShuffleBlocks(blocksToMerge.toArray)
-          blocks.add(DiskShuffleBlock(tmpBlockId, file, file.length()))
+          onDiskBlocks.add(DiskShuffleBlock(tmpBlockId, file, file.length()))
         }
       }
 

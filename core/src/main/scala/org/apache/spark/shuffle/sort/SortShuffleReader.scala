@@ -26,10 +26,9 @@ import org.apache.spark.{Logging, InterruptibleIterator, SparkEnv, TaskContext}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleReader, BaseShuffleHandle}
-import org.apache.spark.shuffle.hash.BlockStoreShuffleFetcher
 import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
-import org.apache.spark.util.collection.{MergeUtil, TieredDiskMerger}
+import org.apache.spark.util.collection.{TieredDiskMerger, MergeUtil}
 
 /**
  * SortShuffleReader merges and aggregates shuffle data that has already been sorted within each
@@ -50,13 +49,13 @@ private[spark] class SortShuffleReader[K, C](
     context: TaskContext)
   extends ShuffleReader[K, C] with Logging {
 
+  /** Manage the fetched in-memory shuffle block and related buffer*/
+  case class MemoryShuffleBlock(blockId: BlockId, blockData: ManagedBuffer)
+
   require(endPartition == startPartition + 1,
     "Sort shuffle currently only supports fetching one partition")
 
-  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
-
-  case class MemoryBlock(blockId: BlockId, blockData: ManagedBuffer)
-
+  /** Shuffle block fetcher iterator */
   private var shuffleRawBlockFetcherItr: ShuffleRawBlockFetcherIterator = _
 
   private val dep = handle.dependency
@@ -65,29 +64,25 @@ private[spark] class SortShuffleReader[K, C](
   private val ser = Serializer.getSerializer(dep.serializer)
   private val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
-  private val memoryBlocks = new ArrayBuffer[MemoryBlock]()
+  private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
-  private val tieredMerger = new TieredDiskMerger(conf, dep, context)
+  /** ArrayBuffer to store in-memory shuffle blocks */
+  private val inMemoryBlocks = new ArrayBuffer[MemoryShuffleBlock]()
 
+  /** keyComparator for mergeSort, id keyOrdering is not available,
+    * using hashcode of key to compare */
   private val keyComparator: Comparator[K] = dep.keyOrdering.getOrElse(new Comparator[K] {
     override def compare(a: K, b: K) = {
       val h1 = if (a == null) 0 else a.hashCode()
       val h2 = if (b == null) 0 else b.hashCode()
-      h1 - h2
+      if (h1 < h2) -1 else if (h1 == h2) 0 else 1
     }
   })
 
-  override def read(): Iterator[Product2[K, C]] = {
-    if (!dep.mapSideCombine && dep.aggregator.isDefined) {
-      val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context, ser)
-      new InterruptibleIterator(context,
-        dep.aggregator.get.combineValuesByKey(iter, context))
-    } else {
-      sortShuffleRead()
-    }
-  }
+  /** A merge thread to merge on-disk blocks */
+  private val tieredMerger = new TieredDiskMerger(conf, dep, keyComparator, context)
 
-  private def sortShuffleRead(): Iterator[Product2[K, C]] = {
+  override def read(): Iterator[Product2[K, C]] = {
     tieredMerger.start()
 
     for ((blockId, blockData) <- fetchRawBlocks()) {
@@ -95,51 +90,68 @@ private[spark] class SortShuffleReader[K, C](
         throw new IllegalStateException(s"block $blockId is empty for unknown reason")
       }
 
-      memoryBlocks += MemoryBlock(blockId, blockData.get)
+      inMemoryBlocks += MemoryShuffleBlock(blockId, blockData.get)
 
       // Try to fit block in memory. If this fails, merge in-memory blocks to disk.
       val blockSize = blockData.get.size
       val granted = shuffleMemoryManager.tryToAcquire(blockData.get.size)
-      if (granted < blockSize) {
-        shuffleMemoryManager.release(granted)
+      logInfo(s"Granted $granted memory for shuffle block")
 
-        val itrGroup = memoryBlocksToIterators()
-        val partialMergedIter =
-          MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
+      if (granted < blockSize) {
+        logInfo(s"Granted $granted memory is not enough to store shuffle block ($blockSize), " +
+          s"try to consolidate in-memory blocks to release the memory")
+
+        shuffleMemoryManager.release(granted)
 
         // Write merged blocks to disk
         val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
-        val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
-        blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedIter, ser)
+        val fos = new FileOutputStream(file)
+        val bos = new BufferedOutputStream(fos, fileBufferSize)
+
+        if (inMemoryBlocks.size > 1) {
+          val itrGroup = inMemoryBlocksToIterators()
+          val partialMergedItr =
+            MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
+          blockManager.dataSerializeStream(tmpBlockId, bos, partialMergedItr, ser)
+        } else {
+          val buffer = inMemoryBlocks.map(_.blockData.nioByteBuffer()).head
+          val channel = fos.getChannel
+          while (buffer.hasRemaining) {
+            channel.write(buffer)
+          }
+          channel.close()
+        }
+
         tieredMerger.registerOnDiskBlock(tmpBlockId, file)
 
-        for (block <- memoryBlocks) {
+        for (block <- inMemoryBlocks) {
           shuffleMemoryManager.release(block.blockData.size)
         }
-        memoryBlocks.clear()
+        inMemoryBlocks.clear()
       }
 
       shuffleRawBlockFetcherItr.currentResult = null
     }
+
     tieredMerger.doneRegisteringOnDiskBlocks()
 
     // Merge on-disk blocks with in-memory blocks to directly feed to the reducer.
-    val finalItrGroup = memoryBlocksToIterators() ++ Seq(tieredMerger.readMerged())
+    val finalItrGroup = inMemoryBlocksToIterators() ++ Seq(tieredMerger.readMerged())
     val mergedItr =
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
-    // Release the in-memory block and on-disk file when iteration is completed.
+    // Release the in-memory block when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
       mergedItr, () => {
-        memoryBlocks.foreach(block => shuffleMemoryManager.release(block.blockData.size))
-        memoryBlocks.clear()
+        inMemoryBlocks.foreach(block => shuffleMemoryManager.release(block.blockData.size))
+        inMemoryBlocks.clear()
       })
 
     new InterruptibleIterator(context, completionItr.map(p => (p._1, p._2)))
   }
 
-  def memoryBlocksToIterators(): Seq[Iterator[Product2[K, C]]] = {
-    memoryBlocks.map{ case MemoryBlock(id, buf) =>
+  private def inMemoryBlocksToIterators(): Seq[Iterator[Product2[K, C]]] = {
+    inMemoryBlocks.map{ case MemoryShuffleBlock(id, buf) =>
       blockManager.dataDeserialize(id, buf.nioByteBuffer(), ser)
         .asInstanceOf[Iterator[Product2[K, C]]]
     }
@@ -149,27 +161,25 @@ private[spark] class SortShuffleReader[K, C](
 
   private def fetchRawBlocks(): Iterator[(BlockId, Option[ManagedBuffer])] = {
     val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
+
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]()
     for (((address, size), index) <- statuses.zipWithIndex) {
       splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
     }
-    val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
-      case (address, splits) =>
-        (address, splits.map(s => (ShuffleBlockId(handle.shuffleId, s._1, startPartition), s._2)))
+
+    val blocksByAddress = splitsByAddress.toSeq.map { case (address, splits) =>
+      val blocks = splits.map { s =>
+        (ShuffleBlockId(handle.shuffleId, s._1, startPartition), s._2)
+      }
+      (address, blocks.toSeq)
     }
-    var numMapBlocks = 0
-    blocksByAddress.foreach { case (_, blocks) =>
-      blocks.foreach { case (_, len) => if (len > 0) numMapBlocks += 1 }
-    }
-    val threadId = Thread.currentThread.getId
-    logInfo(s"Fetching $numMapBlocks blocks for $threadId")
 
     shuffleRawBlockFetcherItr = new ShuffleRawBlockFetcherIterator(
       context,
       SparkEnv.get.blockTransferService,
       blockManager,
       blocksByAddress,
-      SparkEnv.get.conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
+      conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
 
     val completionItr = CompletionIterator[
       (BlockId, Option[ManagedBuffer]),
