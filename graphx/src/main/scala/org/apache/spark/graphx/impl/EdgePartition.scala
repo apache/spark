@@ -98,9 +98,9 @@ class EdgePartition[
       activeSet)
   }
 
-  def srcIds(i: Int): VertexId = local2global(localSrcIds(i))
+  private def srcIds(pos: Int): VertexId = local2global(localSrcIds(pos))
 
-  def dstIds(i: Int): VertexId = local2global(localDstIds(i))
+  private def dstIds(pos: Int): VertexId = local2global(localDstIds(pos))
 
   /** Look up vid in activeSet, throwing an exception if it is None. */
   def isActive(vid: VertexId): Boolean = {
@@ -231,23 +231,34 @@ class EdgePartition[
       global2local, local2global, vertexAttrs)
     var currSrcId: VertexId = null.asInstanceOf[VertexId]
     var currDstId: VertexId = null.asInstanceOf[VertexId]
+    var currLocalSrcId = -1
+    var currLocalDstId = -1
     var currAttr: ED = null.asInstanceOf[ED]
+    // Iterate through the edges, accumulating runs of identical edges using the curr* variables and
+    // releasing them to the builder when we see the beginning of the next run
     var i = 0
     while (i < size) {
       if (i > 0 && currSrcId == srcIds(i) && currDstId == dstIds(i)) {
+        // This edge should be accumulated into the existing run
         currAttr = merge(currAttr, data(i))
       } else {
+        // This edge starts a new run of edges
         if (i > 0) {
-          builder.add(currSrcId, currDstId, localSrcIds(i - 1), localDstIds(i - 1), currAttr)
+          // First release the existing run to the builder
+          builder.add(currSrcId, currDstId, currLocalSrcId, currLocalDstId, currAttr)
         }
+        // Then start accumulating for a new run
         currSrcId = srcIds(i)
         currDstId = dstIds(i)
+        currLocalSrcId = localSrcIds(i)
+        currLocalDstId = localDstIds(i)
         currAttr = data(i)
       }
       i += 1
     }
+    // Finally, release the last accumulated run
     if (size > 0) {
-      builder.add(currSrcId, currDstId, localSrcIds(i - 1), localDstIds(i - 1), currAttr)
+      builder.add(currSrcId, currDstId, currLocalSrcId, currLocalDstId, currAttr)
     }
     builder.toEdgePartition.withActiveSet(activeSet)
   }
