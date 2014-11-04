@@ -18,65 +18,109 @@
 package org.apache.spark.metrics
 
 import java.io.{FileWriter, PrintWriter, File}
+import org.apache.hadoop.io.{Text, LongWritable}
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 
+import org.apache.spark.util.Utils
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListenerTaskEnd, SparkListener}
 
 import org.scalatest.FunSuite
-import org.scalatest.Matchers
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
 
 import scala.collection.mutable.ArrayBuffer
 
-class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with Matchers {
-  test("input metrics when reading text file with single split") {
-    val file = new File(getClass.getSimpleName + ".txt")
-    val pw = new PrintWriter(new FileWriter(file))
-    pw.println("some stuff")
-    pw.println("some other stuff")
-    pw.println("yet more stuff")
-    pw.println("too much stuff")
-    pw.close()
-    file.deleteOnExit()
+class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
 
-    val taskBytesRead = new ArrayBuffer[Long]()
-    sc.addSparkListener(new SparkListener() {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-        taskBytesRead += taskEnd.taskMetrics.inputMetrics.get.bytesRead
-      }
-    })
-    sc.textFile("file://" + file.getAbsolutePath, 2).count()
+  @transient var tmpDir: File = _
+  @transient var tmpFile: File = _
+  @transient var tmpFilePath: String = _
 
-    // Wait for task end events to come in
-    sc.listenerBus.waitUntilEmpty(500)
-    assert(taskBytesRead.length == 2)
-    assert(taskBytesRead.sum >= file.length())
-  }
+  override def beforeAll() {
+    super.beforeAll()
 
-  test("input metrics when reading text file with multiple splits") {
-    val file = new File(getClass.getSimpleName + ".txt")
-    val pw = new PrintWriter(new FileWriter(file))
-    for (i <- 0 until 10000) {
-      pw.println("some stuff")
+    tmpDir = Utils.createTempDir()
+    val testTempDir = new File(tmpDir, "test")
+    testTempDir.mkdir()
+
+    tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
+    val pw = new PrintWriter(new FileWriter(tmpFile))
+    for (x <- 1 to 1000000) {
+      pw.println("s")
     }
     pw.close()
-    file.deleteOnExit()
 
+    // Path to tmpFile
+    tmpFilePath = "file://" + tmpFile.getAbsolutePath
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    Utils.deleteRecursively(tmpDir)
+  }
+
+  test("input metrics for old hadoop with coalesce") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.textFile(tmpFilePath, 4).count()
+    }
+    val bytesRead2 = runAndReturnBytesRead {
+      sc.textFile(tmpFilePath, 4).coalesce(2).count()
+    }
+    assert(bytesRead2 == bytesRead)
+    assert(bytesRead2 >= tmpFile.length())
+  }
+
+  test("input metrics with cache and coalesce") {
+    // prime the cache manager
+    val rdd = sc.textFile(tmpFilePath, 4).cache()
+    rdd.collect()
+
+    val bytesRead = runAndReturnBytesRead {
+      rdd.count()
+    }
+    val bytesRead2 = runAndReturnBytesRead {
+      rdd.coalesce(4).count()
+    }
+
+    // for count and coelesce, the same bytes should be read.
+    assert(bytesRead2 >= bytesRead2)
+  }
+
+  test("input metrics for new Hadoop API with coalesce") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
+        classOf[Text]).count()
+    }
+    val bytesRead2 = runAndReturnBytesRead {
+      sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
+        classOf[Text]).coalesce(5).count()
+    }
+    assert(bytesRead2 == bytesRead)
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics when reading text file") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.textFile(tmpFilePath, 2).count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  private def runAndReturnBytesRead(job : => Unit): Long = {
     val taskBytesRead = new ArrayBuffer[Long]()
     sc.addSparkListener(new SparkListener() {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
         taskBytesRead += taskEnd.taskMetrics.inputMetrics.get.bytesRead
       }
     })
-    sc.textFile("file://" + file.getAbsolutePath, 2).count()
 
-    // Wait for task end events to come in
+    job
+
     sc.listenerBus.waitUntilEmpty(500)
-    assert(taskBytesRead.length == 2)
-    assert(taskBytesRead.sum >= file.length())
+    taskBytesRead.sum
   }
 
   test("output metrics when writing text file") {

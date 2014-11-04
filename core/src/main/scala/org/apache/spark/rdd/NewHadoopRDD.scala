@@ -109,7 +109,11 @@ class NewHadoopRDD[K, V](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = confBroadcast.value.value
 
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      val readMethod = DataReadMethod.Hadoop
+      val inputMetrics = context.taskMetrics.inputMetrics
+          .filter(_.readMethod == readMethod)
+          .getOrElse(new InputMetrics(readMethod))
+
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
@@ -140,6 +144,8 @@ class NewHadoopRDD[K, V](
       var finished = false
       var recordsSinceMetricsUpdate = 0
 
+      val bytesReadAtStart = inputMetrics.bytesRead
+
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
           finished = !reader.nextKeyValue
@@ -159,7 +165,7 @@ class NewHadoopRDD[K, V](
             && bytesReadCallback.isDefined) {
           recordsSinceMetricsUpdate = 0
           val bytesReadFn = bytesReadCallback.get
-          inputMetrics.bytesRead = bytesReadFn()
+          inputMetrics.bytesRead = bytesReadFn() + bytesReadAtStart
         } else {
           recordsSinceMetricsUpdate += 1
         }
@@ -174,12 +180,12 @@ class NewHadoopRDD[K, V](
           // Update metrics with final amount
           if (bytesReadCallback.isDefined) {
             val bytesReadFn = bytesReadCallback.get
-            inputMetrics.bytesRead = bytesReadFn()
+            inputMetrics.bytesRead = bytesReadFn() + bytesReadAtStart
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength
+              inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength + bytesReadAtStart
               context.taskMetrics.inputMetrics = Some(inputMetrics)
             } catch {
               case e: java.io.IOException =>

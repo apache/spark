@@ -213,7 +213,11 @@ class HadoopRDD[K, V](
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
 
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      val readMethod = DataReadMethod.Hadoop
+      val inputMetrics = context.taskMetrics.inputMetrics
+          .filter(_.readMethod == readMethod)
+          .getOrElse(new InputMetrics(readMethod))
+
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
@@ -239,6 +243,8 @@ class HadoopRDD[K, V](
 
       var recordsSinceMetricsUpdate = 0
 
+      val bytesReadAtStart = inputMetrics.bytesRead
+
       override def getNext() = {
         try {
           finished = !reader.next(key, value)
@@ -252,7 +258,7 @@ class HadoopRDD[K, V](
             && bytesReadCallback.isDefined) {
           recordsSinceMetricsUpdate = 0
           val bytesReadFn = bytesReadCallback.get
-          inputMetrics.bytesRead = bytesReadFn()
+          inputMetrics.bytesRead = bytesReadFn() + bytesReadAtStart
         } else {
           recordsSinceMetricsUpdate += 1
         }
@@ -264,12 +270,12 @@ class HadoopRDD[K, V](
           reader.close()
           if (bytesReadCallback.isDefined) {
             val bytesReadFn = bytesReadCallback.get
-            inputMetrics.bytesRead = bytesReadFn()
+            inputMetrics.bytesRead = bytesReadFn() + bytesReadAtStart
           } else if (split.inputSplit.value.isInstanceOf[FileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.bytesRead = split.inputSplit.value.getLength
+              inputMetrics.bytesRead = split.inputSplit.value.getLength + bytesReadAtStart
               context.taskMetrics.inputMetrics = Some(inputMetrics)
             } catch {
               case e: java.io.IOException =>
