@@ -654,6 +654,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+    <td><code>spark.executor.heartbeatInterval</code></td>
+    <td>10000</td>
+    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    the driver know that the executor is still alive and update it with metrics for in-progress
+    tasks.</td>
+</tr>
+</table>
+
+#### Hadoop
+
+All properties in spark.hadoop.* will be copied into the Hadoop <code>Configuration</code> object used by a SparkContext.  For instance, setting spark.hadoop.fs.s3.awsAccessKeyId will set fs.s3.awsAccessKeyId on the Hadoop configuration.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
     <td><code>spark.hadoop.validateOutputSpecs</code></td>
     <td>true</td>
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
@@ -670,14 +685,8 @@ Apart from these, the following properties are also available, and may be useful
     This is disabled by default in order to avoid unexpected performance regressions for jobs that
     are not affected by these issues.</td>
 </tr>
-<tr>
-    <td><code>spark.executor.heartbeatInterval</code></td>
-    <td>10000</td>
-    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
-    the driver know that the executor is still alive and update it with metrics for in-progress
-    tasks.</td>
-</tr>
 </table>
+
 
 #### Networking
 <table class="table">
