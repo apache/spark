@@ -176,11 +176,11 @@ object WriteInputFormatTestDataGenerator {
 
     // Create test data for arbitrary custom writable TestWritable
     val testClass = Seq(
-      ("1", TestWritable("test1", 123, 54.0)),
-      ("2", TestWritable("test2", 456, 8762.3)),
-      ("1", TestWritable("test3", 123, 423.1)),
-      ("3", TestWritable("test56", 456, 423.5)),
-      ("2", TestWritable("test2", 123, 5435.2))
+      ("1", TestWritable("test1", 1, 1.0)),
+      ("2", TestWritable("test2", 2, 2.3)),
+      ("3", TestWritable("test3", 3, 3.1)),
+      ("5", TestWritable("test56", 5, 5.5)),
+      ("4", TestWritable("test4", 4, 4.2))
     )
     val rdd = sc.parallelize(testClass, numSlices = 2).map{ case (k, v) => (new Text(k), v) }
     rdd.saveAsNewAPIHadoopFile(classPath,

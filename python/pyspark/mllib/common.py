@@ -96,7 +96,7 @@ def _java2py(sc, r):
 
         if clsName == 'JavaRDD':
             jrdd = sc._jvm.SerDe.javaToPython(r)
-            return RDD(jrdd, sc, AutoBatchedSerializer(PickleSerializer()))
+            return RDD(jrdd, sc)
 
         elif isinstance(r, (JavaArray, JavaList)) or clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)
