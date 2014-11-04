@@ -107,6 +107,20 @@ class NewHadoopRDD[K, V](
       val split = theSplit.asInstanceOf[NewHadoopPartition]
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = confBroadcast.value.value
+
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      // Find a function that will return the FileSystem bytes read by this thread. Do this before
+      // creating RecordReader, because RecordReader's constructor might read some bytes
+      val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
+          split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf)
+      } else {
+        None
+      }
+      if (bytesReadCallback.isDefined) {
+        context.taskMetrics.inputMetrics = Some(inputMetrics)
+      }
+
       val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
       val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
       val format = inputFormatClass.newInstance
@@ -118,18 +132,6 @@ class NewHadoopRDD[K, V](
       val reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      // Find a function that will return the FileSystem bytes read by this thread.
-      val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
-        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
-          split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf)
-      } else {
-        None
-      }
-      if (bytesReadCallback.isDefined) {
-        context.taskMetrics.inputMetrics = Some(inputMetrics)
-      }
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener(context => close())
