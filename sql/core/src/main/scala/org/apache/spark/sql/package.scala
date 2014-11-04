@@ -161,22 +161,22 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `java.sql.Date` values.
-   *
-   * @group dataType
-   */
-  @DeveloperApi
-  val DateType = catalyst.types.DateType
-
-  /**
-   * :: DeveloperApi ::
-   *
    * The data type representing `java.sql.Timestamp` values.
    *
    * @group dataType
    */
   @DeveloperApi
   val TimestampType = catalyst.types.TimestampType
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * The data type representing `java.sql.Date` values.
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  val DateType = catalyst.types.DateType
 
   /**
    * :: DeveloperApi ::

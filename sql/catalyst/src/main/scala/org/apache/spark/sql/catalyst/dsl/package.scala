@@ -125,9 +125,9 @@ package object dsl {
     implicit def floatToLiteral(f: Float) = Literal(f)
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
+    implicit def dateToLiteral(d: Date) = Literal(d)
     implicit def bigDecimalToLiteral(d: BigDecimal) = Literal(d)
     implicit def decimalToLiteral(d: Decimal) = Literal(d)
-    implicit def dateToLiteral(d: Date) = Literal(d)
     implicit def timestampToLiteral(t: Timestamp) = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
@@ -220,15 +220,15 @@ package object dsl {
       /** Creates a new AttributeReference of type string */
       def string = AttributeReference(s, StringType, nullable = true)()
 
+      /** Creates a new AttributeReference of type date */
+      def date = AttributeReference(s, DateType, nullable = true)()
+
       /** Creates a new AttributeReference of type decimal */
       def decimal = AttributeReference(s, DecimalType.Unlimited, nullable = true)()
 
       /** Creates a new AttributeReference of type decimal */
       def decimal(precision: Int, scale: Int) =
         AttributeReference(s, DecimalType(precision, scale), nullable = true)()
-
-      /** Creates a new AttributeReference of type date */
-      def date = AttributeReference(s, DateType, nullable = true)()
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp = AttributeReference(s, TimestampType, nullable = true)()

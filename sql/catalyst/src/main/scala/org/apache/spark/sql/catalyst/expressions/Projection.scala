@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
-
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
  * @param expressions a sequence of expressions that determine the value of each column of the
