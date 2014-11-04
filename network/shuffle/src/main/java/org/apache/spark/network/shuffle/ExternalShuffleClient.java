@@ -17,8 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.Closeable;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,15 +34,20 @@ import org.apache.spark.network.util.TransportConf;
  * BlockTransferService), which has the downside of losing the shuffle data if we lose the
  * executors.
  */
-public class ExternalShuffleClient implements ShuffleClient {
+public class ExternalShuffleClient extends ShuffleClient {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
 
   private final TransportClientFactory clientFactory;
-  private final String appId;
 
-  public ExternalShuffleClient(TransportConf conf, String appId) {
+  private String appId;
+
+  public ExternalShuffleClient(TransportConf conf) {
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
     this.clientFactory = context.createClientFactory();
+  }
+
+  @Override
+  public void init(String appId) {
     this.appId = appId;
   }
 
@@ -55,6 +58,7 @@ public class ExternalShuffleClient implements ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
+    assert appId != null : "Called before init()";
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
@@ -82,6 +86,7 @@ public class ExternalShuffleClient implements ShuffleClient {
       int port,
       String execId,
       ExecutorShuffleInfo executorInfo) {
+    assert appId != null : "Called before init()";
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerExecutorMessage =
       JavaUtils.serialize(new RegisterExecutor(appId, execId, executorInfo));

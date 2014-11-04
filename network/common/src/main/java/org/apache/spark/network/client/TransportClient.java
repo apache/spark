@@ -186,4 +186,9 @@ public class TransportClient implements Closeable {
     // close is a local operation and should finish with milliseconds; timeout just to be safe
     channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
   }
+
+  /** Returns a stable key for the given channel. Only valid after the channel is connected. */
+  public String getChannelKey() {
+    return channel.toString();
+  }
 }

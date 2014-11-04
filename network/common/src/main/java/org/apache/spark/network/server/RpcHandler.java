@@ -28,6 +28,8 @@ public interface RpcHandler {
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
    * the client in string form as a standard RPC failure.
    *
+   * This method will not be called in parallel for a single TransportClient (i.e., channel).
+   *
    * @param client A channel client which enables the handler to make requests back to the sender
    *               of this RPC.
    * @param message The serialized bytes of the RPC.

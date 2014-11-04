@@ -86,6 +86,7 @@ private[spark] class Executor(
         conf, executorId, slaveHostname, port, isLocal, actorSystem)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
+      _env.blockManager.initialize(conf.getAppId)
       _env
     } else {
       SparkEnv.get

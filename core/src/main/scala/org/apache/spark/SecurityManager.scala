@@ -22,6 +22,7 @@ import java.net.{Authenticator, PasswordAuthentication}
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.network.sasl.SecretKeyHolder
 
 /**
  * Spark class responsible for security.
@@ -139,7 +140,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
  *  can take place.
  */
 
-private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
+private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with SecretKeyHolder {
 
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
@@ -337,4 +338,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
   def getSecretKey(): String = secretKey
+
+  override def getSaslUser(appId: String): String = {
+    val myAppId = sparkConf.getAppId
+    require(appId == myAppId, s"SASL appId $appId did not match my appId ${myAppId}")
+    getSaslUser()
+  }
+
+  override def getSecretKey(appId: String): String = {
+    val myAppId = sparkConf.getAppId
+    require(appId == myAppId, s"SASL appId $appId did not match my appId ${myAppId}")
+    getSecretKey()
+  }
 }
