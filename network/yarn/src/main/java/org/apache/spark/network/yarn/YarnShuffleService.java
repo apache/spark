@@ -49,6 +49,7 @@ public class YarnShuffleService extends AuxiliaryService {
       RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
       TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
       transportContext.createServer(port);
+      logger.info("Started Yarn shuffle service for Spark on port " + port);
     } catch (Exception e) {
       logger.error("Exception in starting Yarn shuffle service for Spark", e);
     }

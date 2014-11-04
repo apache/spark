@@ -30,6 +30,7 @@ import akka.actor.{ActorSystem, Props}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
@@ -92,7 +93,19 @@ private[spark] class BlockManager(
 
   private[spark]
   val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
-  private val externalShuffleServicePort = conf.getInt("spark.shuffle.service.port", 7337)
+
+  // In Yarn, the shuffle service port maybe set through the Hadoop config
+  private val shuffleServicePortKey = "spark.shuffle.service.port"
+  private val externalShuffleServicePort = {
+    val sparkPort = conf.getInt(shuffleServicePortKey, 7337)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      Option(hadoopConf.get(shuffleServicePortKey)).map(_.toInt).getOrElse(sparkPort)
+    } else {
+      sparkPort
+    }
+  }
+
   // Check that we're not using external shuffle service with consolidated shuffle files.
   if (externalShuffleServiceEnabled
       && conf.getBoolean("spark.shuffle.consolidateFiles", false)
