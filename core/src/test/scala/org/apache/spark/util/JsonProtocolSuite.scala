@@ -177,12 +177,32 @@ class JsonProtocolSuite extends FunSuite {
       deserializedBmRemoved)
   }
 
+  test("FetchFailed backwards compatibility") {
+    // FetchFailed in Spark 1.1.0 does not have an "Message" property.
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "ignored")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Message" })
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "Unknown reason")
+    assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
     val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
+  }
+
+  test("ExecutorLostFailure backward compatibility") {
+    // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
+    val executorLostFailure = ExecutorLostFailure("100")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
+      .removeField({ _._1 == "Executor ID" })
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
+    assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
   /** -------------------------- *
