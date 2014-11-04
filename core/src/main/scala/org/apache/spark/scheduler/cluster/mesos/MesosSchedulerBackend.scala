@@ -130,57 +130,14 @@ private[spark] class MesosSchedulerBackend(
       .setData(ByteString.copyFrom(createExecArg()))
       .addResources(cpus)
       .addResources(memory)
-      .build()
 
-    maybeDockerize(executorInfo)
-  }
-
-  private def maybeDockerize(executorInfo: ExecutorInfo): ExecutorInfo = {
-    import org.apache.mesos.Protos.{ContainerInfo, Volume}
-    val image = sc.conf.get("spark.executor.docker.image", null)
-    if(image == null) {
-      return executorInfo
-    } else {
-      val builder = executorInfo.toBuilder()
-      val container = builder.getContainerBuilder()
-        .setType(ContainerInfo.Type.DOCKER)
-      container.setDocker(ContainerInfo.DockerInfo.newBuilder()
-                                                  .setImage(image)
-                                                  .build())
-      def mkVol(p:String,m:Volume.Mode) { 
-        logInfo("ExecutorInfo adding docker volume: " + p 
-               + " with mode " + m)
-        container.addVolumesBuilder().setContainerPath(p).setMode(m) 
-      }
-      def mkMnt(s:String,d:String,m:Volume.Mode) { 
-        logInfo("ExecutorInfo mounting docker container path: " + d 
-               + " from host path: " + s 
-               + " with mode " + m)
-        container.addVolumesBuilder().setContainerPath(d).setHostPath(s).setMode(m)
-      }
-      sc.conf.getOption("spark.executor.docker.volumes").map { 
-        _.split(",").map(_.split(":")).map { 
-          _ match {
-            case Array(container_path) =>
-              mkVol(container_path, Volume.Mode.RW)
-            case Array(container_path, "rw") =>
-              mkVol(container_path, Volume.Mode.RO)
-            case Array(container_path, "ro") =>
-              mkVol(container_path, Volume.Mode.RO)
-            case Array(host_path,container_path) =>
-              mkMnt(host_path, container_path, Volume.Mode.RW)
-            case Array(host_path,container_path,"rw") =>
-              mkMnt(host_path, container_path, Volume.Mode.RW)
-            case Array(host_path,container_path,"ro") =>
-              mkMnt(host_path, container_path, Volume.Mode.RO)
-            case _ => ()
-          }
-        }
-      }
-      logInfo("ExecutorInfo using docker image: " + image)
-      return builder.build()
+    sc.conf.getOption("spark.executor.docker.image").map { image:String =>
+      val container = executorInfo.getContainerBuilder()
+      val volumes = sc.conf.getOption("spark.executor.docker.volumes")
+      MesosSchedulerBackendUtil.withDockerInfo(container, image, volumes)
     }
 
+    executorInfo.build()
   }
 
   /**
