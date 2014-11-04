@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.NativeType
 import java.sql.{Date, Timestamp}
 import java.math.BigDecimal
 
@@ -101,8 +101,6 @@ trait MutableRow extends Row {
   def setByte(ordinal: Int, value: Byte)
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
-  def setDate(ordinal: Int, value: Date)
-  def setTimestamp(ordinal: Int, value: Timestamp)
 }
 
 /**
@@ -123,9 +121,6 @@ object EmptyRow extends Row {
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
   def getString(i: Int): String = throw new UnsupportedOperationException
-  def getDate(i: Int): Date = throw new UnsupportedOperationException
-  def getTimestamp(i: Int): Timestamp = throw new UnsupportedOperationException
-
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
 
   def copy() = this
@@ -190,16 +185,6 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
-  def getDate(i: Int): Date = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
-    values(i).asInstanceOf[Date]
-  }
-
-  def getTimestamp(i: Int): Timestamp = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
-    values(i).asInstanceOf[Timestamp]
-  }
-
   // Custom hashCode function that matches the efficient code generated version.
   override def hashCode(): Int = {
     var result: Int = 37
@@ -243,8 +228,6 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   override def setInt(ordinal: Int, value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int, value: Long): Unit = { values(ordinal) = value }
   override def setString(ordinal: Int, value: String): Unit = { values(ordinal) = value }
-  override def setDate(ordinal: Int,value: Date): Unit = { values(ordinal) = value }
-  override def setTimestamp(ordinal: Int,value: Timestamp): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 

@@ -337,18 +337,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     values(i).asInstanceOf[MutableByte].value
   }
 
-  override def setDate(ordinal: Int, value: Date): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableDate]
-    currentValue.isNull = false
-    currentValue.value = value
-  }
-
-  override def setTimestamp(ordinal: Int, value: Timestamp): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableTimestamp]
-    currentValue.isNull = false
-    currentValue.value = value
-  }
-
   override def getAs[T](i: Int): T = {
     values(i).boxed.asInstanceOf[T]
   }

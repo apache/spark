@@ -100,9 +100,9 @@ object DataType {
       | "LongType" ^^^ LongType
       | "BinaryType" ^^^ BinaryType
       | "BooleanType" ^^^ BooleanType
+      | "DateType" ^^^ DateType
       | "DecimalType()" ^^^ DecimalType.Unlimited
       | fixedDecimalType
-      | "DateType" ^^^ DateType
       | "TimestampType" ^^^ TimestampType
       )
 
@@ -208,6 +208,8 @@ object NativeType {
     FloatType -> 4,
     ShortType -> 2,
     ByteType -> 1,
+    DateType -> 8,
+    TimestampType -> 12,
     StringType -> 4096)
 }
 
