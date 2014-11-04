@@ -103,7 +103,7 @@ class EdgePartitionSuite extends FunSuite {
   }
 
   test("serialization") {
-    val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
+    val aList = List((0, 1, 1), (1, 0, 2), (1, 2, 3), (5, 4, 4), (5, 5, 5))
     val a: EdgePartition[Int, Int] = makeEdgePartition(aList)
     val javaSer = new JavaSerializer(new SparkConf())
     val conf = new SparkConf()
@@ -112,13 +112,8 @@ class EdgePartitionSuite extends FunSuite {
 
     for (ser <- List(javaSer, kryoSer); s = ser.newInstance()) {
       val aSer: EdgePartition[Int, Int] = s.deserialize(s.serialize(a))
-      assert(aSer.localSrcIds.toList === a.localSrcIds.toList)
-      assert(aSer.localDstIds.toList === a.localDstIds.toList)
-      assert(aSer.data.toList === a.data.toList)
+      assert(aSer.tripletIterator().toList === a.tripletIterator().toList)
       assert(aSer.index != null)
-      assert(aSer.global2local != null)
-      assert(aSer.local2global.toList === a.local2global.toList)
-      assert(aSer.vertexAttrs.toList === a.vertexAttrs.toList)
     }
   }
 }
