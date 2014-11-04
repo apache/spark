@@ -83,6 +83,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case m: Map[_,_] => m
       case seq: Traversable[_] => seq.map {
         case e: Expression => transformExpressionDown(e)
+        // TODO we need something like GroupExpression instead of Seq[Expression]
+        case se: Traversable[Expression] => se.map(e => transformExpressionDown(e))
         case other => other
       }
       case other: AnyRef => other
@@ -115,6 +117,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case m: Map[_,_] => m
       case seq: Traversable[_] => seq.map {
         case e: Expression => transformExpressionUp(e)
+        // TODO we need something like GroupExpression instead of Seq[Expression]
+        case se: Traversable[Expression] => se.map(e => transformExpressionUp(e))
         case other => other
       }
       case other: AnyRef => other

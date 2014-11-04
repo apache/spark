@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.IntegerType
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -56,6 +58,7 @@ class Analyzer(catalog: Catalog,
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ResolveGroupingSet ::
       ResolveSortReferences ::
       NewRelationInstances ::
       ImplicitGenerate ::
@@ -102,6 +105,94 @@ class Analyzer(catalog: Catalog,
     }
   }
 
+  object ResolveGroupingSet extends Rule[LogicalPlan] {
+    /**
+     * Extract attribute set according to the grouping id
+     * @param bitmask bitmask to represent the validity of the attribute sequence
+     * @param exprs the attributes in sequence
+     * @return the attributes set of invalid specified via bitmask
+     */
+    private def buildInvalidExprSet(bitmask: Int, exprs: Seq[Expression])
+    : OpenHashSet[Expression] = {
+      val set = new OpenHashSet[Expression](2)
+
+      var bit = exprs.length - 1
+      while (bit >= 0) {
+        if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
+        bit -= 1
+      }
+
+      set
+    }
+
+    /*
+     *  GROUP BY a, b, c, WITH ROLLUP
+     *  is equivalent to
+     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( )).
+     *  Group Count: N + 1 (N is the number of group expression)
+     *
+     *  We need to get all of its subsets for the rule described above, the subset is
+     *  represented as the bit masks.
+     */
+    def bitmasks(r: Rollup): Seq[Int] = {
+      Seq.tabulate(r.groupByExprs.length + 1)(idx => {(1 << idx) - 1})
+    }
+
+    /*
+     *  GROUP BY a, b, c, WITH CUBE
+     *  is equivalent to
+     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+     *  Group Count: 2^N (N is the number of group expression)
+     *
+     *  We need to get all of its sub sets for a given GROUPBY expressions, the subset is
+     *  represented as the bit masks.
+     */
+    def bitmasks(c: Cube): Seq[Int] = {
+      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
+    }
+
+    /**
+     * Create an array of Projections for the child projection, and replace the projections'
+     * expressions which equal GroupBy expressions with Literal(null), if those expressions
+     * are not set for this grouping set (according to the bit mask).
+     * TODO Seq[Seq[Expression]] should be something like GroupExpression
+     */
+    private[this] def expand(g: GroupingSet): Seq[Seq[Expression]] = {
+      val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
+
+      g.bitmasks.foreach { bitmask =>
+        // get the invalid grouping attributes according to the bit mask
+        val invalidGroupExprSet = buildInvalidExprSet(bitmask, g.groupByExprs)
+
+        val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
+          case x: Expression if invalidGroupExprSet.contains(x) =>
+            // if the input attribute in the Invalid Grouping Expression set of for this group
+            // replace it with constant null
+            Literal(null, expr.dataType)
+          case x if x == g.gid =>
+            // replace the groupingId with concrete value (the bit mask)
+            Literal(bitmask, IntegerType)
+        })
+
+        result += substitution
+      }
+
+      result.toSeq
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case a: Cube if a.resolved =>
+        GroupingSet(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
+      case a: Rollup if a.resolved =>
+        GroupingSet(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
+      case x: GroupingSet if x.resolved =>
+        Aggregate(
+          x.groupByExprs :+ x.gid,
+          x.aggregations,
+          Explosive(expand(x), x.child.output :+ x.gid, x.child))
+    }
+  }
+
   /**
    * Checks for non-aggregated attributes with aggregation
    */
@@ -111,7 +202,6 @@ class Analyzer(catalog: Catalog,
         case aggregatePlan @ Aggregate(groupingExprs, aggregateExprs, child) =>
           def isValidAggregateExpression(expr: Expression): Boolean = expr match {
             case _: AggregateExpression => true
-            case e: Attribute => groupingExprs.contains(e)
             case e if groupingExprs.contains(e) => true
             case e if e.references.isEmpty => true
             case e => e.children.forall(isValidAggregateExpression)
@@ -183,6 +273,10 @@ class Analyzer(catalog: Catalog,
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
+          case u @ UnresolvedAttribute(name)
+            if resolver(name, VirtualColumn.groupingIdName) && q.isInstanceOf[GroupingSets] =>
+            // Resolve the GROUPING__ID
+            q.asInstanceOf[GroupingSets].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)

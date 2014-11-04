@@ -143,6 +143,40 @@ case class Aggregate(
   override def output = aggregateExpressions.map(_.toAttribute)
 }
 
+case class Explosive(
+    projections: Seq[Seq[Expression]],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+}
+
+trait GroupingSets extends UnaryNode {
+  self: Product =>
+  def gid: AttributeReference
+  def groupByExprs: Seq[Expression]
+  def aggregations: Seq[NamedExpression]
+
+  override def output = aggregations.map(_.toAttribute)
+}
+
+case class GroupingSet(
+    bitmasks: Seq[Int],
+    groupByExprs: Seq[Expression],
+    child: LogicalPlan,
+    aggregations: Seq[NamedExpression],
+    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingSets
+
+case class Cube(
+    groupByExprs: Seq[Expression],
+    child: LogicalPlan,
+    aggregations: Seq[NamedExpression],
+    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingSets
+
+case class Rollup(
+    groupByExprs: Seq[Expression],
+    child: LogicalPlan,
+    aggregations: Seq[NamedExpression],
+    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingSets
+
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
 
