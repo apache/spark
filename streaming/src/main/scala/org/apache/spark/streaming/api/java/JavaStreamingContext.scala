@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
@@ -133,7 +134,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Recreate a JavaStreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    */
-  def this(path: String) = this(new StreamingContext(path, new Configuration))
+  def this(path: String) = this(new StreamingContext(path, SparkHadoopUtil.get.conf))
 
   /**
    * Re-creates a JavaStreamingContext from a checkpoint file.
