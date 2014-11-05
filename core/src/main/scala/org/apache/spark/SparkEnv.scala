@@ -287,7 +287,7 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
