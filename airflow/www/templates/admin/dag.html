@@ -11,7 +11,7 @@
 {% block body %}
   <h2>DAG: {{ dag.dag_id }}</h2>
   <ul class="nav nav-pills">
-    <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=45) }}">
+    <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}">
       <i class="icon-plus-sign"></i>Tree View
     </a></li>
     <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">

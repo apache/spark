@@ -14,6 +14,7 @@ setup(
         'airflow.executors',
         'airflow.hooks',
         'airflow.www',
+        'dags',
     ],
     scripts=['airflow/bin/airflow'],
     install_requires=reqs,

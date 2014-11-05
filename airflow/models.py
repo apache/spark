@@ -358,6 +358,17 @@ class TaskInstance(Base):
         return self.state == State.UP_FOR_RETRY and \
             self.end_date + self.task.retry_delay < datetime.now()
 
+    def get_template(self, source):
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(self.task.dag.folder))
+        template = None
+        for ext in self.task.__class__.template_ext:
+            # Magic, if field has the right extension, look
+            # for the file.
+            if source.strip().endswith(ext):
+                template = env.get_template(source)
+        return template or jinja2.Template(source)
+
     def run(
             self, verbose=True,
             ignore_dependencies=False,
@@ -417,9 +428,6 @@ class TaskInstance(Base):
             try:
                 if not mark_success:
                     from airflow import macros
-                    env = jinja2.Environment(
-                        loader=jinja2.FileSystemLoader(
-                            self.task.dag.folder))
                     tables = None
                     if 'tables' in self.task.params:
                         tables = self.task.params['tables']
@@ -437,12 +445,7 @@ class TaskInstance(Base):
                     task_copy = copy.copy(self.task)
                     for attr in task_copy.__class__.template_fields:
                         source = getattr(task_copy, attr)
-                        template = jinja2.Template(source)
-                        for ext in task_copy.__class__.template_ext:
-                            # Magic, if field has the right extension, look
-                            # for the file.
-                            if source.strip().endswith(ext):
-                                template = env.get_template(source)
+                        template = self.get_template(source)
                         setattr(
                             task_copy, attr,
                             template.render(**jinja_context)

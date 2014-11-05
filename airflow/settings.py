@@ -38,3 +38,15 @@ Session.configure(bind=engine)
 CELERY_APP_NAME = "airflow.executors.celery_worker"
 CELERY_BROKER = "amqp"
 CELERY_RESULTS_BACKEND = "amqp://"
+
+# SMTP settings
+SMTP_HOST = 'localhost'
+SMTP_PORT = 25
+SMTP_PASSWORD = None
+SMTP_MAIL_FROM = 'airflow_alerts@mydomain.com'
+
+# Overriding settings defaults with local ones
+try:
+    from airflow.secrets import *
+except ImportError as e:
+    pass

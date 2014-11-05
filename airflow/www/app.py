@@ -154,14 +154,19 @@ class Airflow(BaseView):
 
         s = s.replace('<', '&lt')
         s = s.replace('>', '&gt')
-        html_code = "<h3>Atributes:</h3><pre><code>" + s + "</code></pre>"
+        html_code = "<h3>Attributes:</h3><pre><code>" + s + "</code></pre>"
 
         title = "Task Details for {task_id}".format(**locals())
 
         for attr_name in sql_attrs:
             if hasattr(task, attr_name):
+                source = getattr(task, attr_name)
+                if source.endswith('.sql') or source.endswith('.hql'):
+                    f = open(dag.folder + '/' + source, 'r')
+                    source = f.read()
+                    f.close()
                 html_code = "<h3>"+attr_name+"</h3>" + highlight(
-                    getattr(task, attr_name),
+                    source,
                     SqlLexer(),
                     HtmlFormatter(noclasses=True)) + html_code
 
@@ -181,10 +186,7 @@ class Airflow(BaseView):
             base_date = dateutil.parser.parse(base_date)
 
         num_runs = request.args.get('num_runs')
-        if not num_runs:
-            num_runs = 45
-        else:
-            num_runs = int(num_runs)
+        num_runs = int(num_runs) if num_runs else 14
         from_date = (base_date-(num_runs * dag.schedule_interval)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 

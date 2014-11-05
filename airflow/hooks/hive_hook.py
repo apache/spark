@@ -104,7 +104,7 @@ class HiveHook(BaseHook):
                 stderr=subprocess.STDOUT)
         all_err = ''
         for line in iter(sp.stdout.readline, ''):
-            logging.info(line)
+            logging.info(line.strip())
         sp.wait()
 
         if sp.returncode:
