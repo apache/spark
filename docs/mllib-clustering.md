@@ -197,14 +197,21 @@ val data = sc.textFile("data/mllib/sample_hierarchical_data.csv")
 val parsedData = data.map(s => Vectors.dense(s.split(',').map(_.toDouble))).cache()
 
 // Cluster the data into three classes using HierarchicalClustering object
-val numClusters = 3
+val numClusters = 10
 val model = HierarchicalClustering.train(parsedData, numClusters)
+println(s"# Clusters: ${model.getClusters().size}")
 
 // Show the cluster centers
 model.getCenters.foreach(println)
 
 // Evaluate clustering by computing the sum of variance of the clusters
 val variance = model.getClusters.map(_.getVariance.get).sum
+println(s"Sum of Variance of the Clusters = ${variance}")
+
+// Cut the cluster tree by height
+val cut_model = model.cut(4.0)
+println(s"# Clusters: ${cut_model.getClusters().size}")
+val variance = cut_model.getClusters.map(_.getVariance.get).sum
 println(s"Sum of Variance of the Clusters = ${variance}")
 {% endhighlight %}
 </div>
@@ -274,31 +281,45 @@ The number of desired clusters is passed to the algorithm.
 We then compute Within Set Sum of Squared Error (WSSSE). 
 
 {% highlight python %}
-from pyspark.mllib.clustering import HierarchicalClustering
+import matplotlib.pyplot as plt
 from numpy import array
 from math import sqrt
+from scipy.cluster.hierarchy import dendrogram
+
+from pyspark.mllib.clustering import HierarchicalClustering
+from pyspark.mllib.linalg import SparseVector, DenseVector
 
 # Load and parse the data
 data = sc.textFile("./data/mllib/sample_hierarchical_data.csv")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(',')]))
 
 # Build the model (cluster the data)
-model = HierarchicalClustering.train(parsedData, 3)
+model = HierarchicalClustering.train(parsedData, 10)
 
 # Get the cluster centers
 model.clusterCenters
 
 # Predict the index of cluster array 
-point = [6, 3, 4, 1]
+point = array([6, 3, 4, 1])
 model.predict(point)
+model.predict(parsedData).collect()
 
-# Evaluate clustering by computing Within Set Sum of Squared Errors
-def error(point):
-    center = model.clusterCenters[model.predict(point)]
-    return sqrt(sum([x**2 for x in (point - center)]))
+# Evaluate clustering by computing the sum of variance of all clusters
+print("Sum of Variance = " + str(model.sum_of_variance()))
 
-WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
-print("Within Set Sum of Squared Error = " + str(WSSSE))
+# Show the cluster tree as a dendrogram
+merge_list = model.to_merge_list()
+dendrogram(merge_list)
+plt.show()
+
+# Cut the cluster tree by height
+cut_model = model.cut(4.0)
+cut_model.predict(point)
+cut_model.predict(parsedData).collect()
+print("Sum of Variance = " + str(cut_model.sum_of_variance()))
+merge_list = cut_model.to_merge_list()
+dendrogram(merge_list)
+plt.show()
 {% endhighlight %}
 </div>
 

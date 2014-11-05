@@ -84,24 +84,57 @@ class HierarchicalClusteringModelSuite
   }
 
   test("predicted result should be same the seed data") {
-    val predictedData = denseModel.predict(denseData).collect()
-    assert(predictedData === denseSeed)
+    val densePredictedData = denseModel.predict(denseData).collect()
+    assert(densePredictedData(0) === densePredictedData(5))
+    assert(densePredictedData(1) === densePredictedData(6))
+    assert(densePredictedData(2) === densePredictedData(7))
+    assert(densePredictedData(3) === densePredictedData(8))
+    assert(densePredictedData(4) === densePredictedData(9))
 
-    val predictedData2 = sparseModel.predict(sparseData).collect()
-    assert(predictedData2 === sparseSeed)
+    val sparsePredictedData = sparseModel.predict(sparseData).collect()
+    assert(sparsePredictedData(0) === sparsePredictedData(5))
+    assert(sparsePredictedData(1) === sparsePredictedData(6))
+    assert(sparsePredictedData(2) === sparsePredictedData(7))
+    assert(sparsePredictedData(3) === sparsePredictedData(8))
+    assert(sparsePredictedData(4) === sparsePredictedData(9))
   }
 
   test("sum of the total variance") {
-    assert(denseModel.computeCost() === 0.0)
-    assert(sparseModel.computeCost() === 0.0)
+    assert(denseModel.getSumOfVariance() === 0.0)
+    assert(sparseModel.getSumOfVariance() === 0.0)
   }
 
-  test("ClusterTree should be clonable") {
-    val denseClone = denseModel.clusterTree.clone()
-    val sparseClone = sparseModel.clusterTree.clone()
-    assert(denseModel.clusterTree.hashCode() != denseClone.hashCode())
-    assert(sparseModel.clusterTree.hashCode() != sparseClone.hashCode())
-    assert(denseModel.clusterTree.getTreeSize() === denseClone.getTreeSize())
-    assert(sparseModel.clusterTree.getTreeSize() === sparseClone.getTreeSize())
+  test("a model should be clonable") {
+    val denseClone = denseModel.clone()
+    val sparseClone = sparseModel.clone()
+    assert(denseModel.clusterTree.hashCode() != denseClone.clusterTree.hashCode())
+    assert(sparseModel.clusterTree.hashCode() != sparseClone.clusterTree.hashCode())
+    assert(denseModel.clusterTree.getTreeSize() === denseClone.clusterTree.getTreeSize())
+    assert(sparseModel.clusterTree.getTreeSize() === sparseClone.clusterTree.getTreeSize())
+  }
+
+  test("a model can be cut by height") {
+    val cutDenseModel = denseModel.cut(6.0)
+    val cutSparseModel = sparseModel.cut(6.0)
+
+    assert(cutDenseModel.hashCode() !== denseModel.hashCode())
+    assert(cutSparseModel.hashCode() !== sparseModel.hashCode())
+
+    assert(cutDenseModel.getClusters().size === 2)
+    assert(cutSparseModel.getClusters().size === 2)
+    assert(denseModel.getClusters().size === 5)
+    assert(sparseModel.getClusters().size === 5)
+
+    assert(denseModel.predict(denseData).collect().map(_._1).distinct.sorted === (0 to 4).toArray)
+    assert(cutDenseModel.predict(denseData).collect().map(_._1).distinct.sorted === Array(0, 1))
+    assert(sparseModel.predict(sparseData).collect().map(_._1).distinct.sorted === (0 to 4).toArray)
+    assert(cutSparseModel.predict(sparseData).collect().map(_._1).distinct.sorted === Array(0, 1))
+  }
+
+  test("A cluster tree should be converted a merging nodes list") {
+    assert(denseModel.toMergeList().size === 4)
+    assert(denseModel.cut(4.0).toMergeList().size === 2)
+    assert(sparseModel.toMergeList().size === 4)
+    assert(sparseModel.cut(6.0).toMergeList().size === 1)
   }
 }

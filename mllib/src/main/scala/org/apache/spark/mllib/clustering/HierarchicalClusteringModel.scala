@@ -31,9 +31,25 @@ import org.apache.spark.rdd.RDD
  */
 class HierarchicalClusteringModel private (
   val clusterTree: ClusterTree,
-  private[mllib] var isTrained: Boolean) extends Serializable with Logging {
+  private[mllib] var isTrained: Boolean) extends Serializable with Logging with Cloneable {
 
   def this(clusterTree: ClusterTree) = this(clusterTree, false)
+
+  override def clone(): HierarchicalClusteringModel = {
+    new HierarchicalClusteringModel(this.clusterTree.clone(), true)
+  }
+
+  /**
+   * Cuts a cluster tree by given threshold of dendrogram height
+   *
+   * @param height a threshold to cut a cluster tree
+   * @return a hierarchical clustering model
+   */
+  def cut(height: Double): HierarchicalClusteringModel = {
+    val cloned = this.clone()
+    cloned.clusterTree.cut(height)
+    cloned
+  }
 
   /**
    * Predicts the closest cluster of each point
@@ -71,9 +87,40 @@ class HierarchicalClusteringModel private (
   /**
    * Computes the sum of total variance of all cluster
    */
-  def computeCost(): Double = this.getClusters().map(_.getVariance().get).sum
+  def getSumOfVariance(): Double = this.getClusters().map(_.getVariance().get).sum
 
   def getClusters(): Array[ClusterTree] = clusterTree.getClusters().toArray
 
   def getCenters(): Array[Vector] = getClusters().map(_.center)
+
+  /**
+   * Converts a clustering merging list
+   * Returned data format is fit for scipy's dendrogram function
+   * SEE ALSO: scipy.cluster.hierarchy.dendrogram
+   *
+   * @return List[(node1, node2, distance, tree size)]
+   */
+  def toMergeList(): List[(Int, Int, Double, Int)] = {
+    val seq = this.clusterTree.toSeq().sortWith{ case (a, b) => a.getHeight() < b.getHeight()}
+    val leaves = seq.filter(_.isLeaf())
+    val nodes = seq.filter(!_.isLeaf()).filter(_.children.size > 1)
+    val clusters = leaves ++ nodes
+    val treeMap = clusters.zipWithIndex.map { case (tree, idx) => (tree -> idx)}.toMap
+
+    // If a node only has one-child, the child is regarded as the cluster of the child.
+    // Cluster A has cluster B and Cluster B. B is a leaf. C only has cluster D.
+    // ==> A merge list is (B, D), not (B, C).
+    def getIndex(map: Map[ClusterTree, Int], tree: ClusterTree): Int = {
+      tree.children.size match {
+        case 1 => getIndex(map, tree.children(0))
+        case _ => map(tree)
+      }
+    }
+    clusters.filter(tree => !tree.isLeaf()).toList.map { tree =>
+      (getIndex(treeMap, tree.children(0)),
+          getIndex(treeMap, tree.children(1)),
+          tree.getHeight(),
+          tree.getTreeSize())
+    }
+  }
 }

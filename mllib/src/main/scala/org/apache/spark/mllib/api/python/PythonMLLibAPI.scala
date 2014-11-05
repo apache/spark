@@ -280,17 +280,17 @@ class PythonMLLibAPI extends Serializable {
 
     def predict(data: JavaRDD[Vector]): JavaRDD[java.lang.Integer] = model.predict(data)
 
-    def getCenters(): java.util.List[java.lang.Object] = {
-      val ret = new java.util.LinkedList[java.lang.Object]()
-      ret.add(model.getCenters())
-      ret
+    def cut(height: Double): HierarchicalClusteringModelWrapper = {
+      new HierarchicalClusteringModelWrapper(this.model.cut(height))
     }
 
-    def getHights(): java.util.List[java.lang.Object] = {
-      val ret = new java.util.LinkedList[java.lang.Object]()
-      ret.add(model.getClusters().map(_.getHeight()))
-      ret
+    def getCenters(): Array[Vector] = model.getCenters()
+
+    def toMergeList(): Array[Vector] = {
+      model.toMergeList().map{case (c1, c2, d, s) => Vectors.dense(c1, c2, d, s)}.toArray
     }
+
+    def getSumOfVariance(): Double = model.getSumOfVariance()
   }
 
   /**

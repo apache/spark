@@ -328,12 +328,14 @@ object HierarchicalClustering {
 /**
  * A cluster as a tree node which can have its sub nodes
  *
- * @param data the data in the cluster
  * @param center the center of the cluster
+ * @param data the data in the cluster
+ * @param height distance between sub nodes
  * @param variance the statistics for splitting of the cluster
  * @param dataSize the data size of its data
  * @param children the sub node(s) of the cluster
  * @param parent the parent node of the cluster
+ * @param isVisited a flag to be searched
  */
 private[mllib]
 class ClusterTree private (
@@ -344,7 +346,7 @@ class ClusterTree private (
   private[mllib] var dataSize: Option[Long],
   private[mllib] var children: List[ClusterTree],
   private[mllib] var parent: Option[ClusterTree],
-  private[mllib] var isVisited: Boolean) extends Serializable with Cloneable {
+  private[mllib] var isVisited: Boolean) extends Serializable with Cloneable with Logging {
 
   def this(center: Vector, data: RDD[BV[Double]]) =
     this(center, data, None, None, None, List.empty[ClusterTree], None, false)
@@ -360,10 +362,8 @@ class ClusterTree private (
       None,
       this.isVisited
     )
-    if (this.children.size > 0) {
-      val clonedChildren = this.children.map(_.clone()).toList
-      cloned.insert(clonedChildren)
-    }
+    val clonedChildren = this.children.map(child => child.clone()).toList
+    cloned.insert(clonedChildren)
     cloned
   }
 
@@ -379,6 +379,22 @@ class ClusterTree private (
       s"isVisited:${this.isVisited}"
     )
     elements.mkString(", ")
+  }
+
+  /**
+   * Cuts a cluster tree
+   *
+   * @param height the threshold of height to cut a cluster tree
+   * @return a cut hierarchical clustering model
+   */
+  private[mllib] def cut(height: Double): ClusterTree = {
+    this.children.foreach { child =>
+      if (child.getHeight() < height && child.children.size > 0) {
+        child.children.foreach(grandchild => child.delete(grandchild))
+      }
+    }
+    this.children.foreach(child => child.cut(height))
+    this
   }
 
   /**
@@ -398,6 +414,17 @@ class ClusterTree private (
    */
   def insert(child: ClusterTree): Unit = insert(List(child))
 
+  /** Deletes all child */
+  def delete() = this.children = List.empty[ClusterTree]
+
+  /** Deletes a child */
+  def delete(target: ClusterTree) {
+    this.children.contains(target) match {
+      case true => this.children = this.children.filter(child => child != target)
+      case false => logWarning("You attempted to delete a node which is not contained")
+    }
+  }
+
   /**
    * Converts the tree into Seq class
    * the sub nodes are recursively expanded
@@ -405,9 +432,13 @@ class ClusterTree private (
    * @return Seq class which the cluster tree is expanded
    */
   def toSeq(): Seq[ClusterTree] = {
-    this.children.size match {
+    val seq = this.children.size match {
       case 0 => Seq(this)
       case _ => Seq(this) ++ this.children.map(child => child.toSeq()).flatten
+    }
+    seq.sortWith { case (a, b) =>
+      a.getDepth() < b.getDepth() &&
+          breezeNorm(a.center.toBreeze, 2) < breezeNorm(b.center.toBreeze, 2)
     }
   }
 
@@ -415,12 +446,7 @@ class ClusterTree private (
    * Gets the all clusters which are leaves in the cluster tree
    * @return the Seq of the clusters
    */
-  def getClusters(): Seq[ClusterTree] = {
-    toSeq().filter(_.isLeaf()).sortWith { case (a, b) =>
-      a.getDepth() < b.getDepth() &&
-          breezeNorm(a.center.toBreeze, 2) < breezeNorm(b.center.toBreeze, 2)
-    }
-  }
+  def getClusters(): Seq[ClusterTree] = toSeq().filter(_.isLeaf())
 
   /**
    * Gets the depth of the cluster in the tree
@@ -456,13 +482,11 @@ class ClusterTree private (
   def assignCluster(metric: Function2[BV[Double], BV[Double], Double])(v: Vector): ClusterTree = {
     this.children.size match {
       case 0 => this
-      case 2 => {
+      case size if size > 0 => {
         val distances = this.children.map(tree => metric(tree.center.toBreeze, v.toBreeze))
         val minIndex = distances.indexOf(distances.min)
         this.children(minIndex).assignCluster(metric)(v)
       }
-      case _ =>
-        throw new UnsupportedOperationException(s"something wrong with # nodes, ${children.size}")
     }
   }
 
