@@ -103,7 +103,7 @@ def worker(sock):
     exit_code = 0
 
     # Shopify added memory limit
-    soft_limit = calculate_worker_mem(os.getenv('PYSPARK_MAX_HEAP', '3g'))
+    soft_limit = calculate_worker_mem(os.getenv('PYSPARK_MAX_HEAP', '10g'))
     resource.setrlimit(resource.RLIMIT_AS, (soft_limit, -1))
 
     try:
