@@ -100,6 +100,7 @@ public class ExternalShuffleSecuritySuite {
     public String getSaslUser(String appId) {
       return "user";
     }
+
     @Override
     public String getSecretKey(String appId) {
       if (!appId.equals(this.appId)) {
