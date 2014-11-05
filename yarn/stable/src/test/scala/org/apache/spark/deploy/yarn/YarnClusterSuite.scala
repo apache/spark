@@ -50,21 +50,15 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
   private var yarnCluster: MiniYARNCluster = _
   private var tempDir: File = _
   private var fakeSparkJar: File = _
-  private var oldConf: Map[String, String] = _
+  private var logConfDir: File = _
 
   override def beforeAll() {
     tempDir = Utils.createTempDir()
-
-    val logConfDir = new File(tempDir, "log4j")
+    logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, UTF_8)
-
-    val childClasspath = logConfDir.getAbsolutePath() + File.pathSeparator +
-      sys.props("java.class.path")
-
-    oldConf = sys.props.filter { case (k, v) => k.startsWith("spark.") }.toMap
 
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(new YarnConfiguration())
@@ -95,56 +89,48 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     }
 
     logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
-    config.foreach { e =>
-      sys.props += ("spark.hadoop." + e.getKey() -> e.getValue())
-    }
 
     fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
-    sys.props += ("spark.yarn.jar" -> ("local:" + fakeSparkJar.getAbsolutePath()))
-    sys.props += ("spark.executor.instances" -> "1")
-    sys.props += ("spark.driver.extraClassPath" -> childClasspath)
-    sys.props += ("spark.executor.extraClassPath" -> childClasspath)
 
     super.beforeAll()
   }
 
   override def afterAll() {
     yarnCluster.stop()
-    sys.props.retain { case (k, v) => !k.startsWith("spark.") }
-    sys.props ++= oldConf
     super.afterAll()
   }
 
   test("run Spark in yarn-client mode") {
-    var result = File.createTempFile("result", null, tempDir)
-    YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
-    checkResult(result)
+    testBasicYarnApp(true)
   }
 
   test("run Spark in yarn-cluster mode") {
-    val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
-    var result = File.createTempFile("result", null, tempDir)
-    runSpark(false, YarnClusterDriver.getClass, Seq(result.getAbsolutePath()))
-    checkResult(result)
+    testBasicYarnApp(false)
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
     val exception = intercept[SparkException] {
       runSpark(false, YarnClusterDriver.getClass)
+      fail("Spark application should have failed.")
     }
-    assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
   }
 
   test("user class path first in client mode") {
-    testClassPathIsolation(true)
+    testUseClassPathFirst(true)
   }
 
   test("user class path first in cluster mode") {
-    testClassPathIsolation(false)
+    testUseClassPathFirst(false)
   }
 
-  private def testClassPathIsolation(clientMode: Boolean) = {
+  private def testBasicYarnApp(clientMode: Boolean) = {
+    var result = File.createTempFile("result", null, tempDir)
+    runSpark(clientMode, YarnClusterDriver.getClass, Seq(result.getAbsolutePath()))
+    checkResult(result)
+  }
+
+  private def testUseClassPathFirst(clientMode: Boolean) = {
     // Create a jar file that contains a different version of "test.resource".
     val jarFile = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
@@ -167,52 +153,50 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       args: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       settings: Map[String, String] = Map()) = {
-    if (clientMode) {
-      val main = klass.getName().stripSuffix("$")
-      val userJars = extraJars.mkString(",")
+    val master = if (clientMode) "yarn-client" else "yarn-cluster"
+    val main = klass.getName().stripSuffix("$")
+    val userJars = extraJars.mkString(",")
 
-      val props = new Properties()
-      sys.props
-        .filter { case (k, v) => k.startsWith("spark.") }
-        .foreach { case (k, v) => props.setProperty(k, v) }
-      settings.foreach { case (k, v) => props.setProperty(k, v) }
+    val props = new Properties()
 
-      val propsFile = File.createTempFile("client", ".properties", tempDir)
-      val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
-      props.store(writer, "Client mode properties.")
-      writer.close()
+    props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
 
-      val argv = Seq(
-        new File(sys.props("spark.test.home"), "bin/spark-submit").getAbsolutePath(),
-        "--master", "yarn-client",
-        "--class", main,
-        "--jars", extraJars.mkString(","),
-        "--num-executors", "1",
-        "--properties-file", propsFile.getAbsolutePath(),
-        fakeSparkJar.getAbsolutePath()) ++
-        Seq("yarn-client") ++
-        args
+    val childClasspath = logConfDir.getAbsolutePath() + File.pathSeparator +
+      sys.props("java.class.path")
+    props.setProperty("spark.driver.extraClassPath", childClasspath)
+    props.setProperty("spark.executor.extraClassPath", childClasspath)
 
-      Utils.executeAndGetOutput(argv,
-        extraEnvironment = Map("YARN_CONF_DIR" -> tempDir.getAbsolutePath()))
-    } else {
-      val main = klass.getName().stripSuffix("$")
-      val userJars = if (!extraJars.isEmpty()) Seq("--addJars", extraJars.mkString(",")) else Nil
+    yarnCluster.getConfig().foreach { e =>
+      props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
+    }
 
-      val clientArgs = Array("--class", main,
-        "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
-        "--arg", "yarn-cluster",
-        "--num-executors", "1") ++
-        userJars ++
-        args.flatMap { Seq("--arg", _) }
-
-      sys.props ++= settings
-      try {
-        Client.main(clientArgs)
-      } finally {
-        sys.props --= settings.keys
+    sys.props.foreach { case (k, v) =>
+      if (k.startsWith("spark.")) {
+        props.setProperty(k, v)
       }
     }
+
+    settings.foreach { case (k, v) => props.setProperty(k, v) }
+
+    val propsFile = File.createTempFile("spark", ".properties", tempDir)
+    val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
+    props.store(writer, "Spark properties.")
+    writer.close()
+
+    val extraJarArgs = if (!extraJars.isEmpty()) Seq("--jars", extraJars.mkString(",")) else Nil
+    val argv =
+      Seq(
+        new File(sys.props("spark.test.home"), "bin/spark-submit").getAbsolutePath(),
+        "--master", master,
+        "--class", main,
+        "--num-executors", "1",
+        "--properties-file", propsFile.getAbsolutePath()) ++
+      extraJarArgs ++
+      Seq(fakeSparkJar.getAbsolutePath(), master) ++
+      args
+
+    Utils.executeAndGetOutput(argv,
+      extraEnvironment = Map("YARN_CONF_DIR" -> tempDir.getAbsolutePath()))
   }
 
   /**
