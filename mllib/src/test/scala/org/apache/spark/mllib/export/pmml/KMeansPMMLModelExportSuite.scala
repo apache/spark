@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.export.pmml
 
-import org.scalatest.FunSuite
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.export.ModelExportFactory
+import scala.annotation.varargs
 import org.apache.spark.mllib.clustering.KMeansModel
+import org.apache.spark.mllib.export.ModelExportFactory
 import org.apache.spark.mllib.export.ModelExportType
+import org.apache.spark.mllib.linalg.Vectors
+import org.scalatest.FunSuite
 import org.dmg.pmml.ClusteringModel
-import javax.xml.parsers.DocumentBuilderFactory
-import java.io.ByteArrayOutputStream
 
 class KMeansPMMLModelExportSuite extends FunSuite{
 
@@ -43,7 +42,7 @@ class KMeansPMMLModelExportSuite extends FunSuite{
     
     //assert that the PMML format is as expected
     assert(modelExport.isInstanceOf[PMMLModelExport])
-    var pmml = modelExport.asInstanceOf[PMMLModelExport].getPmml()
+    val pmml = modelExport.asInstanceOf[PMMLModelExport].getPmml()
     assert(pmml.getHeader().getDescription() === "k-means clustering")
     //check that the number of fields match the single vector size
     assert(pmml.getDataDictionary().getNumberOfFields() === clusterCenters(0).size)
@@ -52,8 +51,8 @@ class KMeansPMMLModelExportSuite extends FunSuite{
     assert(pmml.getModels().get(0).asInstanceOf[ClusteringModel].getNumberOfClusters() === clusterCenters.size)
     
     //manual checking
-    //modelExport.asInstanceOf[PMMLModelExport].save(System.out)
-    //modelExport.asInstanceOf[PMMLModelExport].saveLocalFile("/tmp/kmeans.xml")
+    //ModelExporter.toPMML(kmeansModel,new StreamResult(System.out))
+    //ModelExporter.toPMML(kmeansModel,"/tmp/kmeans.xml")
    
    }
   
