@@ -907,16 +907,16 @@ private[hive] object HiveQl {
 
     windowSpec match {
       case Token(alias, Nil) :: Nil => translateWindowSpec(getWindowSpec(alias))
-      case Token(alias, Nil) :: range => {
-        val (partitionClause :: rowsRange :: valueRange :: Nil) = getClauses(
+      case Token(alias, Nil) :: frame => {
+        val (partitionClause :: rowsFrame :: valueFrame :: Nil) = getClauses(
           Seq(
             "TOK_PARTITIONINGSPEC",
             "TOK_WINDOWRANGE",
             "TOK_WINDOWVALUES"),
           translateWindowSpec(getWindowSpec(alias)))
         partitionClause match {
-          case Some(partition) => partition.asInstanceOf[ASTNode] :: range
-          case None => range
+          case Some(partition) => partition.asInstanceOf[ASTNode] :: frame
+          case None => frame
         }
       }
       case e => e
@@ -1018,9 +1018,9 @@ private[hive] object HiveQl {
 
   }
 
-  protected def checkWindowSpec(windowSpec: Seq[ASTNode]): WindowRange = {
+  protected def checkWindowSpec(windowSpec: Seq[ASTNode]): WindowFrame = {
 
-    val (partitionClause :: rowsRange :: valueRange :: Nil) = getClauses(
+    val (partitionClause :: rowsFrame :: valueFrame :: Nil) = getClauses(
       Seq(
         "TOK_PARTITIONINGSPEC",
         "TOK_WINDOWRANGE",
@@ -1032,9 +1032,9 @@ private[hive] object HiveQl {
       case None => addWindowPartitions(null)
     }
 
-    (rowsRange orElse valueRange)match {
-      case Some(range) => {
-        val rangeSeq = range.getChildren.toIndexedSeq
+    (rowsFrame orElse valueFrame)match {
+      case Some(frame) => {
+        val rangeSeq = frame.getChildren.toIndexedSeq
 
         if (rangeSeq.size > 0) {
 
@@ -1056,10 +1056,10 @@ private[hive] object HiveQl {
             }
           } else 0
 
-          if (rowsRange.isDefined) {
-            WindowRange("ROWS_RANGE", preceding, following)
+          if (rowsFrame.isDefined) {
+            WindowFrame("ROWS_FRAME", preceding, following)
           } else {
-            WindowRange("VALUE_RANGE", preceding, following)
+            WindowFrame("VALUE_FRAME", preceding, following)
           }
           
         } else null
@@ -1262,12 +1262,12 @@ private[hive] object HiveQl {
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) => {
       val exprs = new ArrayBuffer[Expression]
-      var windowRange: WindowRange = null
+      var windowFrame: WindowFrame = null
       args.foreach {
-          case Token("TOK_WINDOWSPEC", winSpec) => windowRange = checkWindowSpec(winSpec)
+          case Token("TOK_WINDOWSPEC", winSpec) => windowFrame = checkWindowSpec(winSpec)
           case a: ASTNode => exprs += nodeToExpr(a)
       }
-      UnresolvedFunction(name, exprs, windowRange)
+      UnresolvedFunction(name, exprs, windowFrame)
     }
 
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>

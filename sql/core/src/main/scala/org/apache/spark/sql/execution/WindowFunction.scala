@@ -109,7 +109,7 @@ case class WindowFunction(
     var i = 0
     while (i < computeExpressions.length) {
       val baseExpr = BindReferences.bindReference(computeExpressions(i), childOutput)
-      baseExpr.windowRange = computeExpressions(i).windowRange
+      baseExpr.windowFrame = computeExpressions(i).windowFrame
       buffer(i) = baseExpr.newInstance()
       i += 1
     }
@@ -123,7 +123,7 @@ case class WindowFunction(
     while (i < aggrFunctions.length) {
       val aggrFunction = aggrFunctions(i)
       val base = aggrFunction.base
-      if (base.windowRange == null) {
+      if (base.windowFrame == null) {
         if (sortExpressions != null) {
           if (aggrFunction.dataType.isInstanceOf[ArrayType]) {
             rows.foreach(aggrFunction.update)
@@ -144,7 +144,7 @@ case class WindowFunction(
 
       } else {
         functionResults(i) =
-          if (base.windowRange.windowType == "ROWS_RANGE") rowsWindowFunction(base, rows).iterator
+          if (base.windowFrame.frameType == "ROWS_FRAME") rowsWindowFunction(base, rows).iterator
           else valueWindowFunction(base, rows).iterator
       }
       i += 1
@@ -159,16 +159,16 @@ case class WindowFunction(
     var rowIndex = 0
     while (rowIndex < rows.size) {
 
-      val windowRange = base.windowRange
+      val windowFrame = base.windowFrame
       var start =
-        if (windowRange.preceding == Int.MaxValue) 0
-        else rowIndex - windowRange.preceding
+        if (windowFrame.preceding == Int.MaxValue) 0
+        else rowIndex - windowFrame.preceding
       if (start < 0) start = 0
       var end =
-        if (windowRange.following == Int.MaxValue) {
+        if (windowFrame.following == Int.MaxValue) {
           rows.size - 1
         } else {
-          rowIndex + windowRange.following
+          rowIndex + windowFrame.following
         }
       if (end > rows.size - 1) end = rows.size - 1
 
@@ -185,27 +185,27 @@ case class WindowFunction(
   private[this] def valueWindowFunction(base: AggregateExpression,
     rows: CompactBuffer[Row]): CompactBuffer[Any] = {
 
-    val windowRange = base.windowRange
+    val windowFrame = base.windowFrame
 
     // rande only support 1 order
     val sortExpression = BindReferences.bindReference(sortExpressions.head, childOutput)
 
     val preceding = sortExpression.child.dataType match {
-      case IntegerType => Literal(windowRange.preceding)
-      case LongType => Literal(windowRange.preceding.toLong)
-      case DoubleType => Literal(windowRange.preceding.toDouble)
-      case FloatType => Literal(windowRange.preceding.toFloat)
-      case ShortType => Literal(windowRange.preceding.toShort)
-      case DecimalType => Literal(BigDecimal(windowRange.preceding))
+      case IntegerType => Literal(windowFrame.preceding)
+      case LongType => Literal(windowFrame.preceding.toLong)
+      case DoubleType => Literal(windowFrame.preceding.toDouble)
+      case FloatType => Literal(windowFrame.preceding.toFloat)
+      case ShortType => Literal(windowFrame.preceding.toShort)
+      case DecimalType => Literal(BigDecimal(windowFrame.preceding))
       case _=> throw new Exception(s"not support dataType ")
     }
     val following = sortExpression.child.dataType match {
-      case IntegerType => Literal(windowRange.following)
-      case LongType => Literal(windowRange.following.toLong)
-      case DoubleType => Literal(windowRange.following.toDouble)
-      case FloatType => Literal(windowRange.following.toFloat)
-      case ShortType => Literal(windowRange.following.toShort)
-      case DecimalType => Literal(BigDecimal(windowRange.following))
+      case IntegerType => Literal(windowFrame.following)
+      case LongType => Literal(windowFrame.following.toLong)
+      case DoubleType => Literal(windowFrame.following.toDouble)
+      case FloatType => Literal(windowFrame.following.toFloat)
+      case ShortType => Literal(windowFrame.following.toShort)
+      case DecimalType => Literal(BigDecimal(windowFrame.following))
       case _=> throw new Exception(s"not support dataType ")
     }
 
@@ -232,13 +232,13 @@ case class WindowFunction(
       var followingIndex = rows.size - 1
       if (sortExpression != null) {
 
-        if (windowRange.preceding != Int.MaxValue) precedingIndex = rowIndex
+        if (windowFrame.preceding != Int.MaxValue) precedingIndex = rowIndex
         while (precedingIndex > 0 &&
           precedingExpr.eval(rows(precedingIndex - 1)).asInstanceOf[Boolean]) {
           precedingIndex -= 1
         }
 
-        if (windowRange.following != Int.MaxValue) followingIndex = rowIndex
+        if (windowFrame.following != Int.MaxValue) followingIndex = rowIndex
         while (followingIndex < rows.size - 1 &&
           followingExpr.eval(rows(followingIndex + 1)).asInstanceOf[Boolean]) {
           followingIndex += 1
