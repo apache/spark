@@ -195,8 +195,7 @@ case object NullType extends DataType
 
 object NativeType {
   val all = Seq(
-    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType,
-    ByteType, StringType, DateType, TimestampType)
+    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
 
@@ -208,8 +207,6 @@ object NativeType {
     FloatType -> 4,
     ShortType -> 2,
     ByteType -> 1,
-    DateType -> 8,
-    TimestampType -> 12,
     StringType -> 4096)
 }
 
