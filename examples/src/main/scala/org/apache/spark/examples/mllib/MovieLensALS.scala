@@ -176,14 +176,18 @@ object MovieLensALS {
     
     sc.stop()
   }
-
-  /** threshold for predictions are at 0.5 **/
+  
+  /**  
+   * Threshold for predictions are at 0.5
+   */
   def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
     else math.max(scala.math.round(r), 0.0)
   }
   
-  /** compute MAP (Mean Average Precision) statistics **/
+  /**  
+   * Compute MAP (Mean Average Precision) statistics
+   */
   def computeMap(predictedAndLabels: RDD[(Int, (Double, Double))]) = {
      val ranking = predictedAndLabels.groupByKey.map {
       case (user, entries) => {
@@ -197,7 +201,9 @@ object MovieLensALS {
     metrics.meanAveragePrecision
   }
   
-  /** Compute recommendation metrics (RMSE, MAP) */
+  /**  
+   * Compute recommendation metrics (RMSE, MAP)
+   */
   def computeRecommendationMetrics(model: MatrixFactorizationModel, data: RDD[Rating],
     implicitPrefs: Boolean) = {
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
