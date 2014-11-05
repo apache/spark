@@ -102,8 +102,10 @@ object ANNClassifier {
 
   def train(data: RDD[LabeledPoint], model: ANNClassifierModel, maxIterations: Int,
             stepSize: Double, convergenceTol: Double): ANNClassifierModel = {
-    val hiddenLayersTopology = model.annModel.topology.slice(1, model.annModel.topology.length - 1)
-    train(data, hiddenLayersTopology, model.annModel.weights, maxIterations, stepSize, convergenceTol)
+    val hiddenLayersTopology =
+      model.annModel.topology.slice(1, model.annModel.topology.length - 1)
+    train(data, hiddenLayersTopology, model.annModel.weights,
+      maxIterations, stepSize, convergenceTol)
   }
 
   def train(data: RDD[LabeledPoint]): ANNClassifierModel = {
