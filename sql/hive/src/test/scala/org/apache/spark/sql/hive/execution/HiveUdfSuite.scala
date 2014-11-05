@@ -85,22 +85,22 @@ class HiveUdfSuite extends QueryTest {
   }
 
   test("SPARK-2693 udaf aggregates test") {
-    checkAnswer(sql("SELECT percentile(key,1) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT percentile(key, 1) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src").collect().toSeq)
       
-    checkAnswer(sql("SELECT percentile(key,array(1,1)) FROM src LIMIT 1"),
-      sql("SELECT array(max(key),max(key)) FROM src").collect().toSeq)
+    checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
+      sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
       
     TestHive.reset()
   }
 
   test("Generic UDAF aggregates") {
-    checkAnswer(sql("SELECT ceiling(percentile_approx(key,0.99999)) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
       
-    checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9,0.9)) FROM src LIMIT 1"),
-      sql("SELECT array(100,100) FROM src LIMIT 1").collect().toSeq)
-   }	
+    checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9, 0.9)) FROM src LIMIT 1"),
+      sql("SELECT array(100, 100) FROM src LIMIT 1").collect().toSeq)
+   }
   
   test("UDFIntegerToString") {
     val testData = TestHive.sparkContext.parallelize(

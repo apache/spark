@@ -198,7 +198,7 @@ private[hive] case class HiveGenericUdaf(
 
   @transient
   protected lazy val objectInspector  = {
-    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray,false,false)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
     resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
@@ -229,12 +229,13 @@ private[hive] case class HiveUdaf(
 
   @transient
   protected lazy val objectInspector  = {
-    resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
+    resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
   @transient
-  protected lazy val inspectors = children.map(ex => toInspector(ex.dataType))
+  protected lazy val inspectors = children.map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
 
@@ -267,7 +268,7 @@ private[hive] case class HiveGenericUdtf(
   protected lazy val function: GenericUDTF = createFunction()
 
   @transient
-  protected lazy val inputInspectors = children.map( ex => toInspector(ex.dataType))
+  protected lazy val inputInspectors = children.map(toInspector)
 
   @transient
   protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
@@ -345,7 +346,7 @@ private[hive] case class HiveUdafFunction(
   private val inspectors = exprs.map(toInspector).toArray
     
   private val function = { 
-    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors,false,false)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
     resolver.getEvaluator(parameterInfo) 
   }
 
