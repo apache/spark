@@ -468,8 +468,6 @@ class PythonMLLibAPI extends Serializable {
 
   /**
    * Java stub for mllib Statistics.chiSqTest(observed: Matrix)
-   * @param observed
-   * @return
    */
   def chiSqTest(observed: Matrix): ChiSqTestResult = {
     Statistics.chiSqTest(observed)
