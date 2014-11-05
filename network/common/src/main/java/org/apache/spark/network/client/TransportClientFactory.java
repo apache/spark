@@ -21,10 +21,14 @@ import java.io.Closeable;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -40,6 +44,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.IOMode;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -47,22 +52,29 @@ import org.apache.spark.network.util.TransportConf;
  * Factory for creating {@link TransportClient}s by using createClient.
  *
  * The factory maintains a connection pool to other hosts and should return the same
- * {@link TransportClient} for the same remote host. It also shares a single worker thread pool for
- * all {@link TransportClient}s.
+ * TransportClient for the same remote host. It also shares a single worker thread pool for
+ * all TransportClients.
+ *
+ * TransportClients will be reused whenever possible. Prior to completing the creation of a new
+ * TransportClient, all given {@link TransportClientBootstrap}s will be run.
  */
 public class TransportClientFactory implements Closeable {
   private final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
+  private final List<TransportClientBootstrap> clientBootstraps;
   private final ConcurrentHashMap<SocketAddress, TransportClient> connectionPool;
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
 
-  public TransportClientFactory(TransportContext context) {
-    this.context = context;
+  public TransportClientFactory(
+      TransportContext context,
+      List<TransportClientBootstrap> clientBootstraps) {
+    this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
+    this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<SocketAddress, TransportClient>();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
@@ -72,9 +84,12 @@ public class TransportClientFactory implements Closeable {
   }
 
   /**
-   * Create a new BlockFetchingClient connecting to the given remote host / port.
+   * Create a new {@link TransportClient} connecting to the given remote host / port. This will
+   * reuse TransportClients if they are still active and are for the same remote address. Prior
+   * to the creation of a new TransportClient, we will execute all {@link TransportClientBootstrap}s
+   * that are registered with this factory.
    *
-   * This blocks until a connection is successfully established.
+   * This blocks until a connection is successfully established and fully bootstrapped.
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
@@ -104,17 +119,18 @@ public class TransportClientFactory implements Closeable {
     // Use pooled buffers to reduce temporary buffer allocation
     bootstrap.option(ChannelOption.ALLOCATOR, createPooledByteBufAllocator());
 
-    final AtomicReference<TransportClient> client = new AtomicReference<TransportClient>();
+    final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
 
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
         TransportChannelHandler clientHandler = context.initializePipeline(ch);
-        client.set(clientHandler.getClient());
+        clientRef.set(clientHandler.getClient());
       }
     });
 
     // Connect to the remote server
+    long preConnect = System.currentTimeMillis();
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
       throw new RuntimeException(
@@ -123,15 +139,35 @@ public class TransportClientFactory implements Closeable {
       throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
     }
 
-    // Successful connection -- in the event that two threads raced to create a client, we will
+    TransportClient client = clientRef.get();
+    assert client != null : "Channel future completed successfully with null client";
+
+    // Execute any client bootstraps synchronously before marking the Client as successful.
+    long preBootstrap = System.currentTimeMillis();
+    logger.debug("Connection to {} successful, running bootstraps...", address);
+    try {
+      for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
+        clientBootstrap.doBootstrap(client);
+      }
+    } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
+      long bootstrapTime = System.currentTimeMillis() - preBootstrap;
+      logger.error("Exception while bootstrapping client after " + bootstrapTime + " ms", e);
+      client.close();
+      throw Throwables.propagate(e);
+    }
+    long postBootstrap = System.currentTimeMillis();
+
+    // Successful connection & bootstrap -- in the event that two threads raced to create a client,
     // use the first one that was put into the connectionPool and close the one we made here.
-    assert client.get() != null : "Channel future completed successfully with null client";
-    TransportClient oldClient = connectionPool.putIfAbsent(address, client.get());
+    TransportClient oldClient = connectionPool.putIfAbsent(address, client);
     if (oldClient == null) {
-      return client.get();
+      logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
+        address, postBootstrap - preConnect, postBootstrap - preBootstrap);
+      return client;
     } else {
-      logger.debug("Two clients were created concurrently, second one will be disposed.");
-      client.get().close();
+      logger.debug("Two clients were created concurrently after {} ms, second will be disposed.",
+        postBootstrap - preConnect);
+      client.close();
       return oldClient;
     }
   }

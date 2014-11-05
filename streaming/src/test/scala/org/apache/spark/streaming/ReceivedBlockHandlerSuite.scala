@@ -74,6 +74,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
     blockManager = new BlockManager("bm", actorSystem, blockManagerMaster, serializer,
       blockManagerSize, conf, mapOutputTracker, shuffleManager,
       new NioBlockTransferService(conf, securityMgr))
+    blockManager.initialize("app-id")
 
     tempDirectory = Files.createTempDir()
     manualClock.setTime(0)

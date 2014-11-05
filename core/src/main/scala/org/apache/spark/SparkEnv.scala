@@ -276,7 +276,7 @@ object SparkEnv extends Logging {
     val blockTransferService =
       conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>
-          new NettyBlockTransferService(conf)
+          new NettyBlockTransferService(conf, securityManager)
         case "nio" =>
           new NioBlockTransferService(conf, securityManager)
       }
@@ -285,6 +285,7 @@ object SparkEnv extends Logging {
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
+    // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
 
