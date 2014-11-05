@@ -21,14 +21,15 @@ import java.io.{BufferedOutputStream, FileOutputStream}
 import java.util.Comparator
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{Logging, InterruptibleIterator, SparkEnv, TaskContext}
+import org.apache.spark._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleReader, BaseShuffleHandle}
+import org.apache.spark.shuffle.{BaseShuffleHandle, FetchFailedException, ShuffleReader}
 import org.apache.spark.storage._
-import org.apache.spark.util.CompletionIterator
-import org.apache.spark.util.collection.{TieredDiskMerger, MergeUtil}
+import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.util.collection.{MergeUtil, TieredDiskMerger}
 
 /**
  * SortShuffleReader merges and aggregates shuffle data that has already been sorted within each
@@ -69,6 +70,9 @@ private[spark] class SortShuffleReader[K, C](
   /** ArrayBuffer to store in-memory shuffle blocks */
   private val inMemoryBlocks = new ArrayBuffer[MemoryShuffleBlock]()
 
+  /** Manage the BlockManagerId and related shuffle blocks */
+  private var  statuses: Array[(BlockManagerId, Long)] = _
+
   /** keyComparator for mergeSort, id keyOrdering is not available,
     * using hashcode of key to compare */
   private val keyComparator: Comparator[K] = dep.keyOrdering.getOrElse(new Comparator[K] {
@@ -85,17 +89,26 @@ private[spark] class SortShuffleReader[K, C](
   override def read(): Iterator[Product2[K, C]] = {
     tieredMerger.start()
 
-    for ((blockId, blockData) <- fetchRawBlocks()) {
-      if (blockData.isEmpty) {
-        throw new IllegalStateException(s"block $blockId is empty for unknown reason")
+    for ((blockId, blockOption) <- fetchRawBlocks()) {
+      val blockData = blockOption match {
+        case Success(block) => block
+        case Failure(e) =>
+          blockId match {
+            case ShuffleBlockId (shufId, mapId, _) =>
+              val address = statuses(mapId.toInt)._1
+              throw new FetchFailedException (address, shufId.toInt, mapId.toInt, startPartition,
+                Utils.exceptionString (e))
+            case _ =>
+              throw new SparkException (
+                s"Failed to get block $blockId, which is not a shuffle block", e)
+          }
       }
 
-      inMemoryBlocks += MemoryShuffleBlock(blockId, blockData.get)
+      inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
 
       // Try to fit block in memory. If this fails, merge in-memory blocks to disk.
-      val blockSize = blockData.get.size
-      val granted = shuffleMemoryManager.tryToAcquire(blockData.get.size)
-      logInfo(s"Granted $granted memory for shuffle block")
+      val blockSize = blockData.size
+      val granted = shuffleMemoryManager.tryToAcquire(blockSize)
 
       if (granted < blockSize) {
         logInfo(s"Granted $granted memory is not enough to store shuffle block ($blockSize), " +
@@ -124,7 +137,10 @@ private[spark] class SortShuffleReader[K, C](
 
         tieredMerger.registerOnDiskBlock(tmpBlockId, file)
 
+        logInfo(s"Merge ${inMemoryBlocks.size} in-memory blocks into file ${file.getName}")
+
         for (block <- inMemoryBlocks) {
+          block.blockData.release()
           shuffleMemoryManager.release(block.blockData.size)
         }
         inMemoryBlocks.clear()
@@ -143,7 +159,10 @@ private[spark] class SortShuffleReader[K, C](
     // Release the in-memory block when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
       mergedItr, () => {
-        inMemoryBlocks.foreach(block => shuffleMemoryManager.release(block.blockData.size))
+        inMemoryBlocks.foreach { block =>
+          block.blockData.release()
+          shuffleMemoryManager.release(block.blockData.size)
+        }
         inMemoryBlocks.clear()
       })
 
@@ -157,10 +176,8 @@ private[spark] class SortShuffleReader[K, C](
     }
   }
 
-  override def stop(): Unit = ???
-
-  private def fetchRawBlocks(): Iterator[(BlockId, Option[ManagedBuffer])] = {
-    val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
+  private def fetchRawBlocks(): Iterator[(BlockId, Try[ManagedBuffer])] = {
+    statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
 
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]()
     for (((address, size), index) <- statuses.zipWithIndex) {
@@ -176,16 +193,16 @@ private[spark] class SortShuffleReader[K, C](
 
     shuffleRawBlockFetcherItr = new ShuffleRawBlockFetcherIterator(
       context,
-      SparkEnv.get.blockTransferService,
+      SparkEnv.get.blockManager.shuffleClient,
       blockManager,
       blocksByAddress,
       conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
 
     val completionItr = CompletionIterator[
-      (BlockId, Option[ManagedBuffer]),
-      Iterator[(BlockId, Option[ManagedBuffer])]](shuffleRawBlockFetcherItr,
+      (BlockId, Try[ManagedBuffer]),
+      Iterator[(BlockId, Try[ManagedBuffer])]](shuffleRawBlockFetcherItr,
       () => context.taskMetrics.updateShuffleReadMetrics())
 
-    new InterruptibleIterator[(BlockId, Option[ManagedBuffer])](context, completionItr)
+    new InterruptibleIterator[(BlockId, Try[ManagedBuffer])](context, completionItr)
   }
 }

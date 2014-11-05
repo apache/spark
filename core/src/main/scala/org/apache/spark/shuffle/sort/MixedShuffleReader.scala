@@ -35,6 +35,4 @@ private[spark] class MixedShuffleReader[K, C](
   }
 
   override def read(): Iterator[Product2[K, C]] = shuffleReader.read()
-
-  override def stop(): Unit = shuffleReader.stop()
 }
