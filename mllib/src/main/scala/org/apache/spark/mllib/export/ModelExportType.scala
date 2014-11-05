@@ -22,7 +22,7 @@ package org.apache.spark.mllib.export
  *  - PMML exports the machine learning models in an XML-based file format 
  *  called Predictive Model Markup Language developed by the Data Mining Group (www.dmg.org).
  */
-object ModelExportType extends Enumeration{
+private[mllib] object ModelExportType extends Enumeration{
 
   type ModelExportType = Value
   val PMML = Value
