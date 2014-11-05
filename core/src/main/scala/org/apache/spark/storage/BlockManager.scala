@@ -40,7 +40,6 @@ import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.hash.HashShuffleManager
-import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util._
 
 private[spark] sealed trait BlockValues
@@ -97,7 +96,12 @@ private[spark] class BlockManager(
 
   private[spark]
   val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
-  private val externalShuffleServicePort = conf.getInt("spark.shuffle.service.port", 7337)
+
+  // Port used by the external shuffle service. In Yarn mode, this may be already be
+  // set through the Hadoop configuration as the server is launched in the Yarn NM.
+  private val externalShuffleServicePort =
+    Utils.getSparkOrYarnConfig(conf, "spark.shuffle.service.port", "7337").toInt
+
   // Check that we're not using external shuffle service with consolidated shuffle files.
   if (externalShuffleServiceEnabled
       && conf.getBoolean("spark.shuffle.consolidateFiles", false)
