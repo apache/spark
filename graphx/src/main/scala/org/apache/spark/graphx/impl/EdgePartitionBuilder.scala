@@ -18,7 +18,8 @@
 package org.apache.spark.graphx.impl
 
 import scala.reflect.ClassTag
-import scala.util.Sorting
+
+import org.mockito.cglib.util.ParallelSorter
 
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveVector}
 
@@ -28,32 +29,38 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 private[graphx]
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: ClassTag](
     size: Int = 64) {
-  var edges = new PrimitiveVector[Edge[ED]](size)
+  var srcIds = new PrimitiveVector[VertexId](size)
+  var dstIds = new PrimitiveVector[VertexId](size)
+  var data = new PrimitiveVector[ED](size)
 
   /** Add a new edge to the partition. */
   def add(src: VertexId, dst: VertexId, d: ED) {
-    edges += Edge(src, dst, d)
+    srcIds += src
+    dstIds += dst
+    data += d
   }
 
   def toEdgePartition: EdgePartition[ED, VD] = {
-    val edgeArray = edges.trim().array
-    Sorting.quickSort(edgeArray)(Edge.lexicographicOrdering)
-    val srcIds = new Array[VertexId](edgeArray.size)
-    val dstIds = new Array[VertexId](edgeArray.size)
-    val data = new Array[ED](edgeArray.size)
+    val srcIdsTrim = srcIds.trim().array
+    val dstIdsTrim = dstIds.trim().array
+    val dataTrim = data.trim().array
+
+    // Sort the three arrays in parallel by (srcId, dstId)
+    val arrays = Array[Object](srcIdsTrim, dstIdsTrim, dataTrim)
+    val sorter = ParallelSorter.create(arrays)
+    sorter.quickSort(1, 0, srcIdsTrim.length) // necessary for groupEdges
+    sorter.mergeSort(0, 0, srcIdsTrim.length) // preserves dstId sort order
+
     val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index
-    if (edgeArray.length > 0) {
+    if (srcIdsTrim.length > 0) {
       index.update(srcIds(0), 0)
       var currSrcId: VertexId = srcIds(0)
       var i = 0
-      while (i < edgeArray.size) {
-        srcIds(i) = edgeArray(i).srcId
-        dstIds(i) = edgeArray(i).dstId
-        data(i) = edgeArray(i).attr
-        if (edgeArray(i).srcId != currSrcId) {
-          currSrcId = edgeArray(i).srcId
+      while (i < srcIdsTrim.size) {
+        if (srcIdsTrim(i) != currSrcId) {
+          currSrcId = srcIdsTrim(i)
           index.update(currSrcId, i)
         }
         i += 1
@@ -61,12 +68,12 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     }
 
     // Create and populate a VertexPartition with vids from the edges, but no attributes
-    val vidsIter = srcIds.iterator ++ dstIds.iterator
+    val vidsIter = srcIdsTrim.iterator ++ dstIdsTrim.iterator
     val vertexIds = new OpenHashSet[VertexId]
     vidsIter.foreach(vid => vertexIds.add(vid))
     val vertices = new VertexPartition(
       vertexIds, new Array[VD](vertexIds.capacity), vertexIds.getBitSet)
 
-    new EdgePartition(srcIds, dstIds, data, index, vertices)
+    new EdgePartition(srcIdsTrim, dstIdsTrim, dataTrim, index, vertices)
   }
 }
