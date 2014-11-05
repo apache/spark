@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.SchemaRDD
 
 /**

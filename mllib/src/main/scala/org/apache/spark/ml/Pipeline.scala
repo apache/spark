@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.sql.SchemaRDD
 
 import scala.collection.mutable.ListBuffer
@@ -29,10 +30,20 @@ trait PipelineStage extends Identifiable
 class Pipeline extends Estimator[PipelineModel] {
 
   val stages: Param[Array[PipelineStage]] =
-    new Param[Array[PipelineStage]](this, "stages", "stages of the pipeline")
+    new Param(this, "stages", "stages of the pipeline")
+
+  def setStages(stages: Array[PipelineStage]): this.type = {
+    set(this.stages, stages)
+    this
+  }
+
+  def getStages: Array[PipelineStage] = {
+    get(stages)
+  }
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
-    val theStages = paramMap.apply(stages)
+    val map = this.paramMap ++ paramMap
+    val theStages = map(stages)
     // Search for last estimator.
     var lastIndexOfEstimator = -1
     theStages.view.zipWithIndex.foreach { case (stage, index) =>

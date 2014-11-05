@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.example
 
-import org.apache.spark.ml.{Pipeline, Estimator, ParamMap, ParamGridBuilder}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.param.ParamGridBuilder
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.MLUtils
@@ -30,9 +31,9 @@ class LogisticRegressionSuite extends FunSuite {
     .cache()
 
   test("logistic regression alone") {
-    val lr = new LogisticRegression
-    lr.set(lr.maxIter, 10)
-      .set(lr.regParam, 1.0)
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
     val model = lr.fit(dataset)
     model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
       .select('label, 'score, 'prediction).collect()
@@ -41,28 +42,28 @@ class LogisticRegressionSuite extends FunSuite {
 
   test("logistic regression with cross validation") {
     val lr = new LogisticRegression
-    val cv = new CrossValidator
-    val eval = new BinaryClassificationEvaluator
     val lrParamMaps = new ParamGridBuilder()
       .addMulti(lr.regParam, Array(0.1, 100.0))
       .addMulti(lr.maxIter, Array(0, 5))
       .build()
-    cv.set(cv.estimator, lr.asInstanceOf[Estimator[_]])
-      .set(cv.estimatorParamMaps, lrParamMaps)
-      .set(cv.evaluator, eval)
-      .set(cv.numFolds, 3)
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
     val bestModel = cv.fit(dataset)
   }
 
   test("logistic regression with pipeline") {
-    val scaler = new StandardScaler
-    scaler
-      .set(scaler.inputCol, "features")
-      .set(scaler.outputCol, "scaledFeatures")
-    val lr = new LogisticRegression
-    lr.set(lr.featuresCol, "scaledFeatures")
-    val pipeline = new Pipeline
-    val model = pipeline.fit(dataset, pipeline.stages -> Array(scaler, lr))
+    val scaler = new StandardScaler()
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures")
+    val lr = new LogisticRegression()
+      .setFeaturesCol("scaledFeatures")
+    val pipeline = new Pipeline()
+      .setStages(Array(scaler, lr))
+    val model = pipeline.fit(dataset)
     val predictions = model.transform(dataset)
       .select('label, 'score, 'prediction)
       .collect()

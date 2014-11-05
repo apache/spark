@@ -18,18 +18,16 @@
 package org.apache.spark.ml.example
 
 import org.apache.spark.ml._
+import org.apache.spark.ml.api.param.HasMetricName
+import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.expressions.Row
 
-class BinaryClassificationEvaluator extends Evaluator with Params with OwnParamMap {
+class BinaryClassificationEvaluator extends Evaluator with Params
+    with HasScoreCol with HasLabelCol with HasMetricName {
 
-  final val metricName: Param[String] =
-    new Param(this, "metricName", "evaluation metric: areaUnderROC or areaUnderPR", "areaUnderROC")
-
-  final val scoreCol: Param[String] = new Param(this, "scoreCol", "score column name", "score")
-
-  final val labelCol: Param[String] = new Param(this, "labelCol", "label column name", "label")
+  setMetricName("areaUnderROC")
 
   override def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double = {
     import dataset.sqlContext._

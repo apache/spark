@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 
-import scala.language.implicitConversions
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 /**
  * A param with self-contained documentation and optionally default value.
@@ -28,11 +28,10 @@ import scala.collection.mutable
  * @param parent parent object
  * @param name param name
  * @param doc documentation
- * @param default optional default value
  * @tparam T param value type
  */
 class Param[T] private (
-    val parent: Identifiable,
+    val parent: Params,
     val name: String,
     val doc: String,
     val default: Option[T]) extends Serializable {
@@ -44,7 +43,7 @@ class Param[T] private (
    * @param name param name
    * @param doc documentation
    */
-  def this(parent: Identifiable, name: String, doc: String) = this(parent, name, doc, None)
+  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
 
   /**
    * Creates a param with a default value.
@@ -54,7 +53,7 @@ class Param[T] private (
    * @param doc documentation
    * @param default default value
    */
-  def this(parent: Identifiable, name: String, doc: String, default: T) =
+  def this(parent: Params, name: String, doc: String, default: T) =
     this(parent, name, doc, Some(default))
 
   /**
@@ -84,7 +83,7 @@ case class ParamPair[T](param: Param[T], value: T)
 /**
  * Trait for components that take parameters.
  */
-trait Params {
+trait Params extends Identifiable {
 
   /** Returns all params. */
   def params: Array[Param[_]] = {
@@ -114,12 +113,6 @@ trait Params {
    * Returns the documentation of all params.
    */
   def explainParams(): String = params.mkString("\n")
-}
-
-/**
- * Trait for instances that hold their own param maps.
- */
-trait OwnParamMap {
 
   /**
    * Internal param map.
@@ -129,9 +122,13 @@ trait OwnParamMap {
   /**
    * Sets a parameter in the own parameter map.
    */
-  def set[T](param: Param[T], value: T): this.type = {
+  protected def set[T](param: Param[T], value: T): this.type = {
     paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
+  }
+
+  protected def get[T](param: Param[T]): T = {
+    paramMap(param)
   }
 }
 
@@ -175,12 +172,21 @@ class ParamMap private[ml] (
     this
   }
 
+  def get[T](param: Param[T]): Option[T] = {
+    params.get(param.asInstanceOf[Param[Any]]).asInstanceOf[Option[T]]
+  }
+
   /**
    * Gets the value of the input param or the default value if it does not exist.
    * Raises a NoSuchElementException if there is no value associated with the input param.
    */
   def apply[T](param: Param[T]): T = {
-    params.getOrElse(param.asInstanceOf[Param[Any]], param.default.get).asInstanceOf[T]
+    val value = params.get(param.asInstanceOf[Param[Any]]).orElse(param.default)
+    if (value.isDefined) {
+      value.get.asInstanceOf[T]
+    } else {
+      throw new NoSuchElementException(s"Cannot find param ${param.name}.")
+    }
   }
 
   /**

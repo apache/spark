@@ -18,6 +18,8 @@
 package org.apache.spark.ml.example
 
 import org.apache.spark.ml._
+import org.apache.spark.ml.api.param._
+import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -29,16 +31,11 @@ import org.apache.spark.sql.catalyst.expressions.Row
 /**
  * Logistic regression (example).
  */
-class LogisticRegression extends Estimator[LogisticRegressionModel] with OwnParamMap {
+class LogisticRegression extends Estimator[LogisticRegressionModel]
+    with HasRegParam with HasMaxIter with HasLabelCol with HasFeaturesCol {
 
-  final val maxIter: Param[Int] = new Param(this, "maxIter", "max number of iterations", 100)
-
-  final val regParam: Param[Double] = new Param(this, "regParam", "regularization constant", 0.1)
-
-  final val labelCol: Param[String] = new Param(this, "labelCol", "label column name", "label")
-
-  final val featuresCol: Param[String] =
-    new Param(this, "featuresCol", "features column name", "features")
+  setRegParam(0.1)
+  setMaxIter(100)
 
   override final val model: LogisticRegressionModelParams = new LogisticRegressionModelParams {}
 
@@ -58,28 +55,23 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with OwnPara
     instances.unpersist()
     this.model.params.foreach { param =>
       if (map.contains(param)) {
-        lrm.set(lrm.getParam(param.name), map(param))
+        lrm.paramMap.put(lrm.getParam(param.name), map(param))
       }
     }
     if (!lrm.paramMap.contains(lrm.featuresCol) && map.contains(lrm.featuresCol)) {
-      lrm.set(lrm.featuresCol, featuresCol: String)
+      lrm.setFeaturesCol(featuresCol)
     }
     lrm
   }
 }
 
-trait LogisticRegressionModelParams extends Params with Identifiable {
-
-  final val threshold: Param[Double] =
-    new Param(this, "threshold", "threshold for prediction", 0.5)
-
-  final val featuresCol: Param[String] =
-    new Param(this, "featuresCol", "features column name", "features")
-}
+trait LogisticRegressionModelParams extends Params with HasThreshold with HasFeaturesCol
 
 class LogisticRegressionModel(
     val weights: Vector)
-    extends Model with LogisticRegressionModelParams with OwnParamMap {
+    extends Model with LogisticRegressionModelParams {
+
+  setThreshold(0.5)
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._
