@@ -95,58 +95,62 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
-    try {
-      // If authentication is enabled, set up the shuffle server to use a
-      // special RPC handler that filters out unauthenticated fetch requests
-      boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-      RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
-      if (authEnabled) {
-        secretManager = new ShuffleSecretManager();
-        rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
-      }
-
-      int port = conf.getInt(
-        SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-      TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
-      TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
-      shuffleServer = transportContext.createServer(port);
-      String authEnabledString = authEnabled ? "enabled" : "not enabled";
-      logger.info("Started YARN shuffle service for Spark on port {}. " +
-        "Authentication is {}.", port, authEnabledString);
-    } catch (Exception e) {
-      logger.error("Exception in starting YARN shuffle service for Spark", e);
+    // If authentication is enabled, set up the shuffle server to use a
+    // special RPC handler that filters out unauthenticated fetch requests
+    boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
+    RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
+    if (authEnabled) {
+      secretManager = new ShuffleSecretManager();
+      rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
     }
+
+    int port = conf.getInt(
+      SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
+    TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
+    TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
+    shuffleServer = transportContext.createServer(port);
+    String authEnabledString = authEnabled ? "enabled" : "not enabled";
+    logger.info("Started YARN shuffle service for Spark on port {}. " +
+      "Authentication is {}.", port, authEnabledString);
   }
 
   @Override
   public void initializeApplication(ApplicationInitializationContext context) {
     String appId = context.getApplicationId().toString();
-    ByteBuffer shuffleSecret = context.getApplicationDataForService();
-    logger.debug("Initializing application {}", appId);
-    if (isAuthenticationEnabled()) {
-      secretManager.registerApp(appId, shuffleSecret);
+    try {
+      ByteBuffer shuffleSecret = context.getApplicationDataForService();
+      logger.info("Initializing application {}", appId);
+      if (isAuthenticationEnabled()) {
+        secretManager.registerApp(appId, shuffleSecret);
+      }
+    } catch (Exception e) {
+      logger.error("Exception when initializing application {}", appId, e);
     }
   }
 
   @Override
   public void stopApplication(ApplicationTerminationContext context) {
     String appId = context.getApplicationId().toString();
-    logger.debug("Stopping application {}", appId);
-    if (isAuthenticationEnabled()) {
-      secretManager.unregisterApp(appId);
+    try {
+      logger.info("Stopping application {}", appId);
+      if (isAuthenticationEnabled()) {
+        secretManager.unregisterApp(appId);
+      }
+    } catch (Exception e) {
+      logger.error("Exception when stopping application {}", appId, e);
     }
   }
 
   @Override
   public void initializeContainer(ContainerInitializationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.debug("Initializing container {}", containerId);
+    logger.info("Initializing container {}", containerId);
   }
 
   @Override
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.debug("Stopping container {}", containerId);
+    logger.info("Stopping container {}", containerId);
   }
 
   /**
@@ -154,8 +158,12 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceStop() {
-    if (shuffleServer != null) {
-      shuffleServer.close();
+    try {
+      if (shuffleServer != null) {
+        shuffleServer.close();
+      }
+    } catch (Exception e) {
+      logger.error("Exception when stopping service", e);
     }
   }
 
