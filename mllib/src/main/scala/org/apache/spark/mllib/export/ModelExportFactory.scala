@@ -21,7 +21,7 @@ import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
 import org.apache.spark.mllib.export.ModelExportType._
 
-object ModelExportFactory {
+private[mllib] object ModelExportFactory {
   
   /**
    * Factory object to help creating the necessary ModelExport implementation 
