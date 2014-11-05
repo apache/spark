@@ -29,6 +29,13 @@ import org.apache.spark.util.Utils
 // Implicits
 import org.apache.spark.sql.hive.test.TestHive._
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(convertToEqualizer(X).===(true))
+ * (This file already imports convertToEqualizer)
+ */
+
 case class Cases(lower: String, UPPER: String)
 
 class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
@@ -80,7 +87,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   test("Simple column projection + filter on Parquet table") {
     val rdd = sql("SELECT myboolean, mylong FROM testsource WHERE myboolean=true").collect()
-    assert(rdd.size === 5, "Filter returned incorrect number of rows")
+    assert(convertToEqualizer(rdd.size).===(5), "Filter returned incorrect number of rows")
     assert(rdd.forall(_.getBoolean(0)), "Filter returned incorrect Boolean field value")
   }
 
@@ -102,7 +109,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     sql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
     val rddCopy = sql("SELECT * FROM ptable").collect()
     val rddOrig = sql("SELECT * FROM testsource").collect()
-    assert(rddCopy.size === rddOrig.size, "INSERT OVERWRITE changed size of table??")
+    assert(convertToEqualizer(rddCopy.size).===(rddOrig.size), "INSERT OVERWRITE changed size of table??")
     compareRDDs(rddOrig, rddCopy, "testsource", ParquetTestData.testSchemaFieldNames)
   }
 
@@ -111,7 +118,8 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     (rddOne, rddTwo).zipped.foreach {
       (a,b) => (a,b).zipped.toArray.zipWithIndex.foreach {
         case ((value_1, value_2), index) =>
-          assert(value_1 === value_2, s"table $tableName row $counter field ${fieldNames(index)} don't match")
+          assert(convertToEqualizer(value_1).===(value_2),
+		 s"table $tableName row $counter field ${fieldNames(index)} don't match")
       }
     counter = counter + 1
     }

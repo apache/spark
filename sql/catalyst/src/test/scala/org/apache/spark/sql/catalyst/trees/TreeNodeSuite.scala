@@ -24,6 +24,13 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{StringType, NullType}
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 case class Dummy(optKey: Option[Expression]) extends Expression {
   def children = optKey.toSeq
   def nullable = true
@@ -36,21 +43,21 @@ case class Dummy(optKey: Option[Expression]) extends Expression {
 class TreeNodeSuite extends FunSuite {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
-    assert(after === Literal(2))
+    assert(EQ(after).===(Literal(2)))
   }
 
   test("one child changed") {
     val before = Add(Literal(1), Literal(2))
     val after = before transform { case Literal(2, _) => Literal(1) }
 
-    assert(after === Add(Literal(1), Literal(1)))
+    assert(EQ(after).===(Add(Literal(1), Literal(1))))
   }
 
   test("no change") {
     val before = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
     val after = before transform { case Literal(5, _) => Literal(1)}
 
-    assert(before === after)
+    assert(EQ(before).===(after))
     // Ensure that the objects after are the same objects before the transformation.
     before.map(identity[Expression]).zip(after.map(identity[Expression])).foreach {
       case (b, a) => assert(b eq a)
@@ -61,7 +68,7 @@ class TreeNodeSuite extends FunSuite {
     val tree = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
     val literals = tree collect {case l: Literal => l}
 
-    assert(literals.size === 4)
+    assert(EQ(literals.size).===(4))
     (1 to 4).foreach(i => assert(literals contains Literal(i)))
   }
 
@@ -74,7 +81,7 @@ class TreeNodeSuite extends FunSuite {
       case l: Literal => actual.append(l.toString); l
     }
 
-    assert(expected === actual)
+    assert(EQ(expected).===(actual))
   }
 
   test("post-order transform") {
@@ -86,7 +93,7 @@ class TreeNodeSuite extends FunSuite {
       case l: Literal => actual.append(l.toString); l
     }
 
-    assert(expected === actual)
+    assert(EQ(expected).===(actual))
   }
 
   test("transform works on nodes with Option children") {
@@ -95,13 +102,13 @@ class TreeNodeSuite extends FunSuite {
     val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
 
     var actual = dummy1 transformDown toZero
-    assert(actual === Dummy(Some(Literal(0))))
+    assert(EQ(actual).===(Dummy(Some(Literal(0)))))
 
     actual = dummy1 transformUp toZero
-    assert(actual === Dummy(Some(Literal(0))))
+    assert(EQ(actual).===(Dummy(Some(Literal(0)))))
 
     actual = dummy2 transform toZero
-    assert(actual === Dummy(None))
+    assert(EQ(actual).===(Dummy(None)))
   }
 
 }
