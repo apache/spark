@@ -30,6 +30,7 @@ import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.LimitedInputStream;
 
 /**
  * A {@link ManagedBuffer} backed by a segment in a file.
@@ -101,7 +102,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     try {
       is = new FileInputStream(file);
       ByteStreams.skipFully(is, offset);
-      return ByteStreams.limit(is, length);
+      return new LimitedInputStream(is, length);
     } catch (IOException e) {
       try {
         if (is != null) {

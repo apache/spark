@@ -50,6 +50,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <version>11.0.2</version> <!-- yarn 2.4.0's version -->
       <scope>provided</scope>
     </dependency>
 
