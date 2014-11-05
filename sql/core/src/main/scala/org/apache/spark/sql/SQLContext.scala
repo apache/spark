@@ -502,4 +502,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
+
+  /* *
+   * Map RichDate and RichTimestamp to their expected names in this context.
+   */
+  val Date = org.apache.spark.sql.catalyst.expressions.RichDate
+  val Timestamp = org.apache.spark.sql.catalyst.expressions.RichTimestamp
 }
