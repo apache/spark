@@ -28,8 +28,3 @@ function stripeTables() {
         });
     });
 }
-
-/* Stripe all tables after pages finish loading. */
-$(function() {
-    stripeTables();
-});
