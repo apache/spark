@@ -206,12 +206,13 @@ case class InsertIntoHiveTable(
     val holdDDLTime = false
     if (partition.nonEmpty) {
 
+      //loadPartition call orders directories created on the iteration order of the
+      //this map
       val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
       table.hiveQlTable.getPartCols().foreach{
         entry=>
           orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
       }
-
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
       db.validatePartitionNameCharacters(partVals)
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
