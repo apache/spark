@@ -17,30 +17,31 @@
 
 package org.apache.spark.mllib.export.pmml
 
-import org.apache.spark.mllib.clustering.KMeansModel
-import org.dmg.pmml.DataDictionary
-import org.dmg.pmml.FieldName
-import org.dmg.pmml.DataField
-import org.dmg.pmml.OpType
-import org.dmg.pmml.DataType
-import org.dmg.pmml.MiningSchema
-import org.dmg.pmml.MiningField
-import org.dmg.pmml.FieldUsageType
+import org.dmg.pmml.Array.Type
+import org.dmg.pmml.Cluster
+import org.dmg.pmml.ClusteringField
+import org.dmg.pmml.ClusteringModel
+import org.dmg.pmml.ClusteringModel.ModelClass
+import org.dmg.pmml.CompareFunctionType
 import org.dmg.pmml.ComparisonMeasure
 import org.dmg.pmml.ComparisonMeasure.Kind
-import org.dmg.pmml.SquaredEuclidean
-import org.dmg.pmml.ClusteringModel
+import org.dmg.pmml.DataDictionary
+import org.dmg.pmml.DataField
+import org.dmg.pmml.DataType
+import org.dmg.pmml.FieldName
+import org.dmg.pmml.FieldUsageType
+import org.dmg.pmml.MiningField
 import org.dmg.pmml.MiningFunctionType
-import org.dmg.pmml.ClusteringModel.ModelClass
-import org.dmg.pmml.ClusteringField
-import org.dmg.pmml.CompareFunctionType
-import org.dmg.pmml.Cluster
-import org.dmg.pmml.Array.Type
+import org.dmg.pmml.MiningSchema
+import org.dmg.pmml.OpType
+import org.dmg.pmml.SquaredEuclidean
+
+import org.apache.spark.mllib.clustering.KMeansModel
 
 /**
  * PMML Model Export for KMeansModel class
  */
-class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
+private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
 
   /**
    * Export the input KMeansModel model to PMML format
@@ -55,18 +56,18 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
        
        val clusterCenter = model.clusterCenters(0)
        
-       var fields = new Array[FieldName](clusterCenter.size)
+       val fields = new Array[FieldName](clusterCenter.size)
        
-       var dataDictionary = new DataDictionary()
+       val dataDictionary = new DataDictionary()
        
-       var miningSchema = new MiningSchema()
+       val miningSchema = new MiningSchema()
        
-       var comparisonMeasure = new ComparisonMeasure()
+       val comparisonMeasure = new ComparisonMeasure()
             .withKind(Kind.DISTANCE)
             .withMeasure(new SquaredEuclidean()
        );
        
-       var clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
+       val clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
         MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
         .withModelName("k-means");
        
@@ -84,8 +85,8 @@ class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
        
        dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size());
        
-       for ( i <- 0 to (model.clusterCenters.size - 1)) {
-         var cluster = new Cluster()
+       for ( i <- 0 until model.clusterCenters.size ) {
+         val cluster = new Cluster()
             .withName("cluster_" + i)
             .withArray(new org.dmg.pmml.Array()
             .withType(Type.REAL)
