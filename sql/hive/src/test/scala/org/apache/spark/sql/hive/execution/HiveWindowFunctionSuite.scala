@@ -110,7 +110,7 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
       |sum(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN
       |current row AND current row) AS s2,
       |first_value(p_size) OVER w1  AS f,
-      |last_value(p_size) OVER w1  AS l
+      |last_value(p_size, false) OVER w1  AS l
       |FROM part
       |window w1 AS (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN
       |2 preceding AND 2 following)
@@ -123,7 +123,7 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
       |sum(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN
       |current row AND current row) AS s2,
       |first_value(p_size) OVER w1 AS f,
-      |last_value(p_size) OVER w1 AS l
+      |last_value(p_size, false) OVER w1 AS l
       |FROM part
       |where p_mfgr = 'Manufacturer#3'
       |window w1 AS (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN 2 preceding AND 2 following)

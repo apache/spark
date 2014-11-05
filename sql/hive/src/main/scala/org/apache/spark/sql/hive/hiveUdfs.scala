@@ -335,7 +335,7 @@ private[hive] case class HiveUdafFunction(
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
 
-  private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
+  private val inspectors = exprs.map(toInspector).toArray
 
   private val function = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
 
@@ -350,7 +350,11 @@ private[hive] case class HiveUdafFunction(
   val inputProjection = new InterpretedProjection(exprs)
 
   def update(input: Row): Unit = {
-    val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
+    var i = -1
+    val inputs = inputProjection(input).map(data => {
+      i += 1
+      wrap(data, inspectors(i))
+    }).toArray
     function.iterate(buffer, inputs)
   }
 }
