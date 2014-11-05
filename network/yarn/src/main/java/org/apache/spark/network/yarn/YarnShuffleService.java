@@ -41,7 +41,22 @@ import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
 /**
- * External shuffle service used by Spark on Yarn.
+ * An external shuffle service used by Spark on Yarn.
+ *
+ * This is intended to be a long-running auxiliary service that runs in the NodeManager process.
+ * A Spark application may connect to this service by setting `spark.shuffle.service.enabled`.
+ * The application also automatically derives the service port through `spark.shuffle.service.port`
+ * specified in the Yarn configuration. This is so that both the clients and the server agree on
+ * the same port to communicate on.
+ *
+ * The service also optionally supports authentication. This ensures that executors from one
+ * application cannot read the shuffle files written by those from another. This feature can be
+ * enabled by setting `spark.authenticate` in the Yarn configuration before starting the NM.
+ * Note that the Spark application must also set `spark.authenticate` manually and, unlike in
+ * the case of the service port, will not inherit this setting from the Yarn configuration. This
+ * is because an application running on the same Yarn cluster may choose to not use the external
+ * shuffle service, in which case its setting of `spark.authenticate` should be independent of
+ * the service's.
  */
 public class YarnShuffleService extends AuxiliaryService {
   private final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
@@ -58,12 +73,12 @@ public class YarnShuffleService extends AuxiliaryService {
   // This is used only if authentication is enabled
   private ShuffleSecretManager secretManager;
 
-  // Actual server that serves the shuffle files
+  // The actual server that serves shuffle files
   private TransportServer shuffleServer = null;
 
   public YarnShuffleService() {
     super("spark_shuffle");
-    logger.info("Initializing Yarn shuffle service for Spark");
+    logger.info("Initializing YARN shuffle service for Spark");
   }
 
   /**
@@ -96,10 +111,10 @@ public class YarnShuffleService extends AuxiliaryService {
       TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
       shuffleServer = transportContext.createServer(port);
       String authEnabledString = authEnabled ? "enabled" : "not enabled";
-      logger.info("Started Yarn shuffle service for Spark on port {}. " +
+      logger.info("Started YARN shuffle service for Spark on port {}. " +
         "Authentication is {}.", port, authEnabledString);
     } catch (Exception e) {
-      logger.error("Exception in starting Yarn shuffle service for Spark", e);
+      logger.error("Exception in starting YARN shuffle service for Spark", e);
     }
   }
 

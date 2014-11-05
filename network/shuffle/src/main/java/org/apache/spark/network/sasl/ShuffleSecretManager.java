@@ -41,18 +41,18 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   private static final String SPARK_SASL_USER = "sparkSaslUser";
 
   /**
-   * Convert the given string to a byte buffer that can be converted back to a string
-   * through {@link #bytesToString(ByteBuffer)}. This is used if the external shuffle
-   * service represents shuffle secrets as bytes buffers instead of strings.
+   * Convert the given string to a byte buffer. The resulting buffer can be converted back to
+   * the same string through {@link #bytesToString(ByteBuffer)}. This is used if the external
+   * shuffle service represents shuffle secrets as bytes buffers instead of strings.
    */
   public static ByteBuffer stringToBytes(String s) {
     return ByteBuffer.wrap(s.getBytes(UTF8_CHARSET));
   }
 
   /**
-   * Convert the given byte buffer to a string that can be converted back to a byte
-   * buffer through {@link #stringToBytes(String)}. This is used if the external shuffle
-   * service represents shuffle secrets as bytes buffers instead of strings.
+   * Convert the given byte buffer to a string. The resulting string can be converted back to
+   * the same byte buffer through {@link #stringToBytes(String)}. This is used if the external
+   * shuffle service represents shuffle secrets as bytes buffers instead of strings.
    */
   public static String bytesToString(ByteBuffer b) {
     return new String(b.array(), UTF8_CHARSET);
@@ -63,9 +63,9 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   }
 
   /**
-   * Register the specified application with its secret.
+   * Register an application with its secret.
    * Executors need to first authenticate themselves with the same secret before
-   * the fetching shuffle files written by other executors in this application.
+   * fetching shuffle files written by other executors in this application.
    */
   public void registerApp(String appId, String shuffleSecret) {
     if (!shuffleSecretMap.contains(appId)) {
@@ -77,15 +77,15 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   }
 
   /**
-   * Register the specified application with its secret specified as a byte buffer.
+   * Register an application with its secret specified as a byte buffer.
    */
   public void registerApp(String appId, ByteBuffer shuffleSecret) {
     registerApp(appId, bytesToString(shuffleSecret));
   }
 
   /**
-   * Unregister the specified application along with its secret.
-   * This is called when an application terminates.
+   * Unregister an application along with its secret.
+   * This is called when the application terminates.
    */
   public void unregisterApp(String appId) {
     if (shuffleSecretMap.contains(appId)) {
@@ -105,10 +105,10 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   }
 
   /**
-   * Return the secret key registered with the specified application.
-   * This key is used to authenticate the executors in the application
-   * before they can fetch shuffle files from the external shuffle service.
-   * If the application is not registered, return null.
+   * Return the secret key registered with the given application.
+   * This key is used to authenticate the executors before they can fetch shuffle files
+   * written by this application from the external shuffle service. If the specified
+   * application is not registered, return null.
    */
   @Override
   public String getSecretKey(String appId) {
