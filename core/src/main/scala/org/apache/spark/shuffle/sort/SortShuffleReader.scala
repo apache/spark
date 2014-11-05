@@ -158,7 +158,7 @@ private[spark] class SortShuffleReader[K, C](
     val blocksToSpill = new ArrayBuffer[MemoryShuffleBlock]()
     blocksToSpill += tippingBlock
     bytesToSpill -= tippingBlock.blockData.size
-    while (bytesToSpill > 0 && inMemoryBlocks.isEmpty) {
+    while (bytesToSpill > 0 && !inMemoryBlocks.isEmpty) {
       val block = inMemoryBlocks.dequeue()
       blocksToSpill += block
       bytesToSpill -= block.blockData.size
