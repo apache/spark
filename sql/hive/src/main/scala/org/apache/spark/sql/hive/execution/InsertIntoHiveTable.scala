@@ -206,8 +206,7 @@ case class InsertIntoHiveTable(
     val holdDDLTime = false
     if (partition.nonEmpty) {
 
-      //loadPartition call orders directories created on the iteration order of the
-      //this map
+      // loadPartition call orders directories created on the iteration order of the this map
       val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
       table.hiveQlTable.getPartCols().foreach{
         entry=>
