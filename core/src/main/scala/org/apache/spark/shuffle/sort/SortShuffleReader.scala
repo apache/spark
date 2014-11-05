@@ -110,12 +110,15 @@ private[spark] class SortShuffleReader[K, C](
       // Try to fit block in memory. If this fails, merge in-memory blocks to disk.
       val blockSize = blockData.size
       val granted = shuffleMemoryManager.tryToAcquire(blockSize)
+      val block = MemoryShuffleBlock(blockId, blockData)
       if (granted < blockSize) {
         logInfo(s"Granted $granted memory is not enough to store shuffle block ($blockSize), " +
           s"spilling in-memory blocks to release the memory")
 
         shuffleMemoryManager.release(granted)
-        spillInMemoryBlocks(MemoryShuffleBlock(blockId, blockData))
+        spillInMemoryBlocks(block)
+      } else {
+        inMemoryBlocks += block
       }
 
       unfetchedBytes -= blockData.size()
