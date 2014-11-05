@@ -19,13 +19,15 @@ package org.apache.spark.examples.mllib
 
 import scala.collection.mutable
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.{ Level, Logger }
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{ SparkConf, SparkContext }
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
+import org.apache.spark.mllib.recommendation.{ ALS, MatrixFactorizationModel, Rating }
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.evaluation.RankingMetrics
+import scala.math.round
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -39,14 +41,15 @@ import org.apache.spark.rdd.RDD
 object MovieLensALS {
 
   case class Params(
-      input: String = null,
-      kryo: Boolean = false,
-      numIterations: Int = 20,
-      lambda: Double = 1.0,
-      rank: Int = 10,
-      numUserBlocks: Int = -1,
-      numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false) extends AbstractParams[Params]
+    input: String = null,
+    kryo: Boolean = false,
+    numIterations: Int = 20,
+    lambda: Double = 1.0,
+    rank: Int = 10,
+    numUserBlocks: Int = -1,
+    numProductBlocks: Int = -1,
+    implicitPrefs: Boolean = false,
+    validateProducts: Boolean = false)
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -74,6 +77,9 @@ object MovieLensALS {
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
+      opt[Unit]("validateProducts")
+        .text("validate products, default: user validation")
+        .action((_, c) => c.copy(validateProducts = true))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -165,22 +171,44 @@ object MovieLensALS {
       .setProductBlocks(params.numProductBlocks)
       .run(training)
 
-    val rmse = computeRmse(model, test, params.implicitPrefs)
+    val (rmse, map) = computeRecommendationMetrics(model, test, params.implicitPrefs,
+                                                   params.validateProducts)
 
-    println(s"Test RMSE = $rmse.")
+    println(s"Test RMSE = $rmse MAP = $map.")
 
     sc.stop()
   }
 
-  /** Compute RMSE (Root Mean Squared Error). */
-  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
+  /** threshold for predictions are at 0.5 **/
+  def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
+    if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
+    else math.max(scala.math.round(r), 0.0)
+  }
 
-    def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
-
+  /** Compute recommendation metrics (RMSE, MAP) */
+  def computeRecommendationMetrics(model: MatrixFactorizationModel, data: RDD[Rating],
+    implicitPrefs: Boolean, validateProducts: Boolean) = {
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
-    val predictionsAndRatings = predictions.map{ x =>
-      ((x.user, x.product), mapPredictedRating(x.rating))
-    }.join(data.map(x => ((x.user, x.product), x.rating))).values
-    math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
+    val predictionsAndRatings = predictions.map { x =>
+      ((x.user, x.product), mapPredictedRating(x.rating, implicitPrefs))
+    }.join(data.map(x => ((x.user, x.product), x.rating)))
+
+    val predictionValues = predictionsAndRatings.values
+    val rmse = math.sqrt(predictionValues.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
+
+    val predictedAndLabels = predictionsAndRatings.map {
+      case ((user, product), predictionValues) =>
+        if (validateProducts) (product, predictionValues)
+        else (user, predictionValues)
+    }.groupByKey.map {
+      case (user, entries) => {
+        val predictionValues = entries.toArray
+        val predicted = predictionValues.map { _._1 }
+        val labels = predictionValues.map { _._2 }
+        (predicted, labels)
+      }
+    }
+    val metrics = new RankingMetrics[Double](predictedAndLabels)
+    (rmse, metrics.meanAveragePrecision)
   }
 }
