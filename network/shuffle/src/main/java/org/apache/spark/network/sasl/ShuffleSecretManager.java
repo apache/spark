@@ -37,7 +37,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   private static final Charset UTF8_CHARSET = Charset.forName("UTF-8");
 
   // Spark user used for authenticating SASL connections
-  // Note that this should match the value in org.apache.spark.SecurityManager
+  // Note that this must match the value in org.apache.spark.SecurityManager
   private static final String SPARK_SASL_USER = "sparkSaslUser";
 
   /**

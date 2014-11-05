@@ -90,8 +90,9 @@ class ExecutorRunnable(
 
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
-    // If external shuffle service is enabled, register with the
-    // Yarn shuffle service already started on the node manager
+    // If external shuffle service is enabled, register with the Yarn shuffle service already
+    // started on the NodeManager and, if authentication is enabled, provide it with our secret
+    // key for fetching shuffle files later
     if (sparkConf.getBoolean("spark.shuffle.service.enabled", false)) {
       val secretString = securityMgr.getSecretKey()
       val secretBytes =
