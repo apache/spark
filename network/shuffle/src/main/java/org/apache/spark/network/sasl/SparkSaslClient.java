@@ -126,7 +126,6 @@ public class SparkSaslClient {
           logger.trace("SASL client callback: setting realm");
           RealmCallback rc = (RealmCallback) callback;
           rc.setText(rc.getDefaultText());
-          logger.info("Realm callback");
         } else if (callback instanceof RealmChoiceCallback) {
           // ignore (?)
         } else {
