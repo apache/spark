@@ -175,10 +175,6 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     logInfo("Spark configuration:\n" + conf.toDebugString)
   }
 
-  // Set Spark driver host and port system properties
-  conf.setIfMissing("spark.driver.host", Utils.localHostName())
-  conf.setIfMissing("spark.driver.port", "0")
-
   val jars: Seq[String] =
     conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
@@ -205,6 +201,14 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   val isLocal = (master == "local" || master.startsWith("local["))
 
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+
+  // Set Spark driver host and port system properties. Ignore host setting in yarn-cluster mode.
+  if (master == "yarn-cluster") {
+    conf.set("spark.driver.host", Utils.localHostName())
+  } else {
+    conf.setIfMissing("spark.driver.host", Utils.localHostName())
+  }
+  conf.setIfMissing("spark.driver.port", "0")
 
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
