@@ -460,13 +460,13 @@ package object sql {
    * are provided.  The class intializer accepts a String, e.g.
    *
    * {{{
-   * val d = Date("2014-01-01")
+   * val d = RichDate("2014-01-01")
    * }}}
    * 
    * @group dataType
    */
   @DeveloperApi
-  val Date = catalyst.expressions.RichDate
+  val RichDate = catalyst.expressions.RichDate
 
   /**
    * :: DeveloperApi ::
@@ -477,11 +477,11 @@ package object sql {
    * String, e.g.
    *
    * {{{
-   * val ts = Timestamp("2014-01-01 12:34:56.78")
+   * val ts = RichTimestamp("2014-01-01 12:34:56.78")
    * }}}
    * 
    * @group timeClasses
    */
   @DeveloperApi
-  val Timestamp = catalyst.expressions.RichTimestamp
+  val RichTimestamp = catalyst.expressions.RichTimestamp
 }

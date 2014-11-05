@@ -151,7 +151,7 @@ package object dsl {
      * where a literal is being combined with a symbol. Without these an
      * expression such as 0 < 'x is not recognized.
      */
-    case class LhsLiteral(x: Any) {
+    class LhsLiteral(x: Any) {
       val literal = Literal(x)
       def + (other: Symbol) = Add(literal, other)
       def - (other: Symbol) = Subtract(literal, other)
