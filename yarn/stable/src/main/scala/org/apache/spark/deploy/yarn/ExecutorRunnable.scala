@@ -36,6 +36,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
 
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.network.sasl.ShuffleSecretManager
 
 
 class ExecutorRunnable(
@@ -92,7 +93,15 @@ class ExecutorRunnable(
     // If external shuffle service is enabled, register with the
     // Yarn shuffle service already started on the node manager
     if (sparkConf.getBoolean("spark.shuffle.service.enabled", false)) {
-      ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> ByteBuffer.allocate(0)))
+      val secretString = securityMgr.getSecretKey()
+      val secretBytes =
+        if (secretString != null) {
+          ShuffleSecretManager.stringToBytes(secretString)
+        } else {
+          // Authentication is not enabled, so just provide dummy metadata
+          ByteBuffer.allocate(0)
+        }
+      ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> secretBytes))
     }
 
     // Send the start request to the ContainerManager

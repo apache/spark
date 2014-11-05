@@ -32,6 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.sasl.SaslRpcHandler;
+import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
@@ -44,8 +46,17 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 public class YarnShuffleService extends AuxiliaryService {
   private final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
 
+  // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
   private static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
+
+  // Whether the shuffle server should authenticate fetch requests
+  private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
+  private static final boolean DEFAULT_SPARK_AUTHENTICATE = false;
+
+  // An entity that manages the shuffle secret per application
+  // This is used only if authentication is enabled
+  private ShuffleSecretManager secretManager;
 
   // Actual server that serves the shuffle files
   private TransportServer shuffleServer = null;
@@ -56,18 +67,37 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
+   * Return whether authentication is enabled as specified by the configuration.
+   * If so, fetch requests will fail unless the appropriate authentication secret
+   * for the application is provided.
+   */
+  private boolean isAuthenticationEnabled() {
+    return secretManager != null;
+  }
+
+  /**
    * Start the shuffle server with the given configuration.
    */
   @Override
   protected void serviceInit(Configuration conf) {
     try {
+      // If authentication is enabled, set up the shuffle server to use a
+      // special RPC handler that filters out unauthenticated fetch requests
+      boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
+      RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
+      if (authEnabled) {
+        secretManager = new ShuffleSecretManager();
+        rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
+      }
+
       int port = conf.getInt(
         SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
       TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
-      RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
       TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
       shuffleServer = transportContext.createServer(port);
-      logger.info("Started Yarn shuffle service for Spark on port " + port);
+      String authEnabledString = authEnabled ? "enabled" : "not enabled";
+      logger.info("Started Yarn shuffle service for Spark on port {}. " +
+        "Authentication is {}.", port, authEnabledString);
     } catch (Exception e) {
       logger.error("Exception in starting Yarn shuffle service for Spark", e);
     }
@@ -75,38 +105,49 @@ public class YarnShuffleService extends AuxiliaryService {
 
   @Override
   public void initializeApplication(ApplicationInitializationContext context) {
-    ApplicationId appId = context.getApplicationId();
-    logger.debug("Initializing application " + appId + "!");
+    String appId = context.getApplicationId().toString();
+    ByteBuffer shuffleSecret = context.getApplicationDataForService();
+    logger.debug("Initializing application {}", appId);
+    if (isAuthenticationEnabled()) {
+      secretManager.registerApp(appId, shuffleSecret);
+    }
   }
 
   @Override
   public void stopApplication(ApplicationTerminationContext context) {
-    ApplicationId appId = context.getApplicationId();
-    logger.debug("Stopping application " + appId + "!");
-  }
-
-  @Override
-  public ByteBuffer getMetaData() {
-    logger.debug("Getting meta data");
-    return ByteBuffer.allocate(0);
+    String appId = context.getApplicationId().toString();
+    logger.debug("Stopping application {}", appId);
+    if (isAuthenticationEnabled()) {
+      secretManager.unregisterApp(appId);
+    }
   }
 
   @Override
   public void initializeContainer(ContainerInitializationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.debug("Initializing container " + containerId + "!");
+    logger.debug("Initializing container {}", containerId);
   }
 
   @Override
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.debug("Stopping container " + containerId + "!");
+    logger.debug("Stopping container {}", containerId);
   }
 
+  /**
+   * Close the shuffle server to clean up any associated state.
+   */
   @Override
   protected void serviceStop() {
     if (shuffleServer != null) {
       shuffleServer.close();
     }
   }
+
+  // Not currently used
+  @Override
+  public ByteBuffer getMetaData() {
+    return ByteBuffer.allocate(0);
+  }
+
 }

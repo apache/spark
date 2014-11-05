@@ -1783,19 +1783,19 @@ private[spark] object Utils extends Logging {
     }.getOrElse("Unknown")
 
   /**
-   * Return the port used in the external shuffle service as specified through
-   * `spark.shuffle.service.port`. In Yarn, this is set in the Hadoop configuration.
+   * Return the value of a config either through the SparkConf or the Hadoop configuration
+   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
+   * if the key is not set in the Hadoop configuration.
    */
-  def getExternalShuffleServicePort(conf: SparkConf): Int = {
-    val shuffleServicePortKey = "spark.shuffle.service.port"
-    val sparkPort = conf.getInt(shuffleServicePortKey, 7337)
+  def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
+    val sparkValue = conf.get(key, default)
     if (SparkHadoopUtil.get.isYarnMode) {
-      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-      hadoopConf.getInt(shuffleServicePortKey, sparkPort)
+      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
     } else {
-      sparkPort
+      sparkValue
     }
   }
+
 }
 
 /**
