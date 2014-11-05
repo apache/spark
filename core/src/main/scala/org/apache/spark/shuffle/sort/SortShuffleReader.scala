@@ -135,7 +135,7 @@ private[spark] class SortShuffleReader[K, C](
 
     // Release the in-memory block when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
-      mergedItr, () => {
+      mergedItr, {
         inMemoryBlocks.foreach { block =>
           block.blockData.release()
           shuffleMemoryManager.release(block.blockData.size)
@@ -224,7 +224,7 @@ private[spark] class SortShuffleReader[K, C](
     val completionItr = CompletionIterator[
       (BlockId, Try[ManagedBuffer]),
       Iterator[(BlockId, Try[ManagedBuffer])]](shuffleRawBlockFetcherItr,
-      () => context.taskMetrics.updateShuffleReadMetrics())
+        context.taskMetrics.updateShuffleReadMetrics())
 
     new InterruptibleIterator[(BlockId, Try[ManagedBuffer])](context, completionItr)
   }
