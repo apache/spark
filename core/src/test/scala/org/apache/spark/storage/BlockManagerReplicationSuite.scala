@@ -63,6 +63,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     val transfer = new NioBlockTransferService(conf, securityMgr)
     val store = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer)
+    store.initialize("app-id")
     allStores += store
     store
   }
@@ -263,6 +264,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     when(failableTransfer.port).thenReturn(1000)
     val failableStore = new BlockManager("failable-store", actorSystem, master, serializer,
       10000, conf, mapOutputTracker, shuffleManager, failableTransfer)
+    failableStore.initialize("app-id")
     allStores += failableStore // so that this gets stopped after test
     assert(master.getPeers(store.blockManagerId).toSet === Set(failableStore.blockManagerId))
 
