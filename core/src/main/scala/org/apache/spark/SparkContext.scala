@@ -558,6 +558,8 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
 
   /**
+   * :: Experimental ::
+   *
    * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
    * (useful for binary data)
    *
@@ -600,6 +602,8 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   }
 
   /**
+   * :: Experimental ::
+   *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
    * @param path Directory to the input data files
