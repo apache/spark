@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.export
 
+import scala.annotation.varargs
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.scalatest.FunSuite
