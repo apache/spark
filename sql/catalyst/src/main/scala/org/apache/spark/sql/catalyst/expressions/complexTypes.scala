@@ -117,7 +117,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     assert(resolved, s"Invalid dataType of mixed ArrayType ${childTypes.mkString(",")}")
     ArrayType(
       childTypes.headOption.getOrElse(NullType),
-      containsNull = childTypes.size == 0 || children.exists(_.nullable))
+      containsNull = children.exists(_.nullable))
   }
 
   override def nullable: Boolean = false
