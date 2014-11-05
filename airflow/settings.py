@@ -31,6 +31,9 @@ LOG_FORMAT = \
 PRESTO_DEFAULT_DBID = "presto_default"
 HIVE_DEFAULT_DBID = "hive_default"
 
+WEB_SERVER_HOST = '0.0.0.0'
+WEB_SERVER_PORT = 8080
+
 Session = sessionmaker()
 #engine = create_engine('mysql://airflow:airflow@localhost/airflow')
 engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )

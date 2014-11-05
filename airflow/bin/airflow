@@ -110,7 +110,7 @@ def webserver(args):
     print(settings.HEADER)
     from www.app import app
     print("Starting the web server on port {0}.".format(args.port))
-    app.run(debug=True, port=args.port)
+    app.run(debug=True, port=args.port, host=args.hostname)
 
 
 def master(args):
@@ -299,9 +299,15 @@ if __name__ == '__main__':
     parser_webserver = subparsers.add_parser('webserver', help=ht)
     parser_webserver.add_argument(
         "-p", "--port",
-        default=8080,
+        default=settings.WEB_SERVER_PORT,
         type=int,
         help="Set the port on which to run the web server")
+    parser_webserver.set_defaults(func=webserver)
+
+    parser_webserver.add_argument(
+        "-hn", "--hostname",
+        default=settings.WEB_SERVER_HOST,
+        help="Set the hostname on which to run the web server")
     parser_webserver.set_defaults(func=webserver)
 
     ht = "Start a master scheduler instance"
