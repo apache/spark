@@ -114,16 +114,16 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
               </li>
               <li>
                 <span data-toggle="tooltip"
-                      title={ToolTips.GC_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
-                  <span class="additional-metric-title">GC Time</span>
+                      title={ToolTips.TASK_DESERIALIZATION_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}/>
+                  <span class="additional-metric-title">Task Deserialization Time</span>
                 </span>
               </li>
               <li>
                 <span data-toggle="tooltip"
-                      title={ToolTips.TASK_DESERIALIZATION_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}/>
-                  <span class="additional-metric-title">Task Deserialization Time</span>
+                      title={ToolTips.GC_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
+                  <span class="additional-metric-title">GC Time</span>
                 </span>
               </li>
               <li>
@@ -154,8 +154,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
           ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
           ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
-          ("GC Time", TaskDetailsClassNames.GC_TIME),
           ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
+          ("GC Time", TaskDetailsClassNames.GC_TIME),
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
@@ -390,12 +390,12 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             class={TaskDetailsClassNames.SCHEDULER_DELAY}>
           {UIUtils.formatDuration(schedulerDelay.toLong)}
         </td>
-        <td sorttable_customkey={gcTime.toString} class={TaskDetailsClassNames.GC_TIME}>
-          {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
-        </td>
         <td sorttable_customkey={taskDeserializationTime.toString}
             class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
           {UIUtils.formatDuration(taskDeserializationTime.toLong)}
+        </td>
+        <td sorttable_customkey={gcTime.toString} class={TaskDetailsClassNames.GC_TIME}>
+          {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
         <td sorttable_customkey={serializationTime.toString}
             class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
