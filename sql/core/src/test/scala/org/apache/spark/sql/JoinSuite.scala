@@ -25,6 +25,13 @@ import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOu
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext._
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
   // Ensures tables are loaded.
   TestData
@@ -34,7 +41,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     val y = testData2.as('y)
     val join = x.join(y, Inner, Some("x.a".attr === "y.a".attr)).queryExecution.analyzed
     val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
+    assert(EQ(planned.size).===(1))
   }
 
   def assertJoin(sqlString: String, c: Class[_]): Any = {
@@ -50,7 +57,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case j: BroadcastNestedLoopJoin => j
     }
 
-    assert(operators.size === 1)
+    assert(EQ(operators.size).===(1))
     if (operators(0).getClass() != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
     }
@@ -104,7 +111,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     val join = x.join(y, Inner,
       Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).queryExecution.analyzed
     val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
+    assert(EQ(planned.size).===(1))
   }
 
   test("inner join where, one match per row") {

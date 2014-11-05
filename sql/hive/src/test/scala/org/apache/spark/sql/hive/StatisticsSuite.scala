@@ -27,6 +27,13 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
   TestHive.reset()
   TestHive.cacheTables = false
@@ -39,7 +46,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         case o => o
       }
 
-      assert(operators.size === 1)
+      assert(EQ(operators.size).===(1))
       if (operators(0).getClass() != c) {
         fail(
           s"""$analyzeCommand expected command: $c, but got ${operators(0)}
@@ -81,11 +88,11 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     // TODO: How does it works? needs to add it back for other hive version.
     if (HiveShim.version =="0.12.0") {
-      assert(queryTotalSize("analyzeTable") === defaultSizeInBytes)
+      assert(EQ(queryTotalSize("analyzeTable")).===(defaultSizeInBytes))
     }
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable") === BigInt(11624))
+    assert(EQ(queryTotalSize("analyzeTable")).===(BigInt(11624)))
 
     sql("DROP TABLE analyzeTable").collect()
 
@@ -110,11 +117,11 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("analyzeTable_part") === defaultSizeInBytes)
+    assert(EQ(queryTotalSize("analyzeTable_part")).===(defaultSizeInBytes))
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+    assert(EQ(queryTotalSize("analyzeTable_part")).===(BigInt(17436)))
 
     sql("DROP TABLE analyzeTable_part").collect()
 
@@ -131,7 +138,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
-    assert(sizes.size === 1, s"Size wrong for:\n ${rdd.queryExecution}")
+    assert(EQ(sizes.size).===(1), s"Size wrong for:\n ${rdd.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
       s"expected exact size 5812 for test table 'src', got: ${sizes(0)}")
   }
@@ -151,14 +158,14 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       val sizes = rdd.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= autoBroadcastJoinThreshold
+      assert(EQ(sizes.size).===(2) && sizes(0) <= autoBroadcastJoinThreshold
         && sizes(1) <= autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
       // matched, other strategies need to be applied.
       var bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
-      assert(bhj.size === 1,
+      assert(EQ(bhj.size).===(1),
         s"actual query plans do not contain broadcast join: ${rdd.queryExecution}")
 
       checkAnswer(rdd, expectedAnswer) // check correctness of output
@@ -172,7 +179,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
         val shj = rdd.queryExecution.sparkPlan.collect { case j: ShuffledHashJoin => j }
-        assert(shj.size === 1,
+        assert(EQ(shj.size).===(1),
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
         sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")

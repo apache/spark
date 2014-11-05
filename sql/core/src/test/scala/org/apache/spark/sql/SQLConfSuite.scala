@@ -24,6 +24,13 @@ import org.apache.spark.sql.test._
 /* Implicits */
 import TestSQLContext._
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 class SQLConfSuite extends QueryTest with FunSuiteLike {
 
   val testKey = "test.key.0"
@@ -38,7 +45,7 @@ class SQLConfSuite extends QueryTest with FunSuiteLike {
 
   test("programmatic ways of basic setting and getting") {
     clear()
-    assert(getAllConfs.size === 0)
+    assert(EQ(getAllConfs.size).===(0))
 
     setConf(testKey, testVal)
     assert(getConf(testKey) == testVal)

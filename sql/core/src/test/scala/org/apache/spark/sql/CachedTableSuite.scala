@@ -22,6 +22,13 @@ import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 case class BigData(s: String)
 
 class CachedTableSuite extends QueryTest {
@@ -74,7 +81,7 @@ class CachedTableSuite extends QueryTest {
     val data = "*" * 10000
     sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).registerTempTable("bigData")
     table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
-    assert(table("bigData").count() === 200000L)
+    assert(EQ(table("bigData").count()).===(200000L))
     table("bigData").unpersist(blocking = true)
   }
 
@@ -228,7 +235,7 @@ class CachedTableSuite extends QueryTest {
     table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
-        assert(cached.statistics.sizeInBytes === actualSizeInBytes)
+        assert(EQ(cached.statistics.sizeInBytes).===(actualSizeInBytes))
     }
   }
 

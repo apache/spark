@@ -22,6 +22,13 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
   val originalColumnBatchSize = columnBatchSize
   val originalInMemoryPartitionPruning = inMemoryPartitionPruning
@@ -107,8 +114,8 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
         case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
       }.head
 
-      assert(readBatches === expectedReadBatches, "Wrong number of read batches")
-      assert(readPartitions === expectedReadPartitions, "Wrong number of read partitions")
+      assert(EQ(readBatches).===(expectedReadBatches), "Wrong number of read batches")
+      assert(EQ(readPartitions).===(expectedReadPartitions), "Wrong number of read partitions")
     }
   }
 }

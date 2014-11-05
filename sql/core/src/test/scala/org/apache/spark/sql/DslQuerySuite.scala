@@ -24,6 +24,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 
+/*
+ * Note: the DSL conversions collide with the FunSuite === operator!
+ * We can apply the Funsuite conversion explicitly:
+ *   assert(X === true) --> assert(EQ(X).===(true))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
+
 class DslQuerySuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
@@ -171,7 +179,7 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("count") {
-    assert(testData2.count() === testData2.map(_ => 1).count())
+    assert(EQ(testData2.count()).===(testData2.map(_ => 1).count()))
   }
 
   test("null count") {
@@ -192,7 +200,7 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("zero count") {
-    assert(emptyTableData.count() === 0)
+    assert(EQ(emptyTableData.count()).===(0))
   }
 
   test("except") {
