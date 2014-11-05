@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashSet, Stack}
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
@@ -1289,15 +1289,26 @@ abstract class RDD[T: ClassTag](
    *                     `- E -'
    * O(n) for each call, n is RDD number in lineage.
    */
-  private[spark] def doCheckpoint(visited: HashSet[RDD[_]]) {
-    if (visited.contains(this) || isCheckpointed) {
-      return
+  private[spark] def doCheckpoint() {
+    val visited = new HashSet[RDD[_]]
+    // We are manually maintaining a stack here to prevent StackOverflowError
+    // caused by recursively visiting
+    val waitingForVisit = new Stack[RDD[_]]
+    def visit(rdd: RDD[_]) {
+      if (!visited(rdd) || rdd.isCheckpointed) {
+        visited += rdd
+        if (rdd.checkpointData.isDefined) {
+          rdd.checkpointData.get.doCheckpoint()
+        } else {
+          for (dep <- rdd.dependencies) {
+            waitingForVisit.push(dep.rdd)
+          }
+        }
+      }      
     }
-    visited.add(this)
-    if (checkpointData.isDefined) {
-      checkpointData.get.doCheckpoint()
-    } else {
-      dependencies.foreach(_.rdd.doCheckpoint(visited))
+    waitingForVisit.push(this)
+    while (!waitingForVisit.isEmpty) {
+      visit(waitingForVisit.pop())
     }
   }
 
