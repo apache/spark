@@ -21,11 +21,12 @@ import java.io.{InputStream, OutputStream}
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
-import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
+import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
+import org.apache.spark.Logging
 
 /**
  * :: DeveloperApi ::
@@ -42,28 +43,52 @@ trait CompressionCodec {
   def compressedOutputStream(s: OutputStream): OutputStream
 
   def compressedInputStream(s: InputStream): InputStream
+
+  def isAvailable() : Boolean = true
 }
 
+private[spark] object CompressionCodec extends Logging {
 
-private[spark] object CompressionCodec {
-
+  private val configKey = "spark.io.compression.codec"
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
 
   def createCodec(conf: SparkConf): CompressionCodec = {
-    createCodec(conf, conf.get("spark.io.compression.codec", DEFAULT_COMPRESSION_CODEC))
+    conf.getOption(configKey)
+        .map(createCodec(conf, _))
+        .orElse(createCodecFromName(conf, DEFAULT_COMPRESSION_CODEC))
+        .orElse({
+          logWarning("Default codec " + DEFAULT_COMPRESSION_CODEC +
+            " is unavailable. Faling back to " + FALLBACK_COMPRESSION_CODEC)
+          createCodecFromName(conf, FALLBACK_COMPRESSION_CODEC)
+        })
+        .getOrElse(throw new IllegalArgumentException("The codec [" +
+          FALLBACK_COMPRESSION_CODEC + "] is not available."))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
+    createCodecFromName(conf, codecName)
+      .getOrElse(throw new IllegalArgumentException("The specified codec [" +
+                  codecName + "] is not available."))
+  }
+
+  private def createCodecFromName(conf: SparkConf, codecName : String)
+      : Option[CompressionCodec] = {
     val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
-    val ctor = Class.forName(codecClass, true, Utils.getContextOrSparkClassLoader)
-      .getConstructor(classOf[SparkConf])
-    ctor.newInstance(conf).asInstanceOf[CompressionCodec]
+    try {
+      val ctor = Class.forName(codecClass, true, Utils.getContextOrSparkClassLoader)
+        .getConstructor(classOf[SparkConf])
+      Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
+        .filter(_.isAvailable())
+    } catch {
+      case e: ClassNotFoundException => None
+    }
   }
 
   val DEFAULT_COMPRESSION_CODEC = "snappy"
+  val FALLBACK_COMPRESSION_CODEC = "lzf"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
@@ -126,4 +151,13 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
+
+  override def isAvailable() = {
+    try {
+      Snappy.getNativeLibraryVersion
+      true
+    } catch {
+      case e: Error => false
+    }
+  }
 }
