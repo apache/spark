@@ -6,7 +6,10 @@ default_args = {
     'owner': 'mistercrunch',
     'start_date': datetime(2014, 9, 1),
     'retries': 3,
-    'retry_delay': timedelta(seconds=10)
+    'retry_delay': timedelta(seconds=10),
+    'email': "maxime.beauchemin@airbnb.com",
+    'email_on_retry': True,
+    'email_on_failure': True,
 }
 
 dag = DAG(dag_id='test_dag')

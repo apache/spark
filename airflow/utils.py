@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
 from functools import wraps
 import inspect
+import logging
 import re
+from airflow.configuration import getconf
 
 
 class State(object):
@@ -79,6 +81,7 @@ def alchemy_to_dict(obj):
         d[c.name] = value
     return d
 
+
 def readfile(filepath):
     f = open(filepath)
     content = f.read()
@@ -116,6 +119,7 @@ def apply_defaults(func):
         return result
     return wrapper
 
+
 def ask_yesno(question):
     yes = set(['yes','y',])
     no = set(['no','n'])
@@ -130,3 +134,29 @@ def ask_yesno(question):
            return False
         else:
             print("Please respond by yes or no.")
+
+
+def send_email(to, subject, html_content):
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    SMTP_HOST = getconf().get('smtp', 'SMTP_HOST')
+    SMTP_MAIL_FROM = getconf().get('smtp', 'SMTP_MAIL_FROM')
+    SMTP_PORT = getconf().get('smtp', 'SMTP_PORT')
+    SMTP_USER = getconf().get('smtp', 'SMTP_USER')
+    SMTP_PASSWORD = getconf().get('smtp', 'SMTP_PASSWORD')
+
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = SMTP_MAIL_FROM
+    msg['To'] = to
+    mime_text = MIMEText(html_content, 'html')
+    msg.attach(mime_text)
+    s = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+    s.starttls()
+    if SMTP_USER and SMTP_PASSWORD:
+        s.login(SMTP_USER, SMTP_PASSWORD)
+    logging.info("Sent an altert email to " + to)
+    s.sendmail(SMTP_MAIL_FROM, to, msg.as_string())
+    s.quit()

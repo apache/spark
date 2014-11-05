@@ -253,6 +253,17 @@ class TaskInstance(Base):
         return getconf().get('core', 'BASE_LOG_FOLDER') + \
             "/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals())
 
+    @property
+    def log_url(self):
+        iso = self.execution_date.isoformat()
+        BASE_URL = getconf().get('core', 'BASE_URL')
+        return BASE_URL + (
+            "/admin/airflow/log"
+            "?dag_id={self.dag_id}"
+            "&task_id={self.task_id}"
+            "&execution_date={iso}"
+        ).format(**locals())
+
     def current_state(self, main_session=None):
         """
         Get the very latest state from the database, if a session is passed,
@@ -368,8 +379,7 @@ class TaskInstance(Base):
 
     def __repr__(self):
         return (
-            "<TaskInstance: "
-            "{ti.dag_id}.{ti.task_id} {ti.execution_date}>"
+            "<TaskInstance: {ti.dag_id}.{ti.task_id} {ti.execution_date}>"
         ).format(ti=self)
 
     def ready_for_retry(self):
@@ -399,6 +409,7 @@ class TaskInstance(Base):
         """
         Runs the task instnace.
         """
+        task = self.task
         session = settings.Session()
         self.refresh_from_db(session)
         iso = datetime.now().isoformat()
@@ -407,7 +418,7 @@ class TaskInstance(Base):
         msg = "\n"
         msg += ("-" * 80)
         if self.state == State.UP_FOR_RETRY:
-            msg += "\nRetry run {self.try_number} out of {self.task.retries} "
+            msg += "\nRetry run {self.try_number} out of {task.retries} "
             msg += "starting @{iso}\n"
         else:
             msg += "\nNew run starting @{iso}\n"
@@ -424,7 +435,7 @@ class TaskInstance(Base):
             logging.warning("Dependencies not met yet")
         elif self.state == State.UP_FOR_RETRY and \
                 not self.ready_for_retry():
-            next_run = (self.end_date + self.task.retry_delay).isoformat()
+            next_run = (self.end_date + task.retry_delay).isoformat()
             logging.info(
                 "Not ready for retry yet. " +
                 "Next run after {0}".format(next_run)
@@ -451,20 +462,20 @@ class TaskInstance(Base):
                 if not mark_success:
                     from airflow import macros
                     tables = None
-                    if 'tables' in self.task.params:
-                        tables = self.task.params['tables']
+                    if 'tables' in task.params:
+                        tables = task.params['tables']
                     jinja_context = {
-                        'dag': self.task.dag,
+                        'dag': task.dag,
                         'ds': self.execution_date.isoformat()[:10],
                         'execution_date': self.execution_date,
                         'macros': macros,
-                        'params': self.task.params,
+                        'params': task.params,
                         'tables': tables,
-                        'task': self.task,
+                        'task': task,
                         'task_instance': self,
                         'ti': self,
                     }
-                    task_copy = copy.copy(self.task)
+                    task_copy = copy.copy(task)
                     for attr in task_copy.__class__.template_fields:
                         source = getattr(task_copy, attr)
                         template = self.get_template(source)
@@ -478,10 +489,15 @@ class TaskInstance(Base):
                 self.end_date = datetime.now()
                 self.set_duration()
                 session.add(Log(State.FAILED, self))
-                if self.try_number <= self.task.retries:
+                if self.try_number <= task.retries:
                     self.state = State.UP_FOR_RETRY
+                    if task.email_on_retry and task.email:
+                        self.email_alert(e, is_retry=True)
                 else:
                     self.state = State.FAILED
+                    if task.email_on_failure and task.email:
+                        self.email_alert(e, is_retry=False)
+                        self.send_failure_email(e)
                 session.merge(self)
                 session.commit()
                 logging.error(str(e))
@@ -495,6 +511,18 @@ class TaskInstance(Base):
             session.merge(self)
 
         session.commit()
+
+    def email_alert(self, exception, is_retry=False):
+        task = self.task
+        title = "AirFlow alert: {self}".format(**locals())
+        body = (
+            "Try {self.try_number} out of {task.retries}<br>"
+            "Exception:<br>{exception}"
+            "Log: <a href='{self.log_url}'>Link</a><br>"
+            "Host: {self.hostname}<br>"
+            "Log file: {self.log_filepath}<br>"
+        ).format(**locals())
+        utils.send_email(task.email, title, body)
 
     def set_duration(self):
         if self.end_date and self.start_date:
@@ -602,6 +630,9 @@ class BaseOperator(Base):
             self,
             task_id,
             owner,
+            email=None,
+            email_on_retry=True,
+            email_on_failure=True,
             retries=0,
             retry_delay=timedelta(seconds=10),
             start_date=None,
@@ -619,6 +650,9 @@ class BaseOperator(Base):
         self.dag = dag
         self.task_id = task_id
         self.owner = owner
+        self.email = email
+        self.email_on_retry = email_on_retry
+        self.email_on_failure = email_on_failure
         self.start_date = start_date
         self.end_date = end_date
         self.depends_on_past = depends_on_past

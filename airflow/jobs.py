@@ -8,7 +8,6 @@ from time import sleep
 from sqlalchemy import (
         Column, Integer, String, DateTime, ForeignKey)
 from sqlalchemy import func
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm.session import make_transient
 
 from airflow.executors import DEFAULT_EXECUTOR
@@ -19,7 +18,8 @@ from airflow import utils
 import socket
 from airflow.utils import State
 
-Base = declarative_base()
+
+Base = models.Base
 ID_LEN = getconf().getint('misc', 'ID_LEN')
 
 class BaseJob(Base):

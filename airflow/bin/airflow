@@ -160,6 +160,7 @@ def initdb(args):
                             format=settings.SIMPLE_LOG_FORMAT)
 
         from airflow import models
+        from airflow import jobs
 
         logging.info("Dropping tables that exist")
         models.Base.metadata.drop_all(settings.engine)

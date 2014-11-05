@@ -32,6 +32,7 @@ def pessimistic_connection_handling():
 
 
 BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
+BASE_LOG_URL = "/admin/airflow/log"
 SQL_ALCHEMY_CONN = getconf().get('core', 'SQL_ALCHEMY_CONN')
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
