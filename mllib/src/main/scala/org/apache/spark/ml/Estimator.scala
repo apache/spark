@@ -20,6 +20,8 @@ package org.apache.spark.ml
 import org.apache.spark.ml.param.{ParamMap, Params, ParamPair}
 import org.apache.spark.sql.SchemaRDD
 
+import scala.annotation.varargs
+
 /**
  * Abstract class for estimators that fits models to data.
  */
@@ -52,7 +54,8 @@ abstract class Estimator[M <: Model] extends Identifiable with Params with Pipel
    * @param otherParamPairs other parameters
    * @return fitted model
    */
-  def fit(
+  @varargs
+  def fit[T](
       dataset: SchemaRDD,
       firstParamPair: ParamPair[_],
       otherParamPairs: ParamPair[_]*): M = {

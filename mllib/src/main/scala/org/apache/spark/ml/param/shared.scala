@@ -17,11 +17,9 @@
 
 package org.apache.spark.ml.param
 
-import org.apache.spark.ml.Params
-
 trait HasRegParam extends Params {
 
-  val regParam: Param[Double] = new Param(this, "regParam", "regularization parameter")
+  val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter")
 
   def setRegParam(regParam: Double): this.type = {
     set(this.regParam, regParam)
@@ -35,7 +33,7 @@ trait HasRegParam extends Params {
 
 trait HasMaxIter extends Params {
 
-  val maxIter: Param[Int] = new Param(this, "maxIter", "max number of iterations")
+  val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
 
   def setMaxIter(maxIter: Int): this.type = {
     set(this.maxIter, maxIter)

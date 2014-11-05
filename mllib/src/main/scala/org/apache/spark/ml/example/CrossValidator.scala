@@ -73,6 +73,12 @@ class CrossValidator extends Estimator[CrossValidatorModel] with Params
 
   private val f2jBLAS = new F2jBLAS
 
+  // Overwrite return type for Java users.
+  override def setEstimator(estimator: Estimator[_]): this.type = super.setEstimator(estimator)
+  override def setEstimatorParamMaps(estimatorParamMaps: Array[ParamMap]): this.type =
+    super.setEstimatorParamMaps(estimatorParamMaps)
+  override def setEvaluator(evaluator: Evaluator): this.type = super.setEvaluator(evaluator)
+
   val numFolds: Param[Int] = new Param(this, "numFolds", "number of folds for cross validation", 3)
 
   def setNumFolds(numFolds: Int): this.type = {

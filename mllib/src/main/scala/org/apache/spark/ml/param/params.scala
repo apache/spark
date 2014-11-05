@@ -22,6 +22,8 @@ import java.lang.reflect.Modifier
 import scala.collection.mutable
 import scala.language.implicitConversions
 
+import org.apache.spark.ml.Identifiable
+
 /**
  * A param with self-contained documentation and optionally default value.
  *
@@ -30,7 +32,7 @@ import scala.language.implicitConversions
  * @param doc documentation
  * @tparam T param value type
  */
-class Param[T] private (
+class Param[T] private[param] (
     val parent: Params,
     val name: String,
     val doc: String,
@@ -73,6 +75,16 @@ class Param[T] private (
       s"$name: $doc"
     }
   }
+}
+
+class DoubleParam(parent: Params, name: String, doc: String, default: Option[Double] = None)
+  extends Param[Double](parent, name, doc, default) {
+  override def w(value: Double): ParamPair[Double] = ParamPair(this, value)
+}
+
+class IntParam(parent: Params, name: String, doc: String, default: Option[Int] = None)
+  extends Param[Int](parent, name, doc, default) {
+  override def w(value: Int): ParamPair[Int] = ParamPair(this, value)
 }
 
 /**
@@ -199,7 +211,7 @@ class ParamMap private[ml] (
   /**
    * Filter this param map for the given parent.
    */
-  def filter(parent: Identifiable): ParamMap = {
+  def filter(parent: Params): ParamMap = {
     val map = params.filterKeys(_.parent == parent)
     new ParamMap(map.asInstanceOf[mutable.Map[Param[Any], Any]])
   }
@@ -256,6 +268,22 @@ class ParamGridBuilder {
    * Adds a param with multiple values (overwrites if the input param exists).
    */
   def addMulti[T](param: Param[T], values: Iterable[T]): this.type = {
+    paramGrid.put(param, values)
+    this
+  }
+
+  /**
+   * Specialize for Java users.
+   */
+  def addMulti(param: DoubleParam, values: Array[Double]): this.type = {
+    paramGrid.put(param, values)
+    this
+  }
+
+  /**
+   * Specialize for Java users.
+   */
+  def addMulti(param: IntParam, values: Array[Int]): this.type = {
     paramGrid.put(param, values)
     this
   }

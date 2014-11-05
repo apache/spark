@@ -18,7 +18,6 @@
 package org.apache.spark.ml.example
 
 import org.apache.spark.ml._
-import org.apache.spark.ml.api.param._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
@@ -36,6 +35,12 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
 
   setRegParam(0.1)
   setMaxIter(100)
+
+  // Overwrite the return type of setters for Java users.
+  override def setRegParam(regParam: Double): this.type = super.setRegParam(regParam)
+  override def setMaxIter(maxIter: Int): this.type = super.setMaxIter(maxIter)
+  override def setLabelCol(labelCol: String): this.type = super.setLabelCol(labelCol)
+  override def setFeaturesCol(featuresCol: String): this.type = super.setFeaturesCol(featuresCol)
 
   override final val model: LogisticRegressionModelParams = new LogisticRegressionModelParams {}
 

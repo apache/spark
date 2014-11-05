@@ -18,8 +18,7 @@
 package org.apache.spark.ml.example
 
 import org.apache.spark.ml._
-import org.apache.spark.ml.api.param.HasOutputCol
-import org.apache.spark.ml.param.{ParamMap, Params, HasOutputCol, HasInputCol}
+import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.SchemaRDD
@@ -28,6 +27,9 @@ import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Row
 
 class StandardScaler extends Transformer with Params with HasInputCol with HasOutputCol {
+
+  override def setInputCol(inputCol: String): this.type = super.setInputCol(inputCol)
+  override def setOutputCol(outputCol: String): this.type = super.setOutputCol(outputCol)
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._

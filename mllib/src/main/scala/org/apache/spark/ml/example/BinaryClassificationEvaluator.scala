@@ -18,7 +18,6 @@
 package org.apache.spark.ml.example
 
 import org.apache.spark.ml._
-import org.apache.spark.ml.api.param.HasMetricName
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.SchemaRDD
