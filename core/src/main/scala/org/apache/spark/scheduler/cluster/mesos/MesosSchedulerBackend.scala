@@ -72,7 +72,7 @@ private[spark] class MesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()
