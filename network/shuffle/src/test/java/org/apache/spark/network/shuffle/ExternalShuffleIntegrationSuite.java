@@ -266,7 +266,8 @@ public class ExternalShuffleIntegrationSuite {
     assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
   }
 
-  private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo) {
+  private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
+      throws IOException {
     ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false);
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),

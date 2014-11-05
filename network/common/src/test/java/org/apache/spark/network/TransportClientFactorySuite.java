@@ -57,7 +57,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void createAndReuseBlockClients() throws TimeoutException {
+  public void createAndReuseBlockClients() throws Exception {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
@@ -88,7 +88,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void closeBlockClientsWithFactory() throws TimeoutException {
+  public void closeBlockClientsWithFactory() throws Exception {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());

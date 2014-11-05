@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.IOException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -108,7 +109,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       String host,
       int port,
       String execId,
-      ExecutorShuffleInfo executorInfo) {
+      ExecutorShuffleInfo executorInfo) throws IOException {
     assert appId != null : "Called before init()";
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerExecutorMessage =
