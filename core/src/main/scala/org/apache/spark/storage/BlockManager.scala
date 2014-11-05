@@ -72,7 +72,8 @@ private[spark] class BlockManager(
     val conf: SparkConf,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
-    blockTransferService: BlockTransferService)
+    blockTransferService: BlockTransferService,
+    securityManager: SecurityManager)
   extends BlockDataManager with Logging {
 
   val diskBlockManager = new DiskBlockManager(this, conf)
@@ -115,7 +116,8 @@ private[spark] class BlockManager(
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTranserService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
-    new ExternalShuffleClient(SparkTransportConf.fromSparkConf(conf))
+    new ExternalShuffleClient(SparkTransportConf.fromSparkConf(conf), securityManager,
+      securityManager.isAuthenticationEnabled())
   } else {
     blockTransferService
   }
@@ -166,9 +168,10 @@ private[spark] class BlockManager(
       conf: SparkConf,
       mapOutputTracker: MapOutputTracker,
       shuffleManager: ShuffleManager,
-      blockTransferService: BlockTransferService) = {
+      blockTransferService: BlockTransferService,
+      securityManager: SecurityManager) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, mapOutputTracker, shuffleManager, blockTransferService)
+      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager)
   }
 
   /**
@@ -219,7 +222,6 @@ private[spark] class BlockManager(
         return
       } catch {
         case e: Exception if i < MAX_ATTEMPTS =>
-          val attemptsRemaining =
           logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}}"
             + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
           Thread.sleep(SLEEP_TIME_SECS * 1000)
