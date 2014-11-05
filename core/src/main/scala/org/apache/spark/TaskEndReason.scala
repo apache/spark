@@ -88,11 +88,32 @@ case class FetchFailed(
 case class ExceptionFailure(
     className: String,
     description: String,
-    stackTrace: String,
+    stackTrace: Array[StackTraceElement], // backwards compatibility
     metrics: Option[TaskMetrics])
   extends TaskFailedReason {
 
-  override def toErrorString: String = stackTrace
+  /** The stack trace message with a full (recursive) stack trace. */
+  private var fullStackTrace: String = null
+
+  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, metrics)
+    fullStackTrace = Utils.exceptionString(e)
+  }
+
+  private[spark] def getFullStackTrace: String = fullStackTrace
+
+  private[spark] def setFullStackTrace(fullStackTrace: String): this.type = {
+    this.fullStackTrace = fullStackTrace
+    this
+  }
+
+  override def toErrorString: String =
+    if (fullStackTrace == null) {
+      Utils.exceptionString(className, description, stackTrace)
+    }
+    else {
+      fullStackTrace
+    }
 }
 
 /**

@@ -282,10 +282,12 @@ private[spark] object JsonProtocol {
         ("Reduce ID" -> fetchFailed.reduceId) ~
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
+        val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
         val metrics = exceptionFailure.metrics.map(taskMetricsToJson).getOrElse(JNothing)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
-        ("Full Stack Trace" -> exceptionFailure.stackTrace) ~
+        ("Stack Trace" -> stackTrace) ~
+        ("Full Stack Trace" -> exceptionFailure.getFullStackTrace) ~
         ("Metrics" -> metrics)
       case ExecutorLostFailure(executorId) =>
         ("Executor ID" -> executorId)
@@ -635,14 +637,12 @@ private[spark] object JsonProtocol {
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
-        val stackTrace = Utils.jsonOption(json \ "Full Stack Trace").map(_.extract[String]).
-          getOrElse {
-            // backward compatibility
-            val oldStackTrace = stackTraceFromJson(json \ "Stack Trace")
-            Utils.exceptionString(className, description, oldStackTrace)
-          }
+        val stackTrace = stackTraceFromJson(json \ "Stack Trace")
+        val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
+          map(_.extract[String]).orNull
         val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
-        ExceptionFailure(className, description, stackTrace, metrics)
+        ExceptionFailure(className, description, stackTrace, metrics).
+          setFullStackTrace(fullStackTrace)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
       case `executorLostFailure` =>
