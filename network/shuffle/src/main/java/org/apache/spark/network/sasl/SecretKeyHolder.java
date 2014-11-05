@@ -1,5 +1,3 @@
-package org.apache.spark.network.server;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -17,22 +15,21 @@ package org.apache.spark.network.server;
  * limitations under the License.
  */
 
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.TransportClient;
+package org.apache.spark.network.sasl;
 
-/** An RpcHandler suitable for a client-only TransportContext, which cannot receive RPCs. */
-public class NoOpRpcHandler extends RpcHandler {
-  private final StreamManager streamManager;
+/**
+ * Interface for getting a secret key associated with some application.
+ */
+public interface SecretKeyHolder {
+  /**
+   * Gets an appropriate SASL User for the given appId.
+   * @throws IllegalArgumentException if the given appId is not associated with a SASL user.
+   */
+  String getSaslUser(String appId);
 
-  public NoOpRpcHandler() {
-    streamManager = new OneForOneStreamManager();
-  }
-
-  @Override
-  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    throw new UnsupportedOperationException("Cannot handle messages");
-  }
-
-  @Override
-  public StreamManager getStreamManager() { return streamManager; }
+  /**
+   * Gets an appropriate SASL secret key for the given appId.
+   * @throws IllegalArgumentException if the given appId is not associated with a SASL secret key.
+   */
+  String getSecretKey(String appId);
 }
