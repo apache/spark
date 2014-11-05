@@ -154,20 +154,30 @@ object DecisionTreeRunner {
     }
   }
 
-  def run(params: Params) {
-
-    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
-    val sc = new SparkContext(conf)
-
-    println(s"DecisionTreeRunner with parameters:\n$params")
-
+  /**
+   * Load training and test data from files.
+   * @param input  Path to input dataset.
+   * @param dataFormat  "libsvm" or "dense"
+   * @param testInput  Path to test dataset.
+   * @param algo  Classification or Regression
+   * @param fracTest  Fraction of input data to hold out for testing.  Ignored if testInput given.
+   * @return  (training dataset, test dataset, number of classes),
+   *          where the number of classes is inferred from data (and set to 0 for Regression)
+   */
+  private[mllib] def loadDatasets(
+      sc: SparkContext,
+      input: String,
+      dataFormat: String,
+      testInput: String,
+      algo: Algo,
+      fracTest: Double): (RDD[LabeledPoint], RDD[LabeledPoint], Int) = {
     // Load training data and cache it.
-    val origExamples = params.dataFormat match {
-      case "dense" => MLUtils.loadLabeledPoints(sc, params.input).cache()
-      case "libsvm" => MLUtils.loadLibSVMFile(sc, params.input).cache()
+    val origExamples = dataFormat match {
+      case "dense" => MLUtils.loadLabeledPoints(sc, input).cache()
+      case "libsvm" => MLUtils.loadLibSVMFile(sc, input).cache()
     }
     // For classification, re-index classes if needed.
-    val (examples, classIndexMap, numClasses) = params.algo match {
+    val (examples, classIndexMap, numClasses) = algo match {
       case Classification => {
         // classCounts: class --> # examples in class
         val classCounts = origExamples.map(_.label).countByValue()
@@ -205,14 +215,14 @@ object DecisionTreeRunner {
     }
 
     // Create training, test sets.
-    val splits = if (params.testInput != "") {
+    val splits = if (testInput != "") {
       // Load testInput.
       val numFeatures = examples.take(1)(0).features.size
-      val origTestExamples = params.dataFormat match {
-        case "dense" => MLUtils.loadLabeledPoints(sc, params.testInput)
-        case "libsvm" => MLUtils.loadLibSVMFile(sc, params.testInput, numFeatures)
+      val origTestExamples = dataFormat match {
+        case "dense" => MLUtils.loadLabeledPoints(sc, testInput)
+        case "libsvm" => MLUtils.loadLibSVMFile(sc, testInput, numFeatures)
       }
-      params.algo match {
+      algo match {
         case Classification => {
           // classCounts: class --> # examples in class
           val testExamples = {
@@ -229,16 +239,30 @@ object DecisionTreeRunner {
       }
     } else {
       // Split input into training, test.
-      examples.randomSplit(Array(1.0 - params.fracTest, params.fracTest))
+      examples.randomSplit(Array(1.0 - fracTest, fracTest))
     }
     val training = splits(0).cache()
     val test = splits(1).cache()
+
     val numTraining = training.count()
     val numTest = test.count()
-
     println(s"numTraining = $numTraining, numTest = $numTest.")
 
     examples.unpersist(blocking = false)
+
+    (training, test, numClasses)
+  }
+
+  def run(params: Params) {
+
+    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
+    val sc = new SparkContext(conf)
+
+    println(s"DecisionTreeRunner with parameters:\n$params")
+
+    // Load training and test data and cache it.
+    val (training, test, numClasses) = loadDatasets(sc, params.input, params.dataFormat,
+      params.testInput, params.algo, params.fracTest)
 
     val impurityCalculator = params.impurity match {
       case Gini => impurity.Gini
@@ -338,7 +362,9 @@ object DecisionTreeRunner {
   /**
    * Calculates the mean squared error for regression.
    */
-  private def meanSquaredError(tree: WeightedEnsembleModel, data: RDD[LabeledPoint]): Double = {
+  private[mllib] def meanSquaredError(
+      tree: WeightedEnsembleModel,
+      data: RDD[LabeledPoint]): Double = {
     data.map { y =>
       val err = tree.predict(y.features) - y.label
       err * err
