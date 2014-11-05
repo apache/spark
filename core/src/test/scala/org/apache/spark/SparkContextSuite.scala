@@ -21,9 +21,53 @@ import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
 
-class SparkContextSuite extends FunSuite {
-  //Regression test for SPARK-3121
+class SparkContextSuite extends FunSuite with LocalSparkContext {
+
+  test("Only one SparkContext may be active at a time") {
+    // Regression test for SPARK-4180
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    sc = new SparkContext(conf)
+    // A SparkContext is already running, so we shouldn't be able to create a second one
+    intercept[SparkException] { new SparkContext(conf) }
+    // After stopping the running context, we should be able to create a new one
+    resetSparkContext()
+    sc = new SparkContext(conf)
+  }
+
+  test("Can still construct a new SparkContext after failing due to missing app name or master") {
+    val missingMaster = new SparkConf()
+    val missingAppName = missingMaster.clone.setMaster("local")
+    val validConf = missingAppName.clone.setAppName("test")
+    // We shouldn't be able to construct SparkContexts because these are invalid configurations
+    intercept[SparkException] { new SparkContext(missingMaster) }
+    intercept[SparkException] { new SparkContext(missingAppName) }
+    // Even though those earlier calls failed, we should still be able to create a new SparkContext
+    sc = new SparkContext(validConf)
+  }
+
+  test("Check for multiple SparkContexts can be disabled via undocumented debug option") {
+    val propertyName = "spark.driver.disableMultipleSparkContextsErrorChecking"
+    val originalPropertyValue = System.getProperty(propertyName)
+    var secondSparkContext: SparkContext = null
+    try {
+      System.setProperty(propertyName, "true")
+      val conf = new SparkConf().setAppName("test").setMaster("local")
+      sc = new SparkContext(conf)
+      secondSparkContext = new SparkContext(conf)
+    } finally {
+      if (secondSparkContext != null) {
+        secondSparkContext.stop()
+      }
+      if (originalPropertyValue != null) {
+        System.setProperty(propertyName, originalPropertyValue)
+      } else {
+        System.clearProperty(propertyName)
+      }
+    }
+  }
+
   test("BytesWritable implicit conversion is correct") {
+    // Regression test for SPARK-3121
     val bytesWritable = new BytesWritable()
     val inputArray = (1 to 10).map(_.toByte).toArray
     bytesWritable.set(inputArray, 0, 10)

@@ -179,6 +179,30 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
+  // This is placed after the configuration validation so that common configuration errors, like
+  // forgetting to pass a master url or app name, don't prevent subsequent SparkContexts from being
+  // constructed.
+  SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+    SparkContext.activeSparkContextCreationSite.foreach { creationSite =>
+      val errMsg = "Only one SparkContext may be active in this JVM (see SPARK-2243)."
+      val errDetails = if (SparkContext.activeSparkContextIsFullyConstructed) {
+        s"The currently active SparkContext was created at ${creationSite.shortForm}"
+      } else {
+        s"Another SparkContext, created at ${creationSite.shortForm}, is either being constructed" +
+        " or threw an exception from its constructor; please restart your JVM in order to" +
+        " create a new SparkContext."
+      }
+      val exception = new SparkException(s"$errMsg $errDetails")
+      if (conf.getBoolean("spark.driver.disableMultipleSparkContextsErrorChecking", false)) {
+        logWarning("Multiple SparkContext error detection is disabled!", exception)
+      } else {
+        throw exception
+      }
+    }
+    SparkContext.activeSparkContextCreationSite = Some(Utils.getCallSite())
+    SparkContext.activeSparkContextIsFullyConstructed = false
+  }
+
   val jars: Seq[String] =
     conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
@@ -1071,27 +1095,31 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   /** Shut down the SparkContext. */
   def stop() {
-    postApplicationEnd()
-    ui.foreach(_.stop())
-    // Do this only if not stopped already - best case effort.
-    // prevent NPE if stopped more than once.
-    val dagSchedulerCopy = dagScheduler
-    dagScheduler = null
-    if (dagSchedulerCopy != null) {
-      env.metricsSystem.report()
-      metadataCleaner.cancel()
-      env.actorSystem.stop(heartbeatReceiver)
-      cleaner.foreach(_.stop())
-      dagSchedulerCopy.stop()
-      taskScheduler = null
-      // TODO: Cache.stop()?
-      env.stop()
-      SparkEnv.set(null)
-      listenerBus.stop()
-      eventLogger.foreach(_.stop())
-      logInfo("Successfully stopped SparkContext")
-    } else {
-      logInfo("SparkContext already stopped")
+    SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      SparkContext.activeSparkContextCreationSite = None
+      SparkContext.activeSparkContextIsFullyConstructed = false
+      postApplicationEnd()
+      ui.foreach(_.stop())
+      // Do this only if not stopped already - best case effort.
+      // prevent NPE if stopped more than once.
+      val dagSchedulerCopy = dagScheduler
+      dagScheduler = null
+      if (dagSchedulerCopy != null) {
+        env.metricsSystem.report()
+        metadataCleaner.cancel()
+        env.actorSystem.stop(heartbeatReceiver)
+        cleaner.foreach(_.stop())
+        dagSchedulerCopy.stop()
+        taskScheduler = null
+        // TODO: Cache.stop()?
+        env.stop()
+        SparkEnv.set(null)
+        listenerBus.stop()
+        eventLogger.foreach(_.stop())
+        logInfo("Successfully stopped SparkContext")
+      } else {
+        logInfo("SparkContext already stopped")
+      }
     }
   }
 
@@ -1157,7 +1185,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     if (dagScheduler == null) {
       throw new SparkException("SparkContext has been shutdown")
     }
-    val callSite = getCallSite
+    val callSite = Utils.getCallSite()
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
@@ -1380,6 +1408,10 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   private[spark] def cleanup(cleanupTime: Long) {
     persistentRdds.clearOldValues(cleanupTime)
   }
+
+  SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+    SparkContext.activeSparkContextIsFullyConstructed = true
+  }
 }
 
 /**
@@ -1387,6 +1419,30 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
+
+  /**
+   * Lock that prevents multiple threads from being in the SparkContext constructor at the same
+   * time.
+   */
+  private[spark] val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
+
+  /**
+   * Records the creation site of the last SparkContext to successfully enter the constructor.
+   * This may be an active SparkContext, or a SparkContext that is currently under construction.
+   *
+   * Access to this field should be guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
+   */
+  private[spark] var activeSparkContextCreationSite: Option[CallSite] = None
+
+  /**
+   * Tracks whether `activeSparkContextCreationSite` refers to a fully-constructed SparkContext
+   * or a partially-constructed one that is either still executing its constructor or threw
+   * an exception from its constructor.  This is used to enable better error-reporting when
+   * SparkContext construction fails due to existing contexts.
+   *
+   * Access to this field should be guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
+   */
+  private[spark] var activeSparkContextIsFullyConstructed: Boolean = false
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
