@@ -17,46 +17,39 @@
 
 package org.apache.spark.mllib.export.pmml
 
-import org.apache.spark.mllib.export.ModelExport
-import java.io.OutputStream
-import org.jpmml.model.JAXBUtil
-import org.dmg.pmml.PMML
-import javax.xml.transform.stream.StreamResult
-import scala.beans.BeanProperty
-import org.dmg.pmml.Application
-import org.dmg.pmml.Timestamp
-import org.dmg.pmml.Header
 import java.text.SimpleDateFormat
 import java.util.Date
 
-trait PMMLModelExport extends ModelExport{
+import scala.beans.BeanProperty
+
+import org.dmg.pmml.Application
+import org.dmg.pmml.Header
+import org.dmg.pmml.PMML
+import org.dmg.pmml.Timestamp
+
+import org.apache.spark.mllib.export.ModelExport
+
+private[mllib] trait PMMLModelExport extends ModelExport{
   
   /**
    * Holder of the exported model in PMML format
    */
   @BeanProperty
-  var pmml: PMML = new PMML();
+  val pmml: PMML = new PMML();
 
   setHeader(pmml);
   
   private def setHeader(pmml : PMML): Unit = {
-    var version = getClass().getPackage().getImplementationVersion()
-    var app = new Application().withName("Apache Spark MLlib").withVersion(version)
-    var timestamp = new Timestamp()
+    val version = getClass().getPackage().getImplementationVersion()
+    val app = new Application().withName("Apache Spark MLlib").withVersion(version)
+    val timestamp = new Timestamp()
         .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
-    var header = new Header()
-        .withCopyright("www.dmg.org")
+    val header = new Header()
+        .withCopyright("Apache Spark MLlib")
         .withApplication(app)
         .withTimestamp(timestamp);
     pmml.setHeader(header);
+    pmml.setVersion("4.2")
   } 
-  
-  /**
-   * Write the exported model (in PMML XML) to the output stream specified 
-   */
-  @Override
-  def save(outputStream: OutputStream): Unit = {
-    JAXBUtil.marshalPMML(pmml, new StreamResult(outputStream));  
-  }
   
 }
