@@ -33,7 +33,7 @@ from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, Dou
     IntegerType, ByteType, Row
 
 
-__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors', 'DenseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -578,6 +578,8 @@ class DenseMatrix(Matrix):
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
         assert len(values) == numRows * numCols
+        if not isinstance(values, array.array):
+            values = array.array('d', values)
         self.values = values
 
     def __reduce__(self):
@@ -594,6 +596,15 @@ class DenseMatrix(Matrix):
                [ 1.,  3.]])
         """
         return np.reshape(self.values, (self.numRows, self.numCols), order='F')
+
+
+class Matrices(object):
+    @staticmethod
+    def dense(numRows, numCols, values):
+        """
+        Create a DenseMatrix
+        """
+        return DenseMatrix(numRows, numCols, values)
 
 
 def _test():
