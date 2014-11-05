@@ -45,11 +45,9 @@ private[mllib] trait PMMLModelExport extends ModelExport{
     val timestamp = new Timestamp()
         .withContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
     val header = new Header()
-        .withCopyright("Apache Spark MLlib")
         .withApplication(app)
-        .withTimestamp(timestamp);
-    pmml.setHeader(header);
-    pmml.setVersion("4.2")
+        .withTimestamp(timestamp)
+    pmml.setHeader(header)
   } 
   
 }

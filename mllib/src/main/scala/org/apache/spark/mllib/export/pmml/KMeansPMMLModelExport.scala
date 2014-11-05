@@ -46,11 +46,11 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
   /**
    * Export the input KMeansModel model to PMML format
    */
-  populateKMeansPMML(model);
+  populateKMeansPMML(model)
   
   private def populateKMeansPMML(model : KMeansModel): Unit = {
     
-     pmml.getHeader().setDescription("k-means clustering"); 
+     pmml.getHeader().setDescription("k-means clustering") 
      
      if(model.clusterCenters.length > 0){
        
@@ -65,11 +65,11 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
        val comparisonMeasure = new ComparisonMeasure()
             .withKind(Kind.DISTANCE)
             .withMeasure(new SquaredEuclidean()
-       );
+       )
        
        val clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
         MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
-        .withModelName("k-means");
+        .withModelName("k-means")
        
        for ( i <- 0 to (clusterCenter.size - 1)) {
          fields(i) = FieldName.create("field_" + i)
@@ -83,7 +83,7 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
          )     
        }
        
-       dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size());
+       dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size())
        
        for ( i <- 0 until model.clusterCenters.size ) {
          val cluster = new Cluster()
@@ -97,8 +97,8 @@ private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLMode
          clusteringModel.withClusters(cluster)
        }
        
-       pmml.setDataDictionary(dataDictionary);
-       pmml.withModels(clusteringModel);
+       pmml.setDataDictionary(dataDictionary)
+       pmml.withModels(clusteringModel)
        
      }
  
