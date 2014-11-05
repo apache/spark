@@ -66,6 +66,12 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaRDDLike.foreachAsync"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.collectAsync")
+          ) ++ Seq(
+            // Making Java Spark Streaming callable from Java
+              ProblemFilters.exclude[MissingMethodProblem](
+                "org.apache.spark.streaming.StreamingContext.fileStream"),
+              ProblemFilters.exclude[MissingMethodProblem](
+                "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream")
           )
 
         case v if v.startsWith("1.1") =>
