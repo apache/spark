@@ -84,6 +84,7 @@ public class ExternalShuffleSecuritySuite {
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",
       new ExecutorShuffleInfo(new String[0], 0, ""));
+    client.close();
   }
 
   /** Provides a secret key holder which always returns the given secret key, for a single appId. */
