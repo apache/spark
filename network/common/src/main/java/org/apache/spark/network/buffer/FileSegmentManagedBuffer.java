@@ -27,6 +27,7 @@ import java.nio.channels.FileChannel;
 
 import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
+import com.google.common.io.LimitInputStream;
 import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.network.util.JavaUtils;
@@ -101,7 +102,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     try {
       is = new FileInputStream(file);
       ByteStreams.skipFully(is, offset);
-      return ByteStreams.limit(is, length);
+      return new LimitInputStream(is, length);
     } catch (IOException e) {
       try {
         if (is != null) {
