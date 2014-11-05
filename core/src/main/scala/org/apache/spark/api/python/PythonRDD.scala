@@ -24,12 +24,10 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 import org.apache.spark.input.PortableDataStream
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
 
 import com.google.common.base.Charsets.UTF_8
-import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -455,7 +453,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(sc.hadoopConfiguration()))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -481,7 +479,7 @@ private[spark] object PythonRDD extends Logging {
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(mergedConf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -507,7 +505,7 @@ private[spark] object PythonRDD extends Logging {
         None, inputFormatClass, keyClass, valueClass, conf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -550,7 +548,7 @@ private[spark] object PythonRDD extends Logging {
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(mergedConf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -576,7 +574,7 @@ private[spark] object PythonRDD extends Logging {
         None, inputFormatClass, keyClass, valueClass, conf)
     val confBroadcasted = sc.sc.broadcast(new SerializableWritable(conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
-      new WritableToJavaConverter(confBroadcasted, batchSize))
+      new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
   }
 
@@ -758,104 +756,6 @@ private[spark] object PythonRDD extends Logging {
     } else {
       converted.saveAsHadoopDataset(new JobConf(conf))
     }
-  }
-
-
-  /**
-   * Convert an RDD of serialized Python dictionaries to Scala Maps (no recursive conversions).
-   */
-  @deprecated("PySpark does not use it anymore", "1.1")
-  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
-    pyRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Unpickler
-      SerDeUtil.initialize()
-      iter.flatMap { row =>
-        unpickle.loads(row) match {
-          // in case of objects are pickled in batch mode
-          case objs: JArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
-          // not in batch mode
-          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
-        }
-      }
-    }
-  }
-
-  /**
-   * Convert an RDD of serialized Python tuple to Array (no recursive conversions).
-   * It is only used by pyspark.sql.
-   */
-  def pythonToJavaArray(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Array[_]] = {
-
-    def toArray(obj: Any): Array[_] = {
-      obj match {
-        case objs: JArrayList[_] =>
-          objs.toArray
-        case obj if obj.getClass.isArray =>
-          obj.asInstanceOf[Array[_]].toArray
-      }
-    }
-
-    pyRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Unpickler
-      iter.flatMap { row =>
-        val obj = unpickle.loads(row)
-        if (batched) {
-          obj.asInstanceOf[JArrayList[_]].map(toArray)
-        } else {
-          Seq(toArray(obj))
-        }
-      }
-    }.toJavaRDD()
-  }
-
-  private[spark] class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
-    private val pickle = new Pickler()
-    private var batch = 1
-    private val buffer = new mutable.ArrayBuffer[Any]
-
-    override def hasNext(): Boolean = iter.hasNext
-
-    override def next(): Array[Byte] = {
-      while (iter.hasNext && buffer.length < batch) {
-        buffer += iter.next()
-      }
-      val bytes = pickle.dumps(buffer.toArray)
-      val size = bytes.length
-      // let  1M < size < 10M
-      if (size < 1024 * 1024) {
-        batch *= 2
-      } else if (size > 1024 * 1024 * 10 && batch > 1) {
-        batch /= 2
-      }
-      buffer.clear()
-      bytes
-    }
-  }
-
-  /**
-   * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
-   * PySpark.
-   */
-  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
-    jRDD.rdd.mapPartitions { iter => new AutoBatchedPickler(iter) }
-  }
-
-  /**
-    * Convert an RDD of serialized Python objects to RDD of objects, that is usable by PySpark.
-    */
-  def pythonToJava(pyRDD: JavaRDD[Array[Byte]], batched: Boolean): JavaRDD[Any] = {
-    pyRDD.rdd.mapPartitions { iter =>
-      SerDeUtil.initialize()
-      val unpickle = new Unpickler
-      iter.flatMap { row =>
-        val obj = unpickle.loads(row)
-        if (batched) {
-          obj.asInstanceOf[JArrayList[_]].asScala
-        } else {
-          Seq(obj)
-        }
-      }
-    }.toJavaRDD()
   }
 }
 

@@ -114,6 +114,13 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
               </li>
               <li>
                 <span data-toggle="tooltip"
+                      title={ToolTips.TASK_DESERIALIZATION_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}/>
+                  <span class="additional-metric-title">Task Deserialization Time</span>
+                </span>
+              </li>
+              <li>
+                <span data-toggle="tooltip"
                       title={ToolTips.GC_TIME} data-placement="right">
                   <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
                   <span class="additional-metric-title">GC Time</span>
@@ -147,6 +154,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
           ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
           ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
+          ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
           ("GC Time", TaskDetailsClassNames.GC_TIME),
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
@@ -178,6 +186,17 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
               <td>{UIUtils.formatDuration(millis.toLong)}</td>
             }
           }
+
+          val deserializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.executorDeserializeTime.toDouble
+          }
+          val deserializationQuantiles =
+            <td>
+              <span data-toggle="tooltip" title={ToolTips.TASK_DESERIALIZATION_TIME}
+                    data-placement="right">
+                Task Deserialization Time
+              </span>
+            </td> +: getFormattedTimeQuantiles(deserializationTimes)
 
           val serviceTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.executorRunTime.toDouble
@@ -266,6 +285,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           val listings: Seq[Seq[Node]] = Seq(
             <tr>{serviceQuantiles}</tr>,
             <tr class={TaskDetailsClassNames.SCHEDULER_DELAY}>{schedulerDelayQuantiles}</tr>,
+            <tr class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
+              {deserializationQuantiles}
+            </tr>
             <tr class={TaskDetailsClassNames.GC_TIME}>{gcQuantiles}</tr>,
             <tr class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
               {serializationQuantiles}
@@ -314,6 +336,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
       val schedulerDelay = metrics.map(getSchedulerDelay(info, _)).getOrElse(0L)
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
+      val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
       val gettingResultTime = info.gettingResultTime
 
@@ -366,6 +389,10 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <td sorttable_customkey={schedulerDelay.toString}
             class={TaskDetailsClassNames.SCHEDULER_DELAY}>
           {UIUtils.formatDuration(schedulerDelay.toLong)}
+        </td>
+        <td sorttable_customkey={taskDeserializationTime.toString}
+            class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
+          {UIUtils.formatDuration(taskDeserializationTime.toLong)}
         </td>
         <td sorttable_customkey={gcTime.toString} class={TaskDetailsClassNames.GC_TIME}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
@@ -424,6 +451,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         (info.finishTime - info.launchTime)
       }
     }
-    totalExecutionTime - metrics.executorRunTime
+    val executorOverhead = (metrics.executorDeserializeTime +
+      metrics.resultSerializationTime)
+    totalExecutionTime - metrics.executorRunTime - executorOverhead
   }
 }
