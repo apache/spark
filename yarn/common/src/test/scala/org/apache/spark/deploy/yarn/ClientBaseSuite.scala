@@ -84,6 +84,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
   test("Local jar URIs") {
     val conf = new Configuration()
     val sparkConf = new SparkConf().set(ClientBase.CONF_SPARK_JAR, SPARK)
+      .set("spark.yarn.user.classpath.first", "true")
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
