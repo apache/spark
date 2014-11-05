@@ -21,15 +21,21 @@ application. These properties can be set directly on a
 [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
-`set()` method. For example, we could initialize an application as follows:
+`set()` method. For example, we could initialize an application with two threads as follows:
+
+Note that we run with local[2], meaning two threads - which represents "minimal" parallelism, 
+which can help detect bugs that only exist when we run in a distributed context. 
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster("local")
+             .setMaster("local[2]")
              .setAppName("CountingSheep")
              .set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
+
+Note that we can have more than 1 thread in local mode, and in cases like spark streaming, we may actually
+require one to prevent any sort of starvation issues.  
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
