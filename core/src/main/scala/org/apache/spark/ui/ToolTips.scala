@@ -24,9 +24,6 @@ private[spark] object ToolTips {
        scheduler delay is large, consider decreasing the size of tasks or decreasing the size
        of task results."""
 
-  val EXECUTOR_LAUNCH_TIME =
-    """Overhead associated with launching the task in its own thread on the executor."""
-
   val TASK_DESERIALIZATION_TIME =
     """Time spent deserializating the task closure on the executor."""
 

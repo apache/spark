@@ -42,11 +42,6 @@ class TaskMetrics extends Serializable {
   var hostname: String = _
 
   /**
-   * Time taken on the executor to launch the task in its own thread.
-   */
-  var executorLaunchTime: Long = _
-
-  /**
    * Time taken on the executor to deserialize this task
    */
   var executorDeserializeTime: Long = _

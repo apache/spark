@@ -240,7 +240,6 @@ private[spark] object JsonProtocol {
         })
       }.getOrElse(JNothing)
     ("Host Name" -> taskMetrics.hostname) ~
-    ("Executor Launch Time" -> taskMetrics.executorLaunchTime) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Result Size" -> taskMetrics.resultSize) ~
@@ -563,7 +562,6 @@ private[spark] object JsonProtocol {
     }
     val metrics = new TaskMetrics
     metrics.hostname = (json \ "Host Name").extract[String]
-    metrics.executorLaunchTime = (json \ "Executor Launch Time").extractOpt[Long].getOrElse(0)
     metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
     metrics.executorRunTime = (json \ "Executor Run Time").extract[Long]
     metrics.resultSize = (json \ "Result Size").extract[Long]
