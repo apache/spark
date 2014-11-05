@@ -21,9 +21,16 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
+import com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,13 +50,22 @@ import org.apache.spark.network.util.JavaUtils;
 public class ExternalShuffleBlockManager {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockManager.class);
 
-  // Map from "appId-execId" to the executor's configuration.
-  private final ConcurrentHashMap<String, ExecutorShuffleInfo> executors =
-    new ConcurrentHashMap<String, ExecutorShuffleInfo>();
+  // Map containing all registered executors' metadata.
+  private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
-  // Returns an id suitable for a single executor within a single application.
-  private String getAppExecId(String appId, String execId) {
-    return appId + "-" + execId;
+  // Single-threaded executor used to perform expensive recursive directory deletion.
+  private final Executor directoryCleanupExecutor;
+
+  public ExternalShuffleBlockManager() {
+    // TODO: Give this thread a name.
+    this(Executors.newSingleThreadExecutor());
+  }
+
+  // Allows tests to have more control over when directories are cleaned up.
+  @VisibleForTesting
+  ExternalShuffleBlockManager(Executor directoryCleanupExecutor) {
+    this.executors = Maps.newConcurrentMap();
+    this.directoryCleanupExecutor = directoryCleanupExecutor;
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -57,7 +73,7 @@ public class ExternalShuffleBlockManager {
       String appId,
       String execId,
       ExecutorShuffleInfo executorInfo) {
-    String fullId = getAppExecId(appId, execId);
+    AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
     executors.put(fullId, executorInfo);
   }
@@ -78,7 +94,7 @@ public class ExternalShuffleBlockManager {
     int mapId = Integer.parseInt(blockIdParts[2]);
     int reduceId = Integer.parseInt(blockIdParts[3]);
 
-    ExecutorShuffleInfo executor = executors.get(getAppExecId(appId, execId));
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
@@ -91,6 +107,56 @@ public class ExternalShuffleBlockManager {
     } else {
       throw new UnsupportedOperationException(
         "Unsupported shuffle manager: " + executor.shuffleManager);
+    }
+  }
+
+  /**
+   * Removes our metadata of all executors registered for the given application, and optionally
+   * also deletes the local directories associated with the executors of that application in a
+   * separate thread.
+   *
+   * It is not valid to call registerExecutor() for an executor with this appId after invoking
+   * this method.
+   */
+  public void removeApplication(String appId, boolean cleanupLocalDirs) {
+    logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
+    Iterator<Map.Entry<AppExecId, ExecutorShuffleInfo>> it = executors.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<AppExecId, ExecutorShuffleInfo> entry = it.next();
+      AppExecId fullId = entry.getKey();
+      final ExecutorShuffleInfo executor = entry.getValue();
+
+      // Only touch executors associated with the appId that was removed.
+      if (appId.equals(fullId.appId)) {
+        it.remove();
+
+        if (cleanupLocalDirs) {
+          logger.debug("Cleaning up executor {}'s {} local dirs", fullId, executor.localDirs.length);
+
+          // Execute the actual deletion in a different thread, as it may take some time.
+          directoryCleanupExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+              deleteExecutorDirs(executor.localDirs);
+            }
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Synchronously deletes each directory one at a time.
+   * Should be executed in its own thread, as this may take a long time.
+   */
+  private void deleteExecutorDirs(String[] dirs) {
+    for (String localDir : dirs) {
+      try {
+        JavaUtils.deleteRecursively(new File(localDir));
+        logger.info("Successfully cleaned up directory: " + localDir);
+      } catch (Exception e) {
+        logger.error("Failed to delete directory: " + localDir, e);
+      }
     }
   }
 
@@ -146,9 +212,36 @@ public class ExternalShuffleBlockManager {
     return new File(new File(localDir, String.format("%02x", subDirId)), filename);
   }
 
-  /** For testing, clears all registered executors. */
-  @VisibleForTesting
-  void clearRegisteredExecutors() {
-    executors.clear();
+  /** Simply encodes an executor's full ID, which is appId + execId. */
+  private static class AppExecId {
+    final String appId;
+    final String execId;
+
+    private AppExecId(String appId, String execId) {
+      this.appId = appId;
+      this.execId = execId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      AppExecId appExecId = (AppExecId) o;
+      return Objects.equal(appId, appExecId.appId) && Objects.equal(execId, appExecId.execId);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(appId, execId);
+    }
+
+    @Override
+    public String toString() {
+      return Objects.toStringHelper(this)
+        .add("appId", appId)
+        .add("execId", execId)
+        .toString();
+    }
   }
 }
