@@ -17,18 +17,19 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.StreamingContext._
-
-import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.SparkContext._
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.language.existentials
+import scala.reflect.ClassTag
 
 import util.ManualClock
-import org.apache.spark.{SparkException, SparkConf}
-import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import scala.reflect.ClassTag
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import scala.collection.mutable
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
