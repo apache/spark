@@ -28,9 +28,9 @@ import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 
 /*
- * Note: the DSL conversions collide with the FunSuite === operator!
- * We can apply the Funsuite conversion explicitly:
- *   assert(X === true) --> assert(EQ(X).===(true))
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
  */
 import org.scalatest.Assertions.{convertToEqualizer => EQ}
 
