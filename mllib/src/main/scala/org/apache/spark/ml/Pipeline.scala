@@ -17,11 +17,14 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.param.{ParamMap, Param}
-import org.apache.spark.sql.SchemaRDD
-
 import scala.collection.mutable.ListBuffer
 
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.sql.SchemaRDD
+
+/**
+ * A stage in a pipeline, either an Estimator or an Transformer.
+ */
 trait PipelineStage extends Identifiable
 
 /**
@@ -29,22 +32,14 @@ trait PipelineStage extends Identifiable
  */
 class Pipeline extends Estimator[PipelineModel] {
 
-  val stages: Param[Array[PipelineStage]] =
-    new Param(this, "stages", "stages of the pipeline")
-
-  def setStages(stages: Array[PipelineStage]): this.type = {
-    set(this.stages, stages)
-    this
-  }
-
-  def getStages: Array[PipelineStage] = {
-    get(stages)
-  }
+  val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
+  def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
+  def getStages: Array[PipelineStage] = get(stages)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
-    // Search for last estimator.
+    // Search for the last estimator.
     var lastIndexOfEstimator = -1
     theStages.view.zipWithIndex.foreach { case (stage, index) =>
       stage match {
@@ -75,10 +70,11 @@ class Pipeline extends Estimator[PipelineModel] {
 
     new PipelineModel(transformers.toArray)
   }
-
-  override def params: Array[Param[_]] = Array.empty
 }
 
+/**
+ * Represents a compiled pipeline.
+ */
 class PipelineModel(val transformers: Array[Transformer]) extends Model {
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
