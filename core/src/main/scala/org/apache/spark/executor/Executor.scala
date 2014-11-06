@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.ActorSystem
+import akka.actor.{Props, ActorSystem}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -86,11 +86,16 @@ private[spark] class Executor(
         conf, executorId, slaveHostname, port, isLocal, actorSystem)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
+      _env.blockManager.initialize(conf.getAppId)
       _env
     } else {
       SparkEnv.get
     }
   }
+
+  // Create an actor for receiving RPCs from the driver
+  private val executorActor = env.actorSystem.actorOf(
+    Props(new ExecutorActor(executorId)), "ExecutorActor")
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -103,6 +108,9 @@ private[spark] class Executor(
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+
+  // Limit of bytes for total size of results (default is 1GB)
+  private val maxResultSize = Utils.getMaxResultSize(conf)
 
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
@@ -128,6 +136,7 @@ private[spark] class Executor(
 
   def stop() {
     env.metricsSystem.report()
+    env.actorSystem.stop(executorActor)
     isStopped = true
     threadPool.shutdown()
     if (!isLocal) {
@@ -152,7 +161,7 @@ private[spark] class Executor(
     }
 
     override def run() {
-      val startTime = System.currentTimeMillis()
+      val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -197,7 +206,7 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - startTime
+          m.executorDeserializeTime = taskStart - deserializeStartTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
           m.resultSerializationTime = afterSerialization - beforeSerialization
@@ -210,25 +219,27 @@ private[spark] class Executor(
         val resultSize = serializedDirectResult.limit
 
         // directSend = sending directly back to the driver
-        val (serializedResult, directSend) = {
-          if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
+        val serializedResult = {
+          if (resultSize > maxResultSize) {
+            logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
+              s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
+              s"dropping it.")
+            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
+          } else if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
-            (ser.serialize(new IndirectTaskResult[Any](blockId)), false)
+            logInfo(
+              s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
+            ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
           } else {
-            (serializedDirectResult, true)
+            logInfo(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
+            serializedDirectResult
           }
         }
 
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
-        if (directSend) {
-          logInfo(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
-        } else {
-          logInfo(
-            s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
-        }
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason

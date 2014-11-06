@@ -290,6 +290,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
         builder.named(name)
     }.getOrElse {
       ctype match {
+        case udt: UserDefinedType[_] => {
+          fromDataType(udt.sqlType, name, nullable, inArray)
+        }
         case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,

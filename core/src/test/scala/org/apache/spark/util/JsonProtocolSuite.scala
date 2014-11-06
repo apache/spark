@@ -107,7 +107,8 @@ class JsonProtocolSuite extends FunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19)
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "Some exception")
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
@@ -115,7 +116,7 @@ class JsonProtocolSuite extends FunSuite {
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
-    testTaskEndReason(ExecutorLostFailure)
+    testTaskEndReason(ExecutorLostFailure("100"))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -176,12 +177,32 @@ class JsonProtocolSuite extends FunSuite {
       deserializedBmRemoved)
   }
 
+  test("FetchFailed backwards compatibility") {
+    // FetchFailed in Spark 1.1.0 does not have an "Message" property.
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "ignored")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Message" })
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+      "Unknown reason")
+    assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
   test("SparkListenerApplicationStart backwards compatibility") {
     // SparkListenerApplicationStart in Spark 1.0.0 do not have an "appId" property.
     val applicationStart = SparkListenerApplicationStart("test", None, 1L, "user")
     val oldEvent = JsonProtocol.applicationStartToJson(applicationStart)
       .removeField({ _._1 == "App ID" })
     assert(applicationStart === JsonProtocol.applicationStartFromJson(oldEvent))
+  }
+
+  test("ExecutorLostFailure backward compatibility") {
+    // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
+    val executorLostFailure = ExecutorLostFailure("100")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
+      .removeField({ _._1 == "Executor ID" })
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
+    assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
   /** -------------------------- *
@@ -396,6 +417,7 @@ class JsonProtocolSuite extends FunSuite {
         assert(r1.mapId === r2.mapId)
         assert(r1.reduceId === r2.reduceId)
         assertEquals(r1.bmAddress, r2.bmAddress)
+        assert(r1.message === r2.message)
       case (r1: ExceptionFailure, r2: ExceptionFailure) =>
         assert(r1.className === r2.className)
         assert(r1.description === r2.description)
@@ -403,7 +425,8 @@ class JsonProtocolSuite extends FunSuite {
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
-      case (ExecutorLostFailure, ExecutorLostFailure) =>
+      case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
+        assert(execId1 === execId2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }

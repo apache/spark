@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -433,6 +434,12 @@ package object sql {
   val StructField = catalyst.types.StructField
 
   /**
+   * Converts a logical plan into zero or more SparkPlans.
+   */
+  @DeveloperApi
+  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+
+  /**
    * :: DeveloperApi ::
    *
    * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
@@ -448,7 +455,9 @@ package object sql {
   type Metadata = catalyst.util.Metadata
 
   /**
+   * :: DeveloperApi ::
    * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
    */
+  @DeveloperApi
   type MetadataBuilder = catalyst.util.MetadataBuilder
 }

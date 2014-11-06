@@ -70,7 +70,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  */
 @Experimental
 class Strategy (
-    val algo: Algo,
+    @BeanProperty var algo: Algo,
     @BeanProperty var impurity: Impurity,
     @BeanProperty var maxDepth: Int,
     @BeanProperty var numClassesForClassification: Int = 2,
@@ -85,17 +85,9 @@ class Strategy (
     @BeanProperty var checkpointDir: Option[String] = None,
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
-  if (algo == Classification) {
-    require(numClassesForClassification >= 2)
-  }
-  require(minInstancesPerNode >= 1,
-    s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
-  require(maxMemoryInMB <= 10240,
-    s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
-
-  val isMulticlassClassification =
+  def isMulticlassClassification =
     algo == Classification && numClassesForClassification > 2
-  val isMulticlassWithCategoricalFeatures
+  def isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 
   /**
@@ -109,6 +101,23 @@ class Strategy (
       maxBins: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
     this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+  }
+
+  /**
+   * Sets Algorithm using a String.
+   */
+  def setAlgo(algo: String): Unit = algo match {
+    case "Classification" => setAlgo(Classification)
+    case "Regression" => setAlgo(Regression)
+  }
+
+  /**
+   * Sets categoricalFeaturesInfo using a Java Map.
+   */
+  def setCategoricalFeaturesInfo(
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]): Unit = {
+    setCategoricalFeaturesInfo(
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
   }
 
@@ -143,6 +152,26 @@ class Strategy (
         s"DecisionTree Strategy given invalid categoricalFeaturesInfo setting:" +
         s" feature $feature has $arity categories.  The number of categories should be >= 2.")
     }
+    require(minInstancesPerNode >= 1,
+      s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
+    require(maxMemoryInMB <= 10240,
+      s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
   }
+}
 
+@Experimental
+object Strategy {
+
+  /**
+   * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
+   * @param algo  "Classification" or "Regression"
+   */
+  def defaultStrategy(algo: String): Strategy = algo match {
+    case "Classification" =>
+      new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
+        numClassesForClassification = 2)
+    case "Regression" =>
+      new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
+        numClassesForClassification = 0)
+  }
 }

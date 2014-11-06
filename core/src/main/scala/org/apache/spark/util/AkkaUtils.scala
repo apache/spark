@@ -212,4 +212,18 @@ private[spark] object AkkaUtils extends Logging {
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
+
+  def makeExecutorRef(
+      name: String,
+      conf: SparkConf,
+      host: String,
+      port: Int,
+      actorSystem: ActorSystem): ActorRef = {
+    val executorActorSystemName = SparkEnv.executorActorSystemName
+    Utils.checkHost(host, "Expected hostname")
+    val url = s"akka.tcp://$executorActorSystemName@$host:$port/user/$name"
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    logInfo(s"Connecting to $name: $url")
+    Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+  }
 }
