@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.util;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -30,6 +33,7 @@ import org.slf4j.LoggerFactory;
 
 public class JavaUtils {
   private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
+  private static final Charset UTF8_CHARSET = Charset.forName("UTF-8");
 
   /** Closes the given object, ignoring IOExceptions. */
   public static void closeQuietly(Closeable closeable) {
@@ -72,5 +76,21 @@ public class JavaUtils {
     if (obj == null) { return 0; }
     int hash = obj.hashCode();
     return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
+  }
+
+  /**
+   * Convert the given string to a byte buffer. The resulting buffer can be
+   * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
+   */
+  public static ByteBuffer stringToBytes(String s) {
+    return ByteBuffer.wrap(s.getBytes(UTF8_CHARSET));
+  }
+
+  /**
+   * Convert the given byte buffer to a string. The resulting string can be
+   * converted back to the same byte buffer through {@link #stringToBytes(String)}.
+   */
+  public static String bytesToString(ByteBuffer b) {
+    return new String(b.array(), UTF8_CHARSET);
   }
 }

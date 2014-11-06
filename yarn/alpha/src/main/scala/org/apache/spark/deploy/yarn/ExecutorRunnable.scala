@@ -36,7 +36,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
 
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
-import org.apache.spark.network.sasl.ShuffleSecretManager
+import org.apache.spark.network.util.JavaUtils
 
 @deprecated("use yarn/stable", "1.2.0")
 class ExecutorRunnable(
@@ -98,7 +98,9 @@ class ExecutorRunnable(
       val secretString = securityMgr.getSecretKey()
       val secretBytes =
         if (secretString != null) {
-          ShuffleSecretManager.stringToBytes(secretString)
+          // This uses a JavaUtils method because the reverse conversion takes
+          // place in the Yarn shuffle service, which is implemented in Java
+          JavaUtils.stringToBytes(secretString)
         } else {
           // Authentication is not enabled, so just provide dummy metadata
           ByteBuffer.allocate(0)
