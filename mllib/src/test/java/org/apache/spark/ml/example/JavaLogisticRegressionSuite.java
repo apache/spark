@@ -60,16 +60,36 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
   @Test
   public void logisticRegression() {
-    LogisticRegression lr = new LogisticRegression()
-      .setMaxIter(10)
-      .setRegParam(1.0);
-    lr.model().setThreshold(0.8);
+    LogisticRegression lr = new LogisticRegression();
     LogisticRegressionModel model = lr.fit(dataset.schemaRDD());
     model.transform(dataset.schemaRDD()).registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println(r);
     }
+  }
+
+  @Test
+  public void logisticRegressionWithSetters() {
+    LogisticRegression lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0);
+    lr.modelParams().setThreshold(0.8);
+    LogisticRegressionModel model = lr.fit(dataset.schemaRDD());
+    model.transform(dataset.schemaRDD()).registerTempTable("prediction");
+    JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    for (Row r: predictions.collect()) {
+      System.out.println(r);
+    }
+  }
+
+  @Test
+  public void chainModelParams() {
+    LogisticRegression lr = new LogisticRegression();
+    lr.modelParams()
+      .setFeaturesCol("features")
+      .setScoreCol("score")
+      .setThreshold(0.5);
   }
 
   @Test

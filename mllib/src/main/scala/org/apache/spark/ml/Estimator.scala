@@ -64,7 +64,7 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
   }
 
   /**
-   * Parameter for the output model.
+   * Parameters for the output model.
    */
-  def model: Params = Params.empty
+  def modelParams: Params = Params.empty
 }

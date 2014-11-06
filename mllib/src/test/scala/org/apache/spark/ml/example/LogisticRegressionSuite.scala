@@ -30,19 +30,39 @@ class LogisticRegressionSuite extends FunSuite {
     .loadLibSVMFile(sparkContext, "../data/mllib/sample_binary_classification_data.txt")
     .cache()
 
-  test("logistic regression alone") {
+  test("logistic regression") {
+    val lr = new LogisticRegression
+    val model = lr.fit(dataset)
+    model.transform(dataset)
+      .select('label, 'prediction)
+      .collect()
+      .foreach(println)
+  }
+
+  test("logistic regression with setters") {
     val lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0)
     val model = lr.fit(dataset)
-    model.transform(dataset, lr.model.threshold -> 0.8) // overwrite threshold
+    model.transform(dataset, lr.modelParams.threshold -> 0.8) // overwrite threshold
       .select('label, 'score, 'prediction).collect()
       .foreach(println)
   }
 
-  test("logistic regression fit with varargs") {
+  test("chain model parameters") {
     val lr = new LogisticRegression
-    lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
+    lr.modelParams
+      .setFeaturesCol("features")
+      .setScoreCol("score")
+      .setThreshold(0.5)
+  }
+
+  test("logistic regression fit and transform with varargs") {
+    val lr = new LogisticRegression
+    val model = lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
+    model.transform(dataset, model.threshold -> 0.8, model.scoreCol -> "probability")
+      .select('label, 'probability, 'prediction)
+      .foreach(println)
   }
 
   test("logistic regression with cross validation") {

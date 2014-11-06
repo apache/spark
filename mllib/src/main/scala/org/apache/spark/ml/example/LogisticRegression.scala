@@ -42,7 +42,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
   override def setLabelCol(labelCol: String): this.type = super.setLabelCol(labelCol)
   override def setFeaturesCol(featuresCol: String): this.type = super.setFeaturesCol(featuresCol)
 
-  override final val model: LogisticRegressionModelParams = new LogisticRegressionModelParams {}
+  override final val modelParams: LogisticRegressionModelParams = new LogisticRegressionModelParams {}
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
     import dataset.sqlContext._
@@ -58,7 +58,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
       .setNumIterations(maxIter)
     val lrm = new LogisticRegressionModel(lr.run(instances).weights)
     instances.unpersist()
-    this.model.params.foreach { param =>
+    this.modelParams.params.foreach { param =>
       if (map.contains(param)) {
         lrm.paramMap.put(lrm.getParam(param.name), map(param))
       }
@@ -71,6 +71,11 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
 }
 
 trait LogisticRegressionModelParams extends Params with HasThreshold with HasFeaturesCol
+  with HasScoreCol {
+  override def setThreshold(threshold: Double): this.type = super.setThreshold(threshold)
+  override def setFeaturesCol(featuresCol: String): this.type = super.setFeaturesCol(featuresCol)
+  override def setScoreCol(scoreCol: String): this.type = super.setScoreCol(scoreCol)
+}
 
 class LogisticRegressionModel(
     val weights: Vector)
@@ -81,6 +86,7 @@ class LogisticRegressionModel(
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
+    println(s"transform called with $map")
     import map.implicitMapping
     val score: Vector => Double = (v) => {
       val margin = BLAS.dot(v, weights)
@@ -92,7 +98,7 @@ class LogisticRegressionModel(
     }
     dataset.select(
       Star(None),
-      score.call((featuresCol: String).attr) as 'score,
+      score.call((featuresCol: String).attr) as scoreCol,
       predict.call((featuresCol: String).attr) as 'prediction)
   }
 }

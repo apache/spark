@@ -35,7 +35,9 @@ abstract class Transformer extends PipelineStage with Params {
    */
   @varargs
   def transform(dataset: SchemaRDD, paramPairs: ParamPair[_]*): SchemaRDD = {
-    transform(dataset, ParamMap.empty)
+    val map = new ParamMap()
+    paramPairs.foreach(map.put(_))
+    transform(dataset, map)
   }
 
   /**
