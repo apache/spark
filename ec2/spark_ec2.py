@@ -726,16 +726,14 @@ def get_num_disks(instance_type):
         return 1
 
 
+# Deploy the configuration file templates in a given local directory to
+# a cluster, filling in any template parameters with information about the
+# cluster (e.g. lists of masters and slaves). Files are only deployed to
+# the first master instance in the cluster, and we expect the setup
+# script to be run on that instance to copy them to other nodes.
+# 
+# root_dir should be an absolute path to the directory with the files we want to deploy.
 def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
-    """
-    Deploy the configuration file templates in a given local directory to
-    a cluster, filling in any template parameters with information about the
-    cluster (e.g. lists of masters and slaves). Files are only deployed to
-    the first master instance in the cluster, and we expect the setup
-    script to be run on that instance to copy them to other nodes.
-
-    root_dir should be an absolute path to the directory with the files we want to deploy.
-    """
     active_master = master_nodes[0].public_dns_name
 
     num_disks = get_num_disks(opts.instance_type)
