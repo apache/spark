@@ -25,7 +25,7 @@ import org.apache.spark.storage.BlockManagerId
 /**
  * Test add and remove behavior of ExecutorAllocationManager.
  */
-class ExecutorAllocationManagerSuite extends FunSuite {
+class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
 
@@ -36,17 +36,21 @@ class ExecutorAllocationManagerSuite extends FunSuite {
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
     intercept[SparkException] { new SparkContext(conf) }
+    SparkEnv.get.stop() // cleanup the created environment
 
     // Only min
     val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "1")
     intercept[SparkException] { new SparkContext(conf1) }
+    SparkEnv.get.stop()
 
     // Only max
     val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "2")
     intercept[SparkException] { new SparkContext(conf2) }
+    SparkEnv.get.stop()
 
     // Both min and max, but min > max
     intercept[SparkException] { createSparkContext(2, 1) }
+    SparkEnv.get.stop()
 
     // Both min and max, and min == max
     val sc1 = createSparkContext(1, 1)
@@ -60,18 +64,17 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("starting state") {
-    val sc = createSparkContext()
+    sc = createSparkContext()
     val manager = sc.executorAllocationManager.get
     assert(numExecutorsPending(manager) === 0)
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(executorIds(manager).isEmpty)
     assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
     assert(removeTimes(manager).isEmpty)
-    sc.stop()
   }
 
   test("add executors") {
-    val sc = createSparkContext(1, 10)
+    sc = createSparkContext(1, 10)
     val manager = sc.executorAllocationManager.get
 
     // Keep adding until the limit is reached
@@ -112,11 +115,10 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(addExecutors(manager) === 0)
     assert(numExecutorsPending(manager) === 6)
     assert(numExecutorsToAdd(manager) === 1)
-    sc.stop()
   }
 
   test("remove executors") {
-    val sc = createSparkContext(5, 10)
+    sc = createSparkContext(5, 10)
     val manager = sc.executorAllocationManager.get
     (1 to 10).map(_.toString).foreach { id => onExecutorAdded(manager, id) }
 
@@ -163,11 +165,10 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(!removeExecutor(manager, "8"))
     assert(executorsPendingToRemove(manager).isEmpty)
-    sc.stop()
   }
 
   test ("interleaving add and remove") {
-    val sc = createSparkContext(5, 10)
+    sc = createSparkContext(5, 10)
     val manager = sc.executorAllocationManager.get
 
     // Add a few executors
@@ -232,11 +233,10 @@ class ExecutorAllocationManagerSuite extends FunSuite {
     onExecutorAdded(manager, "15")
     onExecutorAdded(manager, "16")
     assert(executorIds(manager).size === 10)
-    sc.stop()
   }
 
   test("starting/canceling add timer") {
-    val sc = createSparkContext(2, 10)
+    sc = createSparkContext(2, 10)
     val clock = new TestClock(8888L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
@@ -268,7 +268,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("starting/canceling remove timers") {
-    val sc = createSparkContext(2, 10)
+    sc = createSparkContext(2, 10)
     val clock = new TestClock(14444L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
@@ -313,7 +313,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("mock polling loop with no events") {
-    val sc = createSparkContext(1, 20)
+    sc = createSparkContext(1, 20)
     val manager = sc.executorAllocationManager.get
     val clock = new TestClock(2020L)
     manager.setClock(clock)
@@ -339,7 +339,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("mock polling loop add behavior") {
-    val sc = createSparkContext(1, 20)
+    sc = createSparkContext(1, 20)
     val clock = new TestClock(2020L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
@@ -388,7 +388,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("mock polling loop remove behavior") {
-    val sc = createSparkContext(1, 20)
+    sc = createSparkContext(1, 20)
     val clock = new TestClock(2020L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
@@ -449,7 +449,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("listeners trigger add executors correctly") {
-    val sc = createSparkContext(2, 10)
+    sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
     assert(addTime(manager) === NOT_SET)
 
@@ -479,7 +479,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("listeners trigger remove executors correctly") {
-    val sc = createSparkContext(2, 10)
+    sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
     assert(removeTimes(manager).isEmpty)
 
@@ -510,7 +510,7 @@ class ExecutorAllocationManagerSuite extends FunSuite {
   }
 
   test("listeners trigger add and remove executor callbacks correctly") {
-    val sc = createSparkContext(2, 10)
+    sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
     assert(executorIds(manager).isEmpty)
     assert(removeTimes(manager).isEmpty)

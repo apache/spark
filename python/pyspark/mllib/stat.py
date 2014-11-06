@@ -19,11 +19,12 @@
 Python package for statistical functions in MLlib.
 """
 
+from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector
+from pyspark.mllib.linalg import Matrix, _convert_to_vector
 
 
-__all__ = ['MultivariateStatisticalSummary', 'Statistics']
+__all__ = ['MultivariateStatisticalSummary', 'ChiSqTestResult', 'Statistics']
 
 
 class MultivariateStatisticalSummary(JavaModelWrapper):
@@ -49,6 +50,54 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
 
     def min(self):
         return self.call("min").toArray()
+
+
+class ChiSqTestResult(JavaModelWrapper):
+    """
+    :: Experimental ::
+
+    Object containing the test results for the chi-squared hypothesis test.
+    """
+    @property
+    def method(self):
+        """
+        Name of the test method
+        """
+        return self._java_model.method()
+
+    @property
+    def pValue(self):
+        """
+        The probability of obtaining a test statistic result at least as
+        extreme as the one that was actually observed, assuming that the
+        null hypothesis is true.
+        """
+        return self._java_model.pValue()
+
+    @property
+    def degreesOfFreedom(self):
+        """
+        Returns the degree(s) of freedom of the hypothesis test.
+        Return type should be Number(e.g. Int, Double) or tuples of Numbers.
+        """
+        return self._java_model.degreesOfFreedom()
+
+    @property
+    def statistic(self):
+        """
+        Test statistic.
+        """
+        return self._java_model.statistic()
+
+    @property
+    def nullHypothesis(self):
+        """
+        Null hypothesis of the test.
+        """
+        return self._java_model.nullHypothesis()
+
+    def __str__(self):
+        return self._java_model.toString()
 
 
 class Statistics(object):
@@ -134,6 +183,90 @@ class Statistics(object):
             return callMLlibFunc("corr", x.map(_convert_to_vector), method).toArray()
         else:
             return callMLlibFunc("corr", x.map(float), y.map(float), method)
+
+    @staticmethod
+    def chiSqTest(observed, expected=None):
+        """
+        :: Experimental ::
+
+        If `observed` is Vector, conduct Pearson's chi-squared goodness
+        of fit test of the observed data against the expected distribution,
+        or againt the uniform distribution (by default), with each category
+        having an expected frequency of `1 / len(observed)`.
+        (Note: `observed` cannot contain negative values)
+
+        If `observed` is matrix, conduct Pearson's independence test on the
+        input contingency matrix, which cannot contain negative entries or
+        columns or rows that sum up to 0.
+
+        If `observed` is an RDD of LabeledPoint, conduct Pearson's independence
+        test for every feature against the label across the input RDD.
+        For each feature, the (feature, label) pairs are converted into a
+        contingency matrix for which the chi-squared statistic is computed.
+        All label and feature values must be categorical.
+
+        :param observed: it could be a vector containing the observed categorical
+                         counts/relative frequencies, or the contingency matrix
+                         (containing either counts or relative frequencies),
+                         or an RDD of LabeledPoint containing the labeled dataset
+                         with categorical features. Real-valued features will be
+                         treated as categorical for each distinct value.
+        :param expected: Vector containing the expected categorical counts/relative
+                         frequencies. `expected` is rescaled if the `expected` sum
+                         differs from the `observed` sum.
+        :return: ChiSquaredTest object containing the test statistic, degrees
+                 of freedom, p-value, the method used, and the null hypothesis.
+
+        >>> from pyspark.mllib.linalg import Vectors, Matrices
+        >>> observed = Vectors.dense([4, 6, 5])
+        >>> pearson = Statistics.chiSqTest(observed)
+        >>> print pearson.statistic
+        0.4
+        >>> pearson.degreesOfFreedom
+        2
+        >>> print round(pearson.pValue, 4)
+        0.8187
+        >>> pearson.method
+        u'pearson'
+        >>> pearson.nullHypothesis
+        u'observed follows the same distribution as expected.'
+
+        >>> observed = Vectors.dense([21, 38, 43, 80])
+        >>> expected = Vectors.dense([3, 5, 7, 20])
+        >>> pearson = Statistics.chiSqTest(observed, expected)
+        >>> print round(pearson.pValue, 4)
+        0.0027
+
+        >>> data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
+        >>> chi = Statistics.chiSqTest(Matrices.dense(3, 4, data))
+        >>> print round(chi.statistic, 4)
+        21.9958
+
+        >>> from pyspark.mllib.regression import LabeledPoint
+        >>> data = [LabeledPoint(0.0, Vectors.dense([0.5, 10.0])),
+        ...         LabeledPoint(0.0, Vectors.dense([1.5, 20.0])),
+        ...         LabeledPoint(1.0, Vectors.dense([1.5, 30.0])),
+        ...         LabeledPoint(0.0, Vectors.dense([3.5, 30.0])),
+        ...         LabeledPoint(0.0, Vectors.dense([3.5, 40.0])),
+        ...         LabeledPoint(1.0, Vectors.dense([3.5, 40.0])),]
+        >>> rdd = sc.parallelize(data, 4)
+        >>> chi = Statistics.chiSqTest(rdd)
+        >>> print chi[0].statistic
+        0.75
+        >>> print chi[1].statistic
+        1.5
+        """
+        if isinstance(observed, RDD):
+            jmodels = callMLlibFunc("chiSqTest", observed)
+            return [ChiSqTestResult(m) for m in jmodels]
+
+        if isinstance(observed, Matrix):
+            jmodel = callMLlibFunc("chiSqTest", observed)
+        else:
+            if expected and len(expected) != len(observed):
+                raise ValueError("`expected` should have same length with `observed`")
+            jmodel = callMLlibFunc("chiSqTest", _convert_to_vector(observed), expected)
+        return ChiSqTestResult(jmodel)
 
 
 def _test():

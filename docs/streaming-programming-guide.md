@@ -68,7 +68,9 @@ import org.apache.spark._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 
-// Create a local StreamingContext with two working thread and batch interval of 1 second
+// Create a local StreamingContext with two working thread and batch interval of 1 second.
+// The master requires 2 cores to prevent from a starvation scenario.
+
 val conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
 val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
@@ -586,11 +588,13 @@ Every input DStream (except file stream) is associated with a single [Receiver](
 
 A receiver is run within a Spark worker/executor as a long-running task, hence it occupies one of the cores allocated to the Spark Streaming application. Hence, it is important to remember that Spark Streaming application needs to be allocated enough cores to process the received data, as well as, to run the receiver(s). Therefore, few important points to remember are:
 
-##### Points to remember:
+##### Points to remember
 {:.no_toc}
-- If the number of cores allocated to the application is less than or equal to the number of input DStreams / receivers, then the system will receive data, but not be able to process them.
-- When running locally, if you master URL is set to "local", then there is only one core to run tasks.  That is insufficient for programs with even one input DStream (file streams are okay) as the receiver will occupy that core and there will be no core left to process the data.
-
+- If the number of threads allocated to the application is less than or equal to the number of input DStreams / receivers, then the system will receive data, but not be able to process them.
+- When running locally, if you master URL is set to "local", then there is only one core to run tasks.  That is insufficient for programs using a DStream as the receiver (file streams are okay).  So, a "local" master URL in a streaming app is generally going to cause starvation for the processor.  
+Thus in any streaming app, you generally will want to allocate more than one thread (i.e. set your master to "local[2]") when testing locally.
+See [Spark Properties] (configuration.html#spark-properties.html).
+  
 ### Basic Sources
 {:.no_toc}
 

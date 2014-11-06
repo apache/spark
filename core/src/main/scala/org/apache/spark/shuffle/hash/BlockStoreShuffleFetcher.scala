@@ -19,12 +19,13 @@ package org.apache.spark.shuffle.hash
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
   def fetch[T](
@@ -52,21 +53,22 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
         (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
     }
 
-    def unpackBlock(blockPair: (BlockId, Option[Iterator[Any]])) : Iterator[T] = {
+    def unpackBlock(blockPair: (BlockId, Try[Iterator[Any]])) : Iterator[T] = {
       val blockId = blockPair._1
       val blockOption = blockPair._2
       blockOption match {
-        case Some(block) => {
+        case Success(block) => {
           block.asInstanceOf[Iterator[T]]
         }
-        case None => {
+        case Failure(e) => {
           blockId match {
             case ShuffleBlockId(shufId, mapId, _) =>
               val address = statuses(mapId.toInt)._1
-              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId)
+              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId,
+                Utils.exceptionString(e))
             case _ =>
               throw new SparkException(
-                "Failed to get block " + blockId + ", which is not a shuffle block")
+                "Failed to get block " + blockId + ", which is not a shuffle block", e)
           }
         }
       }
