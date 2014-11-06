@@ -29,6 +29,7 @@ import java.io.ObjectOutputStream;
 
 import com.google.common.io.Closeables;
 import com.google.common.base.Charsets;
+import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,7 +84,7 @@ public class JavaUtils {
    * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
    */
   public static ByteBuffer stringToBytes(String s) {
-    return ByteBuffer.wrap(s.getBytes(Charsets.UTF_8));
+    return Unpooled.wrappedBuffer(s.getBytes(Charsets.UTF_8)).nioBuffer();
   }
 
   /**
@@ -91,6 +92,6 @@ public class JavaUtils {
    * converted back to the same byte buffer through {@link #stringToBytes(String)}.
    */
   public static String bytesToString(ByteBuffer b) {
-    return new String(b.array(), Charsets.UTF_8);
+    return Unpooled.wrappedBuffer(b).toString(Charsets.UTF_8);
   }
 }
