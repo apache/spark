@@ -28,6 +28,10 @@ class BinaryClassificationEvaluator extends Evaluator with Params
 
   setMetricName("areaUnderROC")
 
+  def setMetricName(value: String): this.type = { set(metricName, value); this }
+  def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
+  def setLabelCol(value: String): this.type = { set(labelCol, value); this }
+
   override def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap

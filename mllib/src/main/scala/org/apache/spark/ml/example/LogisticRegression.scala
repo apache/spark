@@ -36,13 +36,13 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
   setRegParam(0.1)
   setMaxIter(100)
 
-  // Overwrite the return type of setters for Java users.
-  override def setRegParam(regParam: Double): this.type = super.setRegParam(regParam)
-  override def setMaxIter(maxIter: Int): this.type = super.setMaxIter(maxIter)
-  override def setLabelCol(labelCol: String): this.type = super.setLabelCol(labelCol)
-  override def setFeaturesCol(featuresCol: String): this.type = super.setFeaturesCol(featuresCol)
+  def setRegParam(value: Double): this.type = { set(regParam, value); this }
+  def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
+  def setLabelCol(value: String): this.type = { set(labelCol, value); this }
+  def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }
 
-  override final val modelParams: LogisticRegressionModelParams = new LogisticRegressionModelParams {}
+  override final val modelParams: LogisticRegressionModelParams =
+    new LogisticRegressionModelParams {}
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
     import dataset.sqlContext._
@@ -58,23 +58,27 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
       .setNumIterations(maxIter)
     val lrm = new LogisticRegressionModel(lr.run(instances).weights)
     instances.unpersist()
-    this.modelParams.params.foreach { param =>
-      if (map.contains(param)) {
-        lrm.paramMap.put(lrm.getParam(param.name), map(param))
-      }
-    }
+    Params.copyValues(modelParams, lrm)
     if (!lrm.paramMap.contains(lrm.featuresCol) && map.contains(lrm.featuresCol)) {
       lrm.setFeaturesCol(featuresCol)
     }
     lrm
   }
+
+  /**
+   * Validates parameters specified by the input parameter map.
+   * Raises an exception if any parameter belongs to this object is invalid.
+   */
+  override def validateParams(paramMap: ParamMap): Unit = {
+    super.validateParams(paramMap)
+  }
 }
 
 trait LogisticRegressionModelParams extends Params with HasThreshold with HasFeaturesCol
-  with HasScoreCol {
-  override def setThreshold(threshold: Double): this.type = super.setThreshold(threshold)
-  override def setFeaturesCol(featuresCol: String): this.type = super.setFeaturesCol(featuresCol)
-  override def setScoreCol(scoreCol: String): this.type = super.setScoreCol(scoreCol)
+    with HasScoreCol {
+  def setThreshold(value: Double): this.type = { set(threshold, value); this }
+  def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }
+  def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
 }
 
 class LogisticRegressionModel(

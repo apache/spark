@@ -77,6 +77,8 @@ class Param[T] private[param] (
   }
 }
 
+// specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
+
 class DoubleParam(parent: Params, name: String, doc: String, default: Option[Double] = None)
   extends Param[Double](parent, name, doc, default) {
   override def w(value: Double): ParamPair[Double] = ParamPair(this, value)
@@ -151,6 +153,17 @@ private[ml] object Params {
    */
   val empty: Params = new Params {
     override def params: Array[Param[_]] = Array.empty
+  }
+
+  /**
+   * Copy parameter values from one Params instance to another.
+   */
+  def copyValues[F <: Params, T <: F](from: F, to: T): Unit = {
+    from.params.foreach { param =>
+      if (from.paramMap.contains(param)) {
+        to.paramMap.put(to.getParam(param.name), from.paramMap(param))
+      }
+    }
   }
 }
 

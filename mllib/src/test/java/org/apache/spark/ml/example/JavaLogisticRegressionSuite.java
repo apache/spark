@@ -117,7 +117,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
   @Test
   public void logisticRegressionWithPipeline() {
     StandardScaler scaler = new StandardScaler()
-      .setInputCol("features")
+      .setInputCol("features");
+    scaler.modelParams()
       .setOutputCol("scaledFeatures");
     LogisticRegression lr = new LogisticRegression()
       .setFeaturesCol("scaledFeatures");

@@ -83,6 +83,7 @@ class LogisticRegressionSuite extends FunSuite {
   test("logistic regression with pipeline") {
     val scaler = new StandardScaler()
       .setInputCol("features")
+    scaler.modelParams
       .setOutputCol("scaledFeatures")
     val lr = new LogisticRegression()
       .setFeaturesCol("scaledFeatures")

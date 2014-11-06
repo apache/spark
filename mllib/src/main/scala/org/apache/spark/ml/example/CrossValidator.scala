@@ -20,75 +20,33 @@ package org.apache.spark.ml.example
 import com.github.fommil.netlib.F2jBLAS
 
 import org.apache.spark.ml._
-import org.apache.spark.ml.param.{ParamMap, Params, Param}
+import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.SchemaRDD
 
-trait HasEstimator extends Params {
-
-  val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
-
-  def setEstimator(estimator: Estimator[_]): this.type = {
-    set(this.estimator, estimator)
-    this
-  }
-
-  def getEstimator: Estimator[_] = {
-    get(this.estimator)
-  }
-}
-
-trait HasEvaluator extends Params {
-
-  val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
-
-  def setEvaluator(evaluator: Evaluator): this.type = {
-    set(this.evaluator, evaluator)
-    this
-  }
-
-  def getEvaluator: Evaluator = {
-    get(evaluator)
-  }
-}
-
-trait HasEstimatorParamMaps extends Params {
-
-  val estimatorParamMaps: Param[Array[ParamMap]] =
-    new Param(this, "estimatorParamMaps", "param maps for the estimator")
-
-  def setEstimatorParamMaps(estimatorParamMaps: Array[ParamMap]): this.type = {
-    set(this.estimatorParamMaps, estimatorParamMaps)
-    this
-  }
-
-  def getEstimatorParamMaps: Array[ParamMap] = {
-    get(estimatorParamMaps)
-  }
-}
-
-
-class CrossValidator extends Estimator[CrossValidatorModel] with Params
-    with HasEstimator with HasEstimatorParamMaps with HasEvaluator {
+class CrossValidator extends Estimator[CrossValidatorModel] with Params {
 
   private val f2jBLAS = new F2jBLAS
 
-  // Overwrite return type for Java users.
-  override def setEstimator(estimator: Estimator[_]): this.type = super.setEstimator(estimator)
-  override def setEstimatorParamMaps(estimatorParamMaps: Array[ParamMap]): this.type =
-    super.setEstimatorParamMaps(estimatorParamMaps)
-  override def setEvaluator(evaluator: Evaluator): this.type = super.setEvaluator(evaluator)
+  val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
+  def setEstimator(value: Estimator[_]): this.type = { set(estimator, value); this }
+  def getEstimator: Estimator[_] = get(estimator)
 
-  val numFolds: Param[Int] = new Param(this, "numFolds", "number of folds for cross validation", 3)
-
-  def setNumFolds(numFolds: Int): this.type = {
-    set(this.numFolds, numFolds)
+  val estimatorParamMaps: Param[Array[ParamMap]] =
+    new Param(this, "estimatorParamMaps", "param maps for the estimator")
+  def getEstimatorParamMaps: Array[ParamMap] = get(estimatorParamMaps)
+  def setEstimatorParamMaps(value: Array[ParamMap]): this.type = {
+    set(estimatorParamMaps, value)
     this
   }
 
-  def getNumFolds: Int = {
-    get(numFolds)
-  }
+  val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
+  def setEvaluator(value: Evaluator): this.type = { set(evaluator, value); this }
+  def getEvaluator: Evaluator = get(evaluator)
+
+  val numFolds: Param[Int] = new Param(this, "numFolds", "number of folds for cross validation", 3)
+  def setNumFolds(value: Int): this.type = { set(numFolds, value); this }
+  def getNumFolds: Int = get(numFolds)
 
   /**
    * Fits a single model to the input data with provided parameter map.
@@ -135,4 +93,3 @@ class CrossValidatorModel(bestModel: Model, metric: Double) extends Model {
     bestModel.transform(dataset, paramMap)
   }
 }
-
