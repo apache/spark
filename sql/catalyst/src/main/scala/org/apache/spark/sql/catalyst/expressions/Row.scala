@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.NativeType
-import java.sql.{Date, Timestamp}
+
 
 object Row {
   /**
