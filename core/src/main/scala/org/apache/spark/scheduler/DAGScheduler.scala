@@ -761,6 +761,10 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
+  private def shouldPrintDebug(): Boolean ={
+    return false
+  }
+
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage) {
     val jobId = activeJobForStage(stage)
@@ -828,11 +832,16 @@ class DAGScheduler(
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
           closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
-
-          stage.rdd.
         } else {
           closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
+
+      //Before serialization check whether a debug flag is enabled and if so, print out the RDD and its references
+      //prior to serialization
+      if(shouldPrintDebug()){
+        logDebug(stage.rdd.toDebugString)
+      }
+
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.

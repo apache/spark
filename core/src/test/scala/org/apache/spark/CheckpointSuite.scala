@@ -112,7 +112,9 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   test("CartesianRDD") {
     def otherRDD = sc.makeRDD(1 to 10, 1)
     testRDD(new CartesianRDD(sc, _, otherRDD))
-    testRDDPartitions(new CartesianRDD(sc, _, otherRDD))
+    testRDDPartitions(new CartesianRDD(sc, _, oth
+
+
 
     // Test that the CartesianRDD updates parent partitions (CartesianRDD.s1/s2) after
     // the parent RDD has been checkpointed and parent partitions have been changed.
