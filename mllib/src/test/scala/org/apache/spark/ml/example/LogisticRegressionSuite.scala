@@ -35,9 +35,14 @@ class LogisticRegressionSuite extends FunSuite {
       .setMaxIter(10)
       .setRegParam(1.0)
     val model = lr.fit(dataset)
-    model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
+    model.transform(dataset, lr.model.threshold -> 0.8) // overwrite threshold
       .select('label, 'score, 'prediction).collect()
       .foreach(println)
+  }
+
+  test("logistic regression fit with varargs") {
+    val lr = new LogisticRegression
+    lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
   }
 
   test("logistic regression with cross validation") {

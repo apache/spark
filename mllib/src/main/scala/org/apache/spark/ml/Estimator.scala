@@ -17,24 +17,28 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.param.{ParamMap, Params, ParamPair}
-import org.apache.spark.sql.SchemaRDD
-
 import scala.annotation.varargs
+
+import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
+import org.apache.spark.sql.SchemaRDD
 
 /**
  * Abstract class for estimators that fits models to data.
  */
-abstract class Estimator[M <: Model] extends Identifiable with Params with PipelineStage {
+abstract class Estimator[M <: Model] extends PipelineStage with Params {
 
   /**
-   * Fits a single model to the input data with default parameters.
+   * Fits a single model to the input data with optional parameters.
    *
    * @param dataset input dataset
+   * @param paramPairs optional list of param pairs, overwrite embedded params
    * @return fitted model
    */
-  def fit(dataset: SchemaRDD): M = {
-    fit(dataset, ParamMap.empty)
+  @varargs
+  def fit(dataset: SchemaRDD, paramPairs: ParamPair[_]*): M = {
+    val map = new ParamMap()
+    paramPairs.foreach(map.put(_))
+    fit(dataset, map)
   }
 
   /**
@@ -47,25 +51,6 @@ abstract class Estimator[M <: Model] extends Identifiable with Params with Pipel
   def fit(dataset: SchemaRDD, paramMap: ParamMap): M
 
   /**
-   * Fits a single model to the input data with provided parameters.
-   *
-   * @param dataset input dataset
-   * @param firstParamPair first parameter
-   * @param otherParamPairs other parameters
-   * @return fitted model
-   */
-  @varargs
-  def fit[T](
-      dataset: SchemaRDD,
-      firstParamPair: ParamPair[_],
-      otherParamPairs: ParamPair[_]*): M = {
-    val map = new ParamMap()
-    map.put(firstParamPair)
-    otherParamPairs.foreach(map.put(_))
-    fit(dataset, map)
-  }
-
-  /**
    * Fits multiple models to the input data with multiple sets of parameters.
    * The default implementation uses a for loop on each parameter map.
    * Subclasses could overwrite this to optimize multi-model training.
@@ -74,7 +59,7 @@ abstract class Estimator[M <: Model] extends Identifiable with Params with Pipel
    * @param paramMaps an array of parameter maps
    * @return fitted models, matching the input parameter maps
    */
-  def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = {
+  def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = { // how to return an array?
     paramMaps.map(fit(dataset, _))
   }
 

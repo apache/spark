@@ -64,13 +64,18 @@ public class JavaLogisticRegressionSuite implements Serializable {
       .setMaxIter(10)
       .setRegParam(1.0);
     lr.model().setThreshold(0.8);
-    // In Java we can access baseSchemaRDD, while in Scala we cannot.
-    LogisticRegressionModel model = lr.fit(dataset.baseSchemaRDD());
-    model.transform(dataset.baseSchemaRDD()).registerTempTable("prediction");
+    LogisticRegressionModel model = lr.fit(dataset.schemaRDD());
+    model.transform(dataset.schemaRDD()).registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println(r);
     }
+  }
+
+  @Test
+  public void logisticRegressionFitWithVarargs() {
+    LogisticRegression lr = new LogisticRegression();
+    lr.fit(dataset.schemaRDD(), lr.maxIter().w(10), lr.regParam().w(1.0));
   }
 
   @Test

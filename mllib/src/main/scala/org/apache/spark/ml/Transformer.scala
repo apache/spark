@@ -17,20 +17,24 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.param.{ParamMap, Params, ParamPair}
+import scala.annotation.varargs
+
+import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
 import org.apache.spark.sql.SchemaRDD
 
 /**
  * Abstract class for transformers that transform one dataset into another.
  */
-abstract class Transformer extends Identifiable with Params with PipelineStage {
+abstract class Transformer extends PipelineStage with Params {
 
   /**
-   * Transforms the dataset with the default parameters.
+   * Transforms the dataset with optional parameters
    * @param dataset input dataset
+   * @param paramPairs optional list of param pairs, overwrite embedded params
    * @return transformed dataset
    */
-  def transform(dataset: SchemaRDD): SchemaRDD = {
+  @varargs
+  def transform(dataset: SchemaRDD, paramPairs: ParamPair[_]*): SchemaRDD = {
     transform(dataset, ParamMap.empty)
   }
 
@@ -41,31 +45,4 @@ abstract class Transformer extends Identifiable with Params with PipelineStage {
    * @return transformed dataset
    */
   def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD
-
-  /**
-   * Transforms the dataset with provided parameter pairs.
-   * @param dataset input dataset
-   * @param firstParamPair first parameter pair
-   * @param otherParamPairs second parameter pair
-   * @return transformed dataset
-   */
-  def transform(
-      dataset: SchemaRDD,
-      firstParamPair: ParamPair[_],
-      otherParamPairs: ParamPair[_]*): SchemaRDD = {
-    val map = new ParamMap()
-    map.put(firstParamPair)
-    otherParamPairs.foreach(map.put(_))
-    transform(dataset, map)
-  }
-
-  /**
-   * Transforms the dataset with multiple sets of parameters.
-   * @param dataset input dataset
-   * @param paramMaps an array of parameter maps
-   * @return transformed dataset
-   */
-  def transform(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Array[SchemaRDD] = {
-    paramMaps.map(transform(dataset, _))
-  }
 }
