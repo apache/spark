@@ -150,7 +150,10 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       "SPARK_TESTING" -> "0",
       // Prevents loading classes out of the assembly jar. Otherwise Utils.sparkVersion can't read
       // proper version information from the jar manifest.
-      "SPARK_PREPEND_CLASSES" -> "")
+      "SPARK_PREPEND_CLASSES" -> "",
+      // Allows the child process to inherit the parent's class path so the server works when
+      // *-provided profiles are used.
+      "SPARK_TEST_PARENT_CLASS_PATH" -> sys.props("java.class.path"))
 
     Process(command, None, env: _*).run(ProcessLogger(
       captureThriftServerOutput("stdout"),
@@ -184,7 +187,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     } finally {
       warehousePath.delete()
       metastorePath.delete()
-      Process(stopScript).run().exitValue()
+      Process(stopScript, None, env: _*).run().exitValue()
       // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
       Thread.sleep(3.seconds.toMillis)
       Option(logTailingProcess).map(_.destroy())

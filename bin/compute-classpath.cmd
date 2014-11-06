@@ -96,7 +96,13 @@ set SPARK_TEST_CLASSES=%SPARK_TEST_CLASSES%;%FWDIR%sql\hive\target\scala-%SCALA_
 if "x%SPARK_TESTING%"=="x1" (
   rem Add test clases to path - note, add SPARK_CLASSES and SPARK_TEST_CLASSES before CLASSPATH
   rem so that local compilation takes precedence over assembled jar
-  set CLASSPATH=%SPARK_CLASSES%;%SPARK_TEST_CLASSES%;%CLASSPATH%;%SPARK_TEST_PARENT_CLASS_PATH%
+  set CLASSPATH=%SPARK_CLASSES%;%SPARK_TEST_CLASSES%;%CLASSPATH%
+)
+
+rem Append the parent class path if requested by the test code. Note this is outside of
+rem the check for SPARK_TESTING because some tests reset that variable.
+if not "x%SPARK_TEST_PARENT_CLASS_PATH%"=="x" (
+  set CLASSPATH=%CLASSPATH%;%SPARK_TEST_PARENT_CLASS_PATH%
 )
 
 rem Add hadoop conf dir - else FileSystem.*, etc fail
