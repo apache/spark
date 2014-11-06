@@ -112,7 +112,7 @@ private[spark] class Worker(
   val finishedDrivers = new HashMap[String, DriverRunner]
 
   // The shuffle service is not actually started unless configured.
-  var shuffleService = new WorkerShuffleService(conf, securityMgr)
+  val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
 
   val publicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")

@@ -32,7 +32,8 @@ import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
  * Optionally requires SASL authentication in order to read. See [[SecurityManager]].
  */
 private[worker]
-class WorkerShuffleService(sparkConf: SparkConf, securityManager: SecurityManager) extends Logging {
+class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
+  extends Logging {
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
