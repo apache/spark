@@ -161,7 +161,7 @@ private[spark] class Executor(
     }
 
     override def run() {
-      val startTime = System.currentTimeMillis()
+      val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -206,7 +206,7 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - startTime
+          m.executorDeserializeTime = taskStart - deserializeStartTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
           m.resultSerializationTime = afterSerialization - beforeSerialization
