@@ -126,7 +126,7 @@ object SparkBuild extends PomBuild {
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.8",
-
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
@@ -144,7 +144,7 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects).foreach(enable(sharedSettings))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(tools, catalyst)).foreach(enable(sharedSettings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -249,6 +249,9 @@ object Hive {
     scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
       currentOpts.filterNot(_ == "-deprecation")
     },
+    // This is required by hive thrift server.
+    libraryDependencies += "jline" % "jline" % "0.9.94" force(),
+
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
@@ -278,6 +281,9 @@ object Assembly {
 
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
+    // This is required by hive thrift server.
+    libraryDependencies += "jline" % "jline" % "0.9.94" force(),
+    libraryDependencies += "jline" % "jline" % "2.12" force(),
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
       Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
     mergeStrategy in assembly := {
@@ -306,7 +312,8 @@ object Unidoc {
 
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
-
+    // This it exclude it from root project which is spark-parent. This is needed by a maven plugin.
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
@@ -361,7 +368,7 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
-    // Following like places test scope jars on the classpath of executors during tests.
+    // This places test scope jars on the classpath of executors during tests.
     javaOptions in Test += 
       "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
       map(_.getAbsolutePath).mkString(":").stripSuffix(":"),

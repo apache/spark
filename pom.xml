@@ -147,8 +147,6 @@
     <MaxPermGen>512m</MaxPermGen>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
-    <jline.version>${scala.version}</jline.version>
-    <jline.groupid>org.scala-lang</jline.groupid>
   </properties>
 
   <repositories>
@@ -286,16 +284,23 @@
     <dependency>
       <groupId>org.codehaus.groovy</groupId>
       <artifactId>groovy-all</artifactId>
-      <version>2.3.7</version>
+      <version>1.5.0</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>
   <dependencyManagement>
     <dependencies>
+      <!-- Both jline versions are included and it is harmless since they have different package
+      structures -->
       <dependency>
-        <groupId>${jline.groupid}</groupId>
+        <groupId>org.scala-lang</groupId>
         <artifactId>jline</artifactId>
-        <version>${jline.version}</version>
+        <version>2.10.4</version>
+      </dependency>
+      <dependency>
+        <groupId>jline</groupId>
+        <artifactId>jline</artifactId>
+        <version>2.12</version>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>

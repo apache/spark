@@ -24,8 +24,6 @@ case "`uname`" in
     CYGWIN*) cygwin=true;;
 esac
 
-SPARK_SCALA_VERSION=2.10
-
 # Figure out where Spark is installed
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
@@ -124,6 +122,15 @@ if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat "$FWDIR"/conf/java-opts`"
 fi
 
+# Compute classpath using external script
+classpath_output=$("$FWDIR"/bin/compute-classpath.sh)
+if [[ "$?" != "0" ]]; then
+  echo "$classpath_output"
+  exit 1
+else
+  CLASSPATH="$classpath_output"
+fi
+
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
 
 TOOLS_DIR="$FWDIR"/tools
@@ -136,15 +143,6 @@ if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the Maven build
   # TODO: this also needs to become an assembly!
   export SPARK_TOOLS_JAR="`ls "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar`"
-fi
-
-# Compute classpath using external script
-classpath_output=$("$FWDIR"/bin/compute-classpath.sh)
-if [[ "$?" != "0" ]]; then
-  echo "$classpath_output"
-  exit 1
-else
-  CLASSPATH="$classpath_output"
 fi
 
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
