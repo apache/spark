@@ -42,6 +42,16 @@ case class BroadcastHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
+  val timeout = {
+    val conf = sparkContext.getConf
+    val timeoutValue = conf.get("spark.sql.hash.join.timeout", "-1").toInt
+    if (timeoutValue < 0) {
+      Duration.Inf
+    } else {
+      timeoutValue.seconds
+    }
+  }
+
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution =
@@ -56,7 +66,7 @@ case class BroadcastHashJoin(
   }
 
   override def execute() = {
-    val broadcastRelation = Await.result(broadcastFuture, 5.minute)
+    val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       hashJoin(streamedIter, broadcastRelation.value)
