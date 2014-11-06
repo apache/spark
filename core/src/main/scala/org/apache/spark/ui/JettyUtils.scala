@@ -192,6 +192,10 @@ private[spark] object JettyUtils extends Logging {
         server.start()
         (server, server.getConnectors.head.getLocalPort)
       } catch {
+        case e: java.net.BindException =>
+          server.stop()
+          pool.stop()
+          throw new java.net.BindException("Address already in use")
         case e: Exception =>
           server.stop()
           pool.stop()
