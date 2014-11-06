@@ -30,21 +30,21 @@ import static org.junit.Assert.assertTrue;
 
 public class ExternalShuffleCleanupSuite {
 
-  // Executor used to ensure cleanup happens synchronously in this thread.
+  // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
 
   @Test
-  public void cleanupDirs() throws IOException {
+  public void noCleanupAndCleanup() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
     ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(sameThreadExecutor);
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
-    manager.removeApplication("app", false /* cleanup */);
+    manager.applicationRemoved("app", false /* cleanup */);
 
     assertStillThere(dataContext);
 
     manager.registerExecutor("app", "exec1", dataContext.createExecutorInfo("shuffleMgr"));
-    manager.removeApplication("app", true /* cleanup */);
+    manager.applicationRemoved("app", true /* cleanup */);
 
     assertCleanedUp(dataContext);
   }
@@ -61,7 +61,7 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(noThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
-    manager.removeApplication("app", true /* cleanup */);
+    manager.applicationRemoved("app", true);
 
     assertStillThere(dataContext);
 
@@ -70,7 +70,7 @@ public class ExternalShuffleCleanupSuite {
   }
 
   @Test
-  public void cleanupMultipleExecutrs() throws IOException {
+  public void cleanupMultipleExecutors() throws IOException {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
@@ -78,7 +78,7 @@ public class ExternalShuffleCleanupSuite {
 
     manager.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     manager.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
-    manager.removeApplication("app", true /* cleanup */);
+    manager.applicationRemoved("app", true);
 
     assertCleanedUp(dataContext0);
     assertCleanedUp(dataContext1);
@@ -94,20 +94,20 @@ public class ExternalShuffleCleanupSuite {
     manager.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
     manager.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));
 
-    manager.removeApplication("app-nonexistent", true /* cleanup */);
+    manager.applicationRemoved("app-nonexistent", true);
     assertStillThere(dataContext0);
     assertStillThere(dataContext1);
 
-    manager.removeApplication("app-0", true /* cleanup */);
+    manager.applicationRemoved("app-0", true);
     assertCleanedUp(dataContext0);
     assertStillThere(dataContext1);
 
-    manager.removeApplication("app-1", true /* cleanup */);
+    manager.applicationRemoved("app-1", true);
     assertCleanedUp(dataContext0);
     assertCleanedUp(dataContext1);
 
     // Make sure it's not an error to cleanup multiple times
-    manager.removeApplication("app-1", true /* cleanup */);
+    manager.applicationRemoved("app-1", true);
     assertCleanedUp(dataContext0);
     assertCleanedUp(dataContext1);
   }

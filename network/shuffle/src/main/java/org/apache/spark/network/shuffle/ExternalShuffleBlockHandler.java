@@ -98,7 +98,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
    * Removes an application (once it has been terminated), and optionally will clean up any
    * local directories associated with the executors of that application in a separate thread.
    */
-  public void removeApplication(String appId, boolean cleanupLocalDirs) {
-    blockManager.removeApplication(appId, cleanupLocalDirs);
+  public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
+    blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 }

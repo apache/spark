@@ -118,7 +118,7 @@ public class ExternalShuffleBlockManager {
    * It is not valid to call registerExecutor() for an executor with this appId after invoking
    * this method.
    */
-  public void removeApplication(String appId, boolean cleanupLocalDirs) {
+  public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
     Iterator<Map.Entry<AppExecId, ExecutorShuffleInfo>> it = executors.entrySet().iterator();
     while (it.hasNext()) {
@@ -131,12 +131,11 @@ public class ExternalShuffleBlockManager {
         it.remove();
 
         if (cleanupLocalDirs) {
-          logger.debug("Cleaning up executor {}'s {} local dirs", fullId, executor.localDirs.length);
+          logger.info("Cleaning up executor {}'s {} local dirs", fullId, executor.localDirs.length);
 
           // Execute the actual deletion in a different thread, as it may take some time.
           directoryCleanupExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
+            @Override public void run() {
               deleteExecutorDirs(executor.localDirs);
             }
           });
@@ -153,7 +152,7 @@ public class ExternalShuffleBlockManager {
     for (String localDir : dirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir));
-        logger.info("Successfully cleaned up directory: " + localDir);
+        logger.debug("Successfully cleaned up directory: " + localDir);
       } catch (Exception e) {
         logger.error("Failed to delete directory: " + localDir, e);
       }
