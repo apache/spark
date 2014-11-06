@@ -110,12 +110,15 @@ class CrossValidator extends Estimator[CrossValidatorModel] with Params
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.applySchema(training, schema).cache()
       val validationDataset = sqlCtx.applySchema(validation, schema).cache()
-      epm.zipWithIndex.foreach { case (m, idx) =>
-        println(s"Training split $splitIndex with parameters:\n$m")
-        val model = est.fit(trainingDataset, m).asInstanceOf[Model]
-        val metric = eval.evaluate(model.transform(validationDataset, m), map)
-        println(s"Got metric $metric.")
-        metrics(idx) += metric
+      // multi-model training
+      println(s"Train split $splitIndex with multiple sets of parameters.")
+      val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model]]
+      var i = 0
+      while(i < numModels) {
+        val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)), map)
+        println(s"Got metric $metric for model trained with ${epm(i)}.")
+        metrics(i) += metric
+        i += 1
       }
     }
     f2jBLAS.dscal(numModels, 1.0 / map(numFolds), metrics, 1)

@@ -89,7 +89,7 @@ trait HasScoreCol extends Params {
 
 trait HasThreshold extends Params {
 
-  val threshold: Param[Double] = new Param(this, "threshold", "threshold for prediction")
+  val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold for prediction")
 
   def setThreshold(threshold: Double): this.type = {
     set(this.threshold, threshold)

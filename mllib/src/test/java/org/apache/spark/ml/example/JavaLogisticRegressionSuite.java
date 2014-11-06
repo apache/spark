@@ -74,9 +74,9 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0);
-    lr.modelParams().setThreshold(0.8);
     LogisticRegressionModel model = lr.fit(dataset.schemaRDD());
-    model.transform(dataset.schemaRDD()).registerTempTable("prediction");
+    model.transform(dataset.schemaRDD(), model.threshold().w(0.8)) // overwrite threshold
+      .registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println(r);

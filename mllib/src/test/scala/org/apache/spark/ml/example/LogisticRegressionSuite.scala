@@ -44,7 +44,7 @@ class LogisticRegressionSuite extends FunSuite {
       .setMaxIter(10)
       .setRegParam(1.0)
     val model = lr.fit(dataset)
-    model.transform(dataset, lr.modelParams.threshold -> 0.8) // overwrite threshold
+    model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
       .select('label, 'score, 'prediction).collect()
       .foreach(println)
   }
