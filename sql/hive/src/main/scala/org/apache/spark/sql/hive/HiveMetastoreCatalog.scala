@@ -20,11 +20,9 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
-import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.fs.Path
 
 import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.FieldSchema
