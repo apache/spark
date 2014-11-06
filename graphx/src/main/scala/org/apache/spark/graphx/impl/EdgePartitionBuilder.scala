@@ -45,8 +45,8 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index
     if (edgeArray.length > 0) {
-      index.update(srcIds(0), 0)
-      var currSrcId: VertexId = srcIds(0)
+      index.update(edgeArray(0).srcId, 0)
+      var currSrcId: VertexId = edgeArray(0).srcId
       var i = 0
       while (i < edgeArray.size) {
         srcIds(i) = edgeArray(i).srcId
