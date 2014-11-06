@@ -82,9 +82,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
-    override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    override def postStop(): Unit = {
       stopAllExecutors
-      postStop()
     }
 
     private def stopAllExecutors = {
