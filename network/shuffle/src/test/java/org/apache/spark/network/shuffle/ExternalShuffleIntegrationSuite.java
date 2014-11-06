@@ -259,7 +259,7 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    System.setProperty("spark.shuffle.io.maxIORetries", "0");
+    System.setProperty("spark.shuffle.io.maxRetries", "0");
     try {
       registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
       FetchResult execFetch = fetchBlocks("exec-0",
@@ -267,7 +267,7 @@ public class ExternalShuffleIntegrationSuite {
       assertTrue(execFetch.successBlocks.isEmpty());
       assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
     } finally {
-      System.clearProperty("spark.shuffle.io.maxIORetries");
+      System.clearProperty("spark.shuffle.io.maxRetries");
     }
   }
 
