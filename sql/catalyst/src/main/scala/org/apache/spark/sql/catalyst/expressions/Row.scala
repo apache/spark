@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.NativeType
 
-
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
