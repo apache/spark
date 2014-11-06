@@ -184,6 +184,7 @@ private[hive] trait HiveInspectors {
         case l: Byte => l: java.lang.Byte
         case b: BigDecimal => HiveShim.createDecimal(b.underlying())
         case d: Decimal => HiveShim.createDecimal(d.toBigDecimal.underlying())
+        case d: org.apache.hadoop.hive.common.`type`.HiveDecimal => d
         case b: Array[Byte] => b
         case d: java.sql.Date => d
         case t: java.sql.Timestamp => t
