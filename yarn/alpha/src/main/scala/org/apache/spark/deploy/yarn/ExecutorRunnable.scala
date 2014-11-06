@@ -98,8 +98,7 @@ class ExecutorRunnable(
       val secretString = securityMgr.getSecretKey()
       val secretBytes =
         if (secretString != null) {
-          // This uses a JavaUtils method because the reverse conversion takes
-          // place in the Yarn shuffle service, which is implemented in Java
+          // This conversion must match how the YarnShuffleService decodes our secret
           JavaUtils.stringToBytes(secretString)
         } else {
           // Authentication is not enabled, so just provide dummy metadata
