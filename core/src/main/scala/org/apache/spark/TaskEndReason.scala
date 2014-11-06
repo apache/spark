@@ -88,7 +88,7 @@ case class FetchFailed(
 case class ExceptionFailure(
     className: String,
     description: String,
-    stackTrace: Array[StackTraceElement], // backwards compatibility
+    stackTrace: Array[StackTraceElement],
     metrics: Option[TaskMetrics])
   extends TaskFailedReason {
 
@@ -110,8 +110,7 @@ case class ExceptionFailure(
   override def toErrorString: String =
     if (fullStackTrace == null) {
       Utils.exceptionString(className, description, stackTrace)
-    }
-    else {
+    } else {
       fullStackTrace
     }
 }

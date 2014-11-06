@@ -1600,8 +1600,7 @@ private[spark] object Utils extends Logging {
   def exceptionString(e: Throwable): String = {
     if (e == null) {
       ""
-    }
-    else {
+    } else {
       val stringWriter = new StringWriter()
       e.printStackTrace(new PrintWriter(stringWriter))
       stringWriter.toString
