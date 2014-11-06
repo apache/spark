@@ -29,7 +29,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, CompressedSerializer, AutoBatchedSerializer
+    PairDeserializer, CompressedSerializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -387,6 +387,36 @@ class SparkContext(object):
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
                    PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)))
+
+    def binaryFiles(self, path, minPartitions=None):
+        """
+        :: Experimental ::
+
+        Read a directory of binary files from HDFS, a local file system
+        (available on all nodes), or any Hadoop-supported file system URI
+        as a byte array. Each file is read as a single record and returned
+        in a key-value pair, where the key is the path of each file, the
+        value is the content of each file.
+
+        Note: Small files are preferred, large file is also allowable, but
+        may cause bad performance.
+        """
+        minPartitions = minPartitions or self.defaultMinPartitions
+        return RDD(self._jsc.binaryFiles(path, minPartitions), self,
+                   PairDeserializer(UTF8Deserializer(), NoOpSerializer()))
+
+    def binaryRecords(self, path, recordLength):
+        """
+        :: Experimental ::
+
+        Load data from a flat binary file, assuming each record is a set of numbers
+        with the specified numerical format (see ByteBuffer), and the number of
+        bytes per record is constant.
+
+        :param path: Directory to the input data files
+        :param recordLength: The length at which to split the records
+        """
+        return RDD(self._jsc.binaryRecords(path, recordLength), self, NoOpSerializer())
 
     def _dictToJavaMap(self, d):
         jm = self._jvm.java.util.HashMap()

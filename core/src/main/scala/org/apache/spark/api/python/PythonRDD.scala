@@ -21,6 +21,8 @@ import java.io._
 import java.net._
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
+import org.apache.spark.input.PortableDataStream
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
@@ -395,22 +397,33 @@ private[spark] object PythonRDD extends Logging {
           newIter.asInstanceOf[Iterator[String]].foreach { str =>
             writeUTF(str, dataOut)
           }
-        case pair: Tuple2[_, _] =>
-          pair._1 match {
-            case bytePair: Array[Byte] =>
-              newIter.asInstanceOf[Iterator[Tuple2[Array[Byte], Array[Byte]]]].foreach { pair =>
-                dataOut.writeInt(pair._1.length)
-                dataOut.write(pair._1)
-                dataOut.writeInt(pair._2.length)
-                dataOut.write(pair._2)
-              }
-            case stringPair: String =>
-              newIter.asInstanceOf[Iterator[Tuple2[String, String]]].foreach { pair =>
-                writeUTF(pair._1, dataOut)
-                writeUTF(pair._2, dataOut)
-              }
-            case other =>
-              throw new SparkException("Unexpected Tuple2 element type " + pair._1.getClass)
+        case stream: PortableDataStream =>
+          newIter.asInstanceOf[Iterator[PortableDataStream]].foreach { stream =>
+            val bytes = stream.toArray()
+            dataOut.writeInt(bytes.length)
+            dataOut.write(bytes)
+          }
+        case (key: String, stream: PortableDataStream) =>
+          newIter.asInstanceOf[Iterator[(String, PortableDataStream)]].foreach {
+            case (key, stream) =>
+              writeUTF(key, dataOut)
+              val bytes = stream.toArray()
+              dataOut.writeInt(bytes.length)
+              dataOut.write(bytes)
+          }
+        case (key: String, value: String) =>
+          newIter.asInstanceOf[Iterator[(String, String)]].foreach {
+            case (key, value) =>
+              writeUTF(key, dataOut)
+              writeUTF(value, dataOut)
+          }
+        case (key: Array[Byte], value: Array[Byte]) =>
+          newIter.asInstanceOf[Iterator[(Array[Byte], Array[Byte])]].foreach {
+            case (key, value) =>
+              dataOut.writeInt(key.length)
+              dataOut.write(key)
+              dataOut.writeInt(value.length)
+              dataOut.write(value)
           }
         case other =>
           throw new SparkException("Unexpected element type " + first.getClass)
