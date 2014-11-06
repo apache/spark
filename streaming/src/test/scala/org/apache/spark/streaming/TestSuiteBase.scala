@@ -164,6 +164,40 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   after(afterFunction)
 
   /**
+   * Run a block of code with the given StreamingContext and automatically
+   * stop the context when the block completes or when an exception is thrown.
+   */
+  def withStreamingContext[R](ssc: StreamingContext)(block: StreamingContext => R): R = {
+    try {
+      block(ssc)
+    } finally {
+      try {
+        ssc.stop(stopSparkContext = true)
+      } catch {
+        case e: Exception =>
+          logError("Error stopping StreamingContext", e)
+      }
+    }
+  }
+
+  /**
+   * Run a block of code with the given TestServer and automatically
+   * stop the server when the block completes or when an exception is thrown.
+   */
+  def withTestServer[R](testServer: TestServer)(block: TestServer => R): R = {
+    try {
+      block(testServer)
+    } finally {
+      try {
+        testServer.stop()
+      } catch {
+        case e: Exception =>
+          logError("Error stopping TestServer", e)
+      }
+    }
+  }
+
+  /**
    * Set up required DStreams to test the DStream operation using the two sequences
    * of input collections.
    */
@@ -282,10 +316,8 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
       Thread.sleep(100) // Give some time for the forgetting old RDDs to complete
-    } catch {
-      case e: Exception => {e.printStackTrace(); throw e}
     } finally {
-      ssc.stop()
+      ssc.stop(stopSparkContext = true)
     }
     output
   }
@@ -351,9 +383,10 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       useSet: Boolean
     ) {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
-    val ssc = setupStreams[U, V](input, operation)
-    val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
-    verifyOutput[V](output, expectedOutput, useSet)
+    withStreamingContext(setupStreams[U, V](input, operation)) { ssc =>
+      val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
+      verifyOutput[V](output, expectedOutput, useSet)
+    }
   }
 
   /**
@@ -389,8 +422,9 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       useSet: Boolean
     ) {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
-    val ssc = setupStreams[U, V, W](input1, input2, operation)
-    val output = runStreams[W](ssc, numBatches_, expectedOutput.size)
-    verifyOutput[W](output, expectedOutput, useSet)
+    withStreamingContext(setupStreams[U, V, W](input1, input2, operation)) { ssc =>
+      val output = runStreams[W](ssc, numBatches_, expectedOutput.size)
+      verifyOutput[W](output, expectedOutput, useSet)
+    }
   }
 }
