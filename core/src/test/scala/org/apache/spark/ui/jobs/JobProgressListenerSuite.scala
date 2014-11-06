@@ -159,7 +159,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       taskMetrics.inputMetrics = Some(inputMetrics)
       inputMetrics.bytesRead = base + 7
-      val outputMetrics = new OutputMetrics()
+      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       taskMetrics.outputMetrics = Some(outputMetrics)
       outputMetrics.bytesWritten = base + 8
       taskMetrics

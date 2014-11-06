@@ -617,7 +617,7 @@ class JsonProtocolSuite extends FunSuite {
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
-      val outputMetrics = new OutputMetrics()
+      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       outputMetrics.bytesWritten = a + b + c
       t.outputMetrics = Some(outputMetrics)
     } else {
@@ -1022,6 +1022,7 @@ class JsonProtocolSuite extends FunSuite {
       |      "Bytes Read": 2100
       |    },
       |    "Output Metrics": {
+      |      "Data Write Method": "Hadoop",
       |      "Bytes Written": 1200
       |    },
       |    "Updated Blocks": [

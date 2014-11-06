@@ -272,6 +272,7 @@ private[spark] object JsonProtocol {
   }
 
   def outputMetricsToJson(outputMetrics: OutputMetrics): JValue = {
+    ("Data Write Method" -> outputMetrics.writeMethod.toString) ~
     ("Bytes Written" -> outputMetrics.bytesWritten)
   }
 
@@ -621,7 +622,8 @@ private[spark] object JsonProtocol {
   }
 
   def outputMetricsFromJson(json: JValue): OutputMetrics = {
-    val metrics = new OutputMetrics()
+    val metrics = new OutputMetrics(
+      DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
     metrics.bytesWritten = (json \ "Bytes Written").extract[Long]
     metrics
   }

@@ -165,6 +165,16 @@ object DataReadMethod extends Enumeration with Serializable {
 
 /**
  * :: DeveloperApi ::
+ * Method by which output data was written.
+ */
+@DeveloperApi
+object DataWriteMethod extends Enumeration with Serializable {
+  type DataWriteMethod = Value
+  val Hadoop = Value
+}
+
+/**
+ * :: DeveloperApi ::
  * Metrics about reading input data.
  */
 @DeveloperApi
@@ -180,7 +190,7 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
  * Metrics about writing output data.
  */
 @DeveloperApi
-case class OutputMetrics() {
+case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
   /**
    * Total bytes written
    */
