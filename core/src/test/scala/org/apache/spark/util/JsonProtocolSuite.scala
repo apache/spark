@@ -128,7 +128,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   test("ExceptionFailure backward compatibility") {
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
     val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
       .removeField({ _._1 == "Full Stack Trace" })
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
@@ -409,8 +409,8 @@ class JsonProtocolSuite extends FunSuite {
         assert(r1.className === r2.className)
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
+        assert(r1.fullStackTrace === r2.fullStackTrace)
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
-        assert(r1.getFullStackTrace === r2.getFullStackTrace)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
       case (ExecutorLostFailure(execId1), ExecutorLostFailure(execId2)) =>
