@@ -122,11 +122,10 @@ public class JavaUtils {
       }
     }
 
-    if (!file.delete()) {
-      // Delete can also fail if the file simply did not exist
-      if (file.exists()) {
-        throw new IOException("Failed to delete: " + file.getAbsolutePath());
-      }
+    boolean deleted = file.delete();
+    // Delete can also fail if the file simply did not exist.
+    if (!deleted && file.exists()) {
+      throw new IOException("Failed to delete: " + file.getAbsolutePath());
     }
   }
 

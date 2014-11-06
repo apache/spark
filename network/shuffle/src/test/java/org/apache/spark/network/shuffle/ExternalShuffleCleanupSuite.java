@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
@@ -53,9 +54,11 @@ public class ExternalShuffleCleanupSuite {
   public void cleanupUsesExecutor() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
+    final AtomicBoolean cleanupCalled = new AtomicBoolean(false);
+
     // Executor which does nothing to ensure we're actually using it.
     Executor noThreadExecutor = new Executor() {
-      @Override public void execute(Runnable runnable) { /* do nothing */ }
+      @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
     };
 
     ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(noThreadExecutor);
@@ -63,6 +66,7 @@ public class ExternalShuffleCleanupSuite {
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
     manager.applicationRemoved("app", true);
 
+    assertTrue(cleanupCalled.get());
     assertStillThere(dataContext);
 
     dataContext.cleanup();

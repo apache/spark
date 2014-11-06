@@ -25,7 +25,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -53,8 +52,8 @@ public class ExternalShuffleBlockManager {
   // Map containing all registered executors' metadata.
   private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
-  // Single-threaded executor used to perform expensive recursive directory deletion.
-  private final Executor directoryCleanupExecutor;
+  // Single-threaded Java executor used to perform expensive recursive directory deletion.
+  private final Executor directoryCleaner;
 
   public ExternalShuffleBlockManager() {
     // TODO: Give this thread a name.
@@ -63,9 +62,9 @@ public class ExternalShuffleBlockManager {
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockManager(Executor directoryCleanupExecutor) {
+  ExternalShuffleBlockManager(Executor directoryCleaner) {
     this.executors = Maps.newConcurrentMap();
-    this.directoryCleanupExecutor = directoryCleanupExecutor;
+    this.directoryCleaner = directoryCleaner;
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -134,8 +133,9 @@ public class ExternalShuffleBlockManager {
           logger.info("Cleaning up executor {}'s {} local dirs", fullId, executor.localDirs.length);
 
           // Execute the actual deletion in a different thread, as it may take some time.
-          directoryCleanupExecutor.execute(new Runnable() {
-            @Override public void run() {
+          directoryCleaner.execute(new Runnable() {
+            @Override
+            public void run() {
               deleteExecutorDirs(executor.localDirs);
             }
           });
