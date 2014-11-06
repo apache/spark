@@ -78,11 +78,11 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> model.predict(2,2)
     0.4473...
 
-    >>> model = ALS.train(ratings, 1, seed=10, nonnegative=True)
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2,2)
     3.735...
 
-    >>> model = ALS.trainImplicit(ratings, 1, seed=10, nonnegative=True)
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2,2)
     0.4473...
     """
@@ -117,15 +117,15 @@ class ALS(object):
         return _to_java_object_rdd(ratings, True)
 
     @classmethod
-    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, seed=None,
-              nonnegative=False):
+    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
+              seed=None):
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
                               lambda_, blocks, seed, nonnegative)
         return MatrixFactorizationModel(model)
 
     @classmethod
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
-                      seed=None, nonnegative=False):
+                      nonnegative=False, seed=None):
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
                               iterations, lambda_, blocks, alpha, seed, nonnegative)
         return MatrixFactorizationModel(model)
