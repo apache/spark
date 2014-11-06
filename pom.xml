@@ -267,15 +267,27 @@
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
+
+  <dependencies>
   <!-- 
        This is a dummy dependency that is used along with the shading plug-in
        to create effective poms on publishing (see SPARK-3812).
   -->
-  <dependencies>
     <dependency>
       <groupId>org.spark-project.spark</groupId>
       <artifactId>unused</artifactId>
       <version>1.0.0</version>
+    </dependency>
+    <!-- 
+         This depndency has been added to provided scope as it is needed for excuting build
+         specific groovy scripts using gmaven+ and not required for downstream project building
+         with spark.
+    -->
+    <dependency>
+      <groupId>org.codehaus.groovy</groupId>
+      <artifactId>groovy-all</artifactId>
+      <version>2.3.7</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <dependencyManagement>
@@ -1048,9 +1060,9 @@
 
       <!-- This plugin reads a file into maven property. And it lets us write groovy !! -->
       <plugin>
-        <groupId>org.codehaus.gmaven</groupId>
-        <artifactId>gmaven-plugin</artifactId>
-        <version>1.4</version>
+        <groupId>org.codehaus.gmavenplus</groupId>
+        <artifactId>gmavenplus-plugin</artifactId>
+        <version>1.2</version>
         <executions>
           <execution>
             <phase>process-test-classes</phase>
@@ -1058,10 +1070,12 @@
               <goal>execute</goal>
             </goals>
             <configuration>
-              <source>
+              <scripts>
+                <script><![CDATA[
                 def file = new File(project.properties.test_classpath_file)
                 project.properties.test_classpath = file.getText().split().join(":")
-              </source>
+                ]]></script>
+              </scripts>
             </configuration>
           </execution>
         </executions>
