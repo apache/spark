@@ -18,6 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.util.{Locale, TimeZone}
+
+import org.scalatest.BeforeAndAfter
 
 import scala.util.Try
 
@@ -28,14 +31,31 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.sql.{SQLConf, Row, SchemaRDD}
 
 case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest {
+class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+  private val originalTimeZone = TimeZone.getDefault
+  private val originalLocale = Locale.getDefault
+
+  override def beforeAll() {
+    TestHive.cacheTables = true
+    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    // Add Locale setting
+    Locale.setDefault(Locale.US)
+  }
+
+  override def afterAll() {
+    TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
+  }
+
   createQueryTest("constant null testing",
     """SELECT
       |IF(FALSE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL1,
