@@ -32,7 +32,7 @@ import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
-import org.apache.spark.network.netty.{NettyBlockTransferService}
+import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
@@ -156,7 +156,7 @@ object SparkEnv extends Logging {
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
     val port = conf.get("spark.driver.port").toInt
-    create(conf, "<driver>", hostname, port, true, isLocal, listenerBus)
+    create(conf, SparkContext.DRIVER_IDENTIFIER, hostname, port, true, isLocal, listenerBus)
   }
 
   /**
@@ -274,9 +274,9 @@ object SparkEnv extends Logging {
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
     val blockTransferService =
-      conf.get("spark.shuffle.blockTransferService", "nio").toLowerCase match {
+      conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>
-          new NettyBlockTransferService(conf)
+          new NettyBlockTransferService(conf, securityManager)
         case "nio" =>
           new NioBlockTransferService(conf, securityManager)
       }
@@ -285,8 +285,9 @@ object SparkEnv extends Logging {
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
+    // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 

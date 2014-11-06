@@ -18,12 +18,13 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
+import java.util.jar.Attributes.Name
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
-
-import org.eclipse.jetty.util.MultiException
+import java.util.jar.{Manifest => JarManifest}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -39,10 +40,12 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.eclipse.jetty.util.MultiException
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -1238,6 +1241,8 @@ private[spark] object Utils extends Logging {
   }
 
   // Handles idiosyncracies with hash (add more as required)
+  // This method should be kept in sync with
+  // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
 
     // Required ?
@@ -1380,6 +1385,11 @@ private[spark] object Utils extends Logging {
    * Whether the underlying operating system is Windows.
    */
   val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
@@ -1589,7 +1599,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(e: Exception): String = {
+  def exceptionString(e: Throwable): String = {
     if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
   }
 
@@ -1601,6 +1611,18 @@ private[spark] object Utils extends Logging {
     val desc = if (description == null) "" else description
     val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
     s"$className: $desc\n$st"
+  }
+
+  /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
+  def getThreadDump(): Array[ThreadStackTrace] = {
+    // We need to filter out null values here because dumpAllThreads() may return null array
+    // elements for threads that are dead / don't exist.
+    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
+      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
+        threadInfo.getThreadState, stackTrace)
+    }
   }
 
   /**
@@ -1712,6 +1734,66 @@ private[spark] object Utils extends Logging {
     val method = clazz.getDeclaredMethod(methodName, types: _*)
     method.setAccessible(true)
     method.invoke(obj, values.toSeq: _*)
+  }
+
+  // Limit of bytes for total size of results (default is 1GB)
+  def getMaxResultSize(conf: SparkConf): Long = {
+    memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
+  }
+
+  /**
+   * Return the current system LD_LIBRARY_PATH name
+   */
+  def libraryPathEnvName: String = {
+    if (isWindows) {
+      "PATH"
+    } else if (isMac) {
+      "DYLD_LIBRARY_PATH"
+    } else {
+      "LD_LIBRARY_PATH"
+    }
+  }
+
+  /**
+   * Return the prefix of a command that appends the given library paths to the
+   * system-specific library path environment variable. On Unix, for instance,
+   * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   */
+  def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
+    val libraryPathScriptVar = if (isWindows) {
+      s"%${libraryPathEnvName}%"
+    } else {
+      "$" + libraryPathEnvName
+    }
+    val libraryPath = (libraryPaths :+ libraryPathScriptVar).mkString("\"",
+      File.pathSeparator, "\"")
+    val ampersand = if (Utils.isWindows) {
+      " &"
+    } else {
+      ""
+    }
+    s"$libraryPathEnvName=$libraryPath$ampersand"
+  }
+
+  lazy val sparkVersion =
+    SparkContext.jarOfObject(this).map { path =>
+      val manifestUrl = new URL(s"jar:file:$path!/META-INF/MANIFEST.MF")
+      val manifest = new JarManifest(manifestUrl.openStream())
+      manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
+    }.getOrElse("Unknown")
+
+  /**
+   * Return the value of a config either through the SparkConf or the Hadoop configuration
+   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
+   * if the key is not set in the Hadoop configuration.
+   */
+  def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
+    val sparkValue = conf.get(key, default)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    } else {
+      sparkValue
+    }
   }
 
 }
