@@ -215,7 +215,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
    *                 to a new position (in the new data array).
    */
-  private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
+  protected def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
     val newCapacity = _capacity * 2
     allocateFunc(newCapacity)
     val newBitset = new BitSet(newCapacity)
