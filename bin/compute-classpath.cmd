@@ -72,8 +72,8 @@ for %%d in ("%datanucleus_dir%\datanucleus-*.jar") do (
 )
 set CLASSPATH=%CLASSPATH%;%datanucleus_jars%
 
-rem Exclude hive-beeline*.jar from uber jar, since beeline need the Implementation-Version
-rem from MANIFEST.MF.
+rem SPARK-4261: make right version info for beeline, copy hive-beeline*.jar to "lib_managed/jars/".
+rem Here add beeline jar to classpath.
 for %%d in ("%datanucleus_dir%\hive-beeline*.jar") do (
   set hivebeeline_jar=!hivebeeline_jar!;%%d
 )

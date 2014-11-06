@@ -113,9 +113,9 @@ fi
 datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar")"
 datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
 
-# Exclude hive-beeline*.jar from uber jar, since beeline need the Implementation-Version
-# from MANIFEST.MF.
-hivebeeline_jar="$(find "$datanucleus_dir" 2>/dev/null | grep "hive-beeline*\\.jar")"
+# SPARK-4261: make right version info for beeline, copy hive-beeline*.jar to "lib_managed/jars/".
+# Here add beeline jar to classpath.
+hivebeeline_jar="$(find "$datanucleus_dir" 2>/dev/null | grep "hive-beeline-.*\\.jar")"
 
 if [ -n "$datanucleus_jars" ]; then
   hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)
