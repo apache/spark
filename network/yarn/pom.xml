@@ -27,66 +27,27 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-network-shuffle_2.10</artifactId>
+  <artifactId>spark-network-yarn_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Shuffle Streaming Service Code</name>
+  <name>Spark Project Yarn Shuffle Service Code</name>
   <url>http://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>network-shuffle</sbt.project.name>
+    <sbt.project.name>network-yarn</sbt.project.name>
   </properties>
 
   <dependencies>
     <!-- Core dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_2.10</artifactId>
+      <artifactId>spark-network-shuffle_2.10</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
     </dependency>
 
     <!-- Provided dependencies -->
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>11.0.2</version> <!-- yarn 2.4.0's version -->
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
       <scope>provided</scope>
-    </dependency>
-
-    <!-- Test dependencies -->
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_2.10</artifactId>
-      <version>${project.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.novocode</groupId>
-      <artifactId>junit-interface</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-all</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 

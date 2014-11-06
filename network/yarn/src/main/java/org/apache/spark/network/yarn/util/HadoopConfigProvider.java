@@ -15,16 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+package org.apache.spark.network.yarn.util;
 
-/**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
- */
-private object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val GC_TIME = "gc_time"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
+import java.util.NoSuchElementException;
+
+import org.apache.hadoop.conf.Configuration;
+
+import org.apache.spark.network.util.ConfigProvider;
+
+/** Use the Hadoop configuration to obtain config values. */
+public class HadoopConfigProvider extends ConfigProvider {
+  private final Configuration conf;
+
+  public HadoopConfigProvider(Configuration conf) {
+    this.conf = conf;
+  }
+
+  @Override
+  public String get(String name) {
+    String value = conf.get(name);
+    if (value == null) {
+      throw new NoSuchElementException(name);
+    }
+    return value;
+  }
 }
