@@ -17,12 +17,11 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.xml.{NodeSeq, Node}
+
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.StageInfo
-
-import scala.xml.{NodeSeq, Node}
-
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing statistics and stage list for a given job */
@@ -44,6 +43,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       }
       val jobData = jobDataOption.get
       val stages = jobData.stageIds.map { stageId =>
+        // This could be empty if the JobProgressListener hasn't received information about the
+        // stage or if the stage information has been garbage collected
         listener.stageIdToInfo.getOrElse(stageId,
           new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, "Unknown"))
       }
