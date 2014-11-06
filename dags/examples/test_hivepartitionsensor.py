@@ -5,7 +5,6 @@ default_args = {
     'mysql_dbid': 'local_mysql',
 }
 from airflow.operators import HivePartitionSensor
-from airflow import settings
 from airflow import DAG
 
 dag = DAG("test_wfh")
