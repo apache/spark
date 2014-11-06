@@ -28,12 +28,12 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
 import com.google.common.io.Closeables;
+import com.google.common.base.Charsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class JavaUtils {
   private static final Logger logger = LoggerFactory.getLogger(JavaUtils.class);
-  private static final Charset UTF8_CHARSET = Charset.forName("UTF-8");
 
   /** Closes the given object, ignoring IOExceptions. */
   public static void closeQuietly(Closeable closeable) {
@@ -83,7 +83,7 @@ public class JavaUtils {
    * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
    */
   public static ByteBuffer stringToBytes(String s) {
-    return ByteBuffer.wrap(s.getBytes(UTF8_CHARSET));
+    return ByteBuffer.wrap(s.getBytes(Charsets.UTF_8));
   }
 
   /**
@@ -91,6 +91,6 @@ public class JavaUtils {
    * converted back to the same byte buffer through {@link #stringToBytes(String)}.
    */
   public static String bytesToString(ByteBuffer b) {
-    return new String(b.array(), UTF8_CHARSET);
+    return new String(b.array(), Charsets.UTF_8);
   }
 }
