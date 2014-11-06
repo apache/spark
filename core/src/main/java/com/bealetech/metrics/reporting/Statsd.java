@@ -1,15 +1,18 @@
 package com.bealetech.metrics.reporting;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.util.*;
-import java.util.regex.Pattern;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * A client to a StatsD server.
@@ -72,7 +75,10 @@ public class Statsd implements Closeable {
         if (source.equals("executor")) { // "spark.executor.0.filesystem.file.largeRead_ops" (ExecutorSource)
             String executorId = parts.remove(0);
             tags = String.format("#executor:%s", executorId);
-            name = String.format("%s.%s.", prefix, source) + String.format("%s_%s_%s", parts.toArray());
+            while (parts.size() > 3) {
+                parts.remove(parts.size() -1);
+            }
+            name = String.format("%s.%s.%s", prefix, source, StringUtils.join(parts, "_"));
         } else if (source.equals("application")) { // "spark.application.Apriori.1394489355680.runtime_ms" (ApplicationSource)
             String applicationName = parts.remove(0);
             String currentTime = parts.remove(0);
