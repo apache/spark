@@ -30,9 +30,9 @@ import org.apache.spark.util.Utils
 import org.apache.spark.sql.hive.test.TestHive._
 
 /*
- * Note: the DSL conversions collide with the FunSuite === operator!
- * We can apply the Funsuite conversion explicitly:
- *   assert(X === true) --> assert(convertToEqualizer(X).===(true))
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
  * (This file already imports convertToEqualizer)
  */
 
