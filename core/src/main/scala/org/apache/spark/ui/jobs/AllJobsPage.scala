@@ -17,15 +17,15 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, NodeSeq}
+
+import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
 
-/** Page showing list of all ongoing and recently finished stages and pools */
+/** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val listener = parent.listener
@@ -103,12 +103,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <div>
           <ul class="unstyled">
             {if (sc.isDefined) {
-            // Total duration is not meaningful unless the UI is live
-            <li>
-              <strong>Total Duration: </strong>
-              {UIUtils.formatDuration(now - sc.get.startTime)}
-            </li>
-          }}
+              // Total duration is not meaningful unless the UI is live
+              <li>
+                <strong>Total Duration: </strong>
+                {UIUtils.formatDuration(now - sc.get.startTime)}
+              </li>
+            }}
             <li>
               <strong>Scheduling Mode: </strong>
               {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
