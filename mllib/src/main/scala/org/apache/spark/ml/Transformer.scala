@@ -21,6 +21,7 @@ import scala.annotation.varargs
 
 import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
 import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.api.java.JavaSchemaRDD
 
 /**
  * Abstract class for transformers that transform one dataset into another.
@@ -47,4 +48,15 @@ abstract class Transformer extends PipelineStage with Params {
    * @return transformed dataset
    */
   def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD
+
+  // Java-friendly versions of transform.
+
+  @varargs
+  def transform(dataset: JavaSchemaRDD, paramPairs: ParamPair[_]*): JavaSchemaRDD = {
+    transform(dataset.schemaRDD, paramPairs: _*).toJavaSchemaRDD
+  }
+
+  def transform(dataset: JavaSchemaRDD, paramMap: ParamMap): JavaSchemaRDD = {
+    transform(dataset.schemaRDD, paramMap).toJavaSchemaRDD
+  }
 }

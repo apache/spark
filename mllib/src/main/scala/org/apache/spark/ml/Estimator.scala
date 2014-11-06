@@ -18,9 +18,11 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.collection.JavaConverters._
 
 import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
 import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.api.java.JavaSchemaRDD
 
 /**
  * Abstract class for estimators that fits models to data.
@@ -61,6 +63,21 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
    */
   def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = { // how to return an array?
     paramMaps.map(fit(dataset, _))
+  }
+
+  // Java-friendly versions of fit.
+
+  @varargs
+  def fit(dataset: JavaSchemaRDD, paramPairs: ParamPair[_]*): M = {
+    fit(dataset.schemaRDD, paramPairs: _*)
+  }
+
+  def fit(dataset: JavaSchemaRDD, paramMap: ParamMap): M = {
+    fit(dataset.schemaRDD, paramMap)
+  }
+
+  def fit(dataset: JavaSchemaRDD, paramMaps: Array[ParamMap]): java.util.List[M] = {
+    fit(dataset.schemaRDD, paramMaps).asJava
   }
 
   /**

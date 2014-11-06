@@ -19,6 +19,10 @@ package org.apache.spark.ml.example;
 
 import java.io.Serializable;
 
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
@@ -31,10 +35,6 @@ import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.api.java.JavaSQLContext;
 import org.apache.spark.sql.api.java.JavaSchemaRDD;
 import org.apache.spark.sql.api.java.Row;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 
 public class JavaLogisticRegressionSuite implements Serializable {
 
@@ -61,8 +61,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
   @Test
   public void logisticRegression() {
     LogisticRegression lr = new LogisticRegression();
-    LogisticRegressionModel model = lr.fit(dataset.schemaRDD());
-    model.transform(dataset.schemaRDD()).registerTempTable("prediction");
+    LogisticRegressionModel model = lr.fit(dataset);
+    model.transform(dataset).registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println(r);
@@ -74,8 +74,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0);
-    LogisticRegressionModel model = lr.fit(dataset.schemaRDD());
-    model.transform(dataset.schemaRDD(), model.threshold().w(0.8)) // overwrite threshold
+    LogisticRegressionModel model = lr.fit(dataset);
+    model.transform(dataset, model.threshold().w(0.8)) // overwrite threshold
       .registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
@@ -95,7 +95,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   @Test
   public void logisticRegressionFitWithVarargs() {
     LogisticRegression lr = new LogisticRegression();
-    lr.fit(dataset.schemaRDD(), lr.maxIter().w(10), lr.regParam().w(1.0));
+    lr.fit(dataset, lr.maxIter().w(10), lr.regParam().w(1.0));
   }
 
   @Test
@@ -111,7 +111,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3);
-    CrossValidatorModel bestModel = cv.fit(dataset.baseSchemaRDD());
+    CrossValidatorModel bestModel = cv.fit(dataset);
   }
 
   @Test
@@ -123,8 +123,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
       .setFeaturesCol("scaledFeatures");
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {scaler, lr});
-    PipelineModel model = pipeline.fit(dataset.baseSchemaRDD());
-    model.transform(dataset.baseSchemaRDD()).registerTempTable("prediction");
+    PipelineModel model = pipeline.fit(dataset);
+    model.transform(dataset).registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println(r);
