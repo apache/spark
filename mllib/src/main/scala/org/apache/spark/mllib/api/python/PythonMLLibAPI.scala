@@ -279,27 +279,17 @@ class PythonMLLibAPI extends Serializable {
       iterations: Int,
       lambda: Double,
       blocks: Int,
-      seed: Long,
+      seed: java.lang.Long,
       nonnegative: Boolean): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(
-      ALS.train(ratings.rdd, rank, iterations, lambda, blocks, seed, nonnegative))
-  }
-
-  /**
-   * Java stub for Python mllib ALS.train().  This stub returns a handle
-   * to the Java object instead of the content of the Java object.  Extra care
-   * needs to be taken in the Python code to ensure it gets freed on exit; see
-   * the Py4J documentation.  This version does not specify a seed.
-   */
-  def trainALSModel(
-      ratings: JavaRDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      nonnegative: Boolean): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(
-      ALS.train(ratings.rdd, rank, iterations, lambda, blocks, nonnegative))
+    if (seed == null) {
+      new MatrixFactorizationModelWrapper(
+        // if the seed coming from python is None/null, let ALS use the
+        // default, which is to use System.nanoTime
+        ALS.train(ratings.rdd, rank, iterations, lambda, blocks, nonnegative))
+    } else {
+      new MatrixFactorizationModelWrapper(
+        ALS.train(ratings.rdd, rank, iterations, lambda, blocks, seed, nonnegative))
+    }
   }
 
   /**
@@ -315,30 +305,19 @@ class PythonMLLibAPI extends Serializable {
       lambda: Double,
       blocks: Int,
       alpha: Double,
-      seed: Long,
+      seed: java.lang.Long,
       nonnegative: Boolean): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(
-      ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha, 
-        seed, nonnegative))
-  }
-
-  /**
-   * Java stub for Python mllib ALS.trainImplicit().  This stub returns a
-   * handle to the Java object instead of the content of the Java object.
-   * Extra care needs to be taken in the Python code to ensure it gets freed on
-   * exit; see the Py4J documentation.  This version does not specify a seed.
-   */
-  def trainImplicitALSModel(
-      ratingsJRDD: JavaRDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      alpha: Double,
-      nonnegative: Boolean): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(
-      ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha, 
-        nonnegative))
+    if (seed == null) {
+      // if the seed coming from python is None/null, let ALS use the
+      // default, which is to use System.nanoTime
+      new MatrixFactorizationModelWrapper(
+        ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha,
+          nonnegative))
+    } else {
+      new MatrixFactorizationModelWrapper(
+        ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha,
+          seed, nonnegative))
+    }
   }
 
   /**

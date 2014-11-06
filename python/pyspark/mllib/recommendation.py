@@ -119,23 +119,15 @@ class ALS(object):
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, seed=None,
               nonnegative=False):
-        if seed:
-            model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
-                                  lambda_, blocks, seed, nonnegative)
-        else:
-            model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
-                                  lambda_, blocks, nonnegative)
+        model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
+                              lambda_, blocks, seed, nonnegative)
         return MatrixFactorizationModel(model)
 
     @classmethod
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
                       seed=None, nonnegative=False):
-        if seed:
-            model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
-                                  iterations, lambda_, blocks, alpha, seed, nonnegative)
-        else:
-            model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
-                                  iterations, lambda_, blocks, alpha, nonnegative)
+        model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
+                              iterations, lambda_, blocks, alpha, seed, nonnegative)
         return MatrixFactorizationModel(model)
 
 
