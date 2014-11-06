@@ -97,8 +97,10 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with Shou
         rdd.saveAsTextFile(outPath.toString)
         sc.listenerBus.waitUntilEmpty(500)
         assert(taskBytesWritten.length == 2)
-        val outFiles = fs.listStatus(outPath)
-        taskBytesWritten.sorted should equal (outFiles.map(_.getLen).sorted)
+        val outFiles = fs.listStatus(outPath).filter(_.getPath.getName != "_SUCCESS")
+        taskBytesWritten.zip(outFiles).foreach { case (bytes, fileStatus) =>
+          assert(bytes >= fileStatus.getLen)
+        }
       } finally {
         fs.delete(outPath, true)
       }
