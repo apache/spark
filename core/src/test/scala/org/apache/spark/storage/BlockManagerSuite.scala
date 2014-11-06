@@ -1082,6 +1082,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     // memoryGrowthFactor is 1.5, put midList fist, will must drop someBlock3 when putting
     // huge block.
     store.putIterator("someBlock3", midList.iterator, StorageLevel.MEMORY_ONLY)
+    assert(memoryStore.contains("someBlock3"))
     // Unroll huge block with not enough space. Even after ensuring free space by dropping old
     // block "someBlock3", there is still not enough room to unroll this block. 
     // This returns an iterator. In the mean time, however, we kicked out "someBlock3" before 
