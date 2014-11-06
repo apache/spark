@@ -68,11 +68,11 @@ public class TransportConf {
    * Max number of times we will try IO exceptions (such as connection timeouts) per request.
    * If set to 0, we will not do any retries.
    */
-  public int maxIORetries() { return conf.getInt("spark.shuffle.io.maxIORetries", 3); }
+  public int maxIORetries() { return conf.getInt("spark.shuffle.io.maxRetries", 3); }
 
   /**
    * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
    * Only relevant if maxIORetries > 0.
    */
-  public int ioRetryWaitTime() { return conf.getInt("spark.shuffle.io.ioRetryWaitTime", 5000); }
+  public int ioRetryWaitTime() { return conf.getInt("spark.shuffle.io.retryWaitMs", 5000); }
 }

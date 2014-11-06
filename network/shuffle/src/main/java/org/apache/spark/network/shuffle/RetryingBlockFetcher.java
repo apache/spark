@@ -156,7 +156,7 @@ public class RetryingBlockFetcher {
    * Lightweight method which initiates a retry in a different thread. The retry will involve
    * calling fetchAllOutstanding() after a configured wait time.
    */
-  private synchronized  void initiateRetry() {
+  private synchronized void initiateRetry() {
     retryCount += 1;
     currentListener = new RetryingBlockFetchListener();
 
