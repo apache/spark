@@ -16,6 +16,7 @@
  */
 package org.apache.spark.graphx.api.java
 
+import org.apache.spark.api.java.{JavaRDD, JavaRDDLike}
 import org.apache.spark.graphx.VertexId
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -34,7 +35,7 @@ import scala.reflect._
 class JavaVertexRDD[@specialized VD: ClassTag](
     val parent: RDD[(VertexId, VD)],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-  extends Serializable {
+  extends JavaVertexRDDLike[(VertexId, VD), JavaVertexRDD[VD]] {
 
 //  val rdd = new VertexRDD(parent, targetStorageLevel)
 
@@ -100,7 +101,11 @@ class JavaVertexRDD[@specialized VD: ClassTag](
 //    }
 //    this.withPartitionsRDD(newPartitionsRDD)
 //  }
+  override def wrapRDD(rdd: RDD[(VertexId, VD)]): JavaRDD[(VertexId, VD)] = ???
 
+  override def rdd: RDD[(VertexId, VD)] = ???
+
+  override implicit val classTag: ClassTag[(VertexId, VD)] = _
 }
 
 
