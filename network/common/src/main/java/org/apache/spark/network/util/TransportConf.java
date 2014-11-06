@@ -27,9 +27,6 @@ public class TransportConf {
     this.conf = conf;
   }
 
-  /** Port the server listens on. Default to a random port. */
-  public int serverPort() { return conf.getInt("spark.shuffle.io.port", 0); }
-
   /** IO mode: nio or epoll */
   public String ioMode() { return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase(); }
 
@@ -58,4 +55,7 @@ public class TransportConf {
 
   /** Send buffer size (SO_SNDBUF). */
   public int sendBuf() { return conf.getInt("spark.shuffle.io.sendBuffer", -1); }
+
+  /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
+  public int saslRTTimeout() { return conf.getInt("spark.shuffle.sasl.timeout", 30000); }
 }

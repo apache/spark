@@ -17,12 +17,16 @@
 
 package org.apache.spark.network;
 
+import java.util.List;
+
+import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.MessageDecoder;
@@ -52,26 +56,39 @@ public class TransportContext {
   private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
   private final TransportConf conf;
-  private final StreamManager streamManager;
   private final RpcHandler rpcHandler;
 
   private final MessageEncoder encoder;
   private final MessageDecoder decoder;
 
-  public TransportContext(TransportConf conf, StreamManager streamManager, RpcHandler rpcHandler) {
+  public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this.conf = conf;
-    this.streamManager = streamManager;
     this.rpcHandler = rpcHandler;
     this.encoder = new MessageEncoder();
     this.decoder = new MessageDecoder();
   }
 
-  public TransportClientFactory createClientFactory() {
-    return new TransportClientFactory(this);
+  /**
+   * Initializes a ClientFactory which runs the given TransportClientBootstraps prior to returning
+   * a new Client. Bootstraps will be executed synchronously, and must run successfully in order
+   * to create a Client.
+   */
+  public TransportClientFactory createClientFactory(List<TransportClientBootstrap> bootstraps) {
+    return new TransportClientFactory(this, bootstraps);
   }
 
+  public TransportClientFactory createClientFactory() {
+    return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
+  }
+
+  /** Create a server which will attempt to bind to a specific port. */
+  public TransportServer createServer(int port) {
+    return new TransportServer(this, port);
+  }
+
+  /** Creates a new server, binding to any available ephemeral port. */
   public TransportServer createServer() {
-    return new TransportServer(this);
+    return new TransportServer(this, 0);
   }
 
   /**
@@ -109,7 +126,7 @@ public class TransportContext {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      streamManager, rpcHandler);
+      rpcHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler);
   }
 

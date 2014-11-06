@@ -17,15 +17,17 @@
 
 package org.apache.spark.network.netty
 
-import scala.concurrent.{Promise, Future}
+import scala.collection.JavaConversions._
+import scala.concurrent.{Future, Promise}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, TransportClientFactory}
-import org.apache.spark.network.netty.NettyMessages.UploadBlock
+import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClientFactory}
+import org.apache.spark.network.netty.NettyMessages.{OpenBlocks, UploadBlock}
+import org.apache.spark.network.sasl.{SaslRpcHandler, SaslClientBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.util.{ConfigProvider, TransportConf}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
@@ -33,34 +35,45 @@ import org.apache.spark.util.Utils
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
  */
-class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
-  // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
-  val serializer = new JavaSerializer(conf)
+class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManager)
+  extends BlockTransferService {
 
-  // Create a TransportConfig using SparkConf.
-  private[this] val transportConf = new TransportConf(
-    new ConfigProvider { override def get(name: String) = conf.get(name) })
+  // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
+  private val serializer = new JavaSerializer(conf)
+  private val authEnabled = securityManager.isAuthenticationEnabled()
+  private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
   private[this] var clientFactory: TransportClientFactory = _
 
   override def init(blockDataManager: BlockDataManager): Unit = {
-    val streamManager = new DefaultStreamManager
-    val rpcHandler = new NettyBlockRpcServer(serializer, streamManager, blockDataManager)
-    transportContext = new TransportContext(transportConf, streamManager, rpcHandler)
-    clientFactory = transportContext.createClientFactory()
+    val (rpcHandler: RpcHandler, bootstrap: Option[TransportClientBootstrap]) = {
+      val nettyRpcHandler = new NettyBlockRpcServer(serializer, blockDataManager)
+      if (!authEnabled) {
+        (nettyRpcHandler, None)
+      } else {
+        (new SaslRpcHandler(nettyRpcHandler, securityManager),
+          Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager)))
+      }
+    }
+    transportContext = new TransportContext(transportConf, rpcHandler)
+    clientFactory = transportContext.createClientFactory(bootstrap.toList)
     server = transportContext.createServer()
+    logInfo("Server created on " + server.getPort)
   }
 
   override def fetchBlocks(
-      hostname: String,
+      host: String,
       port: Int,
-      blockIds: Seq[String],
+      execId: String,
+      blockIds: Array[String],
       listener: BlockFetchingListener): Unit = {
+    logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
-      val client = clientFactory.createClient(hostname, port)
-      new NettyBlockFetcher(serializer, client, blockIds, listener).start()
+      val client = clientFactory.createClient(host, port)
+      new OneForOneBlockFetcher(client, blockIds.toArray, listener)
+        .start(OpenBlocks(blockIds.map(BlockId.apply)))
     } catch {
       case e: Exception =>
         logError("Exception while beginning fetchBlocks", e)
@@ -107,5 +120,8 @@ class NettyBlockTransferService(conf: SparkConf) extends BlockTransferService {
     result.future
   }
 
-  override def close(): Unit = server.close()
+  override def close(): Unit = {
+    server.close()
+    clientFactory.close()
+  }
 }

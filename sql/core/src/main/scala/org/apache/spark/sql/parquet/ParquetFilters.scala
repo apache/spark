@@ -21,8 +21,12 @@ import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
 
-import parquet.filter._
-import parquet.filter.ColumnPredicates._
+import parquet.filter2.compat.FilterCompat
+import parquet.filter2.compat.FilterCompat._
+import parquet.filter2.predicate.FilterPredicate
+import parquet.filter2.predicate.FilterApi
+import parquet.filter2.predicate.FilterApi._
+import parquet.io.api.Binary
 import parquet.column.ColumnReader
 
 import com.google.common.io.BaseEncoding
@@ -38,67 +42,74 @@ private[sql] object ParquetFilters {
   // set this to false if pushdown should be disabled
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.hints.parquetFilterPushdown"
 
-  def createRecordFilter(filterExpressions: Seq[Expression]): UnboundRecordFilter = {
+  def createRecordFilter(filterExpressions: Seq[Expression]): Filter = {
     val filters: Seq[CatalystFilter] = filterExpressions.collect {
       case (expression: Expression) if createFilter(expression).isDefined =>
         createFilter(expression).get
     }
-    if (filters.length > 0) filters.reduce(AndRecordFilter.and) else null
+    if (filters.length > 0) FilterCompat.get(filters.reduce(FilterApi.and)) else null
   }
 
-  def createFilter(expression: Expression): Option[CatalystFilter] = {
+  def createFilter(expression: Expression): Option[CatalystFilter] ={
     def createEqualityFilter(
         name: String,
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case BooleanType =>
-        ComparisonFilter.createBooleanFilter(name, literal.value.asInstanceOf[Boolean], predicate)
+        ComparisonFilter.createBooleanFilter(
+          name, 
+          literal.value.asInstanceOf[Boolean], 
+          predicate)
       case IntegerType =>
-        ComparisonFilter.createIntFilter(
+        new ComparisonFilter(
           name,
-          (x: Int) => x == literal.value.asInstanceOf[Int],
+          FilterApi.eq(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x == literal.value.asInstanceOf[Long],
+          FilterApi.eq(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x == literal.value.asInstanceOf[Double],
+          FilterApi.eq(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x == literal.value.asInstanceOf[Float],
+          FilterApi.eq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
       case StringType =>
-        ComparisonFilter.createStringFilter(name, literal.value.asInstanceOf[String], predicate)
+        ComparisonFilter.createStringFilter(
+          name, 
+          literal.value.asInstanceOf[String], 
+          predicate)
     }
+
     def createLessThanFilter(
         name: String,
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(
-          name,
-          (x: Int) => x < literal.value.asInstanceOf[Int],
+       new ComparisonFilter(
+          name, 
+          FilterApi.lt(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x < literal.value.asInstanceOf[Long],
+          FilterApi.lt(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x < literal.value.asInstanceOf[Double],
+          FilterApi.lt(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x < literal.value.asInstanceOf[Float],
+          FilterApi.lt(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
     }
     def createLessThanOrEqualFilter(
@@ -106,24 +117,24 @@ private[sql] object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(
+        new ComparisonFilter(
           name,
-          (x: Int) => x <= literal.value.asInstanceOf[Int],
+          FilterApi.ltEq(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x <= literal.value.asInstanceOf[Long],
+          FilterApi.ltEq(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x <= literal.value.asInstanceOf[Double],
+          FilterApi.ltEq(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x <= literal.value.asInstanceOf[Float],
+          FilterApi.ltEq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
     }
     // TODO: combine these two types somehow?
@@ -132,24 +143,24 @@ private[sql] object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(
+        new ComparisonFilter(
           name,
-          (x: Int) => x > literal.value.asInstanceOf[Int],
+          FilterApi.gt(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x > literal.value.asInstanceOf[Long],
+          FilterApi.gt(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x > literal.value.asInstanceOf[Double],
+          FilterApi.gt(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x > literal.value.asInstanceOf[Float],
+          FilterApi.gt(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
     }
     def createGreaterThanOrEqualFilter(
@@ -157,23 +168,24 @@ private[sql] object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(
-          name, (x: Int) => x >= literal.value.asInstanceOf[Int],
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x >= literal.value.asInstanceOf[Long],
+          FilterApi.gtEq(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x >= literal.value.asInstanceOf[Double],
+          FilterApi.gtEq(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x >= literal.value.asInstanceOf[Float],
+          FilterApi.gtEq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
     }
 
@@ -209,25 +221,25 @@ private[sql] object ParquetFilters {
           case _ => None
         }
       }
-      case p @ EqualTo(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ EqualTo(left: Literal, right: NamedExpression) =>
         Some(createEqualityFilter(right.name, left, p))
-      case p @ EqualTo(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ EqualTo(left: NamedExpression, right: Literal) =>
         Some(createEqualityFilter(left.name, right, p))
-      case p @ LessThan(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ LessThan(left: Literal, right: NamedExpression) =>
         Some(createLessThanFilter(right.name, left, p))
-      case p @ LessThan(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ LessThan(left: NamedExpression, right: Literal) =>
         Some(createLessThanFilter(left.name, right, p))
-      case p @ LessThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ LessThanOrEqual(left: Literal, right: NamedExpression) =>
         Some(createLessThanOrEqualFilter(right.name, left, p))
-      case p @ LessThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ LessThanOrEqual(left: NamedExpression, right: Literal) =>
         Some(createLessThanOrEqualFilter(left.name, right, p))
-      case p @ GreaterThan(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ GreaterThan(left: Literal, right: NamedExpression) =>
         Some(createGreaterThanFilter(right.name, left, p))
-      case p @ GreaterThan(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ GreaterThan(left: NamedExpression, right: Literal) =>
         Some(createGreaterThanFilter(left.name, right, p))
-      case p @ GreaterThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ GreaterThanOrEqual(left: Literal, right: NamedExpression) =>
         Some(createGreaterThanOrEqualFilter(right.name, left, p))
-      case p @ GreaterThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ GreaterThanOrEqual(left: NamedExpression, right: Literal) =>
         Some(createGreaterThanOrEqualFilter(left.name, right, p))
       case _ => None
     }
@@ -300,52 +312,54 @@ private[sql] object ParquetFilters {
 }
 
 abstract private[parquet] class CatalystFilter(
-    @transient val predicate: CatalystPredicate) extends UnboundRecordFilter
+    @transient val predicate: CatalystPredicate) extends FilterPredicate
 
 private[parquet] case class ComparisonFilter(
     val columnName: String,
-    private var filter: UnboundRecordFilter,
+    private var filter: FilterPredicate,
     @transient override val predicate: CatalystPredicate)
   extends CatalystFilter(predicate) {
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
+  override def accept[R](visitor: FilterPredicate.Visitor[R]): R = {
+    filter.accept(visitor)
   }
 }
 
 private[parquet] case class OrFilter(
-    private var filter: UnboundRecordFilter,
+    private var filter: FilterPredicate,
     @transient val left: CatalystFilter,
     @transient val right: CatalystFilter,
     @transient override val predicate: Or)
   extends CatalystFilter(predicate) {
   def this(l: CatalystFilter, r: CatalystFilter) =
     this(
-      OrRecordFilter.or(l, r),
+      FilterApi.or(l, r),
       l,
       r,
       Or(l.predicate, r.predicate))
 
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
+  override def accept[R](visitor: FilterPredicate.Visitor[R]): R  = {
+    filter.accept(visitor);
   }
+
 }
 
 private[parquet] case class AndFilter(
-    private var filter: UnboundRecordFilter,
+    private var filter: FilterPredicate,
     @transient val left: CatalystFilter,
     @transient val right: CatalystFilter,
     @transient override val predicate: And)
   extends CatalystFilter(predicate) {
   def this(l: CatalystFilter, r: CatalystFilter) =
     this(
-      AndRecordFilter.and(l, r),
+      FilterApi.and(l, r),
       l,
       r,
       And(l.predicate, r.predicate))
 
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
+  override def accept[R](visitor: FilterPredicate.Visitor[R]): R = {
+    filter.accept(visitor);
   }
+
 }
 
 private[parquet] object ComparisonFilter {
@@ -355,13 +369,7 @@ private[parquet] object ComparisonFilter {
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToBoolean(
-          new BooleanPredicateFunction {
-            def functionToApply(input: Boolean): Boolean = input == value
-          }
-      )),
+      FilterApi.eq(booleanColumn(columnName), value.asInstanceOf[java.lang.Boolean]),
       predicate)
 
   def createStringFilter(
@@ -370,72 +378,6 @@ private[parquet] object ComparisonFilter {
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToString (
-          new ColumnPredicates.PredicateFunction[String]  {
-            def functionToApply(input: String): Boolean = input == value
-          }
-      )),
-      predicate)
-
-  def createIntFilter(
-      columnName: String,
-      func: Int => Boolean,
-      predicate: CatalystPredicate): CatalystFilter =
-    new ComparisonFilter(
-      columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToInteger(
-          new IntegerPredicateFunction {
-            def functionToApply(input: Int) = func(input)
-          }
-      )),
-      predicate)
-
-  def createLongFilter(
-      columnName: String,
-      func: Long => Boolean,
-      predicate: CatalystPredicate): CatalystFilter =
-    new ComparisonFilter(
-      columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToLong(
-          new LongPredicateFunction {
-            def functionToApply(input: Long) = func(input)
-          }
-      )),
-      predicate)
-
-  def createDoubleFilter(
-      columnName: String,
-      func: Double => Boolean,
-      predicate: CatalystPredicate): CatalystFilter =
-    new ComparisonFilter(
-      columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToDouble(
-          new DoublePredicateFunction {
-            def functionToApply(input: Double) = func(input)
-          }
-      )),
-      predicate)
-
-  def createFloatFilter(
-      columnName: String,
-      func: Float => Boolean,
-      predicate: CatalystPredicate): CatalystFilter =
-    new ComparisonFilter(
-      columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToFloat(
-          new FloatPredicateFunction {
-            def functionToApply(input: Float) = func(input)
-          }
-      )),
+      FilterApi.eq(binaryColumn(columnName), Binary.fromString(value)),
       predicate)
 }
