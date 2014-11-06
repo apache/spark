@@ -82,6 +82,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
+    override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+      stopAllExecutors
+      postStop()
+    }
+
+    private def stopAllExecutors = {
+      for ((_, executorData) <- executorDataMap) {
+        executorData.executorActor ! StopExecutor
+      }
+    }
+
     def receiveWithLogging = {
       case RegisterExecutor(executorId, hostPort, cores) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
@@ -134,9 +145,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
-        for ((_, executorData) <- executorDataMap) {
-          executorData.executorActor ! StopExecutor
-        }
+        stopAllExecutors
         sender ! true
 
       case RemoveExecutor(executorId, reason) =>
