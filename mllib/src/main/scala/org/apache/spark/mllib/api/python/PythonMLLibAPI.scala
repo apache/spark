@@ -43,6 +43,7 @@ import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -452,6 +453,31 @@ class PythonMLLibAPI extends Serializable {
    */
   def corr(x: JavaRDD[Double], y: JavaRDD[Double], method: String): Double = {
     Statistics.corr(x.rdd, y.rdd, getCorrNameOrDefault(method))
+  }
+
+  /**
+   * Java stub for mllib Statistics.chiSqTest()
+   */
+  def chiSqTest(observed: Vector, expected: Vector): ChiSqTestResult = {
+    if (expected == null) {
+      Statistics.chiSqTest(observed)
+    } else {
+      Statistics.chiSqTest(observed, expected)
+    }
+  }
+
+  /**
+   * Java stub for mllib Statistics.chiSqTest(observed: Matrix)
+   */
+  def chiSqTest(observed: Matrix): ChiSqTestResult = {
+    Statistics.chiSqTest(observed)
+  }
+
+  /**
+   * Java stub for mllib Statistics.chiSqTest(RDD[LabelPoint])
+   */
+  def chiSqTest(data: JavaRDD[LabeledPoint]): Array[ChiSqTestResult] = {
+    Statistics.chiSqTest(data.rdd)
   }
 
   // used by the corr methods to retrieve the name of the correlation method passed in via pyspark

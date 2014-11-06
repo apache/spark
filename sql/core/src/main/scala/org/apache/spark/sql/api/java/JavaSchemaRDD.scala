@@ -47,6 +47,9 @@ class JavaSchemaRDD(
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
 
+  /** Returns the underlying Scala SchemaRDD. */
+  val schemaRDD: SchemaRDD = baseSchemaRDD
+
   override val classTag = scala.reflect.classTag[Row]
 
   override def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
