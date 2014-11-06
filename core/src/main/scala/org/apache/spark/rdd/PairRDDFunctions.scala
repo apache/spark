@@ -57,6 +57,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   with SparkHadoopMapReduceUtil
   with Serializable
 {
+  import PairRDDFunctions._
+
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
@@ -982,20 +984,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
       try {
-        var recordsSinceMetricsUpdate = 0
+        var recordsWritten = 0L
         while (iter.hasNext) {
           val pair = iter.next()
           writer.write(pair._1, pair._2)
 
           // Update bytes written metric every few records
-          if (recordsSinceMetricsUpdate ==
-              PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES
-              && bytesWrittenCallback.isDefined) {
-            recordsSinceMetricsUpdate = 0
-            bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
-          } else {
-            recordsSinceMetricsUpdate += 1
-          }
+          maybeUpdateOutputMetrics(bytesWrittenCallback, outputMetrics, recordsWritten)
+          recordsWritten += 1
         }
       } finally {
         writer.close(hadoopContext)
@@ -1060,20 +1056,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       writer.setup(context.stageId, context.partitionId, attemptNumber)
       writer.open()
       try {
-        var recordsSinceMetricsUpdate = 0
+        var recordsWritten = 0L
         while (iter.hasNext) {
           val record = iter.next()
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
 
           // Update bytes written metric every few records
-          if (recordsSinceMetricsUpdate ==
-              PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES
-              && bytesWrittenCallback.isDefined) {
-            recordsSinceMetricsUpdate = 0
-            bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
-          } else {
-            recordsSinceMetricsUpdate += 1
-          }
+          maybeUpdateOutputMetrics(bytesWrittenCallback, outputMetrics, recordsWritten)
+          recordsWritten += 1
         }
       } finally {
         writer.close()
@@ -1098,19 +1088,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     (outputMetrics, bytesWrittenCallback)
   }
 
-  /*
-  private def maybeUpdateOutputMetrics(recordsWritten: Long) {
-    // Update bytes written metric every few records
-    if (recordsSinceMetricsUpdate ==
-      PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES
-      && bytesWrittenCallback.isDefined) {
-      recordsSinceMetricsUpdate = 0
+  private def maybeUpdateOutputMetrics(bytesWrittenCallback: Option[() => Long],
+      outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
+    if (recordsWritten % RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0
+        && bytesWrittenCallback.isDefined) {
       bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
-    } else {
-      recordsSinceMetricsUpdate += 1
     }
-
-  }*/
+  }
 
   /**
    * Return an RDD with the keys of each tuple.
