@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.NativeType
 import java.sql.{Date, Timestamp}
-import java.math.BigDecimal
 
 object Row {
   /**
