@@ -189,11 +189,11 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     SparkContext.activeSparkContextCreationSite.foreach { creationSite =>
       val errMsg = "Only one SparkContext may be active in this JVM (see SPARK-2243)."
       val errDetails = if (SparkContext.activeSparkContextIsFullyConstructed) {
-        s"The currently active SparkContext was created at ${creationSite.shortForm}"
+        s"The currently active SparkContext was created at:\n${creationSite.longForm}"
       } else {
-        s"Another SparkContext, created at ${creationSite.shortForm}, is either being constructed" +
-        " or threw an exception from its constructor; please restart your JVM in order to" +
-        " create a new SparkContext."
+        s"Another SparkContext is either being constructed or threw an exception from its" +
+        " constructor; please restart your JVM in order to create a new SparkContext." +
+        s"The current SparkContext was created at:\n${creationSite.longForm}"
       }
       val exception = new SparkException(s"$errMsg $errDetails")
       if (conf.getBoolean("spark.driver.disableMultipleSparkContextsErrorChecking", false)) {
