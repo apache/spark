@@ -182,7 +182,7 @@ object MovieLensALS {
    */
   def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
-    else math.max(scala.math.round(r), 0.0)
+    else math.max(round(r), 0.0)
   }
   
   /**  
