@@ -97,8 +97,8 @@ private[spark] class TieredDiskMerger[K, C](
     mergeFinished.await()
 
     // Merge the final group for combiner to directly feed to the reducer
-    val finalMergedPartArray = onDiskBlocks.toArray(new Array[DiskShuffleBlock](onDiskBlocks.size()))
-    val finalItrGroup = blocksToRecordIterators(finalMergedPartArray)
+    val finalMergedBlocks = onDiskBlocks.toArray(new Array[DiskShuffleBlock](onDiskBlocks.size()))
+    val finalItrGroup = blocksToRecordIterators(finalMergedBlocks)
     val mergedItr =
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
@@ -106,7 +106,7 @@ private[spark] class TieredDiskMerger[K, C](
 
     // Release the on-disk file when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
-      mergedItr, releaseShuffleBlocks(finalMergedPartArray))
+      mergedItr, releaseShuffleBlocks(finalMergedBlocks))
 
     new InterruptibleIterator(context, completionItr)
   }
@@ -118,9 +118,10 @@ private[spark] class TieredDiskMerger[K, C](
   /**
    * Release the left in-memory buffer or on-disk file after merged.
    */
-  private def releaseShuffleBlocks(shufflePartGroup: Array[DiskShuffleBlock]): Unit = {
-    shufflePartGroup.map { case DiskShuffleBlock(_, file, _) =>
+  private def releaseShuffleBlocks(onDiskShuffleGroup: Array[DiskShuffleBlock]): Unit = {
+    onDiskShuffleGroup.map { case DiskShuffleBlock(_, file, _) =>
       try {
+        logDebug(s"Deleting the unused temp shuffle file: ${file.getName}")
         file.delete()
       } catch {
         // Swallow the exception
@@ -133,9 +134,7 @@ private[spark] class TieredDiskMerger[K, C](
   private def blocksToRecordIterators(shufflePartGroup: Seq[DiskShuffleBlock])
     : Seq[Iterator[Product2[K, C]]] = {
     shufflePartGroup.map { case DiskShuffleBlock(id, _, _) =>
-      val blockData = blockManager.getBlockData(id)
-      blockManager.dataDeserialize(id, blockData.nioByteBuffer(), ser)
-        .asInstanceOf[Iterator[Product2[K, C]]]
+      blockManager.diskStore.getValues(id, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
     }.toSeq
   }
 
@@ -188,6 +187,8 @@ private[spark] class TieredDiskMerger[K, C](
             MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
           // Write merged blocks to disk
           val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
+          //TODO. change this into objectWriter
+          // TODO. Track the memory and disk spill
           val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
           blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedItr, ser)
 

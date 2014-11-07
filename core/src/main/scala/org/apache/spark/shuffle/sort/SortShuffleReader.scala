@@ -70,6 +70,10 @@ private[spark] class SortShuffleReader[K, C](
 
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
+  /** Number of bytes spilled in memory and on disk */
+  private var _diskBytesSpilled = 0L
+  private var _memoryBytesSpilled = 0L
+
   /** ArrayBuffer to store in-memory shuffle blocks */
   private val inMemoryBlocks = new Queue[MemoryShuffleBlock]()
 
@@ -107,22 +111,52 @@ private[spark] class SortShuffleReader[K, C](
           }
       }
 
+      inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
+      shuffleRawBlockFetcherItr.currentResult = null
+
       // Try to fit block in memory. If this fails, merge in-memory blocks to disk.
       val blockSize = blockData.size
       val granted = shuffleMemoryManager.tryToAcquire(blockSize)
       val block = MemoryShuffleBlock(blockId, blockData)
       if (granted < blockSize) {
-        logInfo(s"Granted $granted memory is not enough to store shuffle block ($blockSize), " +
-          s"spilling in-memory blocks to release the memory")
+        logInfo(s"Granted $granted memory is not enough to store shuffle block id $blockId, " +
+          s"block size $blockSize, try to consolidate in-memory blocks to release the memory")
 
         shuffleMemoryManager.release(granted)
-        spillInMemoryBlocks(block)
-      } else {
-        inMemoryBlocks += block
-      }
 
-      unfetchedBytes -= blockData.size()
-      shuffleRawBlockFetcherItr.currentResult = null
+        // Write merged blocks to disk
+        val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
+        val fos = new FileOutputStream(file)
+        val bos = new BufferedOutputStream(fos, fileBufferSize)
+
+        if (inMemoryBlocks.size > 1) {
+          val itrGroup = inMemoryBlocksToIterators()
+          val partialMergedItr =
+            MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
+          // TODO. change this into objectWriter
+          // TODO. Track the memory and disk spill
+          blockManager.dataSerializeStream(tmpBlockId, bos, partialMergedItr, ser)
+        } else {
+          val buffer = inMemoryBlocks.map(_.blockData.nioByteBuffer()).head
+          val channel = fos.getChannel
+          while (buffer.hasRemaining) {
+            channel.write(buffer)
+          }
+          channel.close()
+        }
+
+        tieredMerger.registerOnDiskBlock(tmpBlockId, file)
+
+        logInfo(s"Merge ${inMemoryBlocks.size} in-memory blocks into file ${file.getName}")
+
+        for (block <- inMemoryBlocks) {
+          block.blockData.release()
+          if (block.blockId != blockId) {
+            shuffleMemoryManager.release(block.blockData.size)
+          }
+        }
+        inMemoryBlocks.clear()
+      }
     }
     assert(unfetchedBytes == 0)
 
