@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.shuffle.protocol;
 
-import java.io.Serializable;
 import java.util.Arrays;
 
 import com.google.common.base.Objects;
+import io.netty.buffer.ByteBuf;
+
+import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.protocol.Encoders;
 
 /** Contains all configuration necessary for locating the shuffle files of an executor. */
-public class ExecutorShuffleInfo implements Serializable {
+public class ExecutorShuffleInfo implements Encodable {
   /** The base set of local directories that the executor stores its shuffle files in. */
-  final String[] localDirs;
+  public final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
-  final int subDirsPerLocalDir;
+  public final int subDirsPerLocalDir;
   /** Shuffle manager (SortShuffleManager or HashShuffleManager) that the executor is using. */
-  final String shuffleManager;
+  public final String shuffleManager;
 
   public ExecutorShuffleInfo(String[] localDirs, int subDirsPerLocalDir, String shuffleManager) {
     this.localDirs = localDirs;
@@ -60,5 +63,26 @@ public class ExecutorShuffleInfo implements Serializable {
         && Objects.equal(shuffleManager, o.shuffleManager);
     }
     return false;
+  }
+
+  @Override
+  public int encodedLength() {
+    return Encoders.StringArrays.encodedLength(localDirs)
+        + 4 // int
+        + Encoders.Strings.encodedLength(shuffleManager);
+  }
+
+  @Override
+  public void encode(ByteBuf buf) {
+    Encoders.StringArrays.encode(buf, localDirs);
+    buf.writeInt(subDirsPerLocalDir);
+    Encoders.Strings.encode(buf, shuffleManager);
+  }
+
+  public static ExecutorShuffleInfo decode(ByteBuf buf) {
+    String[] localDirs = Encoders.StringArrays.decode(buf);
+    int subDirsPerLocalDir = buf.readInt();
+    String shuffleManager = Encoders.Strings.decode(buf);
+    return new ExecutorShuffleInfo(localDirs, subDirsPerLocalDir, shuffleManager);
   }
 }
