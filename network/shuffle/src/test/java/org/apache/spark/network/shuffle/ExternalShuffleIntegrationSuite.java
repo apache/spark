@@ -105,7 +105,7 @@ public class ExternalShuffleIntegrationSuite {
 
   @After
   public void afterEach() {
-    handler.clearRegisteredExecutors();
+    handler.applicationRemoved(APP_ID, false /* cleanupLocalDirs */);
   }
 
   class FetchResult {

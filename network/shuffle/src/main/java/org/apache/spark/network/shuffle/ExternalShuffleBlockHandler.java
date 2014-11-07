@@ -94,9 +94,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     return streamManager;
   }
 
-  /** For testing, clears all executors registered with "RegisterExecutor". */
-  @VisibleForTesting
-  public void clearRegisteredExecutors() {
-    blockManager.clearRegisteredExecutors();
+  /**
+   * Removes an application (once it has been terminated), and optionally will clean up any
+   * local directories associated with the executors of that application in a separate thread.
+   */
+  public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
+    blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 }

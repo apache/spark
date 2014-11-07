@@ -63,8 +63,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     rdd.count()
     rdd.count()
 
-    // Invalidate the registered executors, disallowing access to their shuffle blocks.
-    rpcHandler.clearRegisteredExecutors()
+    // Invalidate the registered executors, disallowing access to their shuffle blocks (without
+    // deleting the actual shuffle files, so we could access them without the shuffle service).
+    rpcHandler.applicationRemoved(sc.conf.getAppId, false /* cleanupLocalDirs */)
 
     // Now Spark will receive FetchFailed, and not retry the stage due to "spark.test.noStageRetry"
     // being set.
