@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +32,6 @@ import org.apache.spark.network.sasl.SaslClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.util.TransportConf;
 
