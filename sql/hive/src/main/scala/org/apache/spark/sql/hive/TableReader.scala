@@ -290,6 +290,21 @@ private[hive] object HadoopTableReader extends HiveInspectors {
           (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
         case oi: DoubleObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
+        case oi: HiveVarcharObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.setString(ordinal, oi.getPrimitiveJavaObject(value).getValue)
+        case oi: HiveDecimalObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
+        case oi: TimestampObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, oi.getPrimitiveJavaObject(value).clone())
+        case oi: DateObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, oi.getPrimitiveJavaObject(value))
+        case oi: BinaryObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, oi.getPrimitiveJavaObject(value))
         case oi =>
           (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrap(value, oi)
       }
