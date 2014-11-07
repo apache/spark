@@ -10,7 +10,7 @@ from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextField, TextAreaField
 
 from pygments import highlight
-from pygments.lexers import PythonLexer, SqlLexer
+from pygments.lexers import PythonLexer, SqlLexer, BashLexer
 from pygments.formatters import HtmlFormatter
 
 
@@ -144,39 +144,45 @@ class Airflow(BaseView):
         dag = dagbag.dags[dag_id]
         task = dag.get_task(task_id)
 
-        sql_attrs = ['hql', 'sql']
+        special_attrs = {
+            'sql': SqlLexer,
+            'hql': SqlLexer,
+            'bash_command': BashLexer,
+        }
+        special_exts = ['.hql', '.sql', '.sh', '.bash']
         attributes = []
         for attr_name in dir(task):
             if not attr_name.startswith('_'):
                 attr = getattr(task, attr_name)
-                if type(attr) != type(self.task) and attr_name not in sql_attrs:
+                if type(attr) != type(self.task) and attr_name not in special_attrs:
                     attributes.append((attr_name, str(attr)))
 
         title = "Task Details for {task_id}".format(**locals())
 
         # Color coding the special attributes that are code
-        special_attrs = {}
-        for attr_name in sql_attrs:
+        special_attrs_rendered = {}
+        for attr_name in special_attrs:
             if hasattr(task, attr_name):
                 source = getattr(task, attr_name)
-                if source.endswith('.sql') or source.endswith('.hql'):
+                if any([source.endswith(ext) for ext in special_exts]):
+                    filepath = dag.folder + '/' + source
                     try:
-                        f = open(dag.folder + '/' + source, 'r')
+                        f = open(filepath, 'r')
                         source = f.read()
                         f.close()
                     except Exception as e:
                         logging.error(e)
                         source = getattr(task, attr_name)
-                special_attrs[attr_name] = highlight(
+                special_attrs_rendered[attr_name] = highlight(
                     source,
-                    SqlLexer(),
+                    special_attrs[attr_name](), # Lexer call
                     HtmlFormatter(noclasses=True)
                 )
 
         return self.render(
             'admin/task.html',
             attributes=attributes,
-            special_attrs=special_attrs,
+            special_attrs_rendered=special_attrs_rendered,
             dag=dag, title=title)
 
     @expose('/tree')
