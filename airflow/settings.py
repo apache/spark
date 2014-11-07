@@ -2,7 +2,7 @@ import os
 import sys
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-import configuration
+from configuration import getconf
 
 """
 if 'AIRFLOW_HOME' not in os.environ:
@@ -10,8 +10,7 @@ if 'AIRFLOW_HOME' not in os.environ:
 AIRFLOW_HOME = os.environ['AIRFLOW_HOME']
 """
 
-config = configuration.get_config()
-BASE_FOLDER = config.get('core', 'BASE_FOLDER')
+BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 
