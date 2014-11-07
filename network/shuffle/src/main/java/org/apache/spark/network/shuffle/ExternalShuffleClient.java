@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.IOException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -76,17 +77,33 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   @Override
   public void fetchBlocks(
-      String host,
-      int port,
-      String execId,
+      final String host,
+      final int port,
+      final String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
     assert appId != null : "Called before init()";
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
-      TransportClient client = clientFactory.createClient(host, port);
-      new OneForOneBlockFetcher(client, blockIds, listener)
-        .start(new ExternalShuffleMessages.OpenShuffleBlocks(appId, execId, blockIds));
+      RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
+        new RetryingBlockFetcher.BlockFetchStarter() {
+          @Override
+          public void createAndStart(String[] blockIds, BlockFetchingListener listener)
+              throws IOException {
+            TransportClient client = clientFactory.createClient(host, port);
+            new OneForOneBlockFetcher(client, blockIds, listener)
+              .start(new ExternalShuffleMessages.OpenShuffleBlocks(appId, execId, blockIds));
+          }
+        };
+
+      int maxRetries = conf.maxIORetries();
+      if (maxRetries > 0) {
+        // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
+        // a bug in this code. We should remove the if statement once we're sure of the stability.
+        new RetryingBlockFetcher(conf, blockFetchStarter, blockIds, listener).start();
+      } else {
+        blockFetchStarter.createAndStart(blockIds, listener);
+      }
     } catch (Exception e) {
       logger.error("Exception while beginning fetchBlocks", e);
       for (String blockId : blockIds) {
@@ -108,7 +125,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       String host,
       int port,
       String execId,
-      ExecutorShuffleInfo executorInfo) {
+      ExecutorShuffleInfo executorInfo) throws IOException {
     assert appId != null : "Called before init()";
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerExecutorMessage =

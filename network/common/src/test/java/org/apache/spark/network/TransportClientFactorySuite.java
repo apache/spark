@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
 import org.junit.After;
@@ -57,7 +58,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void createAndReuseBlockClients() throws TimeoutException {
+  public void createAndReuseBlockClients() throws IOException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
@@ -70,7 +71,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void neverReturnInactiveClients() throws Exception {
+  public void neverReturnInactiveClients() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     c1.close();
@@ -88,7 +89,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void closeBlockClientsWithFactory() throws TimeoutException {
+  public void closeBlockClientsWithFactory() throws IOException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
