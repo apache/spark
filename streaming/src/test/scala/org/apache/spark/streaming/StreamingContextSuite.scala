@@ -133,11 +133,16 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()
   }
 
-  test("stop before start and start after stop") {
+  test("stop before start") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop()  // stop before start should not throw exception
-    ssc.start()
+  }
+
+  test("start after stop") {
+    // Regression test for SPARK-4301
+    ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register()
     ssc.stop()
     intercept[SparkException] {
       ssc.start() // start after stop should throw exception
