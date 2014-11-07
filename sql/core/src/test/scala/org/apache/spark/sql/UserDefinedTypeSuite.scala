@@ -24,6 +24,13 @@ import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.test.TestSQLContext._
 
+/*
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   override def equals(other: Any): Boolean = other match {
@@ -69,14 +76,14 @@ class UserDefinedTypeSuite extends QueryTest {
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 2)
+    assert(EQ(labelsArrays.size).===(2))
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
     val features: RDD[MyDenseVector] =
       pointsRDD.select('features).map { case Row(v: MyDenseVector) => v }
     val featuresArrays: Array[MyDenseVector] = features.collect()
-    assert(featuresArrays.size === 2)
+    assert(EQ(featuresArrays.size).===(2))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
   }

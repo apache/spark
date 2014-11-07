@@ -22,18 +22,25 @@ import org.apache.spark.sql.test._
 /* Implicits */
 import TestSQLContext._
 
+/*
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest {
 
   test("Simple UDF") {
     registerFunction("strLenScala", (_: String).length)
-    assert(sql("SELECT strLenScala('test')").first().getInt(0) === 4)
+    assert(EQ(sql("SELECT strLenScala('test')").first().getInt(0)).===(4))
   }
 
   test("TwoArgument UDF") {
     registerFunction("strLenScala", (_: String).length + (_:Int))
-    assert(sql("SELECT strLenScala('test', 1)").first().getInt(0) === 5)
+    assert(EQ(sql("SELECT strLenScala('test', 1)").first().getInt(0)).===(5))
   }
 
 

@@ -27,6 +27,13 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 
+/*
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 class PlannerSuite extends FunSuite {
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
@@ -34,8 +41,8 @@ class PlannerSuite extends FunSuite {
     val logicalUnions = query collect { case u: logical.Union => u }
     val physicalUnions = planned collect { case u: execution.Union => u }
 
-    assert(logicalUnions.size === 2)
-    assert(physicalUnions.size === 1)
+    assert(EQ(logicalUnions.size).===(2))
+    assert(EQ(physicalUnions.size).===(1))
   }
 
   test("count is partially aggregated") {
@@ -43,7 +50,7 @@ class PlannerSuite extends FunSuite {
     val planned = HashAggregation(query).head
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
-    assert(aggregations.size === 2)
+    assert(EQ(aggregations.size).===(2))
   }
 
   test("count distinct is partially aggregated") {
@@ -71,7 +78,7 @@ class PlannerSuite extends FunSuite {
     val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
     val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
 
-    assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+    assert(EQ(broadcastHashJoins.size).===(1), "Should use broadcast hash join")
     assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
 
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
@@ -91,7 +98,7 @@ class PlannerSuite extends FunSuite {
     val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
     val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
 
-    assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+    assert(EQ(broadcastHashJoins.size).===(1), "Should use broadcast hash join")
     assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
 
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)

@@ -30,6 +30,13 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{Row, SchemaRDD}
 
+/*
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 case class TestData(a: Int, b: String)
 
 /**
@@ -139,7 +146,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("CREATE TABLE AS runs once") {
     sql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
-    assert(sql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
+    assert(EQ(sql("SELECT COUNT(*) FROM foo").collect().head.getLong(0)).===(1),
       "Incorrect number of rows in created table")
   }
 
@@ -161,7 +168,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
-    assert(sql("SELECT 1").collect() === Array(Seq(1)))
+    assert(EQ(sql("SELECT 1").collect()).===(Array(Seq(1))))
     setConf("spark.sql.dialect", "hiveql")
   }
 
@@ -365,7 +372,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       .collect()
       .toSet
 
-    assert(actual === expected)
+    assert(EQ(actual).===(expected))
   }
 
   // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
@@ -415,7 +422,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       .collect()
       .map(x => Pair(x.getString(0), x.getInt(1)))
 
-    assert(results === Array(Pair("foo", 4)))
+    assert(EQ(results).===(Array(Pair("foo", 4))))
     TestHive.reset()
   }
 
@@ -557,8 +564,8 @@ class HiveQuerySuite extends HiveComparisonTest {
     sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
     sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).map {
       case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
-        assert(map.size === 1)
-        assert(map.head === (key, value))
+        assert(EQ(map.size).===(1))
+        assert(EQ(map.head).===((key, value)))
     }
   }
 
@@ -654,7 +661,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       sql("CREATE TABLE dp_verify(intcol INT)")
       sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
 
-      assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+      assert(EQ(sql("SELECT * FROM dp_verify").collect()).===(Array(Row(value))))
     }
   }
 
