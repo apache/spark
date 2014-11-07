@@ -35,8 +35,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with HasInputCol {
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    import map.implicitMapping
-    val input = dataset.select((inputCol: String).attr)
+    val input = dataset.select(map(inputCol).attr)
       .map { case Row(v: Vector) =>
         v
       }
@@ -44,7 +43,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with HasInputCol {
     val model = new StandardScalerModel(scaler)
     Params.copyValues(modelParams, model)
     if (!model.isSet(model.inputCol)) {
-      model.setInputCol(inputCol)
+      model.setInputCol(map(inputCol))
     }
     model
   }
@@ -61,10 +60,9 @@ class StandardScalerModel private[ml] (
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    import map.implicitMapping
     val scale: (Vector) => Vector = (v) => {
       scaler.transform(v)
     }
-    dataset.select(Star(None), scale.call((inputCol: String).attr) as outputCol)
+    dataset.select(Star(None), scale.call(map(inputCol).attr) as map(outputCol))
   }
 }

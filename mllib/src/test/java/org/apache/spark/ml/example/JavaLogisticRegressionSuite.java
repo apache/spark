@@ -102,8 +102,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void logisticRegressionWithCrossValidation() {
     LogisticRegression lr = new LogisticRegression();
     ParamMap[] lrParamMaps = new ParamGridBuilder()
-      .addMulti(lr.regParam(), new double[] {0.1, 100.0})
-      .addMulti(lr.maxIter(), new int[] {0, 5})
+      .addGrid(lr.regParam(), new double[]{0.1, 100.0})
+      .addGrid(lr.maxIter(), new int[]{0, 5})
       .build();
     BinaryClassificationEvaluator eval = new BinaryClassificationEvaluator();
     CrossValidator cv = new CrossValidator()

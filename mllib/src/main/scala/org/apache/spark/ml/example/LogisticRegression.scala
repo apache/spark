@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Row
 
 /**
- * Logistic regression (example).
+ * Logistic regression.
  */
 class LogisticRegression extends Estimator[LogisticRegressionModel]
     with HasRegParam with HasMaxIter with HasLabelCol with HasFeaturesCol {
@@ -47,21 +47,20 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    import map.implicitMapping
-    val instances = dataset.select((labelCol: String).attr, (featuresCol: String).attr)
+    val instances = dataset.select(map(labelCol).attr, map(featuresCol).attr)
       .map { case Row(label: Double, features: Vector) =>
         LabeledPoint(label, features)
       }.cache()
     val lr = new LogisticRegressionWithLBFGS
     lr.optimizer
-      .setRegParam(regParam)
-      .setNumIterations(maxIter)
+      .setRegParam(map(regParam))
+      .setNumIterations(map(maxIter))
     val lrm = new LogisticRegressionModel(lr.run(instances).weights)
     instances.unpersist()
     // copy model params
     Params.copyValues(modelParams, lrm)
     if (!lrm.isSet(lrm.featuresCol) && map.contains(lrm.featuresCol)) {
-      lrm.setFeaturesCol(featuresCol)
+      lrm.setFeaturesCol(map(featuresCol))
     }
     lrm
   }
@@ -76,10 +75,11 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
 }
 
 trait LogisticRegressionModelParams extends Params with HasThreshold with HasFeaturesCol
-    with HasScoreCol {
+    with HasScoreCol with HasPredictionCol {
   def setThreshold(value: Double): this.type = { set(threshold, value); this }
   def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }
   def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
+  def setPredictionCol(value: String): this.type = { set(predictionCol, value); this }
 }
 
 class LogisticRegressionModel(
@@ -91,19 +91,17 @@ class LogisticRegressionModel(
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    println(s"transform called with $map")
-    import map.implicitMapping
     val score: Vector => Double = (v) => {
       val margin = BLAS.dot(v, weights)
       1.0 / (1.0 + math.exp(-margin))
     }
-    val thres: Double = threshold
+    val t = map(threshold)
     val predict: Vector => Double = (v) => {
-      if (score(v) > thres) 1.0 else 0.0
+      if (score(v) > t) 1.0 else 0.0
     }
     dataset.select(
       Star(None),
-      score.call((featuresCol: String).attr) as scoreCol,
-      predict.call((featuresCol: String).attr) as 'prediction)
+      score.call(map(featuresCol).attr) as map(scoreCol),
+      predict.call(map(featuresCol).attr) as map(predictionCol))
   }
 }

@@ -68,8 +68,8 @@ class LogisticRegressionSuite extends FunSuite {
   test("logistic regression with cross validation") {
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
-      .addMulti(lr.regParam, Array(0.1, 100.0))
-      .addMulti(lr.maxIter, Array(0, 5))
+      .addGrid(lr.regParam, Array(0.1, 100.0))
+      .addGrid(lr.maxIter, Array(0, 5))
       .build()
     val eval = new BinaryClassificationEvaluator
     val cv = new CrossValidator()

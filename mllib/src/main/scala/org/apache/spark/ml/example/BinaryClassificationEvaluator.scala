@@ -35,14 +35,12 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   override def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    import map.implicitMapping
-    val scoreAndLabels = dataset.select((scoreCol: String).attr, (labelCol: String).attr)
+    val scoreAndLabels = dataset.select(map(scoreCol).attr, map(labelCol).attr)
       .map { case Row(score: Double, label: Double) =>
-        println(score, label)
         (score, label)
       }.cache()
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    (metricName: String) match {
+    map(metricName) match {
       case "areaUnderROC" =>
         metrics.areaUnderROC()
       case "areaUnderPR" =>

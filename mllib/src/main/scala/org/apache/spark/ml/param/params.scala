@@ -100,17 +100,24 @@ trait Params extends Identifiable {
   def params: Array[Param[_]] = {
     val methods = this.getClass.getMethods
     methods.filter { m =>
-      Modifier.isPublic(m.getModifiers) &&
-        classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
-        m.getParameterTypes.isEmpty
-    }.map(m => m.invoke(this).asInstanceOf[Param[_]])
+        Modifier.isPublic(m.getModifiers) &&
+          classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
+          m.getParameterTypes.isEmpty
+      }.sortBy(_.getName)
+      .map(m => m.invoke(this).asInstanceOf[Param[_]])
   }
 
   /**
-   * Validates parameters specified by the input parameter map.
-   * Raises an exception if any parameter belongs to this object is invalid.
+   * Validates parameter values stored internally plus the input parameter map.
+   * Raises an exception if any parameter is invalid.
    */
   def validate(paramMap: ParamMap): Unit = {}
+
+  /**
+   * Validates parameter values stored internally.
+   * Raise an exception if any parameter value is invalid.
+   */
+  def validate(): Unit = validate(ParamMap.empty)
 
   /**
    * Returns the documentation of all params.
@@ -245,14 +252,26 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
    * Returns a new param map that contains parameters in this map and the given map,
    * where the latter overwrites this if there exists conflicts.
    */
-  private[ml] def ++(other: ParamMap): ParamMap = {
+  def ++(other: ParamMap): ParamMap = {
     new ParamMap(this.map ++ other.map)
   }
 
 
-  private[ml] def ++=(other: ParamMap): this.type = {
+  /**
+   * Adds all parameters from the input param map into this param map.
+   */
+  def ++=(other: ParamMap): this.type = {
     this.map ++= other.map
     this
+  }
+
+  /**
+   * Converts this param map to a sequence of param pairs.
+   */
+  def toSeq: Seq[ParamPair[_]] = {
+    map.toSeq.map { case (param, value) =>
+      ParamPair(param, value)
+    }
   }
 
   /**
@@ -267,6 +286,14 @@ object ParamMap {
    * Returns an empty param map.
    */
   def empty: ParamMap = new ParamMap()
+
+  /**
+   * Constructs a param map by specifying its entries.
+   */
+  @varargs
+  def apply(paramPairs: ParamPair[_]*): ParamMap = {
+    new ParamMap().put(paramPairs: _*)
+  }
 }
 
 /**
@@ -274,67 +301,70 @@ object ParamMap {
  */
 class ParamGridBuilder {
 
-  private val fixedParamMap = ParamMap.empty
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
   /**
-   * Builds with fixed parameters.
+   * Builds base on parameters with fixed values.
    */
-  def withFixed(paramMap: ParamMap): this.type = {
-    fixedParamMap ++= paramMap
+  def baseOn(paramMap: ParamMap): this.type = {
+    baseOn(paramMap.toSeq: _*)
     this
   }
 
   /**
-   * Builds with fixed parameters.
+   * Builds base on parameters with fixed values.
    */
   @varargs
-  def withFixed(paramPairs: ParamPair[_]*): this.type = {
-    fixedParamMap.put(paramPairs: _*)
+  def baseOn(paramPairs: ParamPair[_]*): this.type = {
+    paramPairs.foreach { p =>
+      addGrid(p.param.asInstanceOf[Param[Any]], Seq(p.value))
+    }
     this
   }
 
   /**
    * Adds a param with multiple values (overwrites if the input param exists).
    */
-  def addMulti[T](param: Param[T], values: Iterable[T]): this.type = {
+  def addGrid[T](param: Param[T], values: Iterable[T]): this.type = {
     paramGrid.put(param, values)
     this
   }
 
+  // specialized versions of addMulti for Java.
+
   /**
    * Adds a double param with multiple values.
    */
-  def addMulti(param: DoubleParam, values: Array[Double]): this.type = {
-    addMulti[Double](param, values)
+  def addGrid(param: DoubleParam, values: Array[Double]): this.type = {
+    addGrid[Double](param, values)
   }
 
   /**
    * Adds a int param with multiple values.
    */
-  def addMulti(param: IntParam, values: Array[Int]): this.type = {
-    addMulti[Int](param, values)
+  def addGrid(param: IntParam, values: Array[Int]): this.type = {
+    addGrid[Int](param, values)
   }
 
   /**
    * Adds a float param with multiple values.
    */
-  def addMulti(param: FloatParam, values: Array[Float]): this.type = {
-    addMulti[Float](param, values)
+  def addGrid(param: FloatParam, values: Array[Float]): this.type = {
+    addGrid[Float](param, values)
   }
 
   /**
    * Adds a long param with multiple values.
    */
-  def addMulti(param: LongParam, values: Array[Long]): this.type = {
-    addMulti[Long](param, values)
+  def addGrid(param: LongParam, values: Array[Long]): this.type = {
+    addGrid[Long](param, values)
   }
 
   /**
    * Adds a boolean param with true and false.
    */
-  def addMulti(param: BooleanParam): this.type = {
-    addMulti[Boolean](param, Array(true, false))
+  def addGrid(param: BooleanParam): this.type = {
+    addGrid[Boolean](param, Array(true, false))
   }
 
   /**
@@ -348,6 +378,6 @@ class ParamGridBuilder {
       }
       paramMaps = newParamMaps.toArray
     }
-    paramMaps.map(_ ++= fixedParamMap)
+    paramMaps
   }
 }

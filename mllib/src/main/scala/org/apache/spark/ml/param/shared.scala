@@ -50,6 +50,13 @@ private[ml] trait HasScoreCol extends Params {
   def getScoreCol: String = get(scoreCol)
 }
 
+private[ml] trait HasPredictionCol extends Params {
+  /** param for prediction column name */
+  val predictionCol: Param[String] =
+    new Param(this, "predictionCol", "prediction column name", Some("prediction"))
+  def getPredictionCol: String = get(predictionCol)
+}
+
 private[ml] trait HasThreshold extends Params {
   /** param for threshold in (binary) prediction */
   val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in prediction")

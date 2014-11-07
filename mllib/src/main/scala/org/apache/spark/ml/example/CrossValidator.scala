@@ -19,12 +19,13 @@ package org.apache.spark.ml.example
 
 import com.github.fommil.netlib.F2jBLAS
 
+import org.apache.spark.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.SchemaRDD
 
-class CrossValidator extends Estimator[CrossValidatorModel] with Params {
+class CrossValidator extends Estimator[CrossValidatorModel] with Params with Logging {
 
   private val f2jBLAS = new F2jBLAS
 
@@ -44,7 +45,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with Params {
   def setEvaluator(value: Evaluator): this.type = { set(evaluator, value); this }
   def getEvaluator: Evaluator = get(evaluator)
 
-  val numFolds: Param[Int] =
+  val numFolds: IntParam =
     new IntParam(this, "numFolds", "number of folds for cross validation", Some(3))
   def setNumFolds(value: Int): this.type = { set(numFolds, value); this }
   def getNumFolds: Int = get(numFolds)
@@ -70,20 +71,20 @@ class CrossValidator extends Estimator[CrossValidatorModel] with Params {
       val trainingDataset = sqlCtx.applySchema(training, schema).cache()
       val validationDataset = sqlCtx.applySchema(validation, schema).cache()
       // multi-model training
-      println(s"Train split $splitIndex with multiple sets of parameters.")
+      logDebug(s"Train split $splitIndex with multiple sets of parameters.")
       val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model]]
       var i = 0
       while(i < numModels) {
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)), map)
-        println(s"Got metric $metric for model trained with ${epm(i)}.")
+        logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
         metrics(i) += metric
         i += 1
       }
     }
     f2jBLAS.dscal(numModels, 1.0 / map(numFolds), metrics, 1)
-    println(s"Average cross-validation metrics: ${metrics.toSeq}")
+    logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) = metrics.zipWithIndex.maxBy(_._1)
-    println("Best set of parameters:\n" + epm(bestIndex))
+    logInfo("Best set of parameters:\n" + epm(bestIndex))
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model]
     new CrossValidatorModel(bestModel, bestMetric / map(numFolds))
   }
