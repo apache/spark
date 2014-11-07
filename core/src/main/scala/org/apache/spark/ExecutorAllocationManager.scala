@@ -66,7 +66,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Lower and upper bounds on the number of executors. These are required.
   private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
   private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", -1)
-  verifyBounds()
 
   // How long there must be backlogged tasks for before an addition is triggered
   private val schedulerBacklogTimeout = conf.getLong(
@@ -77,8 +76,13 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", schedulerBacklogTimeout)
 
   // How long an executor must be idle for before it is removed
-  private val removeThresholdSeconds = conf.getLong(
+  private val executorIdleTimeout = conf.getLong(
     "spark.dynamicAllocation.executorIdleTimeout", 600)
+
+  // During testing, the methods to actually kill and add executors are mocked out
+  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
+
+  validateSettings()
 
   // Number of executors to add in the next round
   private var numExecutorsToAdd = 1
@@ -103,17 +107,14 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
 
-  // Whether we are testing this class. This should only be used internally.
-  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
-
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
 
   /**
-   * Verify that the lower and upper bounds on the number of executors are valid.
+   * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
    */
-  private def verifyBounds(): Unit = {
+  private def validateSettings(): Unit = {
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
     }
@@ -123,6 +124,22 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     if (minNumExecutors > maxNumExecutors) {
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
         s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
+    }
+    if (schedulerBacklogTimeout <= 0) {
+      throw new SparkException("spark.dynamicAllocation.schedulerBacklogTimeout must be > 0!")
+    }
+    if (sustainedSchedulerBacklogTimeout <= 0) {
+      throw new SparkException(
+        "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
+    }
+    if (executorIdleTimeout <= 0) {
+      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
+    }
+    // Require external shuffle service for dynamic allocation
+    // Otherwise, we may lose shuffle files when killing executors
+    if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
+      throw new SparkException("Dynamic allocation of executors requires the external " +
+        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
   }
 
@@ -254,7 +271,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     val removeRequestAcknowledged = testing || sc.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
-        s"$removeThresholdSeconds seconds (new desired total will be ${numExistingExecutors - 1})")
+        s"$executorIdleTimeout seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
       true
     } else {
@@ -329,8 +346,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-        s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
-      removeTimes(executorId) = clock.getTimeMillis + removeThresholdSeconds * 1000
+        s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
+      removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
     }
   }
 

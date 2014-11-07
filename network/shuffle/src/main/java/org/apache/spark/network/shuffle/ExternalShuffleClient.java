@@ -17,14 +17,18 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.Closeable;
+import java.util.List;
 
+import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.sasl.SaslClientBootstrap;
+import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.shuffle.ExternalShuffleMessages.RegisterExecutor;
 import org.apache.spark.network.util.JavaUtils;
@@ -36,16 +40,38 @@ import org.apache.spark.network.util.TransportConf;
  * BlockTransferService), which has the downside of losing the shuffle data if we lose the
  * executors.
  */
-public class ExternalShuffleClient implements ShuffleClient {
+public class ExternalShuffleClient extends ShuffleClient {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
 
-  private final TransportClientFactory clientFactory;
-  private final String appId;
+  private final TransportConf conf;
+  private final boolean saslEnabled;
+  private final SecretKeyHolder secretKeyHolder;
 
-  public ExternalShuffleClient(TransportConf conf, String appId) {
-    TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
-    this.clientFactory = context.createClientFactory();
+  private TransportClientFactory clientFactory;
+  private String appId;
+
+  /**
+   * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
+   * then secretKeyHolder may be null.
+   */
+  public ExternalShuffleClient(
+      TransportConf conf,
+      SecretKeyHolder secretKeyHolder,
+      boolean saslEnabled) {
+    this.conf = conf;
+    this.secretKeyHolder = secretKeyHolder;
+    this.saslEnabled = saslEnabled;
+  }
+
+  @Override
+  public void init(String appId) {
     this.appId = appId;
+    TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
+    List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
+    if (saslEnabled) {
+      bootstraps.add(new SaslClientBootstrap(conf, appId, secretKeyHolder));
+    }
+    clientFactory = context.createClientFactory(bootstraps);
   }
 
   @Override
@@ -55,6 +81,7 @@ public class ExternalShuffleClient implements ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
+    assert appId != null : "Called before init()";
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
@@ -82,6 +109,7 @@ public class ExternalShuffleClient implements ShuffleClient {
       int port,
       String execId,
       ExecutorShuffleInfo executorInfo) {
+    assert appId != null : "Called before init()";
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerExecutorMessage =
       JavaUtils.serialize(new RegisterExecutor(appId, execId, executorInfo));

@@ -110,7 +110,8 @@ package object dsl {
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
 
-    def as(s: Symbol) = Alias(expr, s.name)()
+    def as(alias: String) = Alias(expr, alias)()
+    def as(alias: Symbol) = Alias(expr, alias.name)()
   }
 
   trait ExpressionConversions {

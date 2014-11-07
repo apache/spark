@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.util.jar.Attributes.Name
@@ -44,6 +45,7 @@ import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -1611,6 +1613,18 @@ private[spark] object Utils extends Logging {
     s"$className: $desc\n$st"
   }
 
+  /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
+  def getThreadDump(): Array[ThreadStackTrace] = {
+    // We need to filter out null values here because dumpAllThreads() may return null array
+    // elements for threads that are dead / don't exist.
+    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
+      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
+        threadInfo.getThreadState, stackTrace)
+    }
+  }
+
   /**
    * Convert all spark properties set in the given SparkConf to a sequence of java options.
    */
@@ -1767,6 +1781,21 @@ private[spark] object Utils extends Logging {
       val manifest = new JarManifest(manifestUrl.openStream())
       manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
     }.getOrElse("Unknown")
+
+  /**
+   * Return the value of a config either through the SparkConf or the Hadoop configuration
+   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
+   * if the key is not set in the Hadoop configuration.
+   */
+  def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
+    val sparkValue = conf.get(key, default)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    } else {
+      sparkValue
+    }
+  }
+
 }
 
 /**
