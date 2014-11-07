@@ -42,12 +42,12 @@
       <artifactId>spark-network-common_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
+
+    <!-- Provided dependencies -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
-
-    <!-- Provided dependencies -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
