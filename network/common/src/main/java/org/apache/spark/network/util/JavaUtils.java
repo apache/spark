@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.util;
 
+import java.nio.ByteBuffer;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -25,6 +27,8 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
 import com.google.common.io.Closeables;
+import com.google.common.base.Charsets;
+import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,5 +76,21 @@ public class JavaUtils {
     if (obj == null) { return 0; }
     int hash = obj.hashCode();
     return hash != Integer.MIN_VALUE ? Math.abs(hash) : 0;
+  }
+
+  /**
+   * Convert the given string to a byte buffer. The resulting buffer can be
+   * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
+   */
+  public static ByteBuffer stringToBytes(String s) {
+    return Unpooled.wrappedBuffer(s.getBytes(Charsets.UTF_8)).nioBuffer();
+  }
+
+  /**
+   * Convert the given byte buffer to a string. The resulting string can be
+   * converted back to the same byte buffer through {@link #stringToBytes(String)}.
+   */
+  public static String bytesToString(ByteBuffer b) {
+    return Unpooled.wrappedBuffer(b).toString(Charsets.UTF_8);
   }
 }
