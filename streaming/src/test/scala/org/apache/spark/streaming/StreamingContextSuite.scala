@@ -139,18 +139,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()  // stop before start should not throw exception
   }
 
-  test("stop(stopContext=true) after stopSparkContext(stopContext=false)") {
-    ssc = new StreamingContext(master, appName, batchDuration)
-    addInputStream(ssc).register()
-    ssc.stop(stopSparkContext = false)
-    assert(ssc.sc.makeRDD(1 to 100).collect().size === 100)
-    ssc.stop(stopSparkContext = true)
-    // Check that the SparkContext is actually stopped:
-    intercept[Exception] {
-      ssc.sc.makeRDD(1 to 100).collect()
-    }
-  }
-
   test("start after stop") {
     // Regression test for SPARK-4301
     ssc = new StreamingContext(master, appName, batchDuration)
@@ -172,6 +160,18 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
+  }
+
+  test("stop(stopSparkContext=true) after stop(stopSparkContext=false)") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register()
+    ssc.stop(stopSparkContext = false)
+    assert(ssc.sc.makeRDD(1 to 100).collect().size === 100)
+    ssc.stop(stopSparkContext = true)
+    // Check that the SparkContext is actually stopped:
+    intercept[Exception] {
+      ssc.sc.makeRDD(1 to 100).collect()
+    }
   }
 
   test("stop gracefully") {
