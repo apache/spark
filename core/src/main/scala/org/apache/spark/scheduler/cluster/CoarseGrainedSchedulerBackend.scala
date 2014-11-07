@@ -83,12 +83,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
 
     override def postStop(): Unit = {
-      stopAllExecutors
+      stopAllExecutors("driver actor stopped")
     }
 
-    private def stopAllExecutors = {
-      for ((_, executorData) <- executorDataMap) {
-        executorData.executorActor ! StopExecutor
+    private def stopAllExecutors(reason: String) = {
+      for ((executorId, _) <- executorDataMap) {
+        removeExecutor(executorId, reason)
       }
     }
 
@@ -144,7 +144,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
-        stopAllExecutors
+        stopAllExecutors("Asking each executor to shut down")
         sender ! true
 
       case RemoveExecutor(executorId, reason) =>
