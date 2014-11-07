@@ -32,6 +32,14 @@ import org.apache.spark.sql.test.TestSQLContext._
 import org.scalatest.Assertions.{convertToEqualizer => EQ}
 
 
+/*
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
+
 class DslQuerySuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
