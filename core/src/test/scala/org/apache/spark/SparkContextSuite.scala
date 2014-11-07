@@ -46,7 +46,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Check for multiple SparkContexts can be disabled via undocumented debug option") {
-    val propertyName = "spark.driver.disableMultipleSparkContextsErrorChecking"
+    val propertyName = "spark.driver.allowMultipleContexts"
     val originalPropertyValue = System.getProperty(propertyName)
     var secondSparkContext: SparkContext = null
     try {
