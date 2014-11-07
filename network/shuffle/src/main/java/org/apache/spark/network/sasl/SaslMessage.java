@@ -58,7 +58,8 @@ class SaslMessage implements Encodable {
 
   public static SaslMessage decode(ByteBuf buf) {
     if (buf.readByte() != TAG_BYTE) {
-      throw new IllegalStateException("Expected SaslMessage, received something else");
+      throw new IllegalStateException("Expected SaslMessage, received something else"
+        + " (maybe your client does not have SASL enabled?)");
     }
 
     int idLength = buf.readInt();
