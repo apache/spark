@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types._
+import java.sql.{Date, Timestamp}
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -164,6 +165,35 @@ final class MutableByte extends MutableValue {
   }
   def copy() = {
     val newCopy = new MutableByte
+    newCopy.isNull = isNull
+    newCopy.value = value
+    newCopy.asInstanceOf[this.type]
+  }
+}
+final class MutableDate extends MutableValue {
+  var value: Date = new Date(0)
+  def boxed = if (isNull) null else value
+  def update(v: Any) = value = {
+    isNull = false
+    v.asInstanceOf[Date]
+  }
+  def copy() = {
+    val newCopy = new MutableDate
+    newCopy.isNull = isNull
+    newCopy.value = value
+    newCopy.asInstanceOf[this.type]
+  }
+}
+
+final class MutableTimestamp extends MutableValue {
+  var value: Timestamp = new Timestamp(0)
+  def boxed = if (isNull) null else value
+  def update(v: Any) = value = {
+    isNull = false
+    v.asInstanceOf[Timestamp]
+  }
+  def copy() = {
+    val newCopy = new MutableTimestamp
     newCopy.isNull = isNull
     newCopy.value = value
     newCopy.asInstanceOf[this.type]

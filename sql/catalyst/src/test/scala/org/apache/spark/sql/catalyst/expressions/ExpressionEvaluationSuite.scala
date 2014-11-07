@@ -32,6 +32,13 @@ import org.apache.spark.sql.catalyst.types._
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
+/*
+ * Note: the DSL conversions collide with the scalatest === operator!
+ * We can apply the scalatest conversion explicitly:
+ *   assert(X === Y) --> assert(EQ(X).===(Y))
+ */
+import org.scalatest.Assertions.{convertToEqualizer => EQ}
+
 class ExpressionEvaluationSuite extends FunSuite {
 
   test("literals") {
@@ -318,18 +325,18 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
 
-    assert(("abcdef" cast StringType).nullable === false)
-    assert(("abcdef" cast BinaryType).nullable === false)
-    assert(("abcdef" cast BooleanType).nullable === false)
-    assert(("abcdef" cast TimestampType).nullable === true)
-    assert(("abcdef" cast LongType).nullable === true)
-    assert(("abcdef" cast IntegerType).nullable === true)
-    assert(("abcdef" cast ShortType).nullable === true)
-    assert(("abcdef" cast ByteType).nullable === true)
-    assert(("abcdef" cast DecimalType.Unlimited).nullable === true)
-    assert(("abcdef" cast DecimalType(4, 2)).nullable === true)
-    assert(("abcdef" cast DoubleType).nullable === true)
-    assert(("abcdef" cast FloatType).nullable === true)
+    assert(EQ(("abcdef" cast StringType).nullable).===(false))
+    assert(EQ(("abcdef" cast BinaryType).nullable).===(false))
+    assert(EQ(("abcdef" cast BooleanType).nullable).===(false))
+    assert(EQ(("abcdef" cast TimestampType).nullable).===(true))
+    assert(EQ(("abcdef" cast LongType).nullable).===(true))
+    assert(EQ(("abcdef" cast IntegerType).nullable).===(true))
+    assert(EQ(("abcdef" cast ShortType).nullable).===(true))
+    assert(EQ(("abcdef" cast ByteType).nullable).===(true))
+    assert(EQ(("abcdef" cast DecimalType.Unlimited).nullable).===(true))
+    assert(EQ(("abcdef" cast DecimalType(4, 2)).nullable).===(true))
+    assert(EQ(("abcdef" cast DoubleType).nullable).===(true))
+    assert(EQ(("abcdef" cast FloatType).nullable).===(true))
 
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
@@ -346,15 +353,15 @@ class ExpressionEvaluationSuite extends FunSuite {
     // - Values that would overflow the target precision should turn into null
     // - Because of this, casts to fixed-precision decimals should be nullable
 
-    assert(Cast(Literal(123), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable === false)
+    assert(EQ(Cast(Literal(123), DecimalType.Unlimited).nullable).===(false))
+    assert(EQ(Cast(Literal(10.03f), DecimalType.Unlimited).nullable).===(false))
+    assert(EQ(Cast(Literal(10.03), DecimalType.Unlimited).nullable).===(false))
+    assert(EQ(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable).===(false))
 
-    assert(Cast(Literal(123), DecimalType(2, 1)).nullable === true)
-    assert(Cast(Literal(10.03f), DecimalType(2, 1)).nullable === true)
-    assert(Cast(Literal(10.03), DecimalType(2, 1)).nullable === true)
-    assert(Cast(Literal(Decimal(10.03)), DecimalType(2, 1)).nullable === true)
+    assert(EQ(Cast(Literal(123), DecimalType(2, 1)).nullable).===(true))
+    assert(EQ(Cast(Literal(10.03f), DecimalType(2, 1)).nullable).===(true))
+    assert(EQ(Cast(Literal(10.03), DecimalType(2, 1)).nullable).===(true))
+    assert(EQ(Cast(Literal(Decimal(10.03)), DecimalType(2, 1)).nullable).===(true))
 
     checkEvaluation(Cast(Literal(123), DecimalType.Unlimited), Decimal(123))
     checkEvaluation(Cast(Literal(123), DecimalType(3, 0)), Decimal(123))
@@ -500,26 +507,26 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5, c6)), "c", row)
     checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5)), null, row)
 
-    assert(CaseWhen(Seq(c2, c4, c6)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5, c6)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5)).nullable === true)
+    assert(EQ(CaseWhen(Seq(c2, c4, c6)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4, c3, c5, c6)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4, c3, c5)).nullable).===(true))
 
     val c4_notNull = 'a.boolean.notNull.at(3)
     val c5_notNull = 'a.boolean.notNull.at(4)
     val c6_notNull = 'a.boolean.notNull.at(5)
 
-    assert(CaseWhen(Seq(c2, c4_notNull, c6_notNull)).nullable === false)
-    assert(CaseWhen(Seq(c2, c4, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c6)).nullable === true)
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c6_notNull)).nullable).===(false))
+    assert(EQ(CaseWhen(Seq(c2, c4, c6_notNull)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c6)).nullable).===(true))
 
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6_notNull)).nullable === false)
-    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6)).nullable === true)
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6_notNull)).nullable).===(false))
+    assert(EQ(CaseWhen(Seq(c2, c4, c3, c5_notNull, c6_notNull)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c3, c5, c6_notNull)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6)).nullable).===(true))
 
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4, c3, c5_notNull)).nullable).===(true))
+    assert(EQ(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable).===(true))
   }
 
   test("complex type") {
@@ -559,11 +566,11 @@ class ExpressionEvaluationSuite extends FunSuite {
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(GetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
-    assert(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
+    assert(EQ(GetField(BoundReference(2,typeS, nullable = true), "a").nullable).===(true))
+    assert(EQ(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable).===(false))
 
-    assert(GetField(Literal(null, typeS), "a").nullable === true)
-    assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
+    assert(EQ(GetField(Literal(null, typeS), "a").nullable).===(true))
+    assert(EQ(GetField(Literal(null, typeS_notNullable), "a").nullable).===(true))
 
     checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
     checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
@@ -717,10 +724,10 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     val s_notNull = 'a.string.notNull.at(0)
 
-    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
-    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
+    assert(EQ(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable).===(true))
+    assert(EQ(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable).===(false))
+    assert(EQ(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable).===(true))
+    assert(EQ(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable).===(true))
 
     checkEvaluation(s.substr(0, 2), "ex", row)
     checkEvaluation(s.substr(0), "example", row)
@@ -772,4 +779,25 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 ^ c2, 3, row)
     checkEvaluation(~c1, -2, row)
   }
+
+  test("recognizes literals on the left") {
+    assert(EQ(-1 + 'x).===(Add(-1, 'x)))
+    assert(EQ(0 < 'x).===(LessThan(0, 'x)))
+    assert(EQ(1.5 === 'x).===(EqualTo(1.5, 'x)))
+    assert(EQ(false !== 'x).===(Not(EqualTo(false, 'x))))
+    assert(EQ("a string" >= 'x).===(GreaterThanOrEqual("a string", 'x)))
+    assert(EQ(RichDate("2014-11-05") > 'date).===(GreaterThan(RichDate("2014-11-05"), 'date)))
+    assert(EQ(RichTimestamp("2014-11-05 12:34:56.789") < 'now).===(
+      LessThan(RichTimestamp("2014-11-05 12:34:56.789"), 'now)))
+  }
+
+  test("comparison operators for RichDate and RichTimestamp") {
+    assert(EQ(RichDate("2014-11-05") < RichDate("2014-11-06")).===(true))
+    assert(EQ(RichDate("2014-11-05") <= RichDate("2013-11-06")).===(false))
+    assert(EQ(RichTimestamp("2014-11-05 12:34:56.5432") > RichTimestamp("2014-11-05 00:00:00")
+	    ).===(true))
+    assert(EQ(RichTimestamp("2014-11-05 12:34:56") >= RichTimestamp("2014-11-06 00:00:00")
+	    ).===(false))
+  }
+
 }
