@@ -267,4 +267,27 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
     }
   }
+
+  test("SPARK-4292 regression: result set iterator issue") {
+    withJdbcStatement() { statement =>
+      val dataFilePath =
+        Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_4292",
+        "CREATE TABLE test_4292(key INT, val STRING)",
+        s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test_4292")
+
+      queries.foreach(statement.execute)
+
+      val resultSet = statement.executeQuery("SELECT key FROM test_4292")
+
+      Seq(238, 86, 311, 27, 165).foreach { key =>
+        resultSet.next()
+        assert(resultSet.getInt(1) == key)
+      }
+
+      statement.executeQuery("DROP TABLE IF EXISTS test_4292")
+    }
+  }
 }
