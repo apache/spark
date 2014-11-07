@@ -46,3 +46,6 @@ textarea {
 input, select {
     margin: 0px;
 }
+.code {
+    font-family: monospace;
+}

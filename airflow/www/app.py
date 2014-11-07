@@ -144,20 +144,18 @@ class Airflow(BaseView):
         dag = dagbag.dags[dag_id]
         task = dag.get_task(task_id)
 
-        s = ''
         sql_attrs = ['hql', 'sql']
+        attributes = []
         for attr_name in dir(task):
             if not attr_name.startswith('_'):
                 attr = getattr(task, attr_name)
                 if type(attr) != type(self.task) and attr_name not in sql_attrs:
-                    s += attr_name + ': ' + str(attr) + '\n'
-
-        s = s.replace('<', '&lt')
-        s = s.replace('>', '&gt')
-        html_code = "<h3>Attributes:</h3><pre><code>" + s + "</code></pre>"
+                    attributes.append((attr_name, str(attr)))
 
         title = "Task Details for {task_id}".format(**locals())
 
+        # Color coding the special attributes that are code
+        special_attrs = {}
         for attr_name in sql_attrs:
             if hasattr(task, attr_name):
                 source = getattr(task, attr_name)
@@ -165,13 +163,17 @@ class Airflow(BaseView):
                     f = open(dag.folder + '/' + source, 'r')
                     source = f.read()
                     f.close()
-                html_code = "<h3>"+attr_name+"</h3>" + highlight(
-                    source,
+                special_attrs[attr_name] = highlight(
+                    getattr(task, attr_name),
                     SqlLexer(),
-                    HtmlFormatter(noclasses=True)) + html_code
+                    HtmlFormatter(noclasses=True)
+                )
 
         return self.render(
-            'admin/code.html', html_code=html_code, dag=dag, title=title)
+            'admin/task.html',
+            attributes=attributes,
+            special_attrs=special_attrs,
+            dag=dag, title=title)
 
     @expose('/tree')
     def tree(self):
