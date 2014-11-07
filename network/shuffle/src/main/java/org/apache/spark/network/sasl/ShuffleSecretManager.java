@@ -19,13 +19,13 @@ package org.apache.spark.network.sasl;
 
 import java.lang.Override;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.sasl.SecretKeyHolder;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A class that manages shuffle secret used by the external shuffle service.
@@ -34,29 +34,9 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   private final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
   private final ConcurrentHashMap<String, String> shuffleSecretMap;
 
-  private static final Charset UTF8_CHARSET = Charset.forName("UTF-8");
-
   // Spark user used for authenticating SASL connections
   // Note that this must match the value in org.apache.spark.SecurityManager
   private static final String SPARK_SASL_USER = "sparkSaslUser";
-
-  /**
-   * Convert the given string to a byte buffer. The resulting buffer can be converted back to
-   * the same string through {@link #bytesToString(ByteBuffer)}. This is used if the external
-   * shuffle service represents shuffle secrets as bytes buffers instead of strings.
-   */
-  public static ByteBuffer stringToBytes(String s) {
-    return ByteBuffer.wrap(s.getBytes(UTF8_CHARSET));
-  }
-
-  /**
-   * Convert the given byte buffer to a string. The resulting string can be converted back to
-   * the same byte buffer through {@link #stringToBytes(String)}. This is used if the external
-   * shuffle service represents shuffle secrets as bytes buffers instead of strings.
-   */
-  public static String bytesToString(ByteBuffer b) {
-    return new String(b.array(), UTF8_CHARSET);
-  }
 
   public ShuffleSecretManager() {
     shuffleSecretMap = new ConcurrentHashMap<String, String>();
@@ -80,7 +60,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
    * Register an application with its secret specified as a byte buffer.
    */
   public void registerApp(String appId, ByteBuffer shuffleSecret) {
-    registerApp(appId, bytesToString(shuffleSecret));
+    registerApp(appId, JavaUtils.bytesToString(shuffleSecret));
   }
 
   /**

@@ -17,33 +17,31 @@
 
 package org.apache.spark.util
 
-/**
- * Wrapper around an iterator which calls a completion method after it successfully iterates
- * through all the elements.
- */
-private[spark]
-// scalastyle:off
-abstract class CompletionIterator[ +A, +I <: Iterator[A]](sub: I) extends Iterator[A] {
-// scalastyle:on
+import org.scalatest.FunSuite
 
-  private[this] var completed = false
-  def next() = sub.next()
-  def hasNext = {
-    val r = sub.hasNext
-    if (!r && !completed) {
-      completed = true
-      completion()
-    }
-    r
-  }
+class CompletionIteratorSuite extends FunSuite {
+  test("basic test") {
+    var numTimesCompleted = 0
+    val iter = List(1, 2, 3).iterator
+    val completionIter = CompletionIterator[Int, Iterator[Int]](iter, { numTimesCompleted += 1 })
 
-  def completion()
-}
+    assert(completionIter.hasNext)
+    assert(completionIter.next() === 1)
+    assert(numTimesCompleted === 0)
 
-private[spark] object CompletionIterator {
-  def apply[A, I <: Iterator[A]](sub: I, completionFunction: => Unit) : CompletionIterator[A,I] = {
-    new CompletionIterator[A,I](sub) {
-      def completion() = completionFunction
-    }
+    assert(completionIter.hasNext)
+    assert(completionIter.next() === 2)
+    assert(numTimesCompleted === 0)
+
+    assert(completionIter.hasNext)
+    assert(completionIter.next() === 3)
+    assert(numTimesCompleted === 0)
+
+    assert(!completionIter.hasNext)
+    assert(numTimesCompleted === 1)
+
+    // SPARK-4264: Calling hasNext should not trigger the completion callback again.
+    assert(!completionIter.hasNext)
+    assert(numTimesCompleted === 1)
   }
 }
