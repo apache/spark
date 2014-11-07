@@ -492,11 +492,13 @@ class StreamingContext private[streaming] (
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
+    // Even if the streaming context has not been started, we still need to stop the SparkContext.
+    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
+    if (stopSparkContext) sc.stop()
     if (state == Stopped) {
       logWarning("StreamingContext has already been stopped")
     } else {
-      // Even if the streaming context has not been started, we still need to stop the SparkContext:
-      if (stopSparkContext) sc.stop()
       if (state == Initialized) {
         logWarning("StreamingContext has not been started yet")
       } else {
