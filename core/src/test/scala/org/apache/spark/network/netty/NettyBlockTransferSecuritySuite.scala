@@ -89,18 +89,6 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
     }
   }
 
-  test("security mismatch app ids") {
-    val conf0 = new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
-      .set("spark.app.id", "app-id")
-    val conf1 = conf0.clone.set("spark.app.id", "other-id")
-    testConnection(conf0, conf1) match {
-      case Success(_) => fail("Should have failed")
-      case Failure(t) => t.getMessage should include ("SASL appId app-id did not match")
-    }
-  }
-
   /**
    * Creates two servers with different configurations and sees if they can talk.
    * Returns Success() if they can transfer a block, and Failure() if the block transfer was failed
