@@ -116,7 +116,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val taskFailedReasons = Seq(
       Resubmitted,
       new FetchFailed(null, 0, 0, 0, "ignored"),
-      new ExceptionFailure("Exception", "description", null, None),
+      ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
       TaskKilled,
       ExecutorLostFailure("0"),
