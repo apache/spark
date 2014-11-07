@@ -274,22 +274,25 @@ class PythonMLLibAPI extends Serializable {
    * the Py4J documentation.
    */
   def trainALSModel(
-      ratings: JavaRDD[Rating],
+      ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int,
       nonnegative: Boolean,
       seed: java.lang.Long): MatrixFactorizationModel = {
-    if (seed == null) {
-      new MatrixFactorizationModelWrapper(
-        // if the seed coming from python is None/null, let ALS use the
-        // default, which is to use System.nanoTime
-        ALS.train(ratings.rdd, rank, iterations, lambda, blocks, nonnegative))
-    } else {
-      new MatrixFactorizationModelWrapper(
-        ALS.train(ratings.rdd, rank, iterations, lambda, blocks, seed, nonnegative))
-    }
+
+    val als = new ALS()
+      .setRank(rank)
+      .setIterations(iterations)
+      .setLambda(lambda)
+      .setBlocks(blocks)
+      .setNonnegative(nonnegative)
+
+    if (seed != null) als.setSeed(seed)
+
+    val model =  als.run(ratingsJRDD.rdd)
+    new MatrixFactorizationModelWrapper(model)
   }
 
   /**
@@ -307,17 +310,20 @@ class PythonMLLibAPI extends Serializable {
       alpha: Double,
       nonnegative: Boolean,
       seed: java.lang.Long): MatrixFactorizationModel = {
-    if (seed == null) {
-      // if the seed coming from python is None/null, let ALS use the
-      // default, which is to use System.nanoTime
-      new MatrixFactorizationModelWrapper(
-        ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha,
-          nonnegative))
-    } else {
-      new MatrixFactorizationModelWrapper(
-        ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha,
-          seed, nonnegative))
-    }
+
+    val als = new ALS()
+      .setImplicitPrefs(true)
+      .setRank(rank)
+      .setIterations(iterations)
+      .setLambda(lambda)
+      .setBlocks(blocks)
+      .setAlpha(alpha)
+      .setNonnegative(nonnegative)
+
+    if (seed != null) als.setSeed(seed)
+
+    val model =  als.run(ratingsJRDD.rdd)
+    new MatrixFactorizationModelWrapper(model)
   }
 
   /**

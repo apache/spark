@@ -685,34 +685,6 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @param seed       random seed
-   * @param nonnegative whether to enforce nonnegativity
-   */
-  def train(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      seed: Long,
-      nonnegative: Boolean
-    ): MatrixFactorizationModel = {
-    (new ALS(blocks, blocks, rank, iterations, lambda, false, 1.0, seed)
-      .setNonnegative(nonnegative).run(ratings))
-  }
-
-  /**
-   * Train a matrix factorization model given an RDD of ratings given by users to some products,
-   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-   * product of two lower-rank matrices of a given rank (number of features). To solve for these
-   * features, we run a given number of iterations of ALS. This is done using a level of
-   * parallelism given by `blocks`.
-   *
-   * @param ratings    RDD of (userID, productID, rating) pairs
-   * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
-   * @param blocks     level of parallelism to split computation into
    */
   def train(
       ratings: RDD[Rating],
@@ -722,32 +694,6 @@ object ALS {
       blocks: Int
     ): MatrixFactorizationModel = {
     new ALS(blocks, blocks, rank, iterations, lambda, false, 1.0).run(ratings)
-  }
-
-  /**
-   * Train a matrix factorization model given an RDD of ratings given by users to some products,
-   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-   * product of two lower-rank matrices of a given rank (number of features). To solve for these
-   * features, we run a given number of iterations of ALS. This is done using a level of
-   * parallelism given by `blocks`.
-   *
-   * @param ratings     RDD of (userID, productID, rating) pairs
-   * @param rank        number of features to use
-   * @param iterations  number of iterations of ALS (recommended: 10-20)
-   * @param lambda      regularization factor (recommended: 0.01)
-   * @param blocks      level of parallelism to split computation into
-   * @param nonnegative whether to enforce nonnegativity
-   */
-  def train(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      nonnegative: Boolean
-    ): MatrixFactorizationModel = {
-    (new ALS(blocks, blocks, rank, iterations, lambda, false, 1.0)
-      .setNonnegative(nonnegative).run(ratings))
   }
 
   /**
@@ -823,36 +769,6 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
-   * @param seed       random seed
-   * @param nonnegative whether to enforce nonnegativity
-   */
-  def trainImplicit(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      alpha: Double,
-      seed: Long,
-      nonnegative: Boolean
-    ): MatrixFactorizationModel = {
-    (new ALS(blocks, blocks, rank, iterations, lambda, true, alpha, seed)
-      .setNonnegative(nonnegative).run(ratings))
-  }
-
-  /**
-   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users
-   * to some products, in the form of (userID, productID, preference) pairs. We approximate the
-   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
-   * To solve for these features, we run a given number of iterations of ALS. This is done using
-   * a level of parallelism given by `blocks`.
-   *
-   * @param ratings    RDD of (userID, productID, rating) pairs
-   * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
-   * @param blocks     level of parallelism to split computation into
-   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
    */
   def trainImplicit(
       ratings: RDD[Rating],
@@ -863,34 +779,6 @@ object ALS {
       alpha: Double
     ): MatrixFactorizationModel = {
     new ALS(blocks, blocks, rank, iterations, lambda, true, alpha).run(ratings)
-  }
-
-  /**
-   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users
-   * to some products, in the form of (userID, productID, preference) pairs. We approximate the
-   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
-   * To solve for these features, we run a given number of iterations of ALS. This is done using
-   * a level of parallelism given by `blocks`.
-   *
-   * @param ratings     RDD of (userID, productID, rating) pairs
-   * @param rank        number of features to use
-   * @param iterations  number of iterations of ALS (recommended: 10-20)
-   * @param lambda      regularization factor (recommended: 0.01)
-   * @param blocks      level of parallelism to split computation into
-   * @param alpha       confidence parameter (only applies when immplicitPrefs = true)
-   * @param nonnegative whether to enforce nonnegativity
-   */
-  def trainImplicit(
-      ratings: RDD[Rating],
-      rank: Int,
-      iterations: Int,
-      lambda: Double,
-      blocks: Int,
-      alpha: Double,
-      nonnegative: Boolean
-    ): MatrixFactorizationModel = {
-    (new ALS(blocks, blocks, rank, iterations, lambda, true, alpha)
-      .setNonnegative(nonnegative).run(ratings))
   }
 
   /**

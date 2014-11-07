@@ -44,16 +44,16 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> r2 = (1, 2, 2.0)
     >>> r3 = (2, 1, 2.0)
     >>> ratings = sc.parallelize([r1, r2, r3])
-    >>> model = ALS.trainImplicit(ratings, 1)
+    >>> model = ALS.trainImplicit(ratings, 1, seed=10)
     >>> model.predict(2,2)
     0.4473...
 
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
-    >>> model = ALS.train(ratings, 1)
+    >>> model = ALS.train(ratings, 1, seed=10)
     >>> model.predictAll(testset).collect()
     [Rating(1, 1, 1), Rating(1, 2, 1)]
 
-    >>> model = ALS.train(ratings, 4)
+    >>> model = ALS.train(ratings, 4, seed=10)
     >>> model.userFeatures().collect()
     [(2, array('d', [...])), (1, array('d', [...]))]
 
@@ -69,14 +69,6 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> latents = first_product[1]
     >>> len(latents) == 4
     True
-
-    >>> model = ALS.train(ratings, 1, nonnegative=True)
-    >>> model.predict(2,2)
-    3.735...
-
-    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True)
-    >>> model.predict(2,2)
-    0.4473...
 
     >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
     >>> model.predict(2,2)
