@@ -17,84 +17,59 @@
 
 package org.apache.spark.ml.param
 
-trait HasRegParam extends Params {
+// shared params
 
+private[ml] trait HasRegParam extends Params {
+  /** param for regularization parameter */
   val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter")
-
-  def getRegParam: Double = {
-    get(regParam)
-  }
+  def getRegParam: Double = get(regParam)
 }
 
-trait HasMaxIter extends Params {
-
+private[ml] trait HasMaxIter extends Params {
+  /** param for max number of iterations */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
-
-  def getMaxIter: Int = {
-    get(maxIter)
-  }
+  def getMaxIter: Int = get(maxIter)
 }
 
-trait HasFeaturesCol extends Params {
-
+private[ml] trait HasFeaturesCol extends Params {
+  /** param for features column name */
   val featuresCol: Param[String] =
-    new Param(this, "featuresCol", "features column name", "features")
-
-  def getFeaturesCol: String = {
-    get(featuresCol)
-  }
+    new Param(this, "featuresCol", "features column name", Some("features"))
+  def getFeaturesCol: String = get(featuresCol)
 }
 
-trait HasLabelCol extends Params {
-
-  val labelCol: Param[String] = new Param(this, "labelCol", "label column name", "label")
-
-  def getLabelCol: String = {
-    get(labelCol)
-  }
+private[ml] trait HasLabelCol extends Params {
+  /** param for label column name */
+  val labelCol: Param[String] = new Param(this, "labelCol", "label column name", Some("label"))
+  def getLabelCol: String = get(labelCol)
 }
 
-trait HasScoreCol extends Params {
-
-  val scoreCol: Param[String] = new Param(this, "scoreCol", "score column name", "score")
-
-  def getScoreCol: String = {
-    get(scoreCol)
-  }
+private[ml] trait HasScoreCol extends Params {
+  /** param for score column name */
+  val scoreCol: Param[String] = new Param(this, "scoreCol", "score column name", Some("score"))
+  def getScoreCol: String = get(scoreCol)
 }
 
-trait HasThreshold extends Params {
-
-  val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold for prediction")
-
-  def getThreshold: Double = {
-    get(threshold)
-  }
+private[ml] trait HasThreshold extends Params {
+  /** param for threshold in (binary) prediction */
+  val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in prediction")
+  def getThreshold: Double = get(threshold)
 }
 
-trait HasMetricName extends Params {
-
-  val metricName: Param[String] = new Param(this, "metricName", "metric name for evaluation")
-
-  def getMetricName: String = {
-    get(metricName)
-  }
+private[ml] trait HasMetricName extends Params {
+  /** param for metric name in evaluation */
+  val metricName: Param[String] = new Param(this, "metricName", "metric name in evaluation")
+  def getMetricName: String = get(metricName)
 }
 
-trait HasInputCol extends Params {
-
+private[ml] trait HasInputCol extends Params {
+  /** param for input column name */
   val inputCol: Param[String] = new Param(this, "inputCol", "input column name")
-
-  def getInputCol: String = {
-    get(inputCol)
-  }
+  def getInputCol: String = get(inputCol)
 }
 
-trait HasOutputCol extends Params {
-
+private[ml] trait HasOutputCol extends Params {
+  /** param for output column name */
   val outputCol: Param[String] = new Param(this, "outputCol", "output column name")
-
-  def getOutputCol: String = {
-    get(outputCol)
-  }
+  def getOutputCol: String = get(outputCol)
 }

@@ -19,6 +19,7 @@ package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 
+import scala.annotation.varargs
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -32,31 +33,11 @@ import org.apache.spark.ml.Identifiable
  * @param doc documentation
  * @tparam T param value type
  */
-class Param[T] private[param] (
+class Param[T] (
     val parent: Params,
     val name: String,
     val doc: String,
-    val default: Option[T]) extends Serializable {
-
-  /**
-   * Creates a param without a default value.
-   *
-   * @param parent parent object
-   * @param name param name
-   * @param doc documentation
-   */
-  def this(parent: Params, name: String, doc: String) = this(parent, name, doc, None)
-
-  /**
-   * Creates a param with a default value.
-   *
-   * @param parent parent object
-   * @param name param name
-   * @param doc documentation
-   * @param default default value
-   */
-  def this(parent: Params, name: String, doc: String, default: T) =
-    this(parent, name, doc, Some(default))
+    val default: Option[T] = None) extends Serializable {
 
   /**
    * Creates a param pair with the given value (for Java).
@@ -80,13 +61,28 @@ class Param[T] private[param] (
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 class DoubleParam(parent: Params, name: String, doc: String, default: Option[Double] = None)
-  extends Param[Double](parent, name, doc, default) {
+    extends Param[Double](parent, name, doc, default) {
   override def w(value: Double): ParamPair[Double] = ParamPair(this, value)
 }
 
 class IntParam(parent: Params, name: String, doc: String, default: Option[Int] = None)
-  extends Param[Int](parent, name, doc, default) {
+    extends Param[Int](parent, name, doc, default) {
   override def w(value: Int): ParamPair[Int] = ParamPair(this, value)
+}
+
+class FloatParam(parent: Params, name: String, doc: String, default: Option[Float] = None)
+    extends Param[Float](parent, name, doc, default) {
+  override def w(value: Float): ParamPair[Float] = ParamPair(this, value)
+}
+
+class LongParam(parent: Params, name: String, doc: String, default: Option[Long] = None)
+    extends Param[Long](parent, name, doc, default) {
+  override def w(value: Long): ParamPair[Long] = ParamPair(this, value)
+}
+
+class BooleanParam(parent: Params, name: String, doc: String, default: Option[Boolean] = None)
+    extends Param[Boolean](parent, name, doc, default) {
+  override def w(value: Boolean): ParamPair[Boolean] = ParamPair(this, value)
 }
 
 /**
@@ -95,7 +91,8 @@ class IntParam(parent: Params, name: String, doc: String, default: Option[Int] =
 case class ParamPair[T](param: Param[T], value: T)
 
 /**
- * Trait for components that take parameters.
+ * Trait for components that take parameters. This also provides an internal param map to store
+ * parameter values attached to the instance.
  */
 trait Params extends Identifiable {
 
@@ -109,29 +106,32 @@ trait Params extends Identifiable {
     }.map(m => m.invoke(this).asInstanceOf[Param[_]])
   }
 
-  /** Gets a param by its name. */
-  def getParam(paramName: String): Param[Any] = {
-    val m = this.getClass.getMethod(paramName)
-    assert(Modifier.isPublic(m.getModifiers) &&
-      classOf[Param[_]].isAssignableFrom(m.getReturnType))
-    m.invoke(this).asInstanceOf[Param[Any]]
-  }
-
   /**
    * Validates parameters specified by the input parameter map.
    * Raises an exception if any parameter belongs to this object is invalid.
    */
-  def validateParams(paramMap: ParamMap): Unit = {}
+  def validate(paramMap: ParamMap): Unit = {}
 
   /**
    * Returns the documentation of all params.
    */
   def explainParams(): String = params.mkString("\n")
 
+  /** Gets a param by its name. */
+  private[ml] def getParam(paramName: String): Param[Any] = {
+    val m = this.getClass.getMethod(paramName)
+    assert(Modifier.isPublic(m.getModifiers) &&
+      classOf[Param[_]].isAssignableFrom(m.getReturnType))
+    m.invoke(this).asInstanceOf[Param[Any]]
+  }
+
+  /** Checks whether a param is explicitly set. */
+  private[ml] def isSet(param: Param[_]): Boolean = paramMap.contains(param)
+
   /**
    * Internal param map.
    */
-  val paramMap: ParamMap = ParamMap.empty
+  protected val paramMap: ParamMap = ParamMap.empty
 
   /**
    * Sets a parameter in the own parameter map.
@@ -149,19 +149,17 @@ trait Params extends Identifiable {
 private[ml] object Params {
 
   /**
-   * Returns a Params implementation without any
+   * Returns an empty Params implementation without any params.
    */
-  val empty: Params = new Params {
-    override def params: Array[Param[_]] = Array.empty
-  }
+  val empty: Params = new Params {}
 
   /**
-   * Copy parameter values from one Params instance to another.
+   * Copy parameter values that are explicitly set from one Params instance to another.
    */
-  def copyValues[F <: Params, T <: F](from: F, to: T): Unit = {
+  private[ml] def copyValues[F <: Params, T <: F](from: F, to: T): Unit = {
     from.params.foreach { param =>
-      if (from.paramMap.contains(param)) {
-        to.paramMap.put(to.getParam(param.name), from.paramMap(param))
+      if (from.isSet(param)) {
+        to.set(to.getParam(param.name), from.get(param))
       }
     }
   }
@@ -170,8 +168,7 @@ private[ml] object Params {
 /**
  * A param to value map.
  */
-class ParamMap private[ml] (
-    private val params: mutable.Map[Param[Any], Any]) extends Serializable {
+class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) extends Serializable {
 
   /**
    * Creates an empty param map.
@@ -182,60 +179,64 @@ class ParamMap private[ml] (
    * Puts a (param, value) pair (overwrites if the input param exists).
    */
   def put[T](param: Param[T], value: T): this.type = {
-    params(param.asInstanceOf[Param[Any]]) = value
+    map(param.asInstanceOf[Param[Any]]) = value
     this
   }
 
   /**
    * Puts a param pair (overwrites if the input param exists).
    */
-  def put(firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): this.type = {
-    put(firstParamPair.param.asInstanceOf[Param[Any]], firstParamPair.value)
-    otherParamPairs.foreach { p =>
+  def put(paramPairs: ParamPair[_]*): this.type = {
+    paramPairs.foreach { p =>
       put(p.param.asInstanceOf[Param[Any]], p.value)
     }
     this
   }
 
+  /**
+   * Optionally returns the value associated with a param or its default.
+   */
   def get[T](param: Param[T]): Option[T] = {
-    params.get(param.asInstanceOf[Param[Any]]).asInstanceOf[Option[T]]
+    map.get(param.asInstanceOf[Param[Any]])
+      .orElse(param.default)
+      .asInstanceOf[Option[T]]
   }
 
   /**
-   * Gets the value of the input param or the default value if it does not exist.
+   * Gets the value of the input param or its default value if it does not exist.
    * Raises a NoSuchElementException if there is no value associated with the input param.
    */
   def apply[T](param: Param[T]): T = {
-    val value = params.get(param.asInstanceOf[Param[Any]]).orElse(param.default)
+    val value = get(param)
     if (value.isDefined) {
-      value.get.asInstanceOf[T]
+      value.get
     } else {
       throw new NoSuchElementException(s"Cannot find param ${param.name}.")
     }
   }
 
   /**
-   * Checks whether a parameter is specified.
+   * Checks whether a parameter is explicitly specified.
    */
   def contains(param: Param[_]): Boolean = {
-    params.contains(param.asInstanceOf[Param[Any]])
+    map.contains(param.asInstanceOf[Param[Any]])
   }
 
   /**
-   * Filter this param map for the given parent.
+   * Filters this param map for the given parent.
    */
   def filter(parent: Params): ParamMap = {
-    val map = params.filterKeys(_.parent == parent)
-    new ParamMap(map.asInstanceOf[mutable.Map[Param[Any], Any]])
+    val filtered = map.filterKeys(_.parent == parent)
+    new ParamMap(filtered.asInstanceOf[mutable.Map[Param[Any], Any]])
   }
 
   /**
-   * Make a deep copy of this param map.
+   * Make a copy of this param map.
    */
-  def copy: ParamMap = new ParamMap(params.clone())
+  def copy: ParamMap = new ParamMap(map.clone())
 
   override def toString: String = {
-    params.map { case (param, value) =>
+    map.map { case (param, value) =>
       s"\t${param.parent.uid}-${param.name}: $value"
     }.mkString("{\n", ",\n", "\n}")
   }
@@ -245,7 +246,13 @@ class ParamMap private[ml] (
    * where the latter overwrites this if there exists conflicts.
    */
   private[ml] def ++(other: ParamMap): ParamMap = {
-    new ParamMap(this.params ++ other.params)
+    new ParamMap(this.map ++ other.map)
+  }
+
+
+  private[ml] def ++=(other: ParamMap): this.type = {
+    this.map ++= other.map
+    this
   }
 
   /**
@@ -267,13 +274,23 @@ object ParamMap {
  */
 class ParamGridBuilder {
 
+  private val fixedParamMap = ParamMap.empty
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
   /**
-   * Adds a param with a single value (overwrites if the input param exists).
+   * Builds with fixed parameters.
    */
-  def add[T](param: Param[T], value: T): this.type = {
-    paramGrid.put(param, Seq(value))
+  def withFixed(paramMap: ParamMap): this.type = {
+    fixedParamMap ++= paramMap
+    this
+  }
+
+  /**
+   * Builds with fixed parameters.
+   */
+  @varargs
+  def withFixed(paramPairs: ParamPair[_]*): this.type = {
+    fixedParamMap.put(paramPairs: _*)
     this
   }
 
@@ -286,29 +303,51 @@ class ParamGridBuilder {
   }
 
   /**
-   * Specialize for Java users.
+   * Adds a double param with multiple values.
    */
   def addMulti(param: DoubleParam, values: Array[Double]): this.type = {
-    paramGrid.put(param, values)
-    this
+    addMulti[Double](param, values)
   }
 
   /**
-   * Specialize for Java users.
+   * Adds a int param with multiple values.
    */
   def addMulti(param: IntParam, values: Array[Int]): this.type = {
-    paramGrid.put(param, values)
-    this
+    addMulti[Int](param, values)
   }
 
+  /**
+   * Adds a float param with multiple values.
+   */
+  def addMulti(param: FloatParam, values: Array[Float]): this.type = {
+    addMulti[Float](param, values)
+  }
+
+  /**
+   * Adds a long param with multiple values.
+   */
+  def addMulti(param: LongParam, values: Array[Long]): this.type = {
+    addMulti[Long](param, values)
+  }
+
+  /**
+   * Adds a boolean param with true and false.
+   */
+  def addMulti(param: BooleanParam): this.type = {
+    addMulti[Boolean](param, Array(true, false))
+  }
+
+  /**
+   * Builds and returns all combinations of parameters specified by the param grid.
+   */
   def build(): Array[ParamMap] = {
-    var paramSets = Array(new ParamMap)
+    var paramMaps = Array(new ParamMap)
     paramGrid.foreach { case (param, values) =>
-      val newParamSets = values.flatMap { v =>
-        paramSets.map(_.copy.put(param.asInstanceOf[Param[Any]], v))
+      val newParamMaps = values.flatMap { v =>
+        paramMaps.map(_.copy.put(param.asInstanceOf[Param[Any]], v))
       }
-      paramSets = newParamSets.toArray
+      paramMaps = newParamMaps.toArray
     }
-    paramSets
+    paramMaps.map(_ ++= fixedParamMap)
   }
 }

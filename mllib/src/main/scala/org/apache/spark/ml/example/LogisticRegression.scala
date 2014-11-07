@@ -58,8 +58,9 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
       .setNumIterations(maxIter)
     val lrm = new LogisticRegressionModel(lr.run(instances).weights)
     instances.unpersist()
+    // copy model params
     Params.copyValues(modelParams, lrm)
-    if (!lrm.paramMap.contains(lrm.featuresCol) && map.contains(lrm.featuresCol)) {
+    if (!lrm.isSet(lrm.featuresCol) && map.contains(lrm.featuresCol)) {
       lrm.setFeaturesCol(featuresCol)
     }
     lrm
@@ -69,8 +70,8 @@ class LogisticRegression extends Estimator[LogisticRegressionModel]
    * Validates parameters specified by the input parameter map.
    * Raises an exception if any parameter belongs to this object is invalid.
    */
-  override def validateParams(paramMap: ParamMap): Unit = {
-    super.validateParams(paramMap)
+  override def validate(paramMap: ParamMap): Unit = {
+    super.validate(paramMap)
   }
 }
 

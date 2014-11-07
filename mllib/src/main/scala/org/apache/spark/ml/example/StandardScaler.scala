@@ -43,7 +43,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with HasInputCol {
     val scaler = new feature.StandardScaler().fit(input)
     val model = new StandardScalerModel(scaler)
     Params.copyValues(modelParams, model)
-    if (!model.paramMap.contains(model.inputCol)) {
+    if (!model.isSet(model.inputCol)) {
       model.setInputCol(inputCol)
     }
     model

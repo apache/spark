@@ -20,7 +20,7 @@ package org.apache.spark.ml.example
 import com.github.fommil.netlib.F2jBLAS
 
 import org.apache.spark.ml._
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.SchemaRDD
 
@@ -44,7 +44,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with Params {
   def setEvaluator(value: Evaluator): this.type = { set(evaluator, value); this }
   def getEvaluator: Evaluator = get(evaluator)
 
-  val numFolds: Param[Int] = new Param(this, "numFolds", "number of folds for cross validation", 3)
+  val numFolds: Param[Int] =
+    new IntParam(this, "numFolds", "number of folds for cross validation", Some(3))
   def setNumFolds(value: Int): this.type = { set(numFolds, value); this }
   def getNumFolds: Int = get(numFolds)
 

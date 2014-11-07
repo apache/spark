@@ -25,7 +25,7 @@ import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 
 /**
- * Abstract class for estimators that fits models to data.
+ * Abstract class for estimators that fit models to data.
  */
 abstract class Estimator[M <: Model] extends PipelineStage with Params {
 
@@ -33,13 +33,12 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
    * Fits a single model to the input data with optional parameters.
    *
    * @param dataset input dataset
-   * @param paramPairs optional list of param pairs, overwrite embedded params
+   * @param paramPairs optional list of param pairs (overwrite embedded params)
    * @return fitted model
    */
   @varargs
   def fit(dataset: SchemaRDD, paramPairs: ParamPair[_]*): M = {
-    val map = new ParamMap()
-    paramPairs.foreach(map.put(_))
+    val map = new ParamMap().put(paramPairs: _*)
     fit(dataset, map)
   }
 
@@ -47,7 +46,7 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
    * Fits a single model to the input data with provided parameter map.
    *
    * @param dataset input dataset
-   * @param paramMap parameters
+   * @param paramMap parameter map
    * @return fitted model
    */
   def fit(dataset: SchemaRDD, paramMap: ParamMap): M
@@ -61,21 +60,42 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
    * @param paramMaps an array of parameter maps
    * @return fitted models, matching the input parameter maps
    */
-  def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = { // how to return an array?
+  def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }
 
   // Java-friendly versions of fit.
 
+  /**
+   * Fits a single model to the input data with optional parameters.
+   *
+   * @param dataset input dataset
+   * @param paramPairs optional list of param pairs (overwrite embedded params)
+   * @return fitted model
+   */
   @varargs
   def fit(dataset: JavaSchemaRDD, paramPairs: ParamPair[_]*): M = {
     fit(dataset.schemaRDD, paramPairs: _*)
   }
 
+  /**
+   * Fits a single model to the  input data with provided parameter map.
+   *
+   * @param dataset input dataset
+   * @param paramMap parameter map
+   * @return fitted model
+   */
   def fit(dataset: JavaSchemaRDD, paramMap: ParamMap): M = {
     fit(dataset.schemaRDD, paramMap)
   }
 
+  /**
+   * Fits multiple models to the input data with multiple sets of parameters.
+   *
+   * @param dataset input dataset
+   * @param paramMaps an array of parameter maps
+   * @return fitted models, matching the input parameter maps
+   */
   def fit(dataset: JavaSchemaRDD, paramMaps: Array[ParamMap]): java.util.List[M] = {
     fit(dataset.schemaRDD, paramMaps).asJava
   }
@@ -83,5 +103,5 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
   /**
    * Parameters for the output model.
    */
-  def modelParams: Params = Params.empty
+  val modelParams: Params = Params.empty
 }
