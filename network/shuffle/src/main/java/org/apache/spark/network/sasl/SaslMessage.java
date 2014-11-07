@@ -17,10 +17,10 @@
 
 package org.apache.spark.network.sasl;
 
-import com.google.common.base.Charsets;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.protocol.Encoders;
 
 /**
  * Encodes a Sasl-related message which is attempting to authenticate using some credentials tagged
@@ -42,18 +42,14 @@ class SaslMessage implements Encodable {
 
   @Override
   public int encodedLength() {
-    // tag + appIdLength + appId + payloadLength + payload
-    return 1 + 4 + appId.getBytes(Charsets.UTF_8).length + 4 + payload.length;
+    return 1 + Encoders.Strings.encodedLength(appId) + Encoders.ByteArrays.encodedLength(payload);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeByte(TAG_BYTE);
-    byte[] idBytes = appId.getBytes(Charsets.UTF_8);
-    buf.writeInt(idBytes.length);
-    buf.writeBytes(idBytes);
-    buf.writeInt(payload.length);
-    buf.writeBytes(payload);
+    Encoders.Strings.encode(buf, appId);
+    Encoders.ByteArrays.encode(buf, payload);
   }
 
   public static SaslMessage decode(ByteBuf buf) {
@@ -62,14 +58,8 @@ class SaslMessage implements Encodable {
         + " (maybe your client does not have SASL enabled?)");
     }
 
-    int idLength = buf.readInt();
-    byte[] idBytes = new byte[idLength];
-    buf.readBytes(idBytes);
-
-    int payloadLength = buf.readInt();
-    byte[] payload = new byte[payloadLength];
-    buf.readBytes(payload);
-
-    return new SaslMessage(new String(idBytes, Charsets.UTF_8), payload);
+    String appId = Encoders.Strings.decode(buf);
+    byte[] payload = Encoders.ByteArrays.decode(buf);
+    return new SaslMessage(appId, payload);
   }
 }

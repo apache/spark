@@ -31,8 +31,8 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.sasl.SaslClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
-import org.apache.spark.network.shuffle.ExternalShuffleMessages.RegisterExecutor;
-import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -91,8 +91,7 @@ public class ExternalShuffleClient extends ShuffleClient {
           public void createAndStart(String[] blockIds, BlockFetchingListener listener)
               throws IOException {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, blockIds, listener)
-              .start(new ExternalShuffleMessages.OpenShuffleBlocks(appId, execId, blockIds));
+            new OneForOneBlockFetcher(client, appId, execId, blockIds, listener).start();
           }
         };
 
@@ -128,9 +127,8 @@ public class ExternalShuffleClient extends ShuffleClient {
       ExecutorShuffleInfo executorInfo) throws IOException {
     assert appId != null : "Called before init()";
     TransportClient client = clientFactory.createClient(host, port);
-    byte[] registerExecutorMessage =
-      JavaUtils.serialize(new RegisterExecutor(appId, execId, executorInfo));
-    client.sendRpcSync(registerExecutorMessage, 5000 /* timeoutMs */);
+    byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
+    client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
   }
 
   @Override

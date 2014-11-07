@@ -26,6 +26,9 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.OpenBlocks;
+import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.JavaUtils;
 
 /**
@@ -41,17 +44,21 @@ public class OneForOneBlockFetcher {
   private final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
 
   private final TransportClient client;
+  private final OpenBlocks openMessage;
   private final String[] blockIds;
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
 
-  private ShuffleStreamHandle streamHandle = null;
+  private StreamHandle streamHandle = null;
 
   public OneForOneBlockFetcher(
       TransportClient client,
+      String appId,
+      String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
     this.client = client;
+    this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
@@ -76,18 +83,18 @@ public class OneForOneBlockFetcher {
   /**
    * Begins the fetching process, calling the listener with every block fetched.
    * The given message will be serialized with the Java serializer, and the RPC must return a
-   * {@link ShuffleStreamHandle}. We will send all fetch requests immediately, without throttling.
+   * {@link StreamHandle}. We will send all fetch requests immediately, without throttling.
    */
-  public void start(Object openBlocksMessage) {
+  public void start() {
     if (blockIds.length == 0) {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
 
-    client.sendRpc(JavaUtils.serialize(openBlocksMessage), new RpcResponseCallback() {
+    client.sendRpc(openMessage.toByteArray(), new RpcResponseCallback() {
       @Override
       public void onSuccess(byte[] response) {
         try {
-          streamHandle = JavaUtils.deserialize(response);
+          streamHandle = (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response);
           logger.trace("Successfully opened blocks {}, preparing to fetch chunks.", streamHandle);
 
           // Immediately request all chunks -- we expect that the total size of the request is

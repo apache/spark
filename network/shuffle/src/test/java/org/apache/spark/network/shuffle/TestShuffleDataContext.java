@@ -25,6 +25,8 @@ import java.io.OutputStream;
 
 import com.google.common.io.Files;
 
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+
 /**
  * Manages some sort- and hash-based shuffle data, including the creation
  * and cleanup of directories that can be read by the {@link ExternalShuffleBlockManager}.
