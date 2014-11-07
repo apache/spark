@@ -83,15 +83,48 @@ case class FetchFailed(
  * :: DeveloperApi ::
  * Task failed due to a runtime exception. This is the most common failure case and also captures
  * user program exceptions.
+ *
+ * `stackTrace` contains the stack trace of the exception itself. It still exists for backward
+ * compatibility. It's better to use `this(e: Throwable, metrics: Option[TaskMetrics])` to
+ * create `ExceptionFailure` as it will handle the backward compatibility properly.
+ *
+ * `fullStackTrace` is a better representation of the stack trace because it contains the whole
+ * stack trace including the exception and its causes
  */
 @DeveloperApi
 case class ExceptionFailure(
     className: String,
     description: String,
     stackTrace: Array[StackTraceElement],
+    fullStackTrace: String,
     metrics: Option[TaskMetrics])
   extends TaskFailedReason {
-  override def toErrorString: String = Utils.exceptionString(className, description, stackTrace)
+
+  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics)
+  }
+
+  override def toErrorString: String =
+    if (fullStackTrace == null) {
+      // fullStackTrace is added in 1.2.0
+      // If fullStackTrace is null, use the old error string for backward compatibility
+      exceptionString(className, description, stackTrace)
+    } else {
+      fullStackTrace
+    }
+
+  /**
+   * Return a nice string representation of the exception, including the stack trace.
+   * Note: It does not include the exception's causes, and is only used for backward compatibility.
+   */
+  private def exceptionString(
+      className: String,
+      description: String,
+      stackTrace: Array[StackTraceElement]): String = {
+    val desc = if (description == null) "" else description
+    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
+    s"$className: $desc\n$st"
+  }
 }
 
 /**
