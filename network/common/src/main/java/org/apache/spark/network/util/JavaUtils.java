@@ -98,6 +98,7 @@ public class JavaUtils {
    */
   public static String bytesToString(ByteBuffer b) {
     return Unpooled.wrappedBuffer(b).toString(Charsets.UTF_8);
+  }
 
   /*
    * Delete a file or directory and its contents recursively.
