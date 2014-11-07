@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
