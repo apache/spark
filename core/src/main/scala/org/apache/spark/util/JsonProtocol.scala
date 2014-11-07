@@ -287,6 +287,7 @@ private[spark] object JsonProtocol {
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
+        ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
       case ExecutorLostFailure(executorId) =>
         ("Executor ID" -> executorId)
@@ -637,8 +638,10 @@ private[spark] object JsonProtocol {
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
+        val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
+          map(_.extract[String]).orNull
         val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
-        new ExceptionFailure(className, description, stackTrace, metrics)
+        ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
       case `executorLostFailure` =>

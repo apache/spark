@@ -109,7 +109,7 @@ class JsonProtocolSuite extends FunSuite {
     // TaskEndReason
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "Some exception")
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, None)
+    val exceptionFailure = new ExceptionFailure(exception, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
     testTaskEndReason(fetchFailed)
@@ -125,6 +125,13 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
+  }
+
+  test("ExceptionFailure backward compatibility") {
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
+    val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
+      .removeField({ _._1 == "Full Stack Trace" })
+    assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
   test("StageInfo backward compatibility") {
@@ -422,6 +429,7 @@ class JsonProtocolSuite extends FunSuite {
         assert(r1.className === r2.className)
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
+        assert(r1.fullStackTrace === r2.fullStackTrace)
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>

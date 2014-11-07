@@ -22,6 +22,8 @@ import scala.xml.Text
 
 import java.util.Date
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
@@ -195,7 +197,29 @@ private[ui] class FailedStageTable(
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failureReason = <td valign="middle"><pre>{s.failureReason.getOrElse("")}</pre></td>
-    basicColumns ++ failureReason
+    val failureReason = s.failureReason.getOrElse("")
+    val isMultiline = failureReason.indexOf('\n') >= 0
+    // Display the first line by default
+    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
+      if (isMultiline) {
+        failureReason.substring(0, failureReason.indexOf('\n'))
+      } else {
+        failureReason
+      })
+    val details = if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{failureReason}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      ""
+    }
+    val failureReasonHtml = <td valign="middle">{failureReasonSummary}{details}</td>
+    basicColumns ++ failureReasonHtml
   }
 }

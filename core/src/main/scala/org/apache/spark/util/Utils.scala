@@ -1599,19 +1599,19 @@ private[spark] object Utils extends Logging {
       .orNull
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
+  /**
+   * Return a nice string representation of the exception. It will call "printStackTrace" to
+   * recursively generate the stack trace including the exception and its causes.
+   */
   def exceptionString(e: Throwable): String = {
-    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
-  }
-
-  /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(
-      className: String,
-      description: String,
-      stackTrace: Array[StackTraceElement]): String = {
-    val desc = if (description == null) "" else description
-    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
-    s"$className: $desc\n$st"
+    if (e == null) {
+      ""
+    } else {
+      // Use e.printStackTrace here because e.getStackTrace doesn't include the cause
+      val stringWriter = new StringWriter()
+      e.printStackTrace(new PrintWriter(stringWriter))
+      stringWriter.toString
+    }
   }
 
   /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
