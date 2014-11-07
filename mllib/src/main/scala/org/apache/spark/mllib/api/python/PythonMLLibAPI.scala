@@ -279,8 +279,8 @@ class PythonMLLibAPI extends Serializable {
       iterations: Int,
       lambda: Double,
       blocks: Int,
-      seed: java.lang.Long,
-      nonnegative: Boolean): MatrixFactorizationModel = {
+      nonnegative: Boolean,
+      seed: java.lang.Long): MatrixFactorizationModel = {
     if (seed == null) {
       new MatrixFactorizationModelWrapper(
         // if the seed coming from python is None/null, let ALS use the
@@ -305,8 +305,8 @@ class PythonMLLibAPI extends Serializable {
       lambda: Double,
       blocks: Int,
       alpha: Double,
-      seed: java.lang.Long,
-      nonnegative: Boolean): MatrixFactorizationModel = {
+      nonnegative: Boolean,
+      seed: java.lang.Long): MatrixFactorizationModel = {
     if (seed == null) {
       // if the seed coming from python is None/null, let ALS use the
       // default, which is to use System.nanoTime
