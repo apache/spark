@@ -26,11 +26,15 @@ import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Row
 
-class StandardScaler extends Estimator[StandardScalerModel] with HasInputCol {
+/**
+ * Params for [[StandardScaler]] and [[StandardScalerModel]].
+ */
+trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
+
+class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
-
-  override val modelParams: StandardScalerModelParams = new StandardScalerModelParams {}
+  def setOutputCol(value: String): this.type = { set(outputCol, value); this }
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
     import dataset.sqlContext._
@@ -40,22 +44,19 @@ class StandardScaler extends Estimator[StandardScalerModel] with HasInputCol {
         v
       }
     val scaler = new feature.StandardScaler().fit(input)
-    val model = new StandardScalerModel(scaler)
-    Params.copyValues(modelParams, model)
-    if (!model.isSet(model.inputCol)) {
-      model.setInputCol(map(inputCol))
-    }
+    val model = new StandardScalerModel(this, map, scaler)
+    Params.copyValues(this, model)
     model
   }
 }
 
-trait StandardScalerModelParams extends Params with HasInputCol with HasOutputCol {
+class StandardScalerModel private[ml] (
+    override val parent: StandardScaler,
+    override val fittingParamMap: ParamMap,
+    scaler: feature.StandardScalerModel) extends Model with StandardScalerParams {
+
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
   def setOutputCol(value: String): this.type = { set(outputCol, value); this }
-}
-
-class StandardScalerModel private[ml] (
-    scaler: feature.StandardScalerModel) extends Model with StandardScalerModelParams {
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._

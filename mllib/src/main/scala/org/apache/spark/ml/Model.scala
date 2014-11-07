@@ -17,10 +17,19 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.ml.param.ParamMap
+
 /**
- * A trained model.
+ * A fitted model.
  */
 abstract class Model extends Transformer {
-  // def parent: Estimator
-  // def trainingParameters: ParamMap
+  /**
+   * The parent estimator that produced this model.
+   */
+  val parent: Estimator[_]
+
+  /**
+   * Fitting parameters, such that parent.fit(..., trainingParamMap) could reproduce the model.
+   */
+  val fittingParamMap: ParamMap
 }

@@ -68,14 +68,17 @@ class Pipeline extends Estimator[PipelineModel] {
       }
     }
 
-    new PipelineModel(transformers.toArray)
+    new PipelineModel(this, map, transformers.toArray)
   }
 }
 
 /**
  * Represents a compiled pipeline.
  */
-class PipelineModel(val transformers: Array[Transformer]) extends Model {
+class PipelineModel(
+    override val parent: Pipeline,
+    override val fittingParamMap: ParamMap,
+    val transformers: Array[Transformer]) extends Model {
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     transformers.foldLeft(dataset) { (dataset, transformer) =>

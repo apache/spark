@@ -99,9 +99,4 @@ abstract class Estimator[M <: Model] extends PipelineStage with Params {
   def fit(dataset: JavaSchemaRDD, paramMaps: Array[ParamMap]): java.util.List[M] = {
     fit(dataset.schemaRDD, paramMaps).asJava
   }
-
-  /**
-   * Parameters for the output model.
-   */
-  val modelParams: Params = Params.empty
 }

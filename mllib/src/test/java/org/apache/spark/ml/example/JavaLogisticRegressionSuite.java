@@ -18,6 +18,8 @@
 package org.apache.spark.ml.example;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
@@ -84,15 +86,6 @@ public class JavaLogisticRegressionSuite implements Serializable {
   }
 
   @Test
-  public void chainModelParams() {
-    LogisticRegression lr = new LogisticRegression();
-    lr.modelParams()
-      .setFeaturesCol("features")
-      .setScoreCol("score")
-      .setThreshold(0.5);
-  }
-
-  @Test
   public void logisticRegressionFitWithVarargs() {
     LogisticRegression lr = new LogisticRegression();
     lr.fit(dataset, lr.maxIter().w(10), lr.regParam().w(1.0));
@@ -117,8 +110,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   @Test
   public void logisticRegressionWithPipeline() {
     StandardScaler scaler = new StandardScaler()
-      .setInputCol("features");
-    scaler.modelParams()
+      .setInputCol("features")
       .setOutputCol("scaledFeatures");
     LogisticRegression lr = new LogisticRegression()
       .setFeaturesCol("scaledFeatures");
@@ -127,6 +119,40 @@ public class JavaLogisticRegressionSuite implements Serializable {
     PipelineModel model = pipeline.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    for (Row r: predictions.collect()) {
+      System.out.println(r);
+    }
+  }
+
+  @Test
+  public void textClassificationPipeline() {
+    List<LabeledDocument> localTraining = new ArrayList<LabeledDocument>();
+    localTraining.add(new LabeledDocument(0L, "a b c d e spark", 1.0));
+    localTraining.add(new LabeledDocument(1L, "b d", 0.0));
+    localTraining.add(new LabeledDocument(2L, "spark f g h", 1.0));
+    localTraining.add(new LabeledDocument(3L, "hadoop mapreduce", 0.0));
+    JavaSchemaRDD training =
+      jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+    Tokenizer tokenizer = new Tokenizer()
+      .setInputCol("text")
+      .setOutputCol("words");
+    HashingTF hashingTF = new HashingTF()
+      .setInputCol(tokenizer.getOutputCol())
+      .setOutputCol("features");
+    LogisticRegression lr = new LogisticRegression()
+      .setMaxIter(10);
+    Pipeline pipeline = new Pipeline()
+      .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
+    PipelineModel model = pipeline.fit(training);
+    List<Document> localTest = new ArrayList<Document>();
+    localTest.add(new Document(0L, "a b c d e spark"));
+    localTest.add(new Document(1L, "b d"));
+    localTest.add(new Document(2L, "spark f g h"));
+    localTest.add(new Document(3L, "hadoop mapreduce"));
+    JavaSchemaRDD test =
+      jsql.applySchema(jsc.parallelize(localTest), Document.class);
+    model.transform(test).registerAsTable("prediction");
+    JavaSchemaRDD predictions = jsql.sql("SELECT id, text, prediction, score FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println(r);
     }
