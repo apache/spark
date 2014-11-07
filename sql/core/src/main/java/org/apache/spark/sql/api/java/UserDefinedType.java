@@ -35,6 +35,7 @@ public abstract class UserDefinedType<UserType> extends DataType implements Seri
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
+    @SuppressWarnings("unchecked")
     UserDefinedType<UserType> that = (UserDefinedType<UserType>) o;
     return this.sqlType().equals(that.sqlType());
   }
