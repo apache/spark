@@ -473,8 +473,9 @@ class StreamingContext private[streaming] (
    * Stop the execution of the streams immediately (does not wait for all received data
    * to be processed).
    *
-   * @param stopSparkContext if true, stops the associated SparkContext. The SparkContext will be
-   *                         stopped regardless of whether this StreamingContext has been started.
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
    */
   def stop(stopSparkContext: Boolean = true): Unit = synchronized {
     stop(stopSparkContext, false)
@@ -484,8 +485,9 @@ class StreamingContext private[streaming] (
    * Stop the execution of the streams, with option of ensuring all received data
    * has been processed.
    *
-   * @param stopSparkContext if true, stops the associated SparkContext. The SparkContext will be
-   *                         stopped regardless of whether this StreamingContext has been started.
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
    * @param stopGracefully if true, stops gracefully by waiting for the processing of all
    *                       received data to be completed
    */
