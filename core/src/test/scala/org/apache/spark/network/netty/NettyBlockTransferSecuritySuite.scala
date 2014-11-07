@@ -36,7 +36,9 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, ShouldMat
 
 class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with ShouldMatchers {
   test("security default off") {
-    testConnection(new SparkConf, new SparkConf) match {
+    val conf = new SparkConf()
+      .set("spark.app.id", "app-id")
+    testConnection(conf, conf) match {
       case Success(_) => // expected
       case Failure(t) => fail(t)
     }
