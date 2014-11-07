@@ -238,6 +238,43 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.docker.image</code></td>
+  <td>(none)</td>
+  <td>
+    Set the docker image in which the Spark executors will run when using Mesos. The selected
+    image must have Spark installed, as well as a compatible version of the Mesos library.
+    The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
+    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
+    Mesos Docker support requires Mesos version 0.20.0 or later.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.docker.volumes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of volumes which will be mounted into the Docker image, which was set using
+    <code>spark.executor.docker.image</code>. The format of this property is a comma-separated list of
+    mappings following the form passed to <tt>docker run -v</tt>. That is they take the form:
+
+    <pre>[host_path:]container_path[:ro|:rw]</pre>
+
+    Mesos Docker volume support requires Mesos version 0.20.0 or later.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.docker.portmaps</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of incoming ports exposed by the Docker image, which was set using
+    <code>spark.executor.docker.image</code>. The format of this property is a comma-separated list of
+    mappings which take the form:
+
+    <pre>host_port:container_port[:tcp|:udp]</pre>
+
+    Mesos Docker portmap support requires Mesos version 0.20.0 or later.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.executor.home</code></td>
   <td>driver side <code>SPARK_HOME</code></td>
   <td>
