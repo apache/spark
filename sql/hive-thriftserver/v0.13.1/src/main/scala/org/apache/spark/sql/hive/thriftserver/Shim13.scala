@@ -91,9 +91,9 @@ private[hive] class SparkExecuteStatementOperation(
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          resultRdd.toLocalIterator
+          resultRdd.map(_.copy()).toLocalIterator
         } else {
-          resultRdd.collect().iterator
+          resultRdd.map(_.copy()).collect().iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
