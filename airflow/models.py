@@ -927,10 +927,11 @@ class DAG(Base):
             self, dag_id,
             schedule_interval=timedelta(days=1),
             start_date=None, end_date=None, parallelism=0,
-            full_filepath=None):
+            full_filepath=None, executor=DEFAULT_EXECUTOR):
 
         utils.validate_key(dag_id)
         self.dag_id = dag_id
+        self.executor = executor
         self.end_date = end_date or datetime.now()
         self.parallelism = parallelism
         self.schedule_interval = schedule_interval
@@ -1088,11 +1089,9 @@ class DAG(Base):
         session.merge(self)
         session.commit()
 
-    def run(
-            self, start_date=None, end_date=None, mark_success=False,
-            executor=DEFAULT_EXECUTOR):
+    def run(self, start_date=None, end_date=None, mark_success=False):
         session = settings.Session()
-        job = BackfillJob(executor=executor)
+        job = BackfillJob(executor=self.executor)
         session.add(job)
         session.commit()
         job.run(self, start_date, end_date, mark_success)

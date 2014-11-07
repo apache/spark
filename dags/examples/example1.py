@@ -1,5 +1,7 @@
 from airflow.operators import BashOperator, MySqlOperator, DummyOperator
 from airflow.models import DAG
+from airflow.executors import SequentialExecutor
+from airflow.executors import LocalExecutor
 from datetime import datetime
 
 default_args = {
@@ -8,7 +10,8 @@ default_args = {
     'mysql_dbid': 'local_mysql',
 }
 
-dag = DAG(dag_id='example_1')
+dag = DAG(dag_id='example_1', executor=LocalExecutor())
+# dag = DAG(dag_id='example_1', executor=SequentialExecutor())
 
 cmd = 'ls -l'
 run_this_last = DummyOperator(
@@ -45,3 +48,4 @@ task = MySqlOperator(task_id='also_run_mysql', sql=sql, **default_args)
 dag.add_task(task)
 task.set_downstream(run_this_last)
 task.set_upstream(create_table)
+

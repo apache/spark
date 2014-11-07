@@ -1,16 +1,17 @@
 from airflow.operators import MySqlOperator
 from airflow.executors import SequentialExecutor
+from airflow.executors import LocalExecutor
 from airflow import DAG
 from datetime import datetime
 
 # Setting some default operator parameters
 default_args = {
-            'owner': 'max',
+                'owner': 'max',
                 'mysql_dbid': 'local_mysql',
                 }
 
 # Initializing a directed acyclic graph
-dag = DAG(dag_id='simple', )
+dag = DAG(dag_id='simple', executor=LocalExecutor())
 
 # MySQL Operator
 sql = "TRUNCATE TABLE tmp;"
