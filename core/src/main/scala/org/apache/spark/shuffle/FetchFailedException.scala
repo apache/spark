@@ -33,17 +33,8 @@ private[spark] class FetchFailedException(
     mapId: Int,
     reduceId: Int,
     message: String,
-    cause: Throwable)
+    cause: Throwable = null)
   extends Exception(message, cause) {
-
-  def this(
-      bmAddress: BlockManagerId,
-      shuffleId: Int,
-      mapId: Int,
-      reduceId: Int,
-      message: String) {
-    this(bmAddress, shuffleId, mapId, reduceId, message, null)
-  }
 
   def this(
       bmAddress: BlockManagerId,

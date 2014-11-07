@@ -1596,30 +1596,19 @@ private[spark] object Utils extends Logging {
       .orNull
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
+  /**
+   * Return a nice string representation of the exception. It will call "printStackTrace" to
+   * recursively generate the stack trace including the exception and its causes.
+   */
   def exceptionString(e: Throwable): String = {
     if (e == null) {
       ""
     } else {
+      // Use e.printStackTrace here because e.getStackTrace doesn't include the cause
       val stringWriter = new StringWriter()
       e.printStackTrace(new PrintWriter(stringWriter))
       stringWriter.toString
     }
-  }
-
-  /**
-   * Return a nice string representation of the exception, including the stack trace.
-   * It's only used for backward compatibility.
-   * Note: deprecated because it does not include the exception's cause.
-   */
-  @deprecated("Use exceptionString(Throwable) instead", "1.2.0")
-  def exceptionString(
-      className: String,
-      description: String,
-      stackTrace: Array[StackTraceElement]): String = {
-    val desc = if (description == null) "" else description
-    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
-    s"$className: $desc\n$st"
   }
 
   /**
