@@ -755,6 +755,7 @@ private[spark] object Utils extends Logging {
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
+   * Throws an exception if deletion is unsuccessful.
    */
   def deleteRecursively(file: File) {
     if (file != null) {
