@@ -21,10 +21,8 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.jar.Attributes.Name
-import java.util.{Properties, Locale, Random, UUID}
-import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
-import java.util.jar.{Manifest => JarManifest}
+import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
+import java.util.{Locale, Properties, Random, UUID}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -38,11 +36,11 @@ import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
-import tachyon.client.{TachyonFile,TachyonFS}
+import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -352,8 +350,8 @@ private[spark] object Utils extends Logging {
    * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
-   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared 
-   * across executors running the same application. `useCache` is used mainly for 
+   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared
+   * across executors running the same application. `useCache` is used mainly for
    * the executors, and not in local mode.
    *
    * Throws SparkException if the target file already exists and has different contents than
@@ -400,7 +398,7 @@ private[spark] object Utils extends Logging {
     } else {
       doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
-    
+
     // Decompress the file if it's a .tar or .tar.gz
     if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
       logInfo("Untarring " + fileName)
@@ -1776,13 +1774,6 @@ private[spark] object Utils extends Logging {
     s"$libraryPathEnvName=$libraryPath$ampersand"
   }
 
-  lazy val sparkVersion =
-    SparkContext.jarOfObject(this).map { path =>
-      val manifestUrl = new URL(s"jar:file:$path!/META-INF/MANIFEST.MF")
-      val manifest = new JarManifest(manifestUrl.openStream())
-      manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
-    }.getOrElse("Unknown")
-
   /**
    * Return the value of a config either through the SparkConf or the Hadoop configuration
    * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
@@ -1796,7 +1787,6 @@ private[spark] object Utils extends Logging {
       sparkValue
     }
   }
-
 }
 
 /**
