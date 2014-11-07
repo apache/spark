@@ -51,9 +51,6 @@ public class OneForOneBlockFetcher {
       TransportClient client,
       String[] blockIds,
       BlockFetchingListener listener) {
-    if (blockIds.length == 0) {
-      throw new IllegalArgumentException("Zero-sized blockIds array");
-    }
     this.client = client;
     this.blockIds = blockIds;
     this.listener = listener;
@@ -82,6 +79,10 @@ public class OneForOneBlockFetcher {
    * {@link ShuffleStreamHandle}. We will send all fetch requests immediately, without throttling.
    */
   public void start(Object openBlocksMessage) {
+    if (blockIds.length == 0) {
+      throw new IllegalArgumentException("Zero-sized blockIds array");
+    }
+
     client.sendRpc(JavaUtils.serialize(openBlocksMessage), new RpcResponseCallback() {
       @Override
       public void onSuccess(byte[] response) {
@@ -95,7 +96,7 @@ public class OneForOneBlockFetcher {
             client.fetchChunk(streamHandle.streamId, i, chunkCallback);
           }
         } catch (Exception e) {
-          logger.error("Failed while starting block fetches", e);
+          logger.error("Failed while starting block fetches after success", e);
           failRemainingBlocks(blockIds, e);
         }
       }
