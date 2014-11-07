@@ -202,13 +202,12 @@ private[hive] class SparkExecuteStatementOperation(
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
-        val resultRdd = result.queryExecution.toRdd
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          resultRdd.map(_.copy()).toLocalIterator
+          result.toLocalIterator
         } else {
-          resultRdd.map(_.copy()).collect().iterator
+          result.collect().iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
