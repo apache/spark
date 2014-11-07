@@ -160,11 +160,15 @@ class Airflow(BaseView):
             if hasattr(task, attr_name):
                 source = getattr(task, attr_name)
                 if source.endswith('.sql') or source.endswith('.hql'):
-                    f = open(dag.folder + '/' + source, 'r')
-                    source = f.read()
-                    f.close()
+                    try:
+                        f = open(dag.folder + '/' + source, 'r')
+                        source = f.read()
+                        f.close()
+                    except Exception as e:
+                        logging.error(e)
+                        source = getattr(task, attr_name)
                 special_attrs[attr_name] = highlight(
-                    getattr(task, attr_name),
+                    source,
                     SqlLexer(),
                     HtmlFormatter(noclasses=True)
                 )
