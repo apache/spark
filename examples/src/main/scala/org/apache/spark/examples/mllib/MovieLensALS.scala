@@ -141,9 +141,8 @@ object MovieLensALS {
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
-    //val splits = ratings.randomSplit(Array(0.8, 0.2))
     val fractions = (0 until numUsers.toInt).map(x => (x + 1, 0.8)).toMap
-
+    
     val training = ratings.map { x => (x.user, x) }.sampleByKey(false, fractions).map { x => x._2 }
     val testSplit = ratings.subtract(training)
 
