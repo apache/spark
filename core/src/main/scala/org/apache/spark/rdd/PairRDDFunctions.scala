@@ -57,8 +57,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   with SparkHadoopMapReduceUtil
   with Serializable
 {
-  import PairRDDFunctions._
-
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
@@ -1090,7 +1088,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   private def maybeUpdateOutputMetrics(bytesWrittenCallback: Option[() => Long],
       outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
-    if (recordsWritten % RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0
+    if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0
         && bytesWrittenCallback.isDefined) {
       bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
     }

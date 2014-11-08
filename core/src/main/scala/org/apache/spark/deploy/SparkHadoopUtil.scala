@@ -159,10 +159,10 @@ class SparkHadoopUtil extends Logging {
     : Option[() => Long] = {
     try {
       val threadStats = getFileSystemThreadStatistics(path, conf)
-      val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
-      val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
-      val baselineBytesRead = f()
-      Some(() => f() - baselineBytesRead)
+      val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
+      val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
+      val baselineBytesWritten = f()
+      Some(() => f() - baselineBytesWritten)
     } catch {
       case e: NoSuchMethodException => {
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
