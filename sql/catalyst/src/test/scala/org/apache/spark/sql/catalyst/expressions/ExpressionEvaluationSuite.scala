@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import TimeConversions._
 
 import scala.collection.immutable.HashSet
 
@@ -802,4 +803,12 @@ class ExpressionEvaluationSuite extends FunSuite {
 	    ).===(false))
   }
 
+  test("implicit conversions for RichDate and RichTimestamp") {
+    val d1 = RichDate("2014-01-01")
+    val d2 = javaDateToRichDate(richDateToJavaDate(d1))
+    assert(EQ(d1).===(d2))
+    val t1 = RichTimestamp("2014-01-01 12:34:56.789")
+    val t2 = javaTimestampToRichTimestamp(richTimestampToJavaTimestamp(t1))
+    assert(EQ(t1).===(t2))
+  }
 }

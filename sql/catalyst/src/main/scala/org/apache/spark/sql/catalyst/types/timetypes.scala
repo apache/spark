@@ -79,11 +79,11 @@ object RichTimestamp {
 object TimeConversions {
 
   implicit def javaDateToRichDate(jdate: Date): RichDate = {
-    new Date(jdate.getTime)
+    new RichDate(jdate.getTime)
   }
 
   implicit def javaTimestampToRichTimestamp(jtimestamp: Timestamp): RichTimestamp = {
-    new Timestamp(jtimestamp.getTime)
+    new RichTimestamp(jtimestamp.getTime)
   }
 
   implicit def richDateToJavaDate(date: RichDate): Date = {
