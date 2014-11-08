@@ -155,7 +155,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     sql("DROP TABLE hiveTableWithMapValue")
   }
 
-  test("Insert StringType.fields.exists(_.nullable == false)") {
+  test("Insert StructType.fields.exists(_.nullable == false)") {
     val schema = StructType(Seq(
       StructField("s", StructType(Seq(StructField("f", StringType, nullable = false))))))
     val rowRDD = TestHive.sparkContext.parallelize(
