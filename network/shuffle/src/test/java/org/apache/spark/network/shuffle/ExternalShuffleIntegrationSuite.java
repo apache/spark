@@ -42,6 +42,7 @@ import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -105,7 +106,7 @@ public class ExternalShuffleIntegrationSuite {
 
   @After
   public void afterEach() {
-    handler.clearRegisteredExecutors();
+    handler.applicationRemoved(APP_ID, false /* cleanupLocalDirs */);
   }
 
   class FetchResult {
@@ -135,7 +136,7 @@ public class ExternalShuffleIntegrationSuite {
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    ExternalShuffleClient client = new ExternalShuffleClient(conf);
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false);
     client.init(APP_ID);
     client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
       new BlockFetchingListener() {
@@ -259,15 +260,21 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_1_0_0", "shuffle_1_0_1" }, 1 /* port */);
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    System.setProperty("spark.shuffle.io.maxRetries", "0");
+    try {
+      registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, 1 /* port */);
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    } finally {
+      System.clearProperty("spark.shuffle.io.maxRetries");
+    }
   }
 
-  private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo) {
-    ExternalShuffleClient client = new ExternalShuffleClient(conf);
+  private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
+      throws IOException {
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false);
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);

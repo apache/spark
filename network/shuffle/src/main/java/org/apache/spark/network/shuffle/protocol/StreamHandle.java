@@ -15,25 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.shuffle.protocol;
 
 import java.io.Serializable;
-import java.util.Arrays;
 
 import com.google.common.base.Objects;
+import io.netty.buffer.ByteBuf;
 
 /**
  * Identifier for a fixed number of chunks to read from a stream created by an "open blocks"
- * message. This is used by {@link OneForOneBlockFetcher}.
+ * message. This is used by {@link org.apache.spark.network.shuffle.OneForOneBlockFetcher}.
  */
-public class ShuffleStreamHandle implements Serializable {
+public class StreamHandle extends BlockTransferMessage {
   public final long streamId;
   public final int numChunks;
 
-  public ShuffleStreamHandle(long streamId, int numChunks) {
+  public StreamHandle(long streamId, int numChunks) {
     this.streamId = streamId;
     this.numChunks = numChunks;
   }
+
+  @Override
+  protected Type type() { return Type.STREAM_HANDLE; }
 
   @Override
   public int hashCode() {
@@ -50,11 +53,28 @@ public class ShuffleStreamHandle implements Serializable {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof ShuffleStreamHandle) {
-      ShuffleStreamHandle o = (ShuffleStreamHandle) other;
+    if (other != null && other instanceof StreamHandle) {
+      StreamHandle o = (StreamHandle) other;
       return Objects.equal(streamId, o.streamId)
         && Objects.equal(numChunks, o.numChunks);
     }
     return false;
+  }
+
+  @Override
+  public int encodedLength() {
+    return 8 + 4;
+  }
+
+  @Override
+  public void encode(ByteBuf buf) {
+    buf.writeLong(streamId);
+    buf.writeInt(numChunks);
+  }
+
+  public static StreamHandle decode(ByteBuf buf) {
+    long streamId = buf.readLong();
+    int numChunks = buf.readInt();
+    return new StreamHandle(streamId, numChunks);
   }
 }

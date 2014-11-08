@@ -34,7 +34,8 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.BaseEncoding;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.base64.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -159,12 +160,14 @@ public class SparkSaslServer {
   /* Encode a byte[] identifier as a Base64-encoded string. */
   public static String encodeIdentifier(String identifier) {
     Preconditions.checkNotNull(identifier, "User cannot be null if SASL is enabled");
-    return BaseEncoding.base64().encode(identifier.getBytes(Charsets.UTF_8));
+    return Base64.encode(Unpooled.wrappedBuffer(identifier.getBytes(Charsets.UTF_8)))
+      .toString(Charsets.UTF_8);
   }
 
   /** Encode a password as a base64-encoded char[] array. */
   public static char[] encodePassword(String password) {
     Preconditions.checkNotNull(password, "Password cannot be null if SASL is enabled");
-    return BaseEncoding.base64().encode(password.getBytes(Charsets.UTF_8)).toCharArray();
+    return Base64.encode(Unpooled.wrappedBuffer(password.getBytes(Charsets.UTF_8)))
+      .toString(Charsets.UTF_8).toCharArray();
   }
 }

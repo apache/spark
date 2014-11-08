@@ -343,15 +343,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with 
    */
   def getSecretKey(): String = secretKey
 
-  override def getSaslUser(appId: String): String = {
-    val myAppId = sparkConf.getAppId
-    require(appId == myAppId, s"SASL appId $appId did not match my appId ${myAppId}")
-    getSaslUser()
-  }
-
-  override def getSecretKey(appId: String): String = {
-    val myAppId = sparkConf.getAppId
-    require(appId == myAppId, s"SASL appId $appId did not match my appId ${myAppId}")
-    getSecretKey()
-  }
+  // Default SecurityManager only has a single secret key, so ignore appId.
+  override def getSaslUser(appId: String): String = getSaslUser()
+  override def getSecretKey(appId: String): String = getSecretKey()
 }
