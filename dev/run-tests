@@ -142,7 +142,6 @@ CURRENT_BLOCK=$BLOCK_BUILD
   # We always build with Hive because the PySpark Spark SQL tests need it.
   BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
 
-
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   #+ (either resolution or compilation) prompts the user for input either q, r, etc
   #+ to quit or retry. This echo is there to make it not block.
@@ -150,11 +149,18 @@ CURRENT_BLOCK=$BLOCK_BUILD
   #+ single argument!
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
-  # First build with 0.12 to ensure patches do not break the hive 12 build
-  echo "[info] Compile with hive 0.12"
+  # First build with 0.12 to ensure patches do not break the hive 12 build.
+  echo "[info] Compile with hive 0.12 (base support)"
   echo -e "q\n" \
-    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean hive/compile hive-thriftserver/compile \
+    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean hive/compile \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  if [[ $BUILD_MVN_PROFILE_ARGS != *scala-2.11* ]]; then
+    # JDBC server only supported for Scala 2.10
+    echo "[info] Compile with hive 0.12 (JDBC server)"
+    echo -e "q\n" \
+      | sbt/sbt $BUILD_MVN_PROFILE_ARGS hive-thriftserver/compile \
+      | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  fi
 
   # Then build with default version(0.13.1) because tests are based on this version
   echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS -Phive"
