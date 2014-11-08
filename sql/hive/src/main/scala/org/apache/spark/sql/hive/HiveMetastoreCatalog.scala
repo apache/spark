@@ -65,8 +65,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = synchronized {
-    val (databaseName, tblName) = processDatabaseAndTableName(
-        db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
+    val (databaseName, tblName) =
+      processDatabaseAndTableName(db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
     val table = client.getTable(databaseName, tblName)
     if (table.isView) {
       // if the unresolved relation is from hive view
@@ -432,7 +432,7 @@ private[hive] case class MetastoreRelation
     }
   )
 
-  lazy val tableDesc = HiveShim.getTableDesc(
+  val tableDesc = HiveShim.getTableDesc(
     Class.forName(
       hiveQlTable.getSerializationLib,
       true,
