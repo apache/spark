@@ -282,6 +282,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
+      } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
+        childOutputDataTypes.zip(tableOutputDataTypes).forall(equalsIgnoreNullability)) {
+        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite)
       } else {
         // Only do the casting when child output data types differ from table output data types.
         val castedChildOutput = child.output.zip(table.output).map {
@@ -291,6 +294,21 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
         p.copy(child = logical.Project(castedChildOutput, child))
+      }
+    }
+
+    def equalsIgnoreNullability(dataTypePair: (DataType, DataType)): Boolean = {
+      dataTypePair match {
+        case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
+          equalsIgnoreNullability(leftElementType, rightElementType)
+        case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
+          equalsIgnoreNullability(leftKeyType, rightKeyType) &&
+          equalsIgnoreNullability(leftValueType, rightValueType)
+        case (StructType(leftFields), StructType(rightFields)) =>
+          leftFields.size == rightFields.size &&
+          leftFields.map(_.dataType).zip(rightFields.map(_.dataType))
+            .forall(equalsIgnoreNullability)
+        case (left, right) => left == right
       }
     }
   }
@@ -310,6 +328,17 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       databaseName: Option[String], tableName: String): Unit = ???
 
   override def unregisterAllTables() = {}
+}
+
+private[hive] case class InsertIntoHiveTable(
+    table: LogicalPlan,
+    partition: Map[String, Option[String]],
+    child: LogicalPlan,
+    overwrite: Boolean)
+  extends LogicalPlan {
+
+  override def children = child :: Nil
+  override def output = child.output
 }
 
 /**
