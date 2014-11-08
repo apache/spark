@@ -40,7 +40,9 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.OpenBlocks;
+import org.apache.spark.network.shuffle.protocol.StreamHandle;
 
 public class OneForOneBlockFetcherSuite {
   @Test
@@ -119,17 +121,19 @@ public class OneForOneBlockFetcherSuite {
   private BlockFetchingListener fetchBlocks(final LinkedHashMap<String, ManagedBuffer> blocks) {
     TransportClient client = mock(TransportClient.class);
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
-    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
-    OneForOneBlockFetcher fetcher = new OneForOneBlockFetcher(client, blockIds, listener);
+    final String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+    OneForOneBlockFetcher fetcher =
+      new OneForOneBlockFetcher(client, "app-id", "exec-id", blockIds, listener);
 
     // Respond to the "OpenBlocks" message with an appropirate ShuffleStreamHandle with streamId 123
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
-        String message = JavaUtils.deserialize((byte[]) invocationOnMock.getArguments()[0]);
+        BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteArray(
+          (byte[]) invocationOnMock.getArguments()[0]);
         RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
-        callback.onSuccess(JavaUtils.serialize(new ShuffleStreamHandle(123, blocks.size())));
-        assertEquals("OpenZeBlocks", message);
+        callback.onSuccess(new StreamHandle(123, blocks.size()).toByteArray());
+        assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
         return null;
       }
     }).when(client).sendRpc((byte[]) any(), (RpcResponseCallback) any());
@@ -161,7 +165,7 @@ public class OneForOneBlockFetcherSuite {
       }
     }).when(client).fetchChunk(anyLong(), anyInt(), (ChunkReceivedCallback) any());
 
-    fetcher.start("OpenZeBlocks");
+    fetcher.start();
     return listener;
   }
 }
