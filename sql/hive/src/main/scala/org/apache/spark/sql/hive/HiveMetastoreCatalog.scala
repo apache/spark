@@ -283,7 +283,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
       } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
-        childOutputDataTypes.zip(tableOutputDataTypes).forall(equalsIgnoreNullability)) {
+        childOutputDataTypes.zip(tableOutputDataTypes)
+          .forall(InsertIntoHiveType.equalsIgnoreNullability)) {
+        // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
+        // use InsertIntoHiveTable instead of InsertIntoTable.
         InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite)
       } else {
         // Only do the casting when child output data types differ from table output data types.
@@ -294,21 +297,6 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
         p.copy(child = logical.Project(castedChildOutput, child))
-      }
-    }
-
-    def equalsIgnoreNullability(dataTypePair: (DataType, DataType)): Boolean = {
-      dataTypePair match {
-        case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
-          equalsIgnoreNullability(leftElementType, rightElementType)
-        case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
-          equalsIgnoreNullability(leftKeyType, rightKeyType) &&
-          equalsIgnoreNullability(leftValueType, rightValueType)
-        case (StructType(leftFields), StructType(rightFields)) =>
-          leftFields.size == rightFields.size &&
-          leftFields.map(_.dataType).zip(rightFields.map(_.dataType))
-            .forall(equalsIgnoreNullability)
-        case (left, right) => left == right
       }
     }
   }
@@ -330,6 +318,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   override def unregisterAllTables() = {}
 }
 
+/**
+ * A logical plan representing insertion into Hive table.
+ * This plan ignores nullability of ArrayType, MapType, StructType unlike InsertIntoTable
+ * because Hive table doesn't have nullability for ARRAY, MAP, STRUCT types.
+ */
 private[hive] case class InsertIntoHiveTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
@@ -339,6 +332,32 @@ private[hive] case class InsertIntoHiveTable(
 
   override def children = child :: Nil
   override def output = child.output
+
+  override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
+    case (childAttr, tableAttr) =>
+      InsertIntoHiveType.equalsIgnoreNullability(childAttr.dataType, tableAttr.dataType)
+  }
+}
+
+private[hive] object InsertIntoHiveType {
+
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
+   */
+  def equalsIgnoreNullability(dataTypePair: (DataType, DataType)): Boolean = {
+    dataTypePair match {
+      case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
+        equalsIgnoreNullability(leftElementType, rightElementType)
+      case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
+        equalsIgnoreNullability(leftKeyType, rightKeyType) &&
+          equalsIgnoreNullability(leftValueType, rightValueType)
+      case (StructType(leftFields), StructType(rightFields)) =>
+        leftFields.size == rightFields.size &&
+          leftFields.map(_.dataType).zip(rightFields.map(_.dataType))
+          .forall(equalsIgnoreNullability)
+      case (left, right) => left == right
+    }
+  }
 }
 
 /**
