@@ -34,7 +34,8 @@ import org.apache.spark.storage.StorageLevel
  * This example uses Tachyon to persist rdds during computation.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to org.apache.spark.mllib.classification.LogisticRegressionModel
+ * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+ * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
  */
 object SparkTachyonHdfsLR {
   val D = 10   // Numer of dimensions
@@ -43,7 +44,8 @@ object SparkTachyonHdfsLR {
   def showWarning() {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
-        |Please use the LogisticRegressionModel found in org.apache.spark.mllib.classification
+        |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+        |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
         |for more conventional use.
       """.stripMargin)
   }

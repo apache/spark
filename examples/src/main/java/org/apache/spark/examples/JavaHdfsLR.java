@@ -32,7 +32,8 @@ import java.util.regex.Pattern;
  * Logistic regression based classification.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to org.apache.spark.mllib.classification.LogisticRegressionModel
+ * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+ * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
  */
 public final class JavaHdfsLR {
 
@@ -42,8 +43,9 @@ public final class JavaHdfsLR {
   static void showWarning() {
     String warning = "WARN: This is a naive implementation of Logistic Regression " +
             "and is given as an example!\n" +
-            "Please use the LogisticRegressionModel found in " +
-            "org.apache.spark.mllib.classification for more conventional use.";
+            "Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD " +
+            "or org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS " +
+            "for more conventional use.";
     System.err.println(warning);
   }
 
