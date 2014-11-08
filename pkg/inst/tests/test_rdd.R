@@ -186,6 +186,12 @@ test_that("mapValues() on pairwise RDDs", {
     }))
 })
 
+test_that("flatMapValues() on pairwise RDDs", {
+  l <- parallelize(sc, list(list(1, c(1,2)), list(2, c(3,4))))
+  actual <- collect(flatMapValues(l, function(x) { x }))
+  expect_equal(actual, list(list(1,1), list(1,2), list(2,3), list(2,4)))
+})
+
 test_that("distinct() on RDDs", {
   nums.rep2 <- rep(1:10, 2)
   rdd.rep2 <- parallelize(sc, nums.rep2, 2L)
