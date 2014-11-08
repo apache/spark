@@ -44,7 +44,9 @@ public class JavaUtils {
   /** Closes the given object, ignoring IOExceptions. */
   public static void closeQuietly(Closeable closeable) {
     try {
-      closeable.close();
+      if (closeable != null) {
+        closeable.close();
+      }
     } catch (IOException e) {
       logger.error("IOException should not have been thrown.", e);
     }
