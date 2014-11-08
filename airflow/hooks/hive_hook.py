@@ -2,10 +2,11 @@ import logging
 import subprocess
 import sys
 from airflow.models import DatabaseConnection
+from airflow.configuration import getconf
 from airflow import settings
 
 # Adding the Hive python libs to python path
-sys.path.insert(0, settings.HIVE_HOME_PY)
+sys.path.insert(0, getconf().get('hooks', 'HIVE_HOME_PY'))
 
 from thrift.transport import TSocket
 from thrift.transport import TTransport
@@ -16,7 +17,8 @@ from airflow.hooks.base_hook import BaseHook
 
 
 class HiveHook(BaseHook):
-    def __init__(self, hive_dbid=settings.HIVE_DEFAULT_DBID):
+    def __init__(self,
+        hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID')):
         session = settings.Session()
         db = session.query(
             DatabaseConnection).filter(

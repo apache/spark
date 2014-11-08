@@ -1,6 +1,7 @@
 import subprocess
 
 from airflow import settings
+from airflow.configuration import getconf
 from airflow.models import DatabaseConnection
 from airflow.hooks.base_hook import BaseHook
 from airflow.hooks.presto.presto_client import PrestoClient
@@ -12,7 +13,7 @@ class PrestoHook(BaseHook):
     """
     Interact with Presto!
     """
-    def __init__(self, presto_dbid=settings.PRESTO_DEFAULT_DBID):
+    def __init__(self, presto_dbid=getconf().get('hooks', 'PRESTO_DEFAULT_DBID')):
         session = settings.Session()
         db = session.query(
             DatabaseConnection).filter(

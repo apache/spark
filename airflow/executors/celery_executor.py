@@ -2,7 +2,7 @@ import multiprocessing
 import time
 
 from airflow.executors.base_executor import BaseExecutor
-from airflow import settings
+from airflow.configuration import getconf
 from airflow.utils import State
 from celery_worker import execute_command
 
@@ -52,7 +52,7 @@ class CelerySubmitter(multiprocessing.Process):
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break
-            BASE_FOLDER = settings.BASE_FOLDER
+            BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
             command = (
                 "exec bash -c '"
                 "cd $AIRFLOW_HOME;\n" +

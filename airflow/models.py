@@ -5,7 +5,7 @@ import inspect
 import jinja2
 import logging
 import os
-import sys
+import sys, traceback, traceback, traceback, traceback
 import pickle
 import re
 from time import sleep
@@ -18,14 +18,14 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.serializer import loads, dumps
 from sqlalchemy.orm import relationship
 from airflow.executors import DEFAULT_EXECUTOR
+from airflow.configuration import getconf
 from airflow import settings
 from airflow import utils
-from settings import ID_LEN
 import socket
 from utils import State
 
 Base = declarative_base()
-
+ID_LEN = getconf().getint('misc', 'ID_LEN')
 
 class DagBag(object):
     """
@@ -39,7 +39,7 @@ class DagBag(object):
     """
     def __init__(
             self,
-            dag_folder=settings.DAGS_FOLDER,
+            dag_folder=getconf().get('core', 'DAGS_FOLDER'),
             executor=DEFAULT_EXECUTOR):
         self.dags = {}
         logging.info("Filling up the DagBag from " + dag_folder)
@@ -60,17 +60,17 @@ class DagBag(object):
         except:
             logging.error("Failed to import: " + filepath)
             logging.error("Exception: " + str(sys.exc_info()))
+            traceback.print_exc(file=sys.stdout)
         else:
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
                     dag.full_filepath = filepath
-                    #.replace(settings.AIRFLOW_HOME + '/', '')
                     if dag.dag_id in self.dags:
                         raise Exception(
                             'Two DAGs with the same dag_id. No good.')
                     self.dags[dag.dag_id] = dag
                     dag.dagbag = self
-                    if settings.RUN_AS_MASTER:
+                    if getconf().getboolean('misc', 'RUN_AS_MASTER'):
                         dag.db_merge()
 
     def collect_dags(self, file_location):
@@ -229,7 +229,7 @@ class TaskInstance(Base):
     @property
     def log_filepath(self):
         iso = self.execution_date.isoformat()
-        return settings.BASE_LOG_FOLDER + \
+        return getconf().get('core', 'BASE_LOG_FOLDER') + \
             "/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals())
 
     def current_state(self, main_session=None):
@@ -538,12 +538,12 @@ class BaseJob(Base):
     def is_alive(self):
         return (
             (datetime.now() - self.latest_heartbeat).seconds <
-            (settings.JOB_HEARTBEAT_SEC * 2.1)
+            (getconf().getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
     def heartbeat(self):
         session = settings.Session()
-        sleep_for = settings.JOB_HEARTBEAT_SEC - (
+        sleep_for = getconf().getint('misc', 'JOB_HEARTBEAT_SEC') - (
             datetime.now() - self.latest_heartbeat).total_seconds()
         if sleep_for > 0:
             sleep(sleep_for)
@@ -946,7 +946,8 @@ class DAG(Base):
 
     @property
     def filepath(self):
-        return self.full_filepath.replace(settings.AIRFLOW_HOME + '/', '')
+        return self.full_filepath.replace(
+                  getconf().get('core', 'AIRFLOW_HOME') + '/', '')
 
     @property
     def folder(self):

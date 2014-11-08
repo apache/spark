@@ -21,9 +21,10 @@ from airflow.settings import Session
 from airflow import models
 from airflow.models import State
 from airflow import settings
+from airflow.configuration import getconf
 from airflow import utils
 
-dagbag = models.DagBag(settings.DAGS_FOLDER)
+dagbag = models.DagBag(getconf().get('core', 'DAGS_FOLDER'))
 session = Session()
 
 app = Flask(__name__)
@@ -64,7 +65,7 @@ class HomeView(AdminIndexView):
     @expose("/")
     def index(self):
         md = "".join(
-            open(settings.AIRFLOW_HOME + '/README.md', 'r').readlines())
+            open(getconf().get('core', 'AIRFLOW_HOME') + '/README.md', 'r').readlines())
         content = Markup(markdown.markdown(md))
         return self.render('admin/index.html', content=content)
 admin = Admin(app, name="Airflow", index_view=HomeView(name='Home'))
@@ -110,7 +111,7 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
         code = "".join(open(dag.filepath, 'r').readlines())
-        title = dag.filepath.replace(settings.BASE_FOLDER + '/dags/', '')
+        title = dag.filepath.replace(getconf().get('core', 'BASE_FOLDER') + '/dags/', '')
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
@@ -122,7 +123,7 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
         dag = dagbag.dags[dag_id]
-        loc = settings.BASE_LOG_FOLDER + "/{dag_id}/{task_id}/{execution_date}"
+        loc = getconf().get('core', 'BASE_LOG_FOLDER') + "/{dag_id}/{task_id}/{execution_date}"
         loc = loc.format(**locals())
         try:
             f = open(loc)
@@ -486,7 +487,7 @@ class ModelViewOnly(ModelView):
 
 def filepath_formatter(view, context, model, name):
     url = url_for('airflow.code', dag_id=model.dag_id)
-    short_fp = model.filepath.replace(settings.BASE_FOLDER + '/dags/', '')
+    short_fp = model.filepath.replace(getconf().get('core', 'BASE_FOLDER') + '/dags/', '')
     link = Markup('<a href="{url}">{short_fp}</a>'.format(**locals()))
     return link
 

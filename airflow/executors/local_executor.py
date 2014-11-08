@@ -3,7 +3,7 @@ import multiprocessing
 import subprocess
 import time
 
-from airflow import settings
+from airflow.configuration import getconf
 from airflow.utils import State
 
 from airflow.executors.base_executor import BaseExecutor
@@ -24,7 +24,7 @@ class LocalWorker(multiprocessing.Process):
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break
-            BASE_FOLDER = settings.BASE_FOLDER
+            BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
             print command
             command = (
                 "exec bash -c '"

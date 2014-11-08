@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from airflow.configuration import getconf
 from airflow import settings
 from airflow.models import DagBag, TaskInstance, DagPickle, State
 
@@ -17,7 +18,6 @@ from sqlalchemy import func
 # Common help text across subcommands
 mark_success_help = "Mark jobs as succeeded without running them"
 subdir_help = "File location or directory from which to look for the dag"
-
 
 def backfill(args):
     logging.basicConfig(level=logging.INFO)
@@ -44,7 +44,7 @@ def backfill(args):
 def run(args):
 
     # Setting up logging
-    directory = settings.BASE_LOG_FOLDER + \
+    directory = getconf().get('core', 'BASE_LOG_FOLDER') + \
         "/{args.dag_id}/{args.task_id}".format(args=args)
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -52,7 +52,8 @@ def run(args):
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
     logging.basicConfig(
-        filename=filename, level=logging.INFO, format=settings.LOG_FORMAT)
+        filename=filename, level=logging.INFO,
+        format=settings.LOG_FORMAT)
     print("Logging into: " + filename)
 
     if not args.pickle:
@@ -106,10 +107,11 @@ def clear(args):
 
 
 def webserver(args):
-    logging.basicConfig(level=logging.DEBUG, format=settings.LOG_FORMAT)
+    logging.basicConfig(level=logging.DEBUG,
+      format=settings.LOG_FORMAT)
     print(settings.HEADER)
     from www.app import app
-    print("Starting the web server on port {0}.".format(args.port))
+    print("Starting the web server on port {0} and host {1}.".format(args.port, args.hostname))
     app.run(debug=True, port=args.port, host=args.hostname)
 
 
@@ -251,7 +253,7 @@ if __name__ == '__main__':
         action="store_true")
     parser_backfill.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=settings.DAGS_FOLDER)
+        default=getconf().get('core', 'DAGS_FOLDER'))
     parser_backfill.set_defaults(func=backfill)
 
     ht = "Clear a set of task instance, as if they never ran"
@@ -272,7 +274,7 @@ if __name__ == '__main__':
         "-d", "--downstream", help=ht, action="store_true")
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
-        default=settings.DAGS_FOLDER)
+        default=getconf().get('core', 'DAGS_FOLDER'))
     parser_clear.set_defaults(func=clear)
 
     ht = "Run a single task instance"
@@ -282,7 +284,8 @@ if __name__ == '__main__':
     parser_run.add_argument(
         "execution_date", help="The execution date to run")
     parser_run.add_argument(
-        "-sd", "--subdir", help=subdir_help, default=settings.DAGS_FOLDER)
+        "-sd", "--subdir", help=subdir_help,
+        default=getconf().get('core', 'DAGS_FOLDER'))
     parser_run.add_argument(
         "-m", "--mark_success", help=mark_success_help, action="store_true")
     parser_run.add_argument(
@@ -298,18 +301,18 @@ if __name__ == '__main__':
         help="Serialized pickle object of the entire dag (used internally)")
     parser_run.set_defaults(func=run)
 
-    ht = "Start a Flux webserver instance"
+    ht = "Start a Airflow webserver instance"
     parser_webserver = subparsers.add_parser('webserver', help=ht)
     parser_webserver.add_argument(
         "-p", "--port",
-        default=settings.WEB_SERVER_PORT,
+        default=getconf().get('server', 'WEB_SERVER_PORT'),
         type=int,
         help="Set the port on which to run the web server")
     parser_webserver.set_defaults(func=webserver)
 
     parser_webserver.add_argument(
         "-hn", "--hostname",
-        default=settings.WEB_SERVER_HOST,
+        default=getconf().get('server', 'WEB_SERVER_HOST'),
         help="Set the hostname on which to run the web server")
     parser_webserver.set_defaults(func=webserver)
 
@@ -318,7 +321,8 @@ if __name__ == '__main__':
     parser_master.add_argument(
         "-d", "--dag_id", help="The id of the dag to run")
     parser_master.add_argument(
-        "-sd", "--subdir", help=subdir_help, default=settings.DAGS_FOLDER)
+        "-sd", "--subdir", help=subdir_help,
+        default=getconf().get('core', 'DAGS_FOLDER'))
     parser_master.set_defaults(func=master)
 
     ht = "Initialize and reset the metadata database"
