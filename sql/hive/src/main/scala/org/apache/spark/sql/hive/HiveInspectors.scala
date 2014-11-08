@@ -256,35 +256,29 @@ private[hive] trait HiveInspectors {
 
   def toInspector(expr: Expression): ObjectInspector = expr match {
     case Literal(value, StringType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[String])
+      HiveShim.getStringWritableConstantObjectInspector(value)
     case Literal(value, IntegerType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Int])
+      HiveShim.getIntWritableConstantObjectInspector(value)
     case Literal(value, DoubleType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Double])
+      HiveShim.getDoubleWritableConstantObjectInspector(value)
     case Literal(value, BooleanType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Boolean])
+      HiveShim.getBooleanWritableConstantObjectInspector(value)
     case Literal(value, LongType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Long])
+      HiveShim.getLongWritableConstantObjectInspector(value)
     case Literal(value, FloatType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Float])
+      HiveShim.getFloatWritableConstantObjectInspector(value)
     case Literal(value, ShortType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Short])
+      HiveShim.getShortWritableConstantObjectInspector(value)
     case Literal(value, ByteType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Byte])
+      HiveShim.getByteWritableConstantObjectInspector(value)
     case Literal(value, BinaryType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[Array[Byte]])
+      HiveShim.getBinaryWritableConstantObjectInspector(value)
     case Literal(value, DateType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[java.sql.Date])
+      HiveShim.getDateWritableConstantObjectInspector(value)
     case Literal(value, TimestampType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.asInstanceOf[java.sql.Timestamp])
+      HiveShim.getTimestampWritableConstantObjectInspector(value)
     case Literal(value, DecimalType()) =>
-      if (null == value) {
-        HiveShim.getPrimitiveWritableConstantObjectInspector(
-          null.asInstanceOf[BigDecimal])
-      } else {
-        HiveShim.getPrimitiveWritableConstantObjectInspector(
-          value.asInstanceOf[Decimal].toBigDecimal)
-      }
+      HiveShim.getDecimalWritableConstantObjectInspector(value)
     case Literal(_, NullType) =>
       HiveShim.getPrimitiveNullWritableConstantObjectInspector
     case Literal(value, ArrayType(dt, _)) =>
