@@ -29,7 +29,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-network-common_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Common Network Code</name>
+  <name>Spark Project Networking</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-common</sbt.project.name>
