@@ -470,6 +470,9 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(([1, "b"], [5]), rdd.histogram(1))
         self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
+    def test_sort_on_empty_rdd(self):
+        self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
+
     def test_sample(self):
         rdd = self.sc.parallelize(range(0, 100), 4)
         wo = rdd.sample(False, 0.1, 2).collect()
