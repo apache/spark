@@ -38,9 +38,9 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
     val content =
       <span>
         <h4>Runtime Information</h4> {runtimeInformationTable}
+        <h4>Classpath Entries</h4> {classpathEntriesTable}
         <h4>Spark Properties</h4> {sparkPropertiesTable}
         <h4>System Properties</h4> {systemPropertiesTable}
-        <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
     UIUtils.headerSparkPage("Environment", content, parent)
