@@ -1364,6 +1364,15 @@
       </dependencies>
     </profile>
     <profile>
+      <id>hive</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+    <profile>
       <id>hive-0.12.0</id>
       <activation>
         <activeByDefault>false</activeByDefault>
@@ -1398,8 +1407,6 @@
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
       <modules>
-        <!-- Modules only available with Scala 2.10 -->
-        <module>hive-thriftserver</module>
         <module>external/kafka</module>
       </modules>
     </profile>
