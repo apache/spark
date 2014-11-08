@@ -521,6 +521,8 @@ class RDD(object):
         # the key-space into bins such that the bins have roughly the same
         # number of (key, value) pairs falling into them
         rddSize = self.count()
+        if not rddSize:
+            return self  # empty RDD
         maxSampleSize = numPartitions * 20.0  # constant from Spark's RangePartitioner
         fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
         samples = self.sample(False, fraction, 1).map(lambda (k, v): k).collect()
