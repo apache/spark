@@ -198,6 +198,9 @@ class TestRDDFunctions(PySparkTestCase):
         os.unlink(tempFile.name)
         self.assertRaises(Exception, lambda: filtered_data.count())
 
+    def test_sort_on_empty_rdd(self):
+        self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
+
     def test_itemgetter(self):
         rdd = self.sc.parallelize([range(10)])
         from operator import itemgetter

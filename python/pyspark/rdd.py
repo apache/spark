@@ -496,6 +496,8 @@ class RDD(object):
         # number of (key, value) pairs falling into them
         if numPartitions > 1:
             rddSize = self.count()
+            if not rddSize:
+                return self
             maxSampleSize = numPartitions * 20.0 # constant from Spark's RangePartitioner
             fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
 
