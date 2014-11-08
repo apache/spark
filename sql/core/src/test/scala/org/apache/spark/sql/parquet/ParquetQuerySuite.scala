@@ -632,7 +632,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query12.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result12 = query12.collect()
-    assert(result12.size === 54)
+    assert(EQ(result12.size).===(54))
     assert(result12(0).getString(2) == "6")
     assert(result12(4).getString(2) == "50")
     assert(result12(53).getString(2) == "99")
@@ -642,7 +642,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query13.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result13 = query13.collect()
-    assert(result13.size === 53)
+    assert(EQ(result13.size).===(53))
     assert(result13(0).getString(2) == "6")
     assert(result13(4).getString(2) == "51")
     assert(result13(52).getString(2) == "99")
@@ -652,7 +652,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query14.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result14 = query14.collect()
-    assert(result14.size === 148)
+    assert(EQ(result14.size).===(148))
     assert(result14(0).getString(2) == "0")
     assert(result14(46).getString(2) == "50")
     assert(result14(147).getString(2) == "200")
@@ -662,7 +662,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query15.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result15 = query15.collect()
-    assert(result15.size === 147)
+    assert(EQ(result15.size).===(147))
     assert(result15(0).getString(2) == "0")
     assert(result15(46).getString(2) == "100")
     assert(result15(146).getString(2) == "200")
