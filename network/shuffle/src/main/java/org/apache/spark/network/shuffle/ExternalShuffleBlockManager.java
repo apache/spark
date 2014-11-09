@@ -30,6 +30,7 @@ import java.util.concurrent.Executors;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +38,7 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
@@ -56,16 +58,24 @@ public class ExternalShuffleBlockManager {
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
 
-  public ExternalShuffleBlockManager() {
+  private final TransportConf conf;
+
+  public ExternalShuffleBlockManager(TransportConf conf) {
     // TODO: Give this thread a name.
-    this(Executors.newSingleThreadExecutor());
+    this(Executors.newSingleThreadExecutor(), conf);
   }
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockManager(Executor directoryCleaner) {
+  ExternalShuffleBlockManager(Executor directoryCleaner, TransportConf conf) {
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
+    this.conf = conf;
+  }
+
+  @VisibleForTesting
+  ExternalShuffleBlockManager(Executor directoryCleaner) {
+    this(directoryCleaner, new TransportConf(new SystemPropertyConfigProvider()));
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -167,7 +177,7 @@ public class ExternalShuffleBlockManager {
   // TODO: Support consolidated hash shuffle files
   private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
     File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
-    return new FileSegmentManagedBuffer(shuffleFile, 0, shuffleFile.length());
+    return new FileSegmentManagedBuffer(shuffleFile, 0, shuffleFile.length(), conf);
   }
 
   /**
@@ -190,7 +200,8 @@ public class ExternalShuffleBlockManager {
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         offset,
-        nextOffset - offset);
+        nextOffset - offset,
+        conf);
     } catch (IOException e) {
       throw new RuntimeException("Failed to open file: " + indexFile, e);
     } finally {

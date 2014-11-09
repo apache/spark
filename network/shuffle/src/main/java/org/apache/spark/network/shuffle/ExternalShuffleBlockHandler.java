@@ -21,6 +21,7 @@ import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import org.apache.spark.network.util.TransportConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,8 +49,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private final ExternalShuffleBlockManager blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public ExternalShuffleBlockHandler() {
-    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager());
+  public ExternalShuffleBlockHandler(TransportConf conf) {
+    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager(conf));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */

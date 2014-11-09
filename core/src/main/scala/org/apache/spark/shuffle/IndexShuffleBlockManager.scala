@@ -24,6 +24,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
 
 /**
@@ -41,6 +42,8 @@ private[spark]
 class IndexShuffleBlockManager extends ShuffleBlockManager {
 
   private lazy val blockManager = SparkEnv.get.blockManager
+
+  private val transportConf = SparkTransportConf.fromSparkConf(SparkEnv.get.conf)
 
   /**
    * Mapping to a single shuffleBlockId with reduce ID 0.
@@ -111,7 +114,8 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
       new FileSegmentManagedBuffer(
         getDataFile(blockId.shuffleId, blockId.mapId),
         offset,
-        nextOffset - offset)
+        nextOffset - offset,
+        transportConf)
     } finally {
       in.close()
     }
