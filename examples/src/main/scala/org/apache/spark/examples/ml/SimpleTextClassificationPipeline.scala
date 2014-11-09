@@ -19,11 +19,12 @@ package org.apache.spark.examples.ml
 
 import scala.beans.BeanInfo
 
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.ml.{Pipeline, SimpleTransformer}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.{Pipeline, SimpleTransformer}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
@@ -36,7 +37,8 @@ case class Document(id: Long, text: String)
  */
 class SimpleTokenizer extends SimpleTransformer[String, Seq[String], SimpleTokenizer]
     with Serializable {
-  override def createTransformFunc: String => Seq[String] = _.toLowerCase.split("\\s")
+  override def createTransformFunc(paramMap: ParamMap): String => Seq[String] =
+    _.toLowerCase.split("\\s")
 }
 
 /**

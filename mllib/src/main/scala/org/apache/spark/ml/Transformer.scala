@@ -74,12 +74,17 @@ abstract class SimpleTransformer[IN, OUT: TypeTag, SELF <: SimpleTransformer[IN,
   def setInputCol(value: String): SELF = { set(inputCol, value); this.asInstanceOf[SELF] }
   def setOutputCol(value: String): SELF = { set(outputCol, value); this.asInstanceOf[SELF] }
 
-  def createTransformFunc: IN => OUT
+  /**
+   * Creates the transform function using the given param map. The input param map already takes
+   * account of the embedded param map. So the param values should be determined solely by the input
+   * param map.
+   */
+  protected def createTransformFunc(paramMap: ParamMap): IN => OUT
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val udf: IN => OUT = this.createTransformFunc
+    val udf: IN => OUT = this.createTransformFunc(map)
     dataset.select(Star(None), udf.call(map(inputCol).attr) as map(outputCol))
   }
 }
