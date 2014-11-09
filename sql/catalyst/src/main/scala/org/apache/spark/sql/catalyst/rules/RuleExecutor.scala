@@ -50,7 +50,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
-      var iteration = 1
+      var iteration = 0
       var lastPlan = curPlan
       var continue = true
 
