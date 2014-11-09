@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import scala.language.implicitConversions
 
-/*
+/* *
  * Subclass of java.sql.Date which provides the usual comparison
  * operators (as required for catalyst expressions) and which can
  * be constructed from a string.
@@ -36,18 +36,20 @@ import scala.language.implicitConversions
  */
 
 class RichDate(milliseconds: Long) extends Date(milliseconds) {
-  def <(that: Date): Boolean = this.before(that)
-  def >(that: Date): Boolean  = this.after(that)
-  def <=(that: Date): Boolean = (this.before(that) || this.equals(that))
-  def >=(that: Date): Boolean = (this.after(that) || this.equals(that))
-  def ===(that: Date): Boolean = this.equals(that)
+  def < (that: Date): Boolean = this.before(that)
+  def > (that: Date): Boolean  = this.after(that)
+  def <= (that: Date): Boolean = (this.before(that) || this.equals(that))
+  def >= (that: Date): Boolean = (this.after(that) || this.equals(that))
+  def === (that: Date): Boolean = this.equals(that)
 }
 
 object RichDate {
   def apply(init: String) = new RichDate(Date.valueOf(init).getTime)
+
+  def unapply(richdate: RichDate): Option[Date] = Some(new Date(richdate.getTime)) 
 }
 
-/*
+/* *
  * Analogous subclass of java.sql.Timestamp.
  *
  * scala> val ts1 = Timestamp("2014-03-04 12:34:56.12")
@@ -61,18 +63,21 @@ object RichDate {
  */
 
 class RichTimestamp(milliseconds: Long) extends Timestamp(milliseconds) {
-  def <(that: Timestamp): Boolean = this.before(that)
-  def >(that: Timestamp): Boolean  = this.after(that)
-  def <=(that: Timestamp): Boolean = (this.before(that) || this.equals(that))
-  def >=(that: Timestamp): Boolean = (this.after(that) || this.equals(that))
-  def ===(that: Timestamp): Boolean = this.equals(that)
+  def < (that: Timestamp): Boolean = this.before(that)
+  def > (that: Timestamp): Boolean  = this.after(that)
+  def <= (that: Timestamp): Boolean = (this.before(that) || this.equals(that))
+  def >= (that: Timestamp): Boolean = (this.after(that) || this.equals(that))
+  def === (that: Timestamp): Boolean = this.equals(that)
 }
 
 object RichTimestamp {
   def apply(init: String) = new RichTimestamp(Timestamp.valueOf(init).getTime)
+
+  def unapply(richtimestamp: RichTimestamp): Option[Timestamp] = 
+    Some(new Timestamp(richtimestamp.getTime)) 
 }
 
-/*
+/* *
  * Implicit conversions.
  */
 

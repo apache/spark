@@ -504,8 +504,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /* *
-   * Map RichDate and RichTimestamp to their expected names in this context.
+   * Make RichDate and RichTimestamp available under the names
+   * Date and Timestamp when the members of this SQLContext are
+   * imported.
    */
-  val Date = org.apache.spark.sql.catalyst.expressions.RichDate
-  val Timestamp = org.apache.spark.sql.catalyst.expressions.RichTimestamp
+  import org.apache.spark.sql.catalyst.expressions._
+  val Date = RichDate
+  type Date = RichDate
+  val Timestamp = RichTimestamp
+  type Timestamp = RichTimestamp
 }
