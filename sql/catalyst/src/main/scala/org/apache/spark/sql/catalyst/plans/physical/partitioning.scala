@@ -67,7 +67,7 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
 case class ClusteredOrderedDistribution(clustering: Seq[Expression]) extends Distribution {
   require(
     clustering != Nil,
-    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
+    "The clustering expressions of a ClusteredOrderedDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 }

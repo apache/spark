@@ -34,13 +34,17 @@ case class MergeJoin(
   right: SparkPlan
 ) extends BinaryNode {
   // Implementation: the tricky part is handling duplicate join keys.
-  // To handle duplicate keys, we use a buffer to store a 
+  // To handle duplicate keys, we use a buffer to store all maching tuples 
+  // in right relation for a certain join key. This buffer is used by the 
+  // merge join iterator to generate join tuples. The buffer is used for 
+  // generating join tuples when the join key of the next left element is 
+  // is the same as the current join key. 
+  // TODO: add outer join support
   override def outputPartitioning: Partitioning = left.outputPartitioning
   
   override def output = left.output ++ right.output
 
-  private val leftOrders = leftKeys.map(s => SortOrder(s, Ascending))
-  private val rightOrders = rightKeys.map(s => SortOrder(s, Ascending))
+  private val orders = leftKeys.map(s => SortOrder(s, Ascending))
 
   override def requiredChildDistribution =
     ClusteredOrderedDistribution(leftKeys) :: ClusteredOrderedDistribution(rightKeys) :: Nil
@@ -51,7 +55,7 @@ case class MergeJoin(
   @transient protected lazy val rightKeyGenerator: Projection =
     newProjection(rightKeys, right.output)
 
-  private val ordering = new RowOrdering(leftOrders, left.output)
+  private val ordering = new RowOrdering(orders, left.output)
 
   override def execute() = {
     
@@ -85,6 +89,14 @@ case class MergeJoin(
         initialize()
 
         override final def hasNext: Boolean = {
+          // Two cases that hasNext returns true
+          // 1. We are iterating the buffer
+          // 2. We can find tuple pairs that have matching join key
+          // 
+          // hasNext is stateless as nextMatchingPair() is called when
+          // index == -1 and will set index to 0 when nextMatchingPair() 
+          // returns true. Muptiple calls to hasNext modifies iterator
+          // state at most once. 
           if (index != -1) return true
           if (last) return false
           return nextMatchingPair()
@@ -92,22 +104,33 @@ case class MergeJoin(
         
         override final def next(): Row = {
           if (index == -1) {
+            // We need this becasue the client of the join iterator may 
+            // call next() without calling hasNext 
             if (!hasNext) return null
           }
           val joinedRow = joinRow(leftElement, buffer(index))
           index += 1
           if (index == buffer.size) {
+            // finished iterating the buffer, fetch
+            // next element from left iterator
             if (leftIter.hasNext) {
+              // fetch next element 
               val leftElem = leftElement
               val leftK = leftKeyGenerator(leftElem)
               leftElement = leftIter.next()
               leftKey = leftKeyGenerator(leftElement)
               if (ordering.compare(leftKey,leftK) == 0) {
+                // need to go over the buffer again
+                // as we have the same join key for 
+                // next left element
                 index = 0
               } else {
+                // need to find a matching element from
+                // right iterator
                 index = -1
               }
             } else {
+              // no next left element, we are done
               index = -1
               last = true
             }
@@ -115,6 +138,8 @@ case class MergeJoin(
           joinedRow
         }
 
+        // find the next pair of left/right tuples that have a
+        // matching join key
         private def nextMatchingPair(): Boolean = {
           while (ordering.compare(leftKey, rightKey) != 0) {
             if (ordering.compare(leftKey, rightKey) < 0) {
