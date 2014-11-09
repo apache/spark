@@ -34,11 +34,10 @@ case class MergeJoin(
   right: SparkPlan
 ) extends BinaryNode {
   // Implementation: the tricky part is handling duplicate join keys.
-  // To handle duplicate keys, we use a buffer to store all maching tuples 
-  // in right relation for a certain join key. This buffer is used by the 
-  // merge join iterator to generate join tuples. The buffer is used for 
+  // To handle duplicate keys, we use a buffer to store all matching elements 
+  // in right iterator for a certain join key. The buffer is used for 
   // generating join tuples when the join key of the next left element is 
-  // is the same as the current join key. 
+  // the same as the current join key. 
   // TODO: add outer join support
   override def outputPartitioning: Partitioning = left.outputPartitioning
   
