@@ -131,23 +131,28 @@ trait Params extends Identifiable with Serializable {
     m.invoke(this).asInstanceOf[Param[Any]]
   }
 
-  /** Checks whether a param is explicitly set. */
-  private[ml] def isSet(param: Param[_]): Boolean = paramMap.contains(param)
-
   /**
    * Internal param map.
    */
   protected val paramMap: ParamMap = ParamMap.empty
 
+  /** Checks whether a param is explicitly set. */
+  protected def isSet(param: Param[_]): Boolean = paramMap.contains(param)
+
   /**
    * Sets a parameter in the own parameter map.
    */
   protected def set[T](param: Param[T], value: T): this.type = {
+    require(param.parent.eq(this))
     paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
   }
 
+  /**
+   * Gets the value of a parameter.
+   */
   protected def get[T](param: Param[T]): T = {
+    require(param.parent.eq(this))
     paramMap(param)
   }
 }
