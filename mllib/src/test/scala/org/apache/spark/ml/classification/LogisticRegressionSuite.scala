@@ -15,27 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.example
+package org.apache.spark.ml.classification
 
-import scala.beans.BeanInfo
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.param.ParamGridBuilder
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.feature.StandardScaler
+import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.test.TestSQLContext._
-import org.scalatest.FunSuite
 
-@BeanInfo
-case class LabeledDocument(id: Long, text: String, label: Double)
+class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
-@BeanInfo
-case class Document(id: Long, text: String)
+  var dataset: SchemaRDD = _
 
-class LogisticRegressionSuite extends FunSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    dataset = MLUtils.loadLibSVMFile(
+      sparkContext, "../data/mllib/sample_binary_classification_data.txt")
+    dataset.cache()
+  }
 
-  val dataset = MLUtils
-    .loadLibSVMFile(sparkContext, "../data/mllib/sample_binary_classification_data.txt")
-    .cache()
+  override def afterAll(): Unit = {
+    dataset.unpersist()
+    dataset = null
+    super.afterAll()
+  }
 
   test("logistic regression") {
     val lr = new LogisticRegression
@@ -90,34 +97,6 @@ class LogisticRegressionSuite extends FunSuite {
     val model = pipeline.fit(dataset)
     val predictions = model.transform(dataset)
       .select('label, 'score, 'prediction)
-      .collect()
-      .foreach(println)
-  }
-
-  test("text classification pipeline") {
-    val training = sparkContext.parallelize(Seq(
-      LabeledDocument(0L, "a b c d e spark", 1.0),
-      LabeledDocument(1L, "b d", 0.0),
-      LabeledDocument(2L, "spark f g h", 1.0),
-      LabeledDocument(3L, "hadoop mapreduce", 0.0)))
-    val tokenizer = new Tokenizer()
-      .setInputCol("text")
-      .setOutputCol("words")
-    val hashingTF = new HashingTF()
-      .setInputCol(tokenizer.getOutputCol)
-      .setOutputCol("features")
-    val lr = new LogisticRegression()
-      .setMaxIter(10)
-    val pipeline = new Pipeline()
-      .setStages(Array(tokenizer, hashingTF, lr))
-    val model = pipeline.fit(training)
-    val test = sparkContext.parallelize(Seq(
-      Document(4L, "spark i j k"),
-      Document(5L, "l m"),
-      Document(6L, "mapreduce spark"),
-      Document(7L, "apache hadoop")))
-    model.transform(test)
-      .select('id, 'text, 'prediction, 'score)
       .collect()
       .foreach(println)
   }

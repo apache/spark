@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.example
+package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
 

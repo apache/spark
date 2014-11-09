@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.param
 
+import org.apache.spark.ml.tuning.ParamGridBuilder
+
 import scala.collection.mutable
 
 import org.scalatest.FunSuite

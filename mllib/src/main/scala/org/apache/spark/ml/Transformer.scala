@@ -18,10 +18,13 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
+import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.dsl._
 
 /**
  * Abstract class for transformers that transform one dataset into another.
@@ -58,5 +61,25 @@ abstract class Transformer extends PipelineStage with Params {
 
   def transform(dataset: JavaSchemaRDD, paramMap: ParamMap): JavaSchemaRDD = {
     transform(dataset.schemaRDD, paramMap).toJavaSchemaRDD
+  }
+}
+
+/**
+ * Abstract class for transformers that take one input column, apply transformation, and output the
+ * result as a new column.
+ */
+abstract class SimpleTransformer[IN, OUT: TypeTag, SELF <: SimpleTransformer[IN, OUT, SELF]]
+    extends Transformer with HasInputCol with HasOutputCol {
+
+  def setInputCol(value: String): SELF = { set(inputCol, value); this.asInstanceOf[SELF] }
+  def setOutputCol(value: String): SELF = { set(outputCol, value); this.asInstanceOf[SELF] }
+
+  def createTransformFunc: IN => OUT
+
+  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+    import dataset.sqlContext._
+    val map = this.paramMap ++ paramMap
+    val udf: IN => OUT = this.createTransformFunc
+    dataset.select(Star(None), udf.call(map(inputCol).attr) as map(outputCol))
   }
 }

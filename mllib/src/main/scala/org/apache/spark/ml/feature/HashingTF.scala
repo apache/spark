@@ -1,4 +1,4 @@
-package org.apache.spark.ml.example
+package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{HasInputCol, HasOutputCol, IntParam, ParamMap}

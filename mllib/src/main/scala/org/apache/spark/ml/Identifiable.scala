@@ -20,20 +20,12 @@ package org.apache.spark.ml
 import java.util.UUID
 
 /**
- * Something with a unique id.
+ * Object with a unique id.
  */
 trait Identifiable extends Serializable {
 
   /**
    * A unique id for the object.
    */
-  val uid: String = this.getClass.getSimpleName + "-" + Identifiable.randomUid
-}
-
-object Identifiable {
-
-  /**
-   * Returns a random uid, drawn uniformly from 4+ billion candidates.
-   */
-  private def randomUid: String = UUID.randomUUID().toString.take(8)
+  val uid: String = this.getClass.getSimpleName + "-" + UUID.randomUUID().toString.take(8)
 }

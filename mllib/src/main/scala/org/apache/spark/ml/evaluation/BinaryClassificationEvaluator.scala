@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.example
+package org.apache.spark.ml.evaluation
 
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._

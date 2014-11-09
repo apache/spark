@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.example
+package org.apache.spark.ml.feature
 
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
@@ -31,6 +31,10 @@ import org.apache.spark.sql.catalyst.expressions.Row
  */
 trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
 
+/**
+ * Standardizes features by removing the mean and scaling to unit variance using column summary
+ * statistics on the samples in the training set.
+ */
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
@@ -50,6 +54,9 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
   }
 }
 
+/**
+ * Model fitted by [[StandardScaler]].
+ */
 class StandardScalerModel private[ml] (
     override val parent: StandardScaler,
     override val fittingParamMap: ParamMap,

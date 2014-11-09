@@ -25,7 +25,7 @@ import org.apache.spark.sql.SchemaRDD
 /**
  * A stage in a pipeline, either an Estimator or an Transformer.
  */
-trait PipelineStage extends Identifiable
+abstract class PipelineStage
 
 /**
  * A simple pipeline, which acts as an estimator.
