@@ -80,6 +80,24 @@ class PipelineModel(
     override val fittingParamMap: ParamMap,
     val transformers: Array[Transformer]) extends Model {
 
+  /**
+   * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
+   * estimator does not exist in the pipeline.
+   */
+  def getModel[M](estimator: Estimator[M]): M = {
+    val matched = transformers.filter {
+      case m: Model => m.parent.eq(estimator)
+      case _ => false
+    }
+    if (matched.isEmpty) {
+      throw new NoSuchElementException(s"Cannot find estimator $estimator from the pipeline.")
+    } else if (matched.size > 1) {
+      throw new IllegalStateException(s"Cannot have duplicate estimators in the sample pipeline.")
+    } else {
+      matched.head.asInstanceOf[M]
+    }
+  }
+
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     transformers.foldLeft(dataset) { (dataset, transformer) =>
       transformer.transform(dataset, paramMap)
