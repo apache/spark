@@ -21,7 +21,6 @@ import java.lang.reflect.Modifier
 
 import scala.annotation.varargs
 import scala.collection.mutable
-import scala.language.implicitConversions
 
 import org.apache.spark.ml.Identifiable
 
@@ -273,11 +272,6 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
       ParamPair(param, value)
     }
   }
-
-  /**
-   * Implicitly maps a param to its value defined in the map or its default value.
-   */
-  private[ml] implicit def implicitMapping[T](param: Param[T]): T = apply(param)
 }
 
 object ParamMap {
