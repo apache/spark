@@ -43,7 +43,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Fraction Cached",
     "Size in Memory",
     "Size in Tachyon",
-    "Size on Disk")
+    "Size on Disk",
+    "Miss Rate")
 
   /** Render an HTML row representing an RDD */
   private def rddRow(rdd: RDDInfo): Seq[Node] = {
@@ -61,6 +62,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
       <td sorttable_customkey={rdd.tachyonSize.toString}>{Utils.bytesToString(rdd.tachyonSize)}</td>
       <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
+      <td>{rdd.missRate.map(rate => "%.0f%%".format(rate * 100.0)).getOrElse("--")}</td>
     </tr>
     // scalastyle:on
   }

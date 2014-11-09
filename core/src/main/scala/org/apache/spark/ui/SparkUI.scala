@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.StorageStatusListener
+import org.apache.spark.storage.{MissRateListener, StorageStatusListener}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
 import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
@@ -35,6 +35,7 @@ private[spark] class SparkUI private (
     val securityManager: SecurityManager,
     val environmentListener: EnvironmentListener,
     val storageStatusListener: StorageStatusListener,
+    val missRateListener: MissRateListener,
     val executorsListener: ExecutorsListener,
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
@@ -135,12 +136,13 @@ private[spark] object SparkUI {
       val listener = new JobProgressListener(conf)
       listenerBus.addListener(listener)
       listener
-    }
+   }
 
     val environmentListener = new EnvironmentListener
     val storageStatusListener = new StorageStatusListener
+    val missRateListener = new MissRateListener
     val executorsListener = new ExecutorsListener(storageStatusListener)
-    val storageListener = new StorageListener(storageStatusListener)
+    val storageListener = new StorageListener(storageStatusListener, missRateListener)
 
     listenerBus.addListener(environmentListener)
     listenerBus.addListener(storageStatusListener)
@@ -148,6 +150,6 @@ private[spark] object SparkUI {
     listenerBus.addListener(storageListener)
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
-      executorsListener, _jobProgressListener, storageListener, appName, basePath)
+      missRateListener, executorsListener, _jobProgressListener, storageListener, appName, basePath)
   }
 }

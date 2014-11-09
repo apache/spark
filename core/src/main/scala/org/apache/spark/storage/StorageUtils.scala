@@ -238,7 +238,8 @@ private[spark] object StorageUtils {
    * Update the given list of RDDInfo with the given list of storage statuses.
    * This method overwrites the old values stored in the RDDInfo's.
    */
-  def updateRddInfo(rddInfos: Seq[RDDInfo], statuses: Seq[StorageStatus]): Unit = {
+  def updateRddInfo(rddInfos: Seq[RDDInfo], statuses: Seq[StorageStatus],
+                    missRateListener: Option[MissRateListener] = None): Unit = {
     rddInfos.foreach { rddInfo =>
       val rddId = rddInfo.id
       // Assume all blocks belonging to the same RDD have the same storage level
@@ -254,6 +255,7 @@ private[spark] object StorageUtils {
       rddInfo.memSize = memSize
       rddInfo.diskSize = diskSize
       rddInfo.tachyonSize = tachyonSize
+      rddInfo.missRate = missRateListener.flatMap(_.missRateFor(rddId))
     }
   }
 

@@ -37,7 +37,8 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
  * A SparkListener that prepares information to be displayed on the BlockManagerUI.
  */
 @DeveloperApi
-class StorageListener(storageStatusListener: StorageStatusListener) extends SparkListener {
+class StorageListener(storageStatusListener: StorageStatusListener,
+                      missRateListener: MissRateListener) extends SparkListener {
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
 
   def storageStatusList = storageStatusListener.storageStatusList
@@ -46,10 +47,10 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
 
   /** Update the storage info of the RDDs whose blocks are among the given updated blocks */
-  private def updateRDDInfo(updatedBlocks: Seq[(BlockId, BlockStatus)]): Unit = {
-    val rddIdsToUpdate = updatedBlocks.flatMap { case (bid, _) => bid.asRDDId.map(_.rddId) }.toSet
+  private def updateRDDInfo(updatedBlocks: Seq[BlockId]): Unit = {
+    val rddIdsToUpdate = updatedBlocks.flatMap { case bid => bid.asRDDId.map(_.rddId) }.toSet
     val rddInfosToUpdate = _rddInfoMap.values.toSeq.filter { s => rddIdsToUpdate.contains(s.id) }
-    StorageUtils.updateRddInfo(rddInfosToUpdate, storageStatusList)
+    StorageUtils.updateRddInfo(rddInfosToUpdate, storageStatusList, Some(missRateListener))
   }
 
   /**
@@ -59,7 +60,10 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Spar
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val metrics = taskEnd.taskMetrics
     if (metrics != null && metrics.updatedBlocks.isDefined) {
-      updateRDDInfo(metrics.updatedBlocks.get)
+      updateRDDInfo(metrics.updatedBlocks.get.map(_._1))
+    }
+    if (metrics != null && metrics.accessedBlocks.isDefined) {
+      updateRDDInfo(metrics.accessedBlocks.get.map(_._1))
     }
   }
 

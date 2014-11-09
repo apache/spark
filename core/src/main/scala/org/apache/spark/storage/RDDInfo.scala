@@ -33,6 +33,7 @@ class RDDInfo(
   var memSize = 0L
   var diskSize = 0L
   var tachyonSize = 0L
+  var missRate: Option[Double] = None
 
   def isCached: Boolean = (memSize + diskSize + tachyonSize > 0) && numCachedPartitions > 0
 
