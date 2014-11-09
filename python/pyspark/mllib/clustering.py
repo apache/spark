@@ -17,7 +17,7 @@
 
 from numpy import array, ndarray
 
-from pyspark import SparkContext
+from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _to_java_object_rdd
 from pyspark.mllib.linalg import Vector, SparseVector, _convert_to_vector
