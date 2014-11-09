@@ -100,7 +100,10 @@ class TreeNodeSuite extends FunSuite {
     actual = dummy1 transformUp toZero
     assert(actual === Dummy(Some(Literal(0))))
 
-    actual = dummy2 transform toZero
+    actual = dummy2 transformDown toZero
+    assert(actual === Dummy(None))
+
+    actual = dummy2 transformUp toZero
     assert(actual === Dummy(None))
   }
 
