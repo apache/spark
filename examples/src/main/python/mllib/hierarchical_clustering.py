@@ -21,11 +21,10 @@ A hierarchical clustering program using MLlib.
 This example requires NumPy, SciPy and matplotlib.
 """
 
-import numpy
 import os
 import sys
 
-import numpy
+from numpy import array
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram
 
@@ -34,7 +33,7 @@ from pyspark import SparkContext
 
 
 def parseVector(line):
-    return numpy.array([float(x) for x in line.split(',')])
+    return array([float(x) for x in line.split(',')])
 
 
 def usage():
@@ -51,6 +50,7 @@ if __name__ == "__main__":
     # Parse arguments.
     data_path = 'data/mllib/sample_hierarchical_data.csv'
     k = 20
+    threshold = 4.0
     if len(sys.argv) == 4:
         data_path = sys.argv[1]
         k = int(sys.argv[2])
@@ -67,6 +67,8 @@ if __name__ == "__main__":
     model = HierarchicalClustering.train(data, k)
     merge_list = model.to_merge_list()
     print "Cluster Centers: " + str(model.clusterCenters)
+    cluster_index = model.predict(array([5.1, 3.5, 1.4, 0.2]))
+    print "Predicted Cluster Index: " + str(cluster_index)
     dendrogram(merge_list)
     plt.show()
 
@@ -74,6 +76,8 @@ if __name__ == "__main__":
     new_model = model.cut(threshold)
     merge_list = new_model.to_merge_list()
     print "Cut Cluster Centers: " + str(new_model.clusterCenters)
+    cluster_index = new_model.predict(array([5.1, 3.5, 1.4, 0.2]))
+    print "Predicted Cluster Index: " + str(cluster_index)
     dendrogram(merge_list)
     plt.show()
 

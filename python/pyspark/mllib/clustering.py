@@ -15,16 +15,12 @@
 # limitations under the License.
 #
 
-import inspect
 from numpy import array, ndarray
 
 from pyspark import SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.mllib.linalg import Vector, DenseVector, SparseVector, \
-    _convert_to_vector, _to_java_object_rdd
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc, _to_java_object_rdd
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import Vector, SparseVector, _convert_to_vector
 
 __all__ = ['KMeansModel', 'KMeans',
            'HierarchicalClustering', 'HierarchicalClusteringModel']
