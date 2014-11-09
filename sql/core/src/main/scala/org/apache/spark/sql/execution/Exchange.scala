@@ -59,18 +59,31 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
           }
         }
         
+        val part = new HashPartitioner(numPartitions)
+        val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
+        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.map(_._2)
+
+      case HashSortedPartitioning(expressions, numPartitions) =>
+        val rdd = if (sortBasedShuffleOn) {
+          child.execute().mapPartitions { iter =>
+            val hashExpressions = newProjection(expressions, child.output)
+            iter.map(r => (hashExpressions(r), r.copy()))
+          }
+        } else {
+          child.execute().mapPartitions { iter =>
+            val hashExpressions = newMutableProjection(expressions, child.output)()
+            val mutablePair = new MutablePair[Row, Row]()
+            iter.map(r => mutablePair.update(hashExpressions(r), r))
+          }
+        }
+        
         val sortingExpressions = expressions.map(s => new SortOrder(s, Ascending))
         implicit val ordering = new RowOrdering(sortingExpressions, child.output)
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part).setKeyOrdering(ordering)
-        //val shuffled = new ShuffledRDD[Row, Row, Row](rdd, part)
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
-        val temp = shuffled.map(_._2)
-        for ( x <- temp.collect()) {
-          println(x)
-        }
-        println("------------")
-        temp
+        shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
         val rdd = if (sortBasedShuffleOn) {
@@ -168,6 +181,8 @@ private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPl
             addExchangeIfNecessary(SinglePartition, child)
           case (ClusteredDistribution(clustering), child) =>
             addExchangeIfNecessary(HashPartitioning(clustering, numPartitions), child)
+          case (ClusteredOrderedDistribution(clustering), child) =>
+            addExchangeIfNecessary(HashSortedPartitioning(clustering, numPartitions), child)
           case (OrderedDistribution(ordering), child) =>
             addExchangeIfNecessary(RangePartitioning(ordering, numPartitions), child)
           case (UnspecifiedDistribution, child) => child

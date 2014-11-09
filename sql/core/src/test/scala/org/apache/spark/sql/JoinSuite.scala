@@ -53,6 +53,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         case j: LeftSemiJoinBNL => j
         case j: CartesianProduct => j
         case j: BroadcastNestedLoopJoin => j
+        case j: MergeJoin => j
       }
 
       assert(operators.size === 1)

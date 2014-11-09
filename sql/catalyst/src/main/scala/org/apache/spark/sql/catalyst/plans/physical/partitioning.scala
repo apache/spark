@@ -59,6 +59,20 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
 }
 
 /**
+ * Represents data where tuples that share the same values for the `clustering`
+ * [[Expression Expressions]] will be co-located. Based on the context, this
+ * can mean such tuples are either co-located in the same partition or they will be contiguous
+ * within a single partition.
+ */
+case class ClusteredOrderedDistribution(clustering: Seq[Expression]) extends Distribution {
+  require(
+    clustering != Nil,
+    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+}
+
+/**
  * Represents data where tuples have been ordered according to the `ordering`
  * [[Expression Expressions]].  This is a strictly stronger guarantee than
  * [[ClusteredDistribution]] as an ordering will ensure that tuples that share the same value for
@@ -162,6 +176,37 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
+/**
+ * Represents a partitioning where rows are split up across partitions based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition. In each partition, the keys are sorted according to expressions
+ */
+case class HashSortedPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends Expression
+  with Partitioning {
+
+  override def children = expressions
+  override def nullable = false
+  override def dataType = IntegerType
+
+  private[this] lazy val clusteringSet = expressions.toSet
+
+  override def satisfies(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case ClusteredOrderedDistribution(requiredClustering) =>
+      clusteringSet.subsetOf(requiredClustering.toSet)
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning) = other match {
+    case BroadcastPartitioning => true
+    case h: HashSortedPartitioning if h == this => true
+    case _ => false
+  }
+
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+}
 /**
  * Represents a partitioning where rows are split across partitions based on some total ordering of
  * the expressions specified in `ordering`.  When data is partitioned in this manner the following
