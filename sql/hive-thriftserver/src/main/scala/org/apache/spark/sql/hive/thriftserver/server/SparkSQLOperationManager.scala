@@ -199,6 +199,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
           // Actually do need to catch Throwable as some failures don't inherit from Exception and
           // HiveServer will silently swallow them.
           case e: Throwable =>
+            setState(OperationState.ERROR)
             logError("Error executing query:",e)
             throw new HiveSQLException(e.toString)
         }
