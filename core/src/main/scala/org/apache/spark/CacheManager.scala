@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.executor.{DataReadMethod, InputMetrics, BlockAccess, BlockAccessType}
 
 /**
  * Spark class responsible for passing RDDs partition contents to the BlockManager and making
@@ -41,13 +42,19 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
     val key = RDDBlockId(rdd.id, partition.index)
     logDebug(s"Looking for partition $key")
+    val metrics = context.taskMetrics
     blockManager.get(key) match {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
-        context.taskMetrics.inputMetrics = Some(blockResult.inputMetrics)
+        metrics.inputMetrics = Some(blockResult.inputMetrics)
+        metrics.recordBlockAccess(key,
+            BlockAccess(BlockAccessType.Read, Some(blockResult.inputMetrics)))
         new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
 
       case None =>
+        // Record the failed read.
+        metrics.recordBlockAccess(key, BlockAccess(BlockAccessType.Read, None))
+
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
         val storedValues = acquireLockForPartition[T](key)
@@ -68,7 +75,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
           val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
-          val metrics = context.taskMetrics
+          metrics.recordBlockAccess(key, BlockAccess(BlockAccessType.Write))
           val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
           metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
           new InterruptibleIterator(context, cachedValues)
