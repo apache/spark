@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.Future
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
@@ -112,8 +112,6 @@ private[hive] class SparkExecuteStatementOperation(
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any],  ordinal: Int) {
     dataTypes(ordinal) match {
-      case StringType =>
-        to += from.get(ordinal).asInstanceOf[String]
       case IntegerType =>
         to += from.getInt(ordinal)
       case BooleanType =>
@@ -123,23 +121,19 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to += from.getFloat(ordinal)
       case DecimalType() =>
-        to += from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+        to += from.getAs[BigDecimal](ordinal).bigDecimal
       case LongType =>
         to += from.getLong(ordinal)
       case ByteType =>
         to += from.getByte(ordinal)
       case ShortType =>
         to += from.getShort(ordinal)
+      case DateType =>
+        to += from.getAs[Date](ordinal)
       case TimestampType =>
-        to +=  from.get(ordinal).asInstanceOf[Timestamp]
-      case BinaryType =>
-        to += from.get(ordinal).asInstanceOf[String]
-      case _: ArrayType =>
-        to += from.get(ordinal).asInstanceOf[String]
-      case _: StructType =>
-        to += from.get(ordinal).asInstanceOf[String]
-      case _: MapType =>
-        to += from.get(ordinal).asInstanceOf[String]
+        to +=  from.getAs[Timestamp](ordinal)
+      case StringType | BinaryType | _: ArrayType | _: StructType | _: MapType =>
+        to += from.getAs[String](ordinal)
     }
   }
 
