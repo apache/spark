@@ -112,6 +112,15 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -Dskip
 mvn -Pyarn -Phive -Phive-thriftserver-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
+# Building for Scala 2.11
+To produce a Spark package compiled with Scala 2.11, use the `-Pscala-2.11` profile:
+
+    mvn -Pyarn -Phadoop-2.4 -Pscala-2.11 -DskipTests clean package
+
+Scala 2.11 support in Spark is experimental and does not support a few features.
+Specifically, Spark's external Kafka library and JDBC component are not yet
+supported in Scala 2.11 builds.
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). 
