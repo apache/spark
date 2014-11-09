@@ -126,7 +126,7 @@
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>0.13.1b</hive.version>
+    <hive.version>0.13.1a</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>0.13.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
@@ -231,10 +231,22 @@
       </snapshots>
     </repository>
     <repository>
-      <!-- This is temporarily included to fix issues with Hive 0.13 -->
+      <!-- This is temporarily included to fix issues with Hive 0.12 -->
       <id>spark-staging</id>
       <name>Spring Staging Repository</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1090</url>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!-- This is temporarily included to fix issues with Hive 0.13 -->
+      <id>spark-staging-hive13</id>
+      <name>Spring Staging Repository Hive 13</name>
+      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -1389,7 +1401,7 @@
         <activeByDefault>false</activeByDefault>
       </activation>
       <properties>
-        <hive.version>0.13.1b</hive.version>
+        <hive.version>0.13.1a</hive.version>
         <hive.version.short>0.13.1</hive.version.short>
         <derby.version>10.10.1.1</derby.version>
       </properties>
