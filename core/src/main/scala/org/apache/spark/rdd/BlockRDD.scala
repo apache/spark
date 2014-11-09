@@ -84,5 +84,9 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
         "Attempted to use %s after its blocks have been removed!".format(toString))
     }
   }
+
+  protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
+    locations_
+  }
 }
 

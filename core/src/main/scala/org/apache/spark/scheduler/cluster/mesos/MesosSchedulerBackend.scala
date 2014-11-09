@@ -72,7 +72,7 @@ private[spark] class MesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()
@@ -98,15 +98,16 @@ private[spark] class MesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
-    val extraLibraryPath = sc.conf.getOption("spark.executor.extraLibraryPath").map { lp =>
-      s"-Djava.library.path=$lp"
-    }
-    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+
+    val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
+      Utils.libraryPathEnvPrefix(Seq(p))
+    }.getOrElse("")
+
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
-        .setValue(extraOpts)
+        .setValue(extraJavaOpts)
         .build())
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -118,12 +119,13 @@ private[spark] class MesosSchedulerBackend(
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath)
+      val executorPath = new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath
+      command.setValue("%s %s".format(prefixEnv, executorPath))
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
+      command.setValue("cd %s*; %s ./sbin/spark-executor".format(basename, prefixEnv))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val cpus = Resource.newBuilder()
@@ -276,8 +278,7 @@ private[spark] class MesosSchedulerBackend(
     for (r <- res if r.getName == name) {
       return r.getScalar.getValue
     }
-    // If we reached here, no resource with the required name was present
-    throw new IllegalArgumentException("No resource called " + name + " in " + res)
+    0
   }
 
   /** Turn a Spark TaskDescription into a Mesos task */

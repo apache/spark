@@ -26,10 +26,15 @@ import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
-  val listener = new ExecutorsListener(parent.storageStatusListener)
+  val listener = parent.executorsListener
+  val sc = parent.sc
+  val threadDumpEnabled =
+    sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
 
-  attachPage(new ExecutorsPage(this))
-  parent.registerListener(listener)
+  attachPage(new ExecutorsPage(this, threadDumpEnabled))
+  if (threadDumpEnabled) {
+    attachPage(new ExecutorThreadDumpPage(this))
+  }
 }
 
 /**
@@ -49,14 +54,14 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   def storageStatusList = storageStatusListener.storageStatusList
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
-    val eid = formatExecutorId(taskStart.taskInfo.executorId)
+    val eid = taskStart.taskInfo.executorId
     executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
-      val eid = formatExecutorId(info.executorId)
+      val eid = info.executorId
       executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 1) - 1
       executorToDuration(eid) = executorToDuration.getOrElse(eid, 0L) + info.duration
       taskEnd.reason match {
@@ -85,6 +90,4 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
     }
   }
 
-  // This addresses executor ID inconsistencies in the local mode
-  private def formatExecutorId(execId: String) = storageStatusListener.formatExecutorId(execId)
 }

@@ -272,21 +272,25 @@ private[spark] object JsonProtocol {
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
     val reason = Utils.getFormattedClassName(taskEndReason)
-    val json = taskEndReason match {
+    val json: JObject = taskEndReason match {
       case fetchFailed: FetchFailed =>
         val blockManagerAddress = Option(fetchFailed.bmAddress).
           map(blockManagerIdToJson).getOrElse(JNothing)
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
         ("Map ID" -> fetchFailed.mapId) ~
-        ("Reduce ID" -> fetchFailed.reduceId)
+        ("Reduce ID" -> fetchFailed.reduceId) ~
+        ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
         val metrics = exceptionFailure.metrics.map(taskMetricsToJson).getOrElse(JNothing)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
+        ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
+      case ExecutorLostFailure(executorId) =>
+        ("Executor ID" -> executorId)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -627,16 +631,22 @@ private[spark] object JsonProtocol {
         val shuffleId = (json \ "Shuffle ID").extract[Int]
         val mapId = (json \ "Map ID").extract[Int]
         val reduceId = (json \ "Reduce ID").extract[Int]
-        new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId)
+        val message = Utils.jsonOption(json \ "Message").map(_.extract[String])
+        new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
+          message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
+        val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
+          map(_.extract[String]).orNull
         val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
-        new ExceptionFailure(className, description, stackTrace, metrics)
+        ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
-      case `executorLostFailure` => ExecutorLostFailure
+      case `executorLostFailure` =>
+        val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
+        ExecutorLostFailure(executorId.getOrElse("Unknown"))
       case `unknownReason` => UnknownReason
     }
   }
