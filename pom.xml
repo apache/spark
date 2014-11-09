@@ -1364,7 +1364,7 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hive</id>
+      <id>hive-thriftserver</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>

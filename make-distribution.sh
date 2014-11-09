@@ -59,7 +59,7 @@ while (( "$#" )); do
       exit_with_usage
       ;;
     --with-hive)
-      echo "Error: '--with-hive' is no longer supported, use Maven option -Phive"
+      echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
       ;;
     --skip-java-test)

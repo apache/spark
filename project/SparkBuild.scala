@@ -68,8 +68,8 @@ object SparkBuild extends PomBuild {
       profiles ++= Seq("spark-ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
-      println("NOTE: SPARK_HIVE is deprecated, please use -Phive flag.")
-      profiles ++= Seq("hive")
+      println("NOTE: SPARK_HIVE is deprecated, please use -Phive and -Phive-thriftserver flags.")
+      profiles ++= Seq("hive", "hive-thriftserver")
     }
     Properties.envOrNone("SPARK_HADOOP_VERSION") match {
       case Some(v) =>
