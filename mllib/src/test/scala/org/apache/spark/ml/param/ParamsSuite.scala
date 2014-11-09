@@ -25,21 +25,7 @@ import org.scalatest.FunSuite
 
 class ParamsSuite extends FunSuite {
 
-  class Solver extends Params {
-    val maxIter = new IntParam(this, "maxIter", "max number of iterations", Some(100))
-    def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
-    def getMaxIter: Int = get(maxIter)
-    val inputCol = new Param[String](this, "inputCol", "input column name")
-    def setInputCol(value: String): this.type = { set(inputCol, value); this }
-    def getInputCol: String = get(inputCol)
-    override def validate(paramMap: ParamMap) = {
-      val m = this.paramMap ++ paramMap
-      assert(m(maxIter) >= 0)
-      assert(m.contains(inputCol))
-    }
-  }
-
-  val solver = new Solver()
+  val solver = new TestParams()
   import solver.{maxIter, inputCol}
 
   test("param") {
