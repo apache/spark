@@ -87,16 +87,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val mergeJoin = joins.MergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
       
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
-        val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-            joins.BuildRight
-          } else {
-            joins.BuildLeft
-          }
-        val hashJoin = joins.ShuffledHashJoin(
-          leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
-        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+      // case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
+      //   val buildSide =
+      //     if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+      //       joins.BuildRight
+      //     } else {
+      //       joins.BuildLeft
+      //     }
+      //   val hashJoin = joins.ShuffledHashJoin(
+      //     leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
+      // condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
         joins.HashOuterJoin(
