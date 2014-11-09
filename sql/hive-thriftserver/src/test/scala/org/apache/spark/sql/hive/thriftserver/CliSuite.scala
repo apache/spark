@@ -99,7 +99,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     }
   }
 
-  test("Simple commands") {
+  ignore("Simple commands") {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
@@ -119,7 +119,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("Single command with -e") {
+  ignore("Single command with -e") {
     runCliWithin(1.minute, Seq("-e", "SHOW TABLES;"))("" -> "OK")
   }
 }
