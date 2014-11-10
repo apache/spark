@@ -35,7 +35,7 @@ import org.apache.spark.SparkConf;
 /**
  * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java
  * bean classes {@link LabeledDocument} and {@link Document}, and the tokenizer {@link MyTokenizer}
- * defined in the Scalar counterpart of this example {@link SimpleTextClassificationPipeline}.
+ * defined in the Scala counterpart of this example {@link SimpleTextClassificationPipeline}.
  * Run with
  * <pre>
  * bin/run-example ml.JavaSimpleTextClassificationPipeline
