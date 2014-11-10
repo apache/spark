@@ -49,14 +49,36 @@ abstract class PipelineStage extends Serializable with Logging {
 }
 
 /**
- * A simple pipeline, which acts as an estimator.
+ * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
+ * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline.fit]] is called, the
+ * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator.fit]] method will
+ * be called on the input dataset to fit a model. Then the model, which is a transformer, will be
+ * used to transform the dataset as the input to the next stage. If a stage is a [[Transformer]],
+ * its [[Transformer.transform]] method will be called to produce the dataset for the next stage.
+ * The fitted model from a [[Pipeline]] is an [[PipelineModel]], which consists of fitted models and
+ * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
+ * an identity transformer.
  */
 class Pipeline extends Estimator[PipelineModel] {
 
+  /** param for pipeline stages */
   val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
   def getStages: Array[PipelineStage] = get(stages)
 
+  /**
+   * Fits the pipeline to the input dataset with additional parameters. If a stage is an
+   * [[Estimator]], its [[Estimator.fit]] method will be called on the input dataset to fit a model.
+   * Then the model, which is a transformer, will be used to transform the dataset as the input to
+   * the next stage. If a stage is a [[Transformer]], its [[Transformer.transform]] method will be
+   * called to produce the dataset for the next stage. The fitted model from a [[Pipeline]] is an
+   * [[PipelineModel]], which consists of fitted models and transformers, corresponding to the
+   * pipeline stages. If there are no stages, the output model acts as an identity transformer.
+   *
+   * @param dataset input dataset
+   * @param paramMap parameter map
+   * @return fitted pipeline
+   */
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
     transform(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
