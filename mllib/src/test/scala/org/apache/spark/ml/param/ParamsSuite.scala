@@ -17,11 +17,7 @@
 
 package org.apache.spark.ml.param
 
-import scala.collection.mutable
-
 import org.scalatest.FunSuite
-
-import org.apache.spark.ml.tuning.ParamGridBuilder
 
 class ParamsSuite extends FunSuite {
 
@@ -39,8 +35,9 @@ class ParamsSuite extends FunSuite {
 
   test("param pair") {
     val pair0 = maxIter -> 5
-    val pair1 = ParamPair(maxIter, 5)
-    for (pair <- Seq(pair0, pair1)) {
+    val pair1 = maxIter.w(5)
+    val pair2 = ParamPair(maxIter, 5)
+    for (pair <- Seq(pair0, pair1, pair2)) {
       assert(pair.param.eq(maxIter))
       assert(pair.value === 5)
     }
@@ -92,7 +89,7 @@ class ParamsSuite extends FunSuite {
       solver.getParam("abc")
     }
     assert(!solver.isSet(inputCol))
-    intercept[Exception] {
+    intercept[IllegalArgumentException] {
       solver.validate()
     }
     solver.validate(ParamMap(inputCol -> "input"))
@@ -100,45 +97,12 @@ class ParamsSuite extends FunSuite {
     assert(solver.isSet(inputCol))
     assert(solver.getInputCol === "input")
     solver.validate()
-    intercept[Exception] {
+    intercept[IllegalArgumentException] {
       solver.validate(ParamMap(maxIter -> -10))
     }
     solver.setMaxIter(-10)
-    intercept[Exception] {
+    intercept[IllegalArgumentException] {
       solver.validate()
     }
-  }
-
-  test("param grid builder") {
-    def validateGrid(maps: Array[ParamMap], expected: mutable.Set[(Int, String)]): Unit = {
-      assert(maps.size === expected.size)
-      maps.foreach { m =>
-        val tuple = (m(maxIter), m(inputCol))
-        assert(expected.contains(tuple))
-        expected.remove(tuple)
-      }
-      assert(expected.isEmpty)
-    }
-
-    val maps0 = new ParamGridBuilder()
-      .baseOn(maxIter -> 10)
-      .addGrid(inputCol, Array("input0", "input1"))
-      .build()
-    val expected0 = mutable.Set(
-      (10, "input0"),
-      (10, "input1"))
-    validateGrid(maps0, expected0)
-
-    val maps1 = new ParamGridBuilder()
-      .baseOn(ParamMap(maxIter -> 5, inputCol -> "input")) // will be overwritten
-      .addGrid(maxIter, Array(10, 20))
-      .addGrid(inputCol, Array("input0", "input1"))
-      .build()
-    val expected1 = mutable.Set(
-      (10, "input0"),
-      (20, "input0"),
-      (10, "input1"),
-      (20, "input1"))
-    validateGrid(maps1, expected1)
   }
 }

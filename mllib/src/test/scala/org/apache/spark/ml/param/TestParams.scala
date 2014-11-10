@@ -30,7 +30,7 @@ class TestParams extends Params {
 
   override def validate(paramMap: ParamMap) = {
     val m = this.paramMap ++ paramMap
-    assert(m(maxIter) >= 0)
-    assert(m.contains(inputCol))
+    require(m(maxIter) >= 0)
+    require(m.contains(inputCol))
   }
 }
