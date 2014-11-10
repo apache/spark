@@ -316,6 +316,34 @@ class RDD(object):
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
+    def randomSplit(self, weights, seed=None):
+        """
+        Randomly splits this RDD with the provided weights.
+
+        :param weights: weights for splits, will be normalized if they don't sum to 1
+        :param seed: random seed
+        :return: split RDDs in an list
+
+        >>> rdd = sc.parallelize(range(10), 1)
+        >>> rdd1, rdd2, rdd3 = rdd.randomSplit([0.4, 0.6, 1.0], 11)
+        >>> rdd1.collect()
+        [3, 6]
+        >>> rdd2.collect()
+        [0, 5, 7]
+        >>> rdd3.collect()
+        [1, 2, 4, 8, 9]
+        """
+        ser = BatchedSerializer(PickleSerializer(), 1)
+        rdd = self._reserialize(ser)
+        jweights = ListConverter().convert([float(w) for w in weights],
+                                           self.ctx._gateway._gateway_client)
+        jweights = self.ctx._jvm.PythonRDD.listToArrayDouble(jweights)
+        if seed is None:
+            jrdds = rdd._jrdd.randomSplit(jweights)
+        else:
+            jrdds = rdd._jrdd.randomSplit(jweights, seed)
+        return [RDD(jrdd, self.ctx, ser) for jrdd in jrdds]
+
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed=None):
         """
