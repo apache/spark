@@ -24,8 +24,6 @@ case "`uname`" in
     CYGWIN*) cygwin=true;;
 esac
 
-SPARK_SCALA_VERSION=2.10
-
 # Figure out where Spark is installed
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
