@@ -23,22 +23,26 @@ import org.apache.spark.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{StructType, SchemaRDD}
+import org.apache.spark.sql.{SchemaRDD, StructType}
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
 trait CrossValidatorParams extends Params {
+  /** param for the estimator to be cross-validated */
   val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
   def getEstimator: Estimator[_] = get(estimator)
 
+  /** param for estimator param maps */
   val estimatorParamMaps: Param[Array[ParamMap]] =
     new Param(this, "estimatorParamMaps", "param maps for the estimator")
   def getEstimatorParamMaps: Array[ParamMap] = get(estimatorParamMaps)
 
+  /** param for the evaluator for selection */
   val evaluator: Param[Evaluator] = new Param(this, "evaluator", "evaluator for selection")
   def getEvaluator: Evaluator = get(evaluator)
 
+  /** param for number of folds for cross validation */
   val numFolds: IntParam =
     new IntParam(this, "numFolds", "number of folds for cross validation", Some(3))
   def getNumFolds: Int = get(numFolds)
@@ -59,17 +63,11 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   def setEvaluator(value: Evaluator): this.type = { set(evaluator, value); this }
   def setNumFolds(value: Int): this.type = { set(numFolds, value); this }
 
-  /**
-   * Fits a single model to the input data with provided parameter map.
-   *
-   * @param dataset input dataset
-   * @param paramMap parameters
-   * @return fitted model
-   */
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): CrossValidatorModel = {
-    val sqlCtx = dataset.sqlContext
     val map = this.paramMap ++ paramMap
     val schema = dataset.schema
+    transform(dataset.schema, paramMap, logging = true)
+    val sqlCtx = dataset.sqlContext
     val est = map(estimator)
     val eval = map(evaluator)
     val epm = map(estimatorParamMaps)
@@ -93,9 +91,10 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     f2jBLAS.dscal(numModels, 1.0 / map(numFolds), metrics, 1)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) = metrics.zipWithIndex.maxBy(_._1)
-    logInfo("Best set of parameters:\n" + epm(bestIndex))
+    logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+    logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model]
-    val cvModel = new CrossValidatorModel(this, map, bestModel, bestMetric / map(numFolds))
+    val cvModel = new CrossValidatorModel(this, map, bestModel)
     Params.copyValues(this, cvModel)
     cvModel
   }
@@ -112,8 +111,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 class CrossValidatorModel private[ml] (
     override val parent: CrossValidator,
     override val fittingParamMap: ParamMap,
-    bestModel: Model,
-    metric: Double) extends Model with CrossValidatorParams {
+    val bestModel: Model) extends Model with CrossValidatorParams {
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     bestModel.transform(dataset, paramMap)

@@ -20,17 +20,15 @@ package org.apache.spark.ml.feature
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
-import org.apache.spark.sql.catalyst.types.StructField
-import org.apache.spark.sql.{StructType, SchemaRDD}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
-import org.apache.spark.sql.catalyst.expressions.Row
 
 /**
  * Params for [[StandardScaler]] and [[StandardScalerModel]].
  */
-trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
+private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
 
 /**
  * Standardizes features by removing the mean and scaling to unit variance using column summary
@@ -42,6 +40,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
   def setOutputCol(value: String): this.type = { set(outputCol, value); this }
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
+    transform(dataset.schema, paramMap, logging = true)
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val input = dataset.select(map(inputCol).attr)
@@ -78,6 +77,7 @@ class StandardScalerModel private[ml] (
   def setOutputCol(value: String): this.type = { set(outputCol, value); this }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+    transform(dataset.schema, paramMap, logging = true)
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val scale: (Vector) => Vector = (v) => {

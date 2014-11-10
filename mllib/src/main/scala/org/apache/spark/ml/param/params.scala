@@ -42,7 +42,7 @@ class Param[T] (
   /**
    * Creates a param pair with the given value (for Java).
    */
-  def w(value: T): ParamPair[T] = ParamPair(this, value)
+  def w(value: T): ParamPair[T] = this -> value
 
   /**
    * Creates a param pair with the given value (for Scala).
@@ -303,5 +303,3 @@ object ParamMap {
     new ParamMap().put(paramPairs: _*)
   }
 }
-
-

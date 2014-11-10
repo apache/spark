@@ -26,7 +26,8 @@ import org.apache.spark.sql.SchemaRDD
 abstract class Evaluator extends Identifiable {
 
   /**
-   * Evaluate the output
+   * Evaluates the output.
+   *
    * @param dataset a dataset that contains labels/observations and predictions.
    * @param paramMap parameter map that specifies the input columns and output metrics
    * @return metric

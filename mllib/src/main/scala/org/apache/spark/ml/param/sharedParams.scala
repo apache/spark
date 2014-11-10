@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.param
 
-// shared params
-
 private[ml] trait HasRegParam extends Params {
   /** param for regularization parameter */
   val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter")

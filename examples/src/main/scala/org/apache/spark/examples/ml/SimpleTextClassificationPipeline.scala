@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.ml
 
+import org.apache.spark.sql.{StringType, DataType, SQLContext}
+
 import scala.beans.BeanInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -24,7 +26,6 @@ import org.apache.spark.ml.{Pipeline, UnaryTransformer}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.SQLContext
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
@@ -35,10 +36,15 @@ case class Document(id: Long, text: String)
 /**
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  */
-class MyTokenizer extends UnaryTransformer[String, Seq[String], MyTokenizer]
-    with Serializable {
-  override def createTransformFunc(paramMap: ParamMap): String => Seq[String] =
+class MyTokenizer extends UnaryTransformer[String, Seq[String], MyTokenizer] {
+
+  override def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
     _.toLowerCase.split("\\s")
+  }
+
+  override protected def validateInputType(inputType: DataType): Unit = {
+    require(inputType == StringType, s"Input type must be string type but got $inputType.")
+  }
 }
 
 /**

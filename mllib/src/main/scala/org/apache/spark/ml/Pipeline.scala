@@ -19,18 +19,33 @@ package org.apache.spark.ml
 
 import scala.collection.mutable.ListBuffer
 
+import org.apache.spark.Logging
 import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.sql.{StructType, SchemaRDD}
+import org.apache.spark.sql.{SchemaRDD, StructType}
 
 /**
  * A stage in a pipeline, either an Estimator or an Transformer.
  */
-abstract class PipelineStage {
+abstract class PipelineStage extends Serializable with Logging {
 
   /**
    * Derives the output schema from the input schema and parameters.
    */
   def transform(schema: StructType, paramMap: ParamMap): StructType
+
+  /**
+   * Drives the output schema from the input schema and parameters, optionally with logging.
+   */
+  protected def transform(schema: StructType, paramMap: ParamMap, logging: Boolean): StructType = {
+    if (logging) {
+      logDebug(s"Input schema: ${schema.json}")
+    }
+    val outputSchema = transform(schema, paramMap)
+    if (logging) {
+      logDebug(s"Expected output schema: ${outputSchema.json}")
+    }
+    outputSchema
+  }
 }
 
 /**
@@ -43,6 +58,7 @@ class Pipeline extends Estimator[PipelineModel] {
   def getStages: Array[PipelineStage] = get(stages)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
+    transform(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     // Search for the last estimator.
@@ -89,7 +105,7 @@ class Pipeline extends Estimator[PipelineModel] {
 class PipelineModel(
     override val parent: Pipeline,
     override val fittingParamMap: ParamMap,
-    val transformers: Array[Transformer]) extends Model {
+    val transformers: Array[Transformer]) extends Model with Logging {
 
   /**
    * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
@@ -110,6 +126,7 @@ class PipelineModel(
   }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+    transform(dataset.schema, paramMap, logging = true)
     transformers.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
   }
 

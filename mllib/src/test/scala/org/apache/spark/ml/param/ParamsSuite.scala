@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml.param
 
-import org.apache.spark.ml.tuning.ParamGridBuilder
-
 import scala.collection.mutable
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.ml.tuning.ParamGridBuilder
+
 class ParamsSuite extends FunSuite {
 
   val solver = new TestParams()
-  import solver.{maxIter, inputCol}
+  import solver.{inputCol, maxIter}
 
   test("param") {
     assert(maxIter.name === "maxIter")
@@ -72,7 +72,7 @@ class ParamsSuite extends FunSuite {
     val map5 = ParamMap.empty
     map5 ++= map0
 
-    for (m <- Seq(map1, map2, map3, map4)) {
+    for (m <- Seq(map1, map2, map3, map4, map5)) {
       assert(m.contains(maxIter))
       assert(m(maxIter) === 10)
       assert(m.contains(inputCol))

@@ -25,7 +25,8 @@ import java.util.UUID
 trait Identifiable extends Serializable {
 
   /**
-   * A unique id for the object.
+   * A unique id for the object. The default implementation concatenates the class name, "-", and 8
+   * random hex chars.
    */
   val uid: String = this.getClass.getSimpleName + "-" + UUID.randomUUID().toString.take(8)
 }

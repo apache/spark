@@ -17,17 +17,17 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.types.{StructField, StructType}
-
 import scala.annotation.varargs
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.Logging
 import org.apache.spark.ml.param._
-import org.apache.spark.sql.{DataType, SchemaRDD}
+import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * Abstract class for transformers that transform one dataset into another.
@@ -72,7 +72,7 @@ abstract class Transformer extends PipelineStage with Params {
  * result as a new column.
  */
 abstract class UnaryTransformer[IN, OUT: TypeTag, SELF <: UnaryTransformer[IN, OUT, SELF]]
-    extends Transformer with HasInputCol with HasOutputCol {
+    extends Transformer with HasInputCol with HasOutputCol with Logging {
 
   def setInputCol(value: String): SELF = { set(inputCol, value); this.asInstanceOf[SELF] }
   def setOutputCol(value: String): SELF = { set(outputCol, value); this.asInstanceOf[SELF] }
@@ -103,6 +103,11 @@ abstract class UnaryTransformer[IN, OUT: TypeTag, SELF <: UnaryTransformer[IN, O
   }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+    transform(dataset.schema, paramMap, logging = true)
+    val inputSchema = dataset.schema
+    logDebug(s"Input schema: ${inputSchema.json}")
+    val outputSchema = transform(dataset.schema, paramMap)
+    logDebug(s"Expected output schema: ${outputSchema.json}")
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val udf = this.createTransformFunc(map)
