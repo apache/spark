@@ -115,7 +115,7 @@ class HierarchicalClusteringModelSuite
 
   test("a model can be cut by height") {
     val cutDenseModel = denseModel.cut(6.0)
-    val cutSparseModel = sparseModel.cut(6.0)
+    val cutSparseModel = sparseModel.cut(8.0)
 
     assert(cutDenseModel.hashCode() !== denseModel.hashCode())
     assert(cutSparseModel.hashCode() !== sparseModel.hashCode())
@@ -135,6 +135,6 @@ class HierarchicalClusteringModelSuite
     assert(denseModel.toMergeList().size === 4)
     assert(denseModel.cut(4.0).toMergeList().size === 2)
     assert(sparseModel.toMergeList().size === 4)
-    assert(sparseModel.cut(6.0).toMergeList().size === 1)
+    assert(sparseModel.cut(8.0).toMergeList().size === 1)
   }
 }
