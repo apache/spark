@@ -361,6 +361,7 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
+    // This places test scope jars on the classpath of executors during tests.
     javaOptions in Test += 
       "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
       map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
