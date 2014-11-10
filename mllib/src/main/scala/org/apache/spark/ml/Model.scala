@@ -22,11 +22,11 @@ import org.apache.spark.ml.param.ParamMap
 /**
  * A fitted model.
  */
-abstract class Model extends Transformer {
+abstract class Model[M <: Model[M]] extends Transformer {
   /**
    * The parent estimator that produced this model.
    */
-  val parent: Estimator[_]
+  val parent: Estimator[M]
 
   /**
    * Fitting parameters, such that parent.fit(..., trainingParamMap) could reproduce the model.

@@ -71,7 +71,8 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
 class StandardScalerModel private[ml] (
     override val parent: StandardScaler,
     override val fittingParamMap: ParamMap,
-    scaler: feature.StandardScalerModel) extends Model with StandardScalerParams {
+    scaler: feature.StandardScalerModel) extends Model[StandardScalerModel]
+  with StandardScalerParams {
 
   def setInputCol(value: String): this.type = { set(inputCol, value); this }
   def setOutputCol(value: String): this.type = { set(outputCol, value); this }

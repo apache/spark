@@ -27,7 +27,7 @@ import org.apache.spark.sql.api.java.JavaSchemaRDD
 /**
  * Abstract class for estimators that fit models to data.
  */
-abstract class Estimator[M <: Model] extends PipelineStage with Params {
+abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
 
   /**
    * Fits a single model to the input data with optional parameters.

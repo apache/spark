@@ -96,7 +96,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
 class LogisticRegressionModel private[ml] (
     override val parent: LogisticRegression,
     override val fittingParamMap: ParamMap,
-    val weights: Vector) extends Model with LogisticRegressionParams {
+    val weights: Vector) extends Model[LogisticRegressionModel] with LogisticRegressionParams {
 
   def setThreshold(value: Double): this.type = { set(threshold, value); this }
   def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }

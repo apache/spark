@@ -79,7 +79,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
       val validationDataset = sqlCtx.applySchema(validation, schema).cache()
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model]]
+      val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
       var i = 0
       while (i < numModels) {
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)), map)
@@ -93,7 +93,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     val (bestMetric, bestIndex) = metrics.zipWithIndex.maxBy(_._1)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
-    val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model]
+    val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     val cvModel = new CrossValidatorModel(this, map, bestModel)
     Params.copyValues(this, cvModel)
     cvModel
@@ -111,7 +111,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 class CrossValidatorModel private[ml] (
     override val parent: CrossValidator,
     override val fittingParamMap: ParamMap,
-    val bestModel: Model) extends Model with CrossValidatorParams {
+    val bestModel: Model[_]) extends Model[CrossValidatorModel] with CrossValidatorParams {
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     bestModel.transform(dataset, paramMap)

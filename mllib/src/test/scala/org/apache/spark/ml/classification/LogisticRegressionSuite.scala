@@ -70,34 +70,4 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
       .select('label, 'probability, 'prediction)
       .foreach(println)
   }
-
-  test("logistic regression with cross validation") {
-    val lr = new LogisticRegression
-    val lrParamMaps = new ParamGridBuilder()
-      .addGrid(lr.regParam, Array(0.1, 100.0))
-      .addGrid(lr.maxIter, Array(0, 5))
-      .build()
-    val eval = new BinaryClassificationEvaluator
-    val cv = new CrossValidator()
-      .setEstimator(lr)
-      .setEstimatorParamMaps(lrParamMaps)
-      .setEvaluator(eval)
-      .setNumFolds(3)
-    val bestModel = cv.fit(dataset)
-  }
-
-  test("logistic regression with pipeline") {
-    val scaler = new StandardScaler()
-      .setInputCol("features")
-      .setOutputCol("scaledFeatures")
-    val lr = new LogisticRegression()
-      .setFeaturesCol("scaledFeatures")
-    val pipeline = new Pipeline()
-      .setStages(Array(scaler, lr))
-    val model = pipeline.fit(dataset)
-    val predictions = model.transform(dataset)
-      .select('label, 'score, 'prediction)
-      .collect()
-      .foreach(println)
-  }
 }

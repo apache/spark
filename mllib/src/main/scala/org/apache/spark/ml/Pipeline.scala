@@ -105,15 +105,15 @@ class Pipeline extends Estimator[PipelineModel] {
 class PipelineModel(
     override val parent: Pipeline,
     override val fittingParamMap: ParamMap,
-    val transformers: Array[Transformer]) extends Model with Logging {
+    val transformers: Array[Transformer]) extends Model[PipelineModel] with Logging {
 
   /**
    * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
    * estimator does not exist in the pipeline.
    */
-  def getModel[M <: Model](estimator: Estimator[M]): M = {
+  def getModel[M <: Model[M]](estimator: Estimator[M]): M = {
     val matched = transformers.filter {
-      case m: Model => m.parent.eq(estimator)
+      case m: Model[_] => m.parent.eq(estimator)
       case _ => false
     }
     if (matched.isEmpty) {
