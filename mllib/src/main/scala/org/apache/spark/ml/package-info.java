@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
 /**
- * :: AlphaComponent ::
- * This is an ALPHA component that adapts the new set of machine learning APIs.
+ * Spark ML is an ALPHA component that adapts the new set of machine learning APIs.
  */
-package object ml {
-}
+@AlphaComponent
+package org.apache.spark.ml;
+
+import org.apache.spark.annotation.AlphaComponent;
