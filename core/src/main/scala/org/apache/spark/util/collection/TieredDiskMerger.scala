@@ -24,6 +24,7 @@ import java.util.concurrent.{PriorityBlockingQueue, CountDownLatch}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.BlockId
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.CompletionIterator
@@ -56,8 +57,12 @@ private[spark] class TieredDiskMerger[K, C](
 
   private val maxMergeFactor = conf.getInt("spark.shuffle.maxMergeFactor", 100)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+
   private val blockManager = SparkEnv.get.blockManager
   private val ser = Serializer.getSerializer(dep.serializer)
+
+  /** Number of bytes spilled on disk */
+  private var _diskBytesSpilled: Long = 0L
 
   /** PriorityQueue to store the on-disk merging blocks, blocks are merged by size ordering */
   private val onDiskBlocks = new PriorityBlockingQueue[DiskShuffleBlock]()
@@ -83,6 +88,8 @@ private[spark] class TieredDiskMerger[K, C](
     }
   }
 
+  def diskBytesSpilled: Long = _diskBytesSpilled
+
   /**
    * Notify the merger that no more on disk blocks will be registered.
    */
@@ -98,7 +105,7 @@ private[spark] class TieredDiskMerger[K, C](
 
     // Merge the final group for combiner to directly feed to the reducer
     val finalMergedBlocks = onDiskBlocks.toArray(new Array[DiskShuffleBlock](onDiskBlocks.size()))
-    val finalItrGroup = blocksToRecordIterators(finalMergedBlocks)
+    val finalItrGroup = onDiskBlocksToIterators(finalMergedBlocks)
     val mergedItr =
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
@@ -131,7 +138,7 @@ private[spark] class TieredDiskMerger[K, C](
     }
   }
 
-  private def blocksToRecordIterators(shufflePartGroup: Seq[DiskShuffleBlock])
+  private def onDiskBlocksToIterators(shufflePartGroup: Seq[DiskShuffleBlock])
     : Seq[Iterator[Product2[K, C]]] = {
     shufflePartGroup.map { case DiskShuffleBlock(id, _, _) =>
       blockManager.diskStore.getValues(id, ser).get.asInstanceOf[Iterator[Product2[K, C]]]
@@ -182,19 +189,38 @@ private[spark] class TieredDiskMerger[K, C](
           }
 
           // Merge the blocks
-          val itrGroup = blocksToRecordIterators(blocksToMerge)
+          val itrGroup = onDiskBlocksToIterators(blocksToMerge)
           val partialMergedItr =
             MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
           // Write merged blocks to disk
           val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
-          //TODO. change this into objectWriter
-          // TODO. Track the memory and disk spill
-          val fos = new BufferedOutputStream(new FileOutputStream(file), fileBufferSize)
-          blockManager.dataSerializeStream(tmpBlockId, fos, partialMergedItr, ser)
+          val curWriteMetrics = new ShuffleWriteMetrics()
+          var writer =
+            blockManager.getDiskWriter(tmpBlockId, file, ser, fileBufferSize, curWriteMetrics)
+          var success = false
+
+          try {
+            partialMergedItr.foreach(p => writer.write(p))
+            success = true
+          } finally {
+            if (!success) {
+              if (writer != null) {
+                writer.revertPartialWritesAndClose()
+                writer = null
+              }
+              if (file.exists()) {
+                file.delete()
+              }
+            } else {
+              writer.commitAndClose()
+              writer = null
+            }
+          }
+          _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
+          releaseShuffleBlocks(blocksToMerge.toArray)
 
           logInfo(s"Merged ${blocksToMerge.size} on-disk blocks into file ${file.getName}")
 
-          releaseShuffleBlocks(blocksToMerge.toArray)
           onDiskBlocks.add(DiskShuffleBlock(tmpBlockId, file, file.length()))
         }
       }
