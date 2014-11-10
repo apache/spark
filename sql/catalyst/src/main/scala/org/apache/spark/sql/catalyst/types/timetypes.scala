@@ -25,12 +25,14 @@ import scala.language.implicitConversions
  * operators (as required for catalyst expressions) and which can
  * be constructed from a string.
  *
- * scala> val d1 = Date("2014-02-01")
- * d1: Date = 2014-02-01
+ * {{{
+ *   scala> val d1 = Date("2014-02-01")
+ *   d1: Date = 2014-02-01
  *
- * scala> val d2 = Date("2014-02-02")
- * d2: Date = 2014-02-02
- *
+ *   scala> val d2 = Date("2014-02-02")
+ *   d2: Date = 2014-02-02
+ * }}}
+ * 
  * scala> d1 < d2
  * res1: Boolean = true
  */
@@ -49,17 +51,19 @@ object RichDate {
   def unapply(richdate: RichDate): Option[Date] = Some(new Date(richdate.getTime)) 
 }
 
-/* *
+/**
  * Analogous subclass of java.sql.Timestamp.
  *
- * scala> val ts1 = Timestamp("2014-03-04 12:34:56.12")
- * ts1: Timestamp = 2014-03-04 12:34:56.12
+ * {{{
+ *   scala> val ts1 = Timestamp("2014-03-04 12:34:56.12")
+ *   ts1: Timestamp = 2014-03-04 12:34:56.12
  *
- * scala> val ts2 = Timestamp("2014-03-04 12:34:56.13")
- * ts2: Timestamp = 2014-03-04 12:34:56.13
+ *   scala> val ts2 = Timestamp("2014-03-04 12:34:56.13")
+ *   ts2: Timestamp = 2014-03-04 12:34:56.13
  *
- * scala> ts1 < ts2
- * res13: Boolean = true
+ *   scala> ts1 < ts2
+ *   res13: Boolean = true
+ * }}}
  */
 
 class RichTimestamp(milliseconds: Long) extends Timestamp(milliseconds) {
@@ -90,7 +94,7 @@ object RichTimestamp {
     Some(new Timestamp(richtimestamp.getTime)) 
 }
 
-/* *
+/**
  * Implicit conversions.
  */
 
