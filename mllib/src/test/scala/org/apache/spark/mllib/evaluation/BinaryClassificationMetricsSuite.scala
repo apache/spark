@@ -61,7 +61,7 @@ class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("binary evaluation metrics for All Positive RDD") {
-    val scoreAndLabels = sc.parallelize(Seq((0.5, 1.0)), 2)
+    val scoreAndLabels = sc.parallelize(Seq((0.5, 1.0), (0.5, 1.0)), 2)
     val metrics: BinaryClassificationMetrics = new BinaryClassificationMetrics(scoreAndLabels)
 
     val threshold = Seq(0.5)
@@ -86,7 +86,7 @@ class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("binary evaluation metrics for All Negative RDD") {
-    val scoreAndLabels = sc.parallelize(Seq((0.5, 0.0)), 2)
+    val scoreAndLabels = sc.parallelize(Seq((0.5, 0.0), (0.5, 0.0)), 2)
     val metrics: BinaryClassificationMetrics = new BinaryClassificationMetrics(scoreAndLabels)
 
     val threshold = Seq(0.5)
@@ -97,11 +97,11 @@ class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
     val pr = recall.zip(precision)
     val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map {
-      case (0,0) => 0.0
+      case (0, 0) => 0.0
       case (r, p) => 2.0 * (p * r) / (p + r)
     }
     val f2 = pr.map {
-      case (0,0) => 0.0
+      case (0, 0) => 0.0
       case (r, p) => 5.0 * (p * r) / (4.0 * p + r)
     }
 
