@@ -856,6 +856,54 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             sample(samples)[1:total]
           })
 
+#' Return an RDD with the keys of each tuple.
+#'
+#' @param rdd The RDD from which the keys of each tuple is returned.
+#' @rdname keys
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
+#' collect(keys(rdd)) # list(1, 3)
+#'}
+setGeneric("keys", function(rdd) { standardGeneric("keys") })
+
+#' @rdname keys
+#' @aliases keys,RDD
+setMethod("keys",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            func <- function(x) {
+              x[[1]]
+            }
+            lapply(rdd, func)
+          })
+
+#' Return an RDD with the values of each tuple.
+#'
+#' @param rdd The RDD from which the values of each tuple is returned.
+#' @rdname values
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
+#' collect(values(rdd)) # list(2, 4)
+#'}
+setGeneric("values", function(rdd) { standardGeneric("values") })
+
+#' @rdname values
+#' @aliases values,RDD
+setMethod("values",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            func <- function(x) {
+              x[[2]]
+            }
+            lapply(rdd, func)
+          })
+
 #' Applies a function to all values of the elements, without modifying the keys.
 #'
 #' The same as `mapValues()' in Spark.
