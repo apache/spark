@@ -32,7 +32,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.streaming.Durations;
+import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Time;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
@@ -83,7 +83,7 @@ public final class JavaRecoverableNetworkWordCount {
     }
     SparkConf sparkConf = new SparkConf().setAppName("JavaRecoverableNetworkWordCount");
     // Create the context with a 1 second batch size
-    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
+    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(1000));
     ssc.checkpoint(checkpointDirectory);
 
     // Create a socket stream on target ip:port and count the
