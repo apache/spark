@@ -502,8 +502,11 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
     }
   }
 
-  override def eval(input: Row): Any =
-    seen.reduceLeft(base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
+  override def eval(input: Row): Any = {
+    val zero = Cast(Literal(0), base.dataType)
+    seen.foldLeft(zero.eval(null))(
+      base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
+  }
 }
 
 case class CountDistinctFunction(

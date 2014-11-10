@@ -195,6 +195,18 @@ class DslQuerySuite extends QueryTest {
     assert(emptyTableData.count() === 0)
   }
 
+  test("zero sum") {
+    checkAnswer(
+      emptyTableData.aggregate(sum('a)),
+      0)
+  }
+
+  test("zero sum distinct") {
+    checkAnswer(
+      emptyTableData.aggregate(sumDistinct('a)),
+      0)
+  }
+
   test("except") {
     checkAnswer(
       lowerCaseData.except(upperCaseData),
