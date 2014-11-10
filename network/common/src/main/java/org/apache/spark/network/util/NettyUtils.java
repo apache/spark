@@ -37,13 +37,17 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
  */
 public class NettyUtils {
+  /** Creates a new ThreadFactory which prefixes each thread with the given name. */
+  public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
+    return new ThreadFactoryBuilder()
+      .setDaemon(true)
+      .setNameFormat(threadPoolPrefix + "-%d")
+      .build();
+  }
+
   /** Creates a Netty EventLoopGroup based on the IOMode. */
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
-
-    ThreadFactory threadFactory = new ThreadFactoryBuilder()
-      .setDaemon(true)
-      .setNameFormat(threadPrefix + "-%d")
-      .build();
+    ThreadFactory threadFactory = createThreadFactory(threadPrefix);
 
     switch (mode) {
       case NIO:

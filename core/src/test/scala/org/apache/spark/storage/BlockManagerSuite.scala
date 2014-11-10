@@ -36,6 +36,7 @@ import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
+import tachyon.master.LocalTachyonCluster
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.executor.DataReadMethod
@@ -73,8 +74,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
-      mapOutputTracker, shuffleManager, transfer)
+    val manager = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+      mapOutputTracker, shuffleManager, transfer, securityMgr)
+    manager.initialize("app-id")
+    manager
   }
 
   before {
@@ -534,9 +537,14 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("tachyon storage") {
-    // TODO Make the spark.test.tachyon.enable true after using tachyon 0.5.0 testing jar.
-    val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
+    val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", true)
     if (tachyonUnitTestEnabled) {
+      val tachyonCluster = new LocalTachyonCluster(30000000)
+      tachyonCluster.start()
+      val tachyonURL = tachyon.Constants.HEADER +
+        tachyonCluster.getMasterHostname() + ":" + tachyonCluster.getMasterPort()
+      conf.set("spark.tachyonStore.url", tachyonURL)
+      conf.set("spark.tachyonStore.folderName", "app-test")
       store = makeBlockManager(1200)
       val a1 = new Array[Byte](400)
       val a2 = new Array[Byte](400)
@@ -547,6 +555,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       assert(store.getSingle("a3").isDefined, "a3 was in store")
       assert(store.getSingle("a2").isDefined, "a2 was in store")
       assert(store.getSingle("a1").isDefined, "a1 was in store")
+      tachyonCluster.stop()
     } else {
       info("tachyon storage test disabled.")
     }
@@ -793,7 +802,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     // Use Java serializer so we can create an unserializable error.
     val transfer = new NioBlockTransferService(conf, securityMgr)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, actorSystem, master,
-      new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer)
+      new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass

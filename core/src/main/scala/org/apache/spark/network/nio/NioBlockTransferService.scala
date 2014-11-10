@@ -137,6 +137,7 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
   override def uploadBlock(
       hostname: String,
       port: Int,
+      execId: String,
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel)

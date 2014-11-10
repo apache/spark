@@ -24,6 +24,7 @@ package org.apache.spark.ui.jobs
 private object TaskDetailsClassNames {
   val SCHEDULER_DELAY = "scheduler_delay"
   val GC_TIME = "gc_time"
+  val TASK_DESERIALIZATION_TIME = "deserialization_time"
   val RESULT_SERIALIZATION_TIME = "serialization_time"
   val GETTING_RESULT_TIME = "getting_result_time"
 }
