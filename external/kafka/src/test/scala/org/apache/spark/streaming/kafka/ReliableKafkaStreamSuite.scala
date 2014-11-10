@@ -69,13 +69,17 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
     ssc.start()
     ssc.awaitTermination(3000)
 
+    // A basic process verification for ReliableKafkaReceiver.
+    // Verify whether received message number is equal to the sent message number.
     assert(sent.size === result.size)
+    // Verify whether each message is the same as the data to be verified.
     sent.keys.foreach { k => assert(sent(k) === result(k).toInt) }
 
     ssc.stop()
   }
 
   test("Verify the offset commit") {
+    // Verify the corretness of offset commit mechanism.
     val sparkConf = new SparkConf()
       .setMaster(master)
       .setAppName(framework)
@@ -97,8 +101,10 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
       "group.id" -> groupId,
       "auto.offset.reset" -> "smallest")
 
+    // Verify whether the offset of this group/topic/partition is 0 before starting.
     assert(getCommitOffset(groupId, topic, 0) === 0L)
 
+    // Do this to consume all the message of this group/topic.
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
@@ -109,6 +115,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
     ssc.awaitTermination(3000)
     ssc.stop()
 
+    // Verify the offset number whether it is equal to the total message number.
     assert(getCommitOffset(groupId, topic, 0) === 29L)
   }
 
@@ -136,8 +143,10 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
       "group.id" -> groupId,
       "auto.offset.reset" -> "smallest")
 
+    // Before started, verify all the group/topic/partition offsets are 0.
     topics.foreach { case (t, _) => assert(getCommitOffset(groupId, t, 0) === 0L) }
 
+    // Consuming all the data sent to the broker which will potential commit the offsets internally.
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc,
       kafkaParams,
@@ -148,9 +157,11 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuite {
     ssc.awaitTermination(3000)
     ssc.stop()
 
+    // Verify the offset for each group/topic to see whether they are equal to the expected one.
     topics.foreach { case (t, _) => assert(getCommitOffset(groupId, t, 0) === 29L) }
   }
 
+  /** Getting partition offset from Zookeeper. */
   private def getCommitOffset(groupId: String, topic: String, partition: Int): Long = {
     assert(zkClient != null, "Zookeeper client is not initialized")
 
