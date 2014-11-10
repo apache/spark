@@ -68,6 +68,21 @@ class HiveTypeCoercionSuite extends FunSuite {
     widenTest(LongType, FloatType, Some(FloatType))
     widenTest(LongType, DoubleType, Some(DoubleType))
 
+    // Casting up to unlimited-precision decimal
+    widenTest(IntegerType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
+    widenTest(DoubleType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
+    widenTest(DecimalType(3, 2), DecimalType.Unlimited, Some(DecimalType.Unlimited))
+    widenTest(DecimalType.Unlimited, IntegerType, Some(DecimalType.Unlimited))
+    widenTest(DecimalType.Unlimited, DoubleType, Some(DecimalType.Unlimited))
+    widenTest(DecimalType.Unlimited, DecimalType(3, 2), Some(DecimalType.Unlimited))
+
+    // No up-casting for fixed-precision decimal (this is handled by arithmetic rules)
+    widenTest(DecimalType(2, 1), DecimalType(3, 2), None)
+    widenTest(DecimalType(2, 1), DoubleType, None)
+    widenTest(DecimalType(2, 1), IntegerType, None)
+    widenTest(DoubleType, DecimalType(2, 1), None)
+    widenTest(IntegerType, DecimalType(2, 1), None)
+
     // StringType
     widenTest(NullType, StringType, Some(StringType))
     widenTest(StringType, StringType, Some(StringType))
@@ -92,7 +107,7 @@ class HiveTypeCoercionSuite extends FunSuite {
     def ruleTest(initial: Expression, transformed: Expression) {
       val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
       assert(booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)) ==
-        Project(Seq(Alias(transformed, "a")()), testRelation))      
+        Project(Seq(Alias(transformed, "a")()), testRelation))
     }
     // Remove superflous boolean -> boolean casts.
     ruleTest(Cast(Literal(true), BooleanType), Literal(true))

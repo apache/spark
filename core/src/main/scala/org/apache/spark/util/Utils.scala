@@ -18,12 +18,11 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{Properties, Locale, Random, UUID}
-import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
-
-import org.eclipse.jetty.util.MultiException
+import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
+import java.util.{Locale, Properties, Random, UUID}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -33,17 +32,18 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.Files
+import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.util.MultiException
 import org.json4s._
-import tachyon.client.{TachyonFile,TachyonFS}
+import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
-import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -347,15 +347,84 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared
+   * across executors running the same application. `useCache` is used mainly for
+   * the executors, and not in local mode.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
+   */
+  def fetchFile(
+      url: String,
+      targetDir: File,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration,
+      timestamp: Long,
+      useCache: Boolean) {
+    val fileName = url.split("/").last
+    val targetFile = new File(targetDir, fileName)
+    if (useCache) {
+      val cachedFileName = s"${url.hashCode}${timestamp}_cache"
+      val lockFileName = s"${url.hashCode}${timestamp}_lock"
+      val localDir = new File(getLocalDir(conf))
+      val lockFile = new File(localDir, lockFileName)
+      val raf = new RandomAccessFile(lockFile, "rw")
+      // Only one executor entry.
+      // The FileLock is only used to control synchronization for executors download file,
+      // it's always safe regardless of lock type (mandatory or advisory).
+      val lock = raf.getChannel().lock()
+      val cachedFile = new File(localDir, cachedFileName)
+      try {
+        if (!cachedFile.exists()) {
+          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+        }
+      } finally {
+        lock.release()
+      }
+      if (targetFile.exists && !Files.equal(cachedFile, targetFile)) {
+        if (conf.getBoolean("spark.files.overwrite", false)) {
+          targetFile.delete()
+          logInfo((s"File $targetFile exists and does not match contents of $url, " +
+            s"replacing it with $url"))
+        } else {
+          throw new SparkException(s"File $targetFile exists and does not match contents of $url")
+        }
+      }
+      Files.copy(cachedFile, targetFile)
+    } else {
+      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+    }
+
+    // Decompress the file if it's a .tar or .tar.gz
+    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+      logInfo("Untarring " + fileName)
+      Utils.execute(Seq("tar", "-xzf", fileName), targetDir)
+    } else if (fileName.endsWith(".tar")) {
+      logInfo("Untarring " + fileName)
+      Utils.execute(Seq("tar", "-xf", fileName), targetDir)
+    }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+  }
+
+  /**
+   * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager,
-    hadoopConf: Configuration) {
-    val filename = url.split("/").last
+  private def doFetchFile(
+      url: String,
+      targetDir: File,
+      filename: String,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration) {
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
@@ -443,16 +512,6 @@ private[spark] object Utils extends Logging {
         }
         Files.move(tempFile, targetFile)
     }
-    // Decompress the file if it's a .tar or .tar.gz
-    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
-    } else if (filename.endsWith(".tar")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xf", filename), targetDir)
-    }
-    // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
@@ -680,16 +739,21 @@ private[spark] object Utils extends Logging {
   }
 
   private def listFilesSafely(file: File): Seq[File] = {
-    val files = file.listFiles()
-    if (files == null) {
-      throw new IOException("Failed to list files for dir: " + file)
+    if (file.exists()) {
+      val files = file.listFiles()
+      if (files == null) {
+        throw new IOException("Failed to list files for dir: " + file)
+      }
+      files
+    } else {
+      List()
     }
-    files
   }
 
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
+   * Throws an exception if deletion is unsuccessful.
    */
   def deleteRecursively(file: File) {
     if (file != null) {
@@ -906,7 +970,37 @@ private[spark] object Utils extends Logging {
       block
     } catch {
       case e: ControlThrowable => throw e
-      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+      case t: Throwable => SparkUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code that evaluates to Unit, re-throwing any non-fatal uncaught
+   * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException(block: => Unit) {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
+    }
+  }
+
+  /**
+   * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
+   * exceptions as IOException. This is used when implementing Externalizable and Serializable's
+   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+   * see SPARK-4080 for more context.
+   */
+  def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(t) => throw new IOException(t)
     }
   }
 
@@ -914,7 +1008,8 @@ private[spark] object Utils extends Logging {
   private def coreExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the "core" Spark API that we want to skip when
     // finding the call site of a method.
-    val SPARK_CORE_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
+    val SPARK_CORE_CLASS_REGEX =
+      """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.broadcast)?\.[A-Z]""".r
     val SCALA_CLASS_REGEX = """^scala""".r
     val isSparkCoreClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = SCALA_CLASS_REGEX.findFirstIn(className).isDefined
@@ -983,8 +1078,8 @@ private[spark] object Utils extends Logging {
     val stream = new FileInputStream(file)
 
     try {
-      stream.skip(effectiveStart)
-      stream.read(buff)
+      ByteStreams.skipFully(stream, effectiveStart)
+      ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()
     }
@@ -1145,6 +1240,8 @@ private[spark] object Utils extends Logging {
   }
 
   // Handles idiosyncracies with hash (add more as required)
+  // This method should be kept in sync with
+  // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
 
     // Required ?
@@ -1178,12 +1275,28 @@ private[spark] object Utils extends Logging {
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
    * @param numIters number of iterations
-   * @param f function to be executed
+   * @param f function to be executed. If prepare is not None, the running time of each call to f
+   *          must be an order of magnitude longer than one millisecond for accurate timing.
+   * @param prepare function to be executed before each call to f. Its running time doesn't count.
+   * @return the total time across all iterations (not couting preparation time)
    */
-  def timeIt(numIters: Int)(f: => Unit): Long = {
-    val start = System.currentTimeMillis
-    times(numIters)(f)
-    System.currentTimeMillis - start
+  def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
+    if (prepare.isEmpty) {
+      val start = System.currentTimeMillis
+      times(numIters)(f)
+      System.currentTimeMillis - start
+    } else {
+      var i = 0
+      var sum = 0L
+      while (i < numIters) {
+        prepare.get.apply()
+        val start = System.currentTimeMillis
+        f
+        sum += System.currentTimeMillis - start
+        i += 1
+      }
+      sum
+    }
   }
 
   /**
@@ -1271,6 +1384,11 @@ private[spark] object Utils extends Logging {
    * Whether the underlying operating system is Windows.
    */
   val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
@@ -1479,19 +1597,31 @@ private[spark] object Utils extends Logging {
       .orNull
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(e: Exception): String = {
-    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+  /**
+   * Return a nice string representation of the exception. It will call "printStackTrace" to
+   * recursively generate the stack trace including the exception and its causes.
+   */
+  def exceptionString(e: Throwable): String = {
+    if (e == null) {
+      ""
+    } else {
+      // Use e.printStackTrace here because e.getStackTrace doesn't include the cause
+      val stringWriter = new StringWriter()
+      e.printStackTrace(new PrintWriter(stringWriter))
+      stringWriter.toString
+    }
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(
-      className: String,
-      description: String,
-      stackTrace: Array[StackTraceElement]): String = {
-    val desc = if (description == null) "" else description
-    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
-    s"$className: $desc\n$st"
+  /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
+  def getThreadDump(): Array[ThreadStackTrace] = {
+    // We need to filter out null values here because dumpAllThreads() may return null array
+    // elements for threads that are dead / don't exist.
+    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
+      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
+        threadInfo.getThreadState, stackTrace)
+    }
   }
 
   /**
@@ -1594,6 +1724,69 @@ private[spark] object Utils extends Logging {
     PropertyConfigurator.configure(pro)
   }
 
+  def invoke(
+      clazz: Class[_],
+      obj: AnyRef,
+      methodName: String,
+      args: (Class[_], AnyRef)*): AnyRef = {
+    val (types, values) = args.unzip
+    val method = clazz.getDeclaredMethod(methodName, types: _*)
+    method.setAccessible(true)
+    method.invoke(obj, values.toSeq: _*)
+  }
+
+  // Limit of bytes for total size of results (default is 1GB)
+  def getMaxResultSize(conf: SparkConf): Long = {
+    memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
+  }
+
+  /**
+   * Return the current system LD_LIBRARY_PATH name
+   */
+  def libraryPathEnvName: String = {
+    if (isWindows) {
+      "PATH"
+    } else if (isMac) {
+      "DYLD_LIBRARY_PATH"
+    } else {
+      "LD_LIBRARY_PATH"
+    }
+  }
+
+  /**
+   * Return the prefix of a command that appends the given library paths to the
+   * system-specific library path environment variable. On Unix, for instance,
+   * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   */
+  def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
+    val libraryPathScriptVar = if (isWindows) {
+      s"%${libraryPathEnvName}%"
+    } else {
+      "$" + libraryPathEnvName
+    }
+    val libraryPath = (libraryPaths :+ libraryPathScriptVar).mkString("\"",
+      File.pathSeparator, "\"")
+    val ampersand = if (Utils.isWindows) {
+      " &"
+    } else {
+      ""
+    }
+    s"$libraryPathEnvName=$libraryPath$ampersand"
+  }
+
+  /**
+   * Return the value of a config either through the SparkConf or the Hadoop configuration
+   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
+   * if the key is not set in the Hadoop configuration.
+   */
+  def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
+    val sparkValue = conf.get(key, default)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    } else {
+      sparkValue
+    }
+  }
 }
 
 /**

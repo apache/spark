@@ -31,7 +31,10 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets.UTF_8
+
 import org.apache.spark._
+import org.apache.spark.network.sasl.{SparkSaslClient, SparkSaslServer}
 import org.apache.spark.util.Utils
 
 import scala.util.Try
@@ -598,7 +601,7 @@ private[nio] class ConnectionManager(
     } else {
       var replyToken : Array[Byte] = null
       try {
-        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken)
+        replyToken = waitingConn.sparkSaslClient.response(securityMsg.getToken)
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
@@ -632,7 +635,7 @@ private[nio] class ConnectionManager(
         connection.synchronized {
           if (connection.sparkSaslServer == null) {
             logDebug("Creating sasl Server")
-            connection.sparkSaslServer = new SparkSaslServer(securityManager)
+            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager)
           }
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
@@ -776,7 +779,7 @@ private[nio] class ConnectionManager(
     if (!conn.isSaslComplete()) {
       conn.synchronized {
         if (conn.sparkSaslClient == null) {
-          conn.sparkSaslClient = new SparkSaslClient(securityManager)
+          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager)
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()
@@ -923,7 +926,7 @@ private[nio] class ConnectionManager(
             val errorMsgByteBuf = ackMessage.asInstanceOf[BufferMessage].buffers.head
             val errorMsgBytes = new Array[Byte](errorMsgByteBuf.limit())
             errorMsgByteBuf.get(errorMsgBytes)
-            val errorMsg = new String(errorMsgBytes, "utf-8")
+            val errorMsg = new String(errorMsgBytes, UTF_8)
             val e = new IOException(
               s"sendMessageReliably failed with ACK that signalled a remote error: $errorMsg")
             if (!promise.tryFailure(e)) {

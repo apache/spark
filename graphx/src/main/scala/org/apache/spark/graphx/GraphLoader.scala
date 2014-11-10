@@ -48,7 +48,8 @@ object GraphLoader extends Logging {
    * @param path the path to the file (e.g., /home/data/file or hdfs://file)
    * @param canonicalOrientation whether to orient edges in the positive
    *        direction
-   * @param minEdgePartitions the number of partitions for the edge RDD
+   * @param numEdgePartitions the number of partitions for the edge RDD
+   * Setting this value to -1 will use the default parallelism.
    * @param edgeStorageLevel the desired storage level for the edge partitions
    * @param vertexStorageLevel the desired storage level for the vertex partitions
    */
@@ -56,7 +57,7 @@ object GraphLoader extends Logging {
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      minEdgePartitions: Int = 1,
+      numEdgePartitions: Int = -1,
       edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
       vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
     : Graph[Int, Int] =
@@ -64,7 +65,12 @@ object GraphLoader extends Logging {
     val startTime = System.currentTimeMillis
 
     // Parse the edge data table directly into edge partitions
-    val lines = sc.textFile(path, minEdgePartitions).coalesce(minEdgePartitions)
+    val lines =
+      if (numEdgePartitions > 0) {
+        sc.textFile(path, numEdgePartitions).coalesce(numEdgePartitions)
+      } else {
+        sc.textFile(path)
+      }
     val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
       val builder = new EdgePartitionBuilder[Int, Int]
       iter.foreach { line =>
