@@ -90,7 +90,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     master = null
   }
 
-  
+
   test("get peers with addition and removal of block managers") {
     val numStores = 4
     val stores = (1 to numStores - 1).map { i => makeBlockManager(1000, s"store$i") }
@@ -150,15 +150,15 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   test("block replication - mixed between 1x to 5x") {
     // Generate storage levels with varying replication
     val storageLevels = Seq(
-      //MEMORY_ONLY,
+      MEMORY_ONLY,
       MEMORY_ONLY_SER_2,
-      StorageLevel(true, false, false, false, 3)
-      //StorageLevel(true, true, false, true, 4),
-      //StorageLevel(true, true, false, false, 5),
-      //StorageLevel(true, true, false, true, 4),
-      //StorageLevel(true, false, false, false, 3),
-      //MEMORY_ONLY_SER_2,
-      //MEMORY_ONLY
+      StorageLevel(true, false, false, false, 3),
+      StorageLevel(true, true, false, true, 4),
+      StorageLevel(true, true, false, false, 5),
+      StorageLevel(true, true, false, true, 4),
+      StorageLevel(true, false, false, false, 3),
+      MEMORY_ONLY_SER_2,
+      MEMORY_ONLY
     )
     testReplication(5, storageLevels)
   }
