@@ -669,11 +669,10 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
 
     start_time = datetime.now()
 
-    num_attempts = 0
     conn = ec2.connect_to_region(opts.region)
 
     while True:
-        time.sleep(3 * num_attempts)  # seconds
+        time.sleep(5)  # seconds
 
         for i in cluster_instances:
             i.update()
@@ -690,14 +689,13 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
             if all(i.state == cluster_state for i in cluster_instances):
                 break
 
-        num_attempts += 1
-
         sys.stdout.write(".")
         sys.stdout.flush()
 
     sys.stdout.write("\n")
 
     end_time = datetime.now()
+
     print "Cluster is now in '{s}' state. Waited {t} seconds.".format(
         s=cluster_state,
         t=(end_time - start_time).seconds
