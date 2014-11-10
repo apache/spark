@@ -412,7 +412,6 @@ class BasicOperationsSuite extends TestSuiteBase {
       assert(getInputFromSlice(2000, 4000) == Set(2, 3, 4))
     }
   }
-/*
   test("slice - has not been initialized") {
     withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
@@ -423,7 +422,6 @@ class BasicOperationsSuite extends TestSuiteBase {
       assert(thrown.getMessage.contains("has not been initialized"))
     }
   }
-  */
 
   val cleanupTestInput = (0 until 10).map(x => Seq(x, x + 1)).toSeq
 
