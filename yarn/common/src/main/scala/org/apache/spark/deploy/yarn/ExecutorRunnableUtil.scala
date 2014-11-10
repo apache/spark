@@ -112,7 +112,7 @@ trait ExecutorRunnableUtil extends Logging {
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val userClassPath =
-      if (ClientBase.isolateClassPath(sparkConf, false)) {
+      if (ClientBase.isUserClassPathFirst(sparkConf, false)) {
         ClientBase.getUserClasspath(null, sparkConf).flatMap { uri =>
           val absPath =
             if (new File(uri.getPath()).isAbsolute()) {

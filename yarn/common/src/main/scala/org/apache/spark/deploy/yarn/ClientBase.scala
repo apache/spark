@@ -675,7 +675,7 @@ private[spark] object ClientBase extends Logging {
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(Environment.PWD.$(), env)
-    if (isolateClassPath(sparkConf, args == null)) {
+    if (isUserClassPathFirst(sparkConf, args == null)) {
       addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)
     } else {
@@ -788,9 +788,10 @@ private[spark] object ClientBase extends Logging {
   }
 
   /**
-   * Whether to isolate the user's jars in a different class loader for the given process.
+   * Whether to consider jars provided by the user to have precedence over the Spark jars when
+   * loading user classes.
    */
-  def isolateClassPath(conf: SparkConf, isDriver: Boolean): Boolean = {
+  def isUserClassPathFirst(conf: SparkConf, isDriver: Boolean): Boolean = {
     if (isDriver) {
       conf.getBoolean("spark.driver.userClassPathFirst", false)
     } else {
