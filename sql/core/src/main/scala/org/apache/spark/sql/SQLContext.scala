@@ -503,7 +503,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
-  /* *
+  /**
    * Make RichDate and RichTimestamp available under the names
    * Date and Timestamp when the members of this SQLContext are
    * imported.

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import scala.language.implicitConversions
 
-/* *
+/**
  * Subclass of java.sql.Date which provides the usual comparison
  * operators (as required for catalyst expressions) and which can
  * be constructed from a string.
