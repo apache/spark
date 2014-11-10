@@ -144,7 +144,8 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects).foreach(enable(sharedSettings))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
+    .foreach(enable(sharedSettings ++ ExludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -184,6 +185,16 @@ object SparkBuild extends PomBuild {
 
 object Flume {
   lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
+/**
+  This excludes library dependencies in sbt, which are specified in maven but are
+  not needed by sbt build.
+  */
+object ExludedDependencies {
+  lazy val settings = Seq(
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+  )
 }
 
 /**
