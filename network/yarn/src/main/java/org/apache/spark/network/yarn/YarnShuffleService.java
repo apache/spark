@@ -95,10 +95,11 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
+    TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-    RpcHandler rpcHandler = new ExternalShuffleBlockHandler();
+    RpcHandler rpcHandler = new ExternalShuffleBlockHandler(transportConf);
     if (authEnabled) {
       secretManager = new ShuffleSecretManager();
       rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
@@ -106,7 +107,6 @@ public class YarnShuffleService extends AuxiliaryService {
 
     int port = conf.getInt(
       SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-    TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
     shuffleServer = transportContext.createServer(port);
     String authEnabledString = authEnabled ? "enabled" : "not enabled";

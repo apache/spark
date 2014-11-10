@@ -22,14 +22,12 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.util.TransportConf
-
 import scala.collection.JavaConversions._
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FileShuffleBlockManager.ShuffleFileGroup
 import org.apache.spark.storage._
@@ -188,13 +186,13 @@ class FileShuffleBlockManager(conf: SparkConf)
         if (segmentOpt.isDefined) {
           val segment = segmentOpt.get
           return new FileSegmentManagedBuffer(
-            segment.file, segment.offset, segment.length, transportConf)
+            transportConf, segment.file, segment.offset, segment.length)
         }
       }
       throw new IllegalStateException("Failed to find shuffle block: " + blockId)
     } else {
       val file = blockManager.diskBlockManager.getFile(blockId)
-      new FileSegmentManagedBuffer(file, 0, file.length, transportConf)
+      new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
     }
   }
 

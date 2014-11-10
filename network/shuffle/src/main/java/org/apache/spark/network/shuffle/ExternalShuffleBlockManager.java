@@ -30,7 +30,6 @@ import java.util.concurrent.Executors;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,20 +61,15 @@ public class ExternalShuffleBlockManager {
 
   public ExternalShuffleBlockManager(TransportConf conf) {
     // TODO: Give this thread a name.
-    this(Executors.newSingleThreadExecutor(), conf);
+    this(conf, Executors.newSingleThreadExecutor());
   }
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockManager(Executor directoryCleaner, TransportConf conf) {
+  ExternalShuffleBlockManager(TransportConf conf, Executor directoryCleaner) {
+    this.conf = conf;
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
-    this.conf = conf;
-  }
-
-  @VisibleForTesting
-  ExternalShuffleBlockManager(Executor directoryCleaner) {
-    this(directoryCleaner, new TransportConf(new SystemPropertyConfigProvider()));
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -177,7 +171,7 @@ public class ExternalShuffleBlockManager {
   // TODO: Support consolidated hash shuffle files
   private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
     File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
-    return new FileSegmentManagedBuffer(shuffleFile, 0, shuffleFile.length(), conf);
+    return new FileSegmentManagedBuffer(conf, shuffleFile, 0, shuffleFile.length());
   }
 
   /**
@@ -197,11 +191,11 @@ public class ExternalShuffleBlockManager {
       long offset = in.readLong();
       long nextOffset = in.readLong();
       return new FileSegmentManagedBuffer(
+        conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         offset,
-        nextOffset - offset,
-        conf);
+        nextOffset - offset);
     } catch (IOException e) {
       throw new RuntimeException("Failed to open file: " + indexFile, e);
     } finally {

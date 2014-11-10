@@ -112,10 +112,10 @@ class IndexShuffleBlockManager extends ShuffleBlockManager {
       val offset = in.readLong()
       val nextOffset = in.readLong()
       new FileSegmentManagedBuffer(
+        transportConf,
         getDataFile(blockId.shuffleId, blockId.mapId),
         offset,
-        nextOffset - offset,
-        transportConf)
+        nextOffset - offset)
     } finally {
       in.close()
     }

@@ -31,27 +31,22 @@ import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 /**
  * A {@link ManagedBuffer} backed by a segment in a file.
  */
 public final class FileSegmentManagedBuffer extends ManagedBuffer {
+  private final TransportConf conf;
   private final File file;
   private final long offset;
   private final long length;
-  private final TransportConf conf;
 
-  public FileSegmentManagedBuffer(File file, long offset, long length, TransportConf conf) {
+  public FileSegmentManagedBuffer(TransportConf conf, File file, long offset, long length) {
+    this.conf = conf;
     this.file = file;
     this.offset = offset;
     this.length = length;
-    this.conf = conf;
-  }
-
-  public FileSegmentManagedBuffer(File file, long offset, long length) {
-    this(file, offset, length, new TransportConf(new SystemPropertyConfigProvider()));
   }
 
   @Override
