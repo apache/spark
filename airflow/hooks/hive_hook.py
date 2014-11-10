@@ -45,7 +45,7 @@ class HiveHook(BaseHook):
 
     def __setstate__(self, d):
         self.__dict__.update(d)
-        d['hive'] = self.get_hive_client()
+        self.__dict__['hive'] = self.get_hive_client()
 
     def get_hive_client(self):
         transport = TSocket.TSocket(self.host, self.port)
@@ -61,7 +61,7 @@ class HiveHook(BaseHook):
             self.hive._oprot.trans.open()
             partitions = self.hive.get_partitions_by_filter(
                 schema, table, partition, 1)
-            self.transport.close()
+            self.hive._oprot.trans.close()
             if partitions:
                 return True
             else:

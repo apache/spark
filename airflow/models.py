@@ -864,10 +864,11 @@ class BaseOperator(Base):
     def __repr__(self):
         return "<Task({self.task_type}): {self.task_id}>".format(self=self)
 
-    @staticmethod
-    def append_only_new(l, item):
+    def append_only_new(self, l, item):
         if item in l:
-            raise Exception('Dependency already registered')
+            raise Exception(
+                'Dependency {self}, {item} already registered'
+                ''.format(**locals()))
         else:
             l.append(item)
 
@@ -921,7 +922,7 @@ class DAG(Base):
     full_filepath = Column(String(2000))
 
     tasks = relationship(
-        "BaseOperator", cascade="merge, delete, delete-orphan", backref='dag')
+        "BaseOperator", cascade="all, delete-orphan", backref='dag')
 
     def __init__(
             self, dag_id,
@@ -1061,6 +1062,7 @@ class DAG(Base):
         for task in self.tasks:
             if task.task_id == task_id:
                 return task
+        raise Exception("Task {task_id} not found".format(**locals()))
 
     def tree_view(self):
         """
@@ -1084,6 +1086,10 @@ class DAG(Base):
             task.dag_id = self.dag_id
             task.dag = self
         self.task_count = len(self.tasks)
+
+    def add_tasks(self, tasks):
+        for task in tasks:
+            self.add_task(task)
 
     def db_merge(self):
         session = settings.Session()
