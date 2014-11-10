@@ -70,16 +70,29 @@ case class GeneratedAggregate(
 
     val computeFunctions = aggregatesToCompute.map {
       case c @ Count(expr) =>
+        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
+        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
+        val toCount = expr match {
+          case UnscaledValue(e) => e
+          case _ => expr
+        }
         val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
         val initialValue = Literal(0L)
-        val updateFunction = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
+        val updateFunction = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
         val result = currentCount
 
         AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
       case Sum(expr) =>
-        val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
-        val initialValue = Cast(Literal(0L), expr.dataType)
+        val resultType = expr.dataType match {
+          case DecimalType.Fixed(precision, scale) =>
+            DecimalType(precision + 10, scale)
+          case _ =>
+            expr.dataType
+        }
+
+        val currentSum = AttributeReference("currentSum", resultType, nullable = false)()
+        val initialValue = Cast(Literal(0L), resultType)
 
         // Coalasce avoids double calculation...
         // but really, common sub expression elimination would be better....
@@ -93,10 +106,26 @@ case class GeneratedAggregate(
         val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
         val initialCount = Literal(0L)
         val initialSum = Cast(Literal(0L), expr.dataType)
-        val updateCount = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
+
+        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
+        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
+        val toCount = expr match {
+          case UnscaledValue(e) => e
+          case _ => expr
+        }
+
+        val updateCount = If(IsNotNull(toCount), Add(currentCount, Literal(1L)), currentCount)
         val updateSum = Coalesce(Add(expr, currentSum) :: currentSum :: Nil)
 
-        val result = Divide(Cast(currentSum, DoubleType), Cast(currentCount, DoubleType))
+        val resultType = expr.dataType match {
+          case DecimalType.Fixed(precision, scale) =>
+            DecimalType(precision + 4, scale + 4)
+          case DecimalType.Unlimited =>
+            DecimalType.Unlimited
+          case _ =>
+            DoubleType
+        }
+        val result = Divide(Cast(currentSum, resultType), Cast(currentCount, resultType))
 
         AggregateEvaluation(
           currentCount :: currentSum :: Nil,
@@ -142,7 +171,7 @@ case class GeneratedAggregate(
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap: Map[TreeNodeRef, Expression] = 
+    val resultMap: Map[TreeNodeRef, Expression] =
       aggregatesToCompute.zip(computeFunctions).map {
         case (agg, func) => new TreeNodeRef(agg) -> func.result
       }.toMap

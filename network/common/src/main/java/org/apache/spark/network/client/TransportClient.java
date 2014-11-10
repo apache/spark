@@ -18,10 +18,15 @@
 package org.apache.spark.network.client;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -113,8 +118,12 @@ public class TransportClient implements Closeable {
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
             handler.removeFetchRequest(streamChunkId);
-            callback.onFailure(chunkIndex, new RuntimeException(errorMsg, future.cause()));
             channel.close();
+            try {
+              callback.onFailure(chunkIndex, new IOException(errorMsg, future.cause()));
+            } catch (Exception e) {
+              logger.error("Uncaught exception in RPC response callback handler!", e);
+            }
           }
         }
       });
@@ -129,7 +138,7 @@ public class TransportClient implements Closeable {
     final long startTime = System.currentTimeMillis();
     logger.trace("Sending RPC to {}", serverAddr);
 
-    final long requestId = UUID.randomUUID().getLeastSignificantBits();
+    final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
     handler.addRpcRequest(requestId, callback);
 
     channel.writeAndFlush(new RpcRequest(requestId, message)).addListener(
@@ -144,16 +153,56 @@ public class TransportClient implements Closeable {
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
             handler.removeRpcRequest(requestId);
-            callback.onFailure(new RuntimeException(errorMsg, future.cause()));
             channel.close();
+            try {
+              callback.onFailure(new IOException(errorMsg, future.cause()));
+            } catch (Exception e) {
+              logger.error("Uncaught exception in RPC response callback handler!", e);
+            }
           }
         }
       });
+  }
+
+  /**
+   * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
+   * a specified timeout for a response.
+   */
+  public byte[] sendRpcSync(byte[] message, long timeoutMs) {
+    final SettableFuture<byte[]> result = SettableFuture.create();
+
+    sendRpc(message, new RpcResponseCallback() {
+      @Override
+      public void onSuccess(byte[] response) {
+        result.set(response);
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+        result.setException(e);
+      }
+    });
+
+    try {
+      return result.get(timeoutMs, TimeUnit.MILLISECONDS);
+    } catch (ExecutionException e) {
+      throw Throwables.propagate(e.getCause());
+    } catch (Exception e) {
+      throw Throwables.propagate(e);
+    }
   }
 
   @Override
   public void close() {
     // close is a local operation and should finish with milliseconds; timeout just to be safe
     channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
+  }
+
+  @Override
+  public String toString() {
+    return Objects.toStringHelper(this)
+      .add("remoteAdress", channel.remoteAddress())
+      .add("isActive", isActive())
+      .toString();
   }
 }

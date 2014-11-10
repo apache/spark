@@ -27,11 +27,13 @@ public class TransportConf {
     this.conf = conf;
   }
 
-  /** Port the server listens on. Default to a random port. */
-  public int serverPort() { return conf.getInt("spark.shuffle.io.port", 0); }
-
   /** IO mode: nio or epoll */
   public String ioMode() { return conf.get("spark.shuffle.io.mode", "NIO").toUpperCase(); }
+
+  /** If true, we will prefer allocating off-heap byte buffers within Netty. */
+  public boolean preferDirectBufs() {
+    return conf.getBoolean("spark.shuffle.io.preferDirectBufs", true);
+  }
 
   /** Connect timeout in secs. Default 120 secs. */
   public int connectionTimeoutMs() {
@@ -58,4 +60,19 @@ public class TransportConf {
 
   /** Send buffer size (SO_SNDBUF). */
   public int sendBuf() { return conf.getInt("spark.shuffle.io.sendBuffer", -1); }
+
+  /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
+  public int saslRTTimeout() { return conf.getInt("spark.shuffle.sasl.timeout", 30000); }
+
+  /**
+   * Max number of times we will try IO exceptions (such as connection timeouts) per request.
+   * If set to 0, we will not do any retries.
+   */
+  public int maxIORetries() { return conf.getInt("spark.shuffle.io.maxRetries", 3); }
+
+  /**
+   * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
+   * Only relevant if maxIORetries > 0.
+   */
+  public int ioRetryWaitTime() { return conf.getInt("spark.shuffle.io.retryWaitMs", 5000); }
 }
