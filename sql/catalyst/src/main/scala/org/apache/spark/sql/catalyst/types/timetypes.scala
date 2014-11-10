@@ -68,6 +68,19 @@ class RichTimestamp(milliseconds: Long) extends Timestamp(milliseconds) {
   def <= (that: Timestamp): Boolean = (this.before(that) || this.equals(that))
   def >= (that: Timestamp): Boolean = (this.after(that) || this.equals(that))
   def === (that: Timestamp): Boolean = this.equals(that)
+  // Follow Hive conventions when converting to a String.
+  // Copied from the Cast class.
+  override def toString(): String = { 
+    val jts = new Timestamp(this.getTime)
+    val timestampString = jts.toString
+    val formatted = Cast.threadLocalTimestampFormat.get.format(jts)
+    
+    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
+      formatted + timestampString.substring(19)
+    } else {
+      formatted
+    }
+  }
 }
 
 object RichTimestamp {
