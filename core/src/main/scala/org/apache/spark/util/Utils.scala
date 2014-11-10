@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
+import java.nio.channels.FileLock
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
 import java.util.{Locale, Properties, Random, UUID}
@@ -372,18 +373,25 @@ private[spark] object Utils extends Logging {
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
-      val raf = new RandomAccessFile(lockFile, "rw")
-      // Only one executor entry.
-      // The FileLock is only used to control synchronization for executors download file,
-      // it's always safe regardless of lock type (mandatory or advisory).
-      val lock = raf.getChannel().lock()
-      val cachedFile = new File(localDir, cachedFileName)
+      var raf: RandomAccessFile = null
+      var lock: FileLock = null
+      val  cachedFile = new File(localDir, cachedFileName)
       try {
+        raf = new RandomAccessFile(lockFile, "rw")
+        // Only one executor entry.
+        // The FileLock is only used to control synchronization for executors download file,
+        // it's always safe regardless of lock type (mandatory or advisory).
+        lock = raf.getChannel().lock()
+
         if (!cachedFile.exists()) {
           doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
         }
       } finally {
-        lock.release()
+        if (lock != null && lock.isValid) {
+          lock.release()
+        } else if (raf != null) {
+          raf.close()
+        }
       }
       if (targetFile.exists && !Files.equal(cachedFile, targetFile)) {
         if (conf.getBoolean("spark.files.overwrite", false)) {
