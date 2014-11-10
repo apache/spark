@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.classification;
-
-import java.io.Serializable;
+package org.apache.spark.ml;
 
 import org.junit.After;
 import org.junit.Before;
@@ -25,23 +23,19 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.Pipeline;
-import org.apache.spark.ml.PipelineModel;
-import org.apache.spark.ml.PipelineStage;
-import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
-import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.ml.tuning.CrossValidator;
-import org.apache.spark.ml.tuning.CrossValidatorModel;
-import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.sql.api.java.JavaSQLContext;
 import org.apache.spark.sql.api.java.JavaSchemaRDD;
 import org.apache.spark.sql.api.java.Row;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite
   .generateLogisticInputAsList;
 
-public class JavaLogisticRegressionSuite implements Serializable {
+/**
+ * Test Pipeline construction and fitting in Java.
+ */
+public class JavaPipelineSuite {
 
   private transient JavaSparkContext jsc;
   private transient JavaSQLContext jsql;
@@ -49,7 +43,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
+    jsc = new JavaSparkContext("local", "JavaPipelineSuite");
     jsql = new JavaSQLContext(jsc);
     JavaRDD<LabeledPoint> points =
       jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
@@ -63,29 +57,17 @@ public class JavaLogisticRegressionSuite implements Serializable {
   }
 
   @Test
-  public void logisticRegression() {
-    LogisticRegression lr = new LogisticRegression();
-    LogisticRegressionModel model = lr.fit(dataset);
+  public void pipeline() {
+    StandardScaler scaler = new StandardScaler()
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures");
+    LogisticRegression lr = new LogisticRegression()
+      .setFeaturesCol("scaledFeatures");
+    Pipeline pipeline = new Pipeline()
+      .setStages(new PipelineStage[] {scaler, lr});
+    PipelineModel model = pipeline.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collect();
-  }
-
-  @Test
-  public void logisticRegressionWithSetters() {
-    LogisticRegression lr = new LogisticRegression()
-      .setMaxIter(10)
-      .setRegParam(1.0);
-    LogisticRegressionModel model = lr.fit(dataset);
-    model.transform(dataset, model.threshold().w(0.8)) // overwrite threshold
-      .registerTempTable("prediction");
-    JavaSchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
-    predictions.collect();
-  }
-
-  @Test
-  public void logisticRegressionFitWithVarargs() {
-    LogisticRegression lr = new LogisticRegression();
-    lr.fit(dataset, lr.maxIter().w(10), lr.regParam().w(1.0));
   }
 }

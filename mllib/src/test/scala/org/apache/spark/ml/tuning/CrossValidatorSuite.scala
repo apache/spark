@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 class CrossValidatorSuite extends FunSuite {
 
-  val dataset: SchemaRDD = sparkContext.makeRDD(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
+  val dataset: SchemaRDD = sparkContext.makeRDD(generateLogisticInput(1.0, 1.0, 100, 42), 2)
 
   test("cross validation with logistic regression") {
     val lr = new LogisticRegression
