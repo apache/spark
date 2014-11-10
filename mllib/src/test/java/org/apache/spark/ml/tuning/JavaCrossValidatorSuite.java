@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.tuning;
 
+import java.io.Serializable;
+import java.util.List;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
@@ -33,7 +35,7 @@ import org.apache.spark.sql.api.java.JavaSchemaRDD;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite
   .generateLogisticInputAsList;
 
-public class JavaCrossValidatorSuite {
+public class JavaCrossValidatorSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient JavaSQLContext jsql;
@@ -43,9 +45,8 @@ public class JavaCrossValidatorSuite {
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
     jsql = new JavaSQLContext(jsc);
-    JavaRDD<LabeledPoint> points =
-      jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
-    dataset = jsql.applySchema(points, LabeledPoint.class);
+    List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
+    dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);
   }
 
   @After

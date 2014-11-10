@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -25,9 +25,14 @@ import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLog
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.test.TestSQLContext._
 
-class CrossValidatorSuite extends FunSuite {
+class CrossValidatorSuite extends FunSuite with BeforeAndAfterAll with Serializable {
 
-  val dataset: SchemaRDD = sparkContext.makeRDD(generateLogisticInput(1.0, 1.0, 100, 42), 2)
+  var dataset: SchemaRDD = _
+
+  override def beforeAll(): Unit = {
+    val points = generateLogisticInput(1.0, 1.0, 100, 42)
+    dataset = sparkContext.parallelize(points, 2)
+  }
 
   test("cross validation with logistic regression") {
     val lr = new LogisticRegression

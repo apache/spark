@@ -23,9 +23,15 @@ import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.sql.test.TestSQLContext._
 
-class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
+class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with Serializable {
 
-  var dataset: SchemaRDD = sparkContext.parallelize(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
+  var dataset: SchemaRDD = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val points = generateLogisticInput(1.0, 1.0, 100, 42)
+    dataset = sparkContext.parallelize(points, 2)
+  }
 
   test("logistic regression") {
     val lr = new LogisticRegression

@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
@@ -25,19 +26,9 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.Pipeline;
-import org.apache.spark.ml.PipelineModel;
-import org.apache.spark.ml.PipelineStage;
-import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
-import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.ml.tuning.CrossValidator;
-import org.apache.spark.ml.tuning.CrossValidatorModel;
-import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.api.java.JavaSQLContext;
 import org.apache.spark.sql.api.java.JavaSchemaRDD;
-import org.apache.spark.sql.api.java.Row;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite
   .generateLogisticInputAsList;
 
@@ -51,9 +42,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void setUp() {
     jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
     jsql = new JavaSQLContext(jsc);
-    JavaRDD<LabeledPoint> points =
-      jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
-    dataset = jsql.applySchema(points, LabeledPoint.class);
+    List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
+    dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);
   }
 
   @After
