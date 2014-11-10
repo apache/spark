@@ -15,15 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package org.apache.spark.mapred
 
-private[apache]
+import java.lang.reflect.Modifier
+
+import org.apache.hadoop.mapred.{TaskAttemptID, JobID, JobConf, JobContext, TaskAttemptContext}
+
+private[spark]
 trait SparkHadoopMapRedUtil {
   def newJobContext(conf: JobConf, jobId: JobID): JobContext = {
     val klass = firstAvailableClass("org.apache.hadoop.mapred.JobContextImpl",
       "org.apache.hadoop.mapred.JobContext")
     val ctor = klass.getDeclaredConstructor(classOf[JobConf],
       classOf[org.apache.hadoop.mapreduce.JobID])
+    // In Hadoop 1.0.x, JobContext is an interface, and JobContextImpl is package private.
+    // Make it accessible if it's not in order to access it.
+    if (!Modifier.isPublic(ctor.getModifiers)) {
+      ctor.setAccessible(true)
+    }
     ctor.newInstance(conf, jobId).asInstanceOf[JobContext]
   }
 
@@ -31,6 +40,10 @@ trait SparkHadoopMapRedUtil {
     val klass = firstAvailableClass("org.apache.hadoop.mapred.TaskAttemptContextImpl",
       "org.apache.hadoop.mapred.TaskAttemptContext")
     val ctor = klass.getDeclaredConstructor(classOf[JobConf], classOf[TaskAttemptID])
+    // See above
+    if (!Modifier.isPublic(ctor.getModifiers)) {
+      ctor.setAccessible(true)
+    }
     ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
   }
 
