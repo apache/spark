@@ -58,8 +58,8 @@ public final class JavaStatusAPIDemo {
         continue;
       }
       int currentJobId = jobIds.get(jobIds.size() - 1);
-      SparkJobInfo jobInfo = sc.getJobInfo(currentJobId);
-      SparkStageInfo stageInfo = sc.getStageInfo(jobInfo.stageIds()[0]);
+      SparkJobInfo jobInfo = sc.statusAPI().getJobInfo(currentJobId);
+      SparkStageInfo stageInfo = sc.statusAPI().getStageInfo(jobInfo.stageIds()[0]);
       System.out.println(stageInfo.numTasks() + " tasks total: " + stageInfo.numActiveTasks() +
           " active, " + stageInfo.numCompletedTasks() + " complete");
     }

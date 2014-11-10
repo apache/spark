@@ -37,20 +37,20 @@ class StatusAPISuite extends FunSuite with Matchers with SharedSparkContext {
       jobIds.head
     }
     val jobInfo = eventually(timeout(10 seconds)) {
-      sc.getJobInfo(jobId).get
+      sc.statusAPI.getJobInfo(jobId).get
     }
     jobInfo.status() should not be FAILED
     val stageIds = jobInfo.stageIds()
     stageIds.size should be(2)
 
     val firstStageInfo = eventually(timeout(10 seconds)) {
-      sc.getStageInfo(stageIds(0)).get
+      sc.statusAPI.getStageInfo(stageIds(0)).get
     }
     firstStageInfo.stageId() should be(stageIds(0))
     firstStageInfo.currentAttemptId() should be(0)
     firstStageInfo.numTasks() should be(2)
     eventually(timeout(10 seconds)) {
-      val updatedFirstStageInfo = sc.getStageInfo(stageIds(0)).get
+      val updatedFirstStageInfo = sc.statusAPI.getStageInfo(stageIds(0)).get
       updatedFirstStageInfo.numCompletedTasks() should be(2)
       updatedFirstStageInfo.numActiveTasks() should be(0)
       updatedFirstStageInfo.numFailedTasks() should be(0)
@@ -59,20 +59,20 @@ class StatusAPISuite extends FunSuite with Matchers with SharedSparkContext {
 
   test("getJobIdsForGroup()") {
     sc.setJobGroup("my-job-group", "description")
-    sc.getJobIdsForGroup("my-job-group") should be (Seq.empty)
+    sc.statusAPI.getJobIdsForGroup("my-job-group") should be (Seq.empty)
     val firstJobFuture = sc.parallelize(1 to 1000).countAsync()
     val firstJobId = eventually(timeout(10 seconds)) {
       firstJobFuture.jobIds.head
     }
     eventually(timeout(10 seconds)) {
-      sc.getJobIdsForGroup("my-job-group") should be (Seq(firstJobId))
+      sc.statusAPI.getJobIdsForGroup("my-job-group") should be (Seq(firstJobId))
     }
     val secondJobFuture = sc.parallelize(1 to 1000).countAsync()
     val secondJobId = eventually(timeout(10 seconds)) {
       secondJobFuture.jobIds.head
     }
     eventually(timeout(10 seconds)) {
-      sc.getJobIdsForGroup("my-job-group").toSet should be (Set(firstJobId, secondJobId))
+      sc.statusAPI.getJobIdsForGroup("my-job-group").toSet should be (Set(firstJobId, secondJobId))
     }
   }
 }
