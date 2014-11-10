@@ -43,6 +43,7 @@ import parquet.hadoop.util.ContextUtil
 import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
+import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.SQLConf
