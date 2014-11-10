@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import java.net.URLDecoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.util.Try
@@ -29,7 +30,18 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
   private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId = Option(request.getParameter("executorId")).getOrElse {
+    val executorId = Option(request.getParameter("executorId")).map {
+      executorId =>
+        // "<driver>" will be encoded to "%25253Cdriver%25253E" as a bug in Yarn when running in
+        // yarn-cluster mode. Therefore we need to decode it until we get the real id
+        var id = executorId
+        var decodedId = URLDecoder.decode(id, "UTF-8")
+        while (id != decodedId) {
+          id = decodedId
+          decodedId = URLDecoder.decode(id, "UTF-8")
+        }
+        id
+    }.getOrElse {
       return Text(s"Missing executorId parameter")
     }
     val time = System.currentTimeMillis()
