@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import com.google.common.cache.{CacheLoader, CacheBuilder}
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.language.existentials
 
@@ -485,6 +486,34 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           }
         """.children
 
+      case UnscaledValue(child) =>
+        val childEval = expressionEvaluator(child)
+
+        childEval.code ++
+        q"""
+         var $nullTerm = ${childEval.nullTerm}
+         var $primitiveTerm: Long = if (!$nullTerm) {
+           ${childEval.primitiveTerm}.toUnscaledLong
+         } else {
+           ${defaultPrimitive(LongType)}
+         }
+         """.children
+
+      case MakeDecimal(child, precision, scale) =>
+        val childEval = expressionEvaluator(child)
+
+        childEval.code ++
+        q"""
+         var $nullTerm = ${childEval.nullTerm}
+         var $primitiveTerm: org.apache.spark.sql.catalyst.types.decimal.Decimal =
+           ${defaultPrimitive(DecimalType())}
+
+         if (!$nullTerm) {
+           $primitiveTerm = new org.apache.spark.sql.catalyst.types.decimal.Decimal()
+           $primitiveTerm = $primitiveTerm.setOrNull(${childEval.primitiveTerm}, $precision, $scale)
+           $nullTerm = $primitiveTerm == null
+         }
+         """.children
     }
 
     // If there was no match in the partial function above, we fall back on calling the interpreted
@@ -562,7 +591,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case LongType => ru.Literal(Constant(1L))
     case ByteType => ru.Literal(Constant(-1.toByte))
     case DoubleType => ru.Literal(Constant(-1.toDouble))
-    case DecimalType => ru.Literal(Constant(-1)) // Will get implicity converted as needed.
+    case DecimalType() => q"org.apache.spark.sql.catalyst.types.decimal.Decimal(-1)"
     case IntegerType => ru.Literal(Constant(-1))
     case _ => ru.Literal(Constant(null))
   }

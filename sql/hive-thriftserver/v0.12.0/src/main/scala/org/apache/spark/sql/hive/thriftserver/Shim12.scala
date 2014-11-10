@@ -123,7 +123,7 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.doubleValue(from.getDouble(ordinal)))
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(from.getFloat(ordinal)))
-      case DecimalType =>
+      case DecimalType() =>
         val hiveDecimal = from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
         to.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
       case LongType =>
@@ -156,7 +156,7 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.doubleValue(null))
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(null))
-      case DecimalType =>
+      case DecimalType() =>
         to.addColumnValue(ColumnValue.stringValue(null: HiveDecimal))
       case LongType =>
         to.addColumnValue(ColumnValue.longValue(null))
@@ -202,13 +202,12 @@ private[hive] class SparkExecuteStatementOperation(
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
-        val resultRdd = result.queryExecution.toRdd
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          resultRdd.toLocalIterator
+          result.toLocalIterator
         } else {
-          resultRdd.collect().iterator
+          result.collect().iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray

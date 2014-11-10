@@ -87,13 +87,12 @@ private[hive] class SparkExecuteStatementOperation(
       val groupId = round(random * 1000000).toString
       hiveContext.sparkContext.setJobGroup(groupId, statement)
       iter = {
-        val resultRdd = result.queryExecution.toRdd
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          resultRdd.toLocalIterator
+          result.toLocalIterator
         } else {
-          resultRdd.collect().iterator
+          result.collect().iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
@@ -123,7 +122,7 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getDouble(ordinal)
       case FloatType =>
         to += from.getFloat(ordinal)
-      case DecimalType =>
+      case DecimalType() =>
         to += from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
       case LongType =>
         to += from.getLong(ordinal)

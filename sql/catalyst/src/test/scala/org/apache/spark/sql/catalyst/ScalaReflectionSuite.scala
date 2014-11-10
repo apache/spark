@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.types._
 
 case class PrimitiveData(
@@ -96,7 +97,7 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
-        StructField("decimalField", DecimalType, nullable = true),
+        StructField("decimalField", DecimalType.Unlimited, nullable = true),
         StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
@@ -199,7 +200,7 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DoubleType === typeOfObject(1.7976931348623157E308))
 
     // DecimalType
-    assert(DecimalType === typeOfObject(BigDecimal("1.7976931348623157E318")))
+    assert(DecimalType.Unlimited === typeOfObject(BigDecimal("1.7976931348623157E318")))
 
     // DateType
     assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
@@ -211,19 +212,19 @@ class ScalaReflectionSuite extends FunSuite {
     assert(NullType === typeOfObject(null))
 
     def typeOfObject1: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType
-      case value: java.math.BigDecimal => DecimalType
+      case value: java.math.BigInteger => DecimalType.Unlimited
+      case value: java.math.BigDecimal => DecimalType.Unlimited
       case _ => StringType
     }
 
-    assert(DecimalType === typeOfObject1(
+    assert(DecimalType.Unlimited === typeOfObject1(
       new BigInteger("92233720368547758070")))
-    assert(DecimalType === typeOfObject1(
+    assert(DecimalType.Unlimited === typeOfObject1(
       new java.math.BigDecimal("1.7976931348623157E318")))
     assert(StringType === typeOfObject1(BigInt("92233720368547758070")))
 
     def typeOfObject2: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType
+      case value: java.math.BigInteger => DecimalType.Unlimited
     }
 
     intercept[MatchError](typeOfObject2(BigInt("92233720368547758070")))
@@ -239,13 +240,17 @@ class ScalaReflectionSuite extends FunSuite {
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
-    assert(convertToCatalyst(data) === convertedData)
+    val dataType = schemaFor[PrimitiveData].dataType
+    assert(convertToCatalyst(data, dataType) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val data = OptionalData(Some(1), Some(1), Some(1), Some(1), Some(1), Some(1), Some(true), Some(primitiveData))
-    val convertedData = Seq(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true, convertToCatalyst(primitiveData))
-    assert(convertToCatalyst(data) === convertedData)
+    val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
+      Some(primitiveData))
+    val dataType = schemaFor[OptionalData].dataType
+    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      Row(1, 1, 1, 1, 1, 1, true))
+    assert(convertToCatalyst(data, dataType) === convertedData)
   }
 }

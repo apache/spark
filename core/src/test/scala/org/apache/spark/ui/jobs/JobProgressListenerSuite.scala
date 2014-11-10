@@ -115,11 +115,11 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     // Go through all the failure cases to make sure we are counting them as failures.
     val taskFailedReasons = Seq(
       Resubmitted,
-      new FetchFailed(null, 0, 0, 0),
-      new ExceptionFailure("Exception", "description", null, None),
+      new FetchFailed(null, 0, 0, 0, "ignored"),
+      ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
       TaskKilled,
-      ExecutorLostFailure,
+      ExecutorLostFailure("0"),
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {

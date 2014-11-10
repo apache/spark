@@ -21,9 +21,8 @@ import scala.language.implicitConversions
 
 import java.io._
 import java.net.URI
-import java.util.Arrays
+import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
@@ -41,7 +40,8 @@ import akka.actor.Props
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.input.WholeTextFileInputFormat
+import org.apache.spark.executor.TriggerThreadDump
+import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat, FixedLengthBinaryInputFormat}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -51,7 +51,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
-import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
+import org.apache.spark.util._
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -313,6 +313,8 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   val applicationId: String = taskScheduler.applicationId()
   conf.set("spark.app.id", applicationId)
 
+  env.blockManager.initialize(applicationId)
+
   val metricsSystem = env.metricsSystem
 
   // The metrics system for Driver need to be set spark.app.id to app ID.
@@ -359,6 +361,29 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = new Properties(parent)
+  }
+
+  /**
+   * Called by the web UI to obtain executor thread dumps.  This method may be expensive.
+   * Logs an error and returns None if we failed to obtain a thread dump, which could occur due
+   * to an executor being dead or unresponsive or due to network issues while sending the thread
+   * dump message back to the driver.
+   */
+  private[spark] def getExecutorThreadDump(executorId: String): Option[Array[ThreadStackTrace]] = {
+    try {
+      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+        Some(Utils.getThreadDump())
+      } else {
+        val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
+        val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
+        Some(AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump, actorRef,
+          AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf)))
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Exception getting thread dump from executor $executorId", e)
+        None
+    }
   }
 
   private[spark] def getLocalProperties: Properties = localProperties.get()
@@ -531,6 +556,73 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
       classOf[String],
       updateConf,
       minPartitions).setName(path)
+  }
+
+
+  /**
+   * :: Experimental ::
+   *
+   * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
+   * (useful for binary data)
+   *
+   * For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do
+   * `val rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   *
+   * then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   *
+   * @note Small files are preferred; very large files may cause bad performance.
+   */
+  @Experimental
+  def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
+      RDD[(String, PortableDataStream)] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new BinaryFileRDD(
+      this,
+      classOf[StreamInputFormat],
+      classOf[String],
+      classOf[PortableDataStream],
+      updateConf,
+      minPartitions).setName(path)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Load data from a flat binary file, assuming the length of each record is constant.
+   *
+   * @param path Directory to the input data files
+   * @param recordLength The length at which to split the records
+   * @return An RDD of data with values, represented as byte arrays
+   */
+  @Experimental
+  def binaryRecords(path: String, recordLength: Int, conf: Configuration = hadoopConfiguration)
+      : RDD[Array[Byte]] = {
+    conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
+    val br = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path,
+      classOf[FixedLengthBinaryInputFormat],
+      classOf[LongWritable],
+      classOf[BytesWritable],
+      conf=conf)
+    val data = br.map{ case (k, v) => v.getBytes}
+    data
   }
 
   /**
