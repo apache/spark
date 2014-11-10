@@ -26,6 +26,7 @@ import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Params for logistic regression.
@@ -40,6 +41,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
 
   setRegParam(0.1)
   setMaxIter(100)
+  setThreshold(0.5)
 
   def setRegParam(value: Double): this.type = { set(regParam, value); this }
   def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
@@ -55,7 +57,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
     val instances = dataset.select(map(labelCol).attr, map(featuresCol).attr)
       .map { case Row(label: Double, features: Vector) =>
         LabeledPoint(label, features)
-      }.cache()
+      }.persist(StorageLevel.MEMORY_AND_DISK)
     val lr = new LogisticRegressionWithLBFGS
     lr.optimizer
       .setRegParam(map(regParam))
@@ -66,22 +68,15 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
     Params.copyValues(this, lrm)
     lrm
   }
-
-  /**
-   * Validates parameters specified by the input parameter map.
-   * Raises an exception if any parameter belongs to this object is invalid.
-   */
-  override def validate(paramMap: ParamMap): Unit = {
-    super.validate(paramMap)
-  }
 }
 
+/**
+ * Model produced by [[LogisticRegression]].
+ */
 class LogisticRegressionModel private[ml] (
     override val parent: LogisticRegression,
     override val fittingParamMap: ParamMap,
     val weights: Vector) extends Model with LogisticRegressionParams {
-
-  setThreshold(0.5)
 
   def setThreshold(value: Double): this.type = { set(threshold, value); this }
   def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }

@@ -20,7 +20,7 @@ package org.apache.spark.examples.ml
 import scala.beans.BeanInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.{Pipeline, SimpleTransformer}
+import org.apache.spark.ml.{Pipeline, UnaryTransformer}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
@@ -35,7 +35,7 @@ case class Document(id: Long, text: String)
 /**
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  */
-class SimpleTokenizer extends SimpleTransformer[String, Seq[String], SimpleTokenizer]
+class MyTokenizer extends UnaryTransformer[String, Seq[String], MyTokenizer]
     with Serializable {
   override def createTransformFunc(paramMap: ParamMap): String => Seq[String] =
     _.toLowerCase.split("\\s")
@@ -64,7 +64,7 @@ object SimpleTextClassificationPipeline {
       LabeledDocument(3L, "hadoop mapreduce", 0.0)))
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
-    val tokenizer = new SimpleTokenizer()
+    val tokenizer = new MyTokenizer()
       .setInputCol("text")
       .setOutputCol("words")
     val hashingTF = new HashingTF()

@@ -22,7 +22,11 @@ import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.storage.StorageLevel
 
+/**
+ * Evaluator for binary classification, which expects two input columns: score and label.
+ */
 class BinaryClassificationEvaluator extends Evaluator with Params
     with HasScoreCol with HasLabelCol with HasMetricName {
 
@@ -38,9 +42,9 @@ class BinaryClassificationEvaluator extends Evaluator with Params
     val scoreAndLabels = dataset.select(map(scoreCol).attr, map(labelCol).attr)
       .map { case Row(score: Double, label: Double) =>
         (score, label)
-      }.cache()
+      }.persist(StorageLevel.MEMORY_AND_DISK)
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    map(metricName) match {
+    val metric = map(metricName) match {
       case "areaUnderROC" =>
         metrics.areaUnderROC()
       case "areaUnderPR" =>
@@ -48,5 +52,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
       case other =>
         throw new IllegalArgumentException(s"Do not support metric $other.")
     }
+    scoreAndLabels.unpersist()
+    metric
   }
 }

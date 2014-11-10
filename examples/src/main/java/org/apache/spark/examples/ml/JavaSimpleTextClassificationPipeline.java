@@ -34,8 +34,9 @@ import org.apache.spark.SparkConf;
 
 /**
  * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java
- * bean classes [[LabeledDocument]] and [[Document]], and the tokenizer [[SimpleTokenizer]] defined
- * in the Scalar counterpart of this example [[SimpleTextClassificationPipeline]]. Run with
+ * bean classes {@link LabeledDocument} and {@link Document}, and the tokenizer {@link MyTokenizer}
+ * defined in the Scalar counterpart of this example {@link SimpleTextClassificationPipeline}.
+ * Run with
  * <pre>
  * bin/run-example ml.JavaSimpleTextClassificationPipeline
  * </pre>
@@ -57,7 +58,7 @@ public class JavaSimpleTextClassificationPipeline {
       jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
-    SimpleTokenizer tokenizer = new SimpleTokenizer()
+    MyTokenizer tokenizer = new MyTokenizer()
       .setInputCol("text")
       .setOutputCol("words");
     HashingTF hashingTF = new HashingTF()

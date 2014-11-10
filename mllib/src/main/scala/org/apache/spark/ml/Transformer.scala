@@ -68,7 +68,7 @@ abstract class Transformer extends PipelineStage with Params {
  * Abstract class for transformers that take one input column, apply transformation, and output the
  * result as a new column.
  */
-abstract class SimpleTransformer[IN, OUT: TypeTag, SELF <: SimpleTransformer[IN, OUT, SELF]]
+abstract class UnaryTransformer[IN, OUT: TypeTag, SELF <: UnaryTransformer[IN, OUT, SELF]]
     extends Transformer with HasInputCol with HasOutputCol {
 
   def setInputCol(value: String): SELF = { set(inputCol, value); this.asInstanceOf[SELF] }
