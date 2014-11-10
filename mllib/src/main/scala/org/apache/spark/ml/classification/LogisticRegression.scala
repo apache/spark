@@ -20,12 +20,13 @@ package org.apache.spark.ml.classification
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{BLAS, Vector}
+import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Cast, Row}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -54,7 +55,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val instances = dataset.select(map(labelCol).attr, map(featuresCol).attr)
+    val instances = dataset.select(Cast(map(labelCol).attr, DoubleType), map(featuresCol).attr)
       .map { case Row(label: Double, features: Vector) =>
         LabeledPoint(label, features)
       }.persist(StorageLevel.MEMORY_AND_DISK)
@@ -67,6 +68,33 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
     // copy model params
     Params.copyValues(this, lrm)
     lrm
+  }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    val featuresType = schema(map(featuresCol)).dataType
+    // TODO: Support casting Array[Double] and Array[Float] to Vector.
+    if (!featuresType.isInstanceOf[VectorUDT]) {
+      throw new IllegalArgumentException(
+        s"Features column ${map(featuresCol)} must be a vector column but got $featuresType.")
+    }
+    val validLabelTypes = Set[DataType](FloatType, DoubleType, IntegerType, BooleanType, LongType)
+    val labelType = schema(map(labelCol)).dataType
+    if (!validLabelTypes.contains(labelType)) {
+      throw new IllegalArgumentException(
+        s"Cannot convert label column ${map(labelCol)} of type $labelType to a double column.")
+    }
+    val fieldNames = schema.fieldNames
+    if (fieldNames.contains(map(scoreCol))) {
+      throw new IllegalArgumentException(s"Score column ${map(scoreCol)} already exists.")
+    }
+    if (fieldNames.contains(map(predictionCol))) {
+      throw new IllegalArgumentException(s"Prediction column ${map(predictionCol)} already exists.")
+    }
+    val outputFields = schema.fields ++ Seq(
+      StructField(map(scoreCol), DoubleType, false),
+      StructField(map(predictionCol), DoubleType, false))
+    StructType(outputFields)
   }
 }
 
@@ -82,6 +110,27 @@ class LogisticRegressionModel private[ml] (
   def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }
   def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
   def setPredictionCol(value: String): this.type = { set(predictionCol, value); this }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    val featuresType = schema(map(featuresCol)).dataType
+    // TODO: Support casting Array[Double] and Array[Float] to Vector.
+    if (!featuresType.isInstanceOf[VectorUDT]) {
+      throw new IllegalArgumentException(
+        s"Features column ${map(featuresCol)} must be a vector column but got $featuresType.")
+    }
+    val fieldNames = schema.fieldNames
+    if (fieldNames.contains(map(scoreCol))) {
+      throw new IllegalArgumentException(s"Score column ${map(scoreCol)} already exists.")
+    }
+    if (fieldNames.contains(map(predictionCol))) {
+      throw new IllegalArgumentException(s"Prediction column ${map(predictionCol)} already exists.")
+    }
+    val outputFields = schema.fields ++ Seq(
+      StructField(map(scoreCol), DoubleType, false),
+      StructField(map(predictionCol), DoubleType, false))
+    StructType(outputFields)
+  }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._

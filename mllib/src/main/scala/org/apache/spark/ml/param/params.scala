@@ -129,6 +129,12 @@ trait Params extends Identifiable with Serializable {
    */
   def explainParams(): String = params.mkString("\n")
 
+  /** Checks whether a param is explicitly set. */
+  def isSet(param: Param[_]): Boolean = {
+    require(param.parent.eq(this))
+    paramMap.contains(param)
+  }
+
   /** Gets a param by its name. */
   private[ml] def getParam(paramName: String): Param[Any] = {
     val m = this.getClass.getMethod(paramName)
@@ -141,9 +147,6 @@ trait Params extends Identifiable with Serializable {
    * Internal param map.
    */
   protected val paramMap: ParamMap = ParamMap.empty
-
-  /** Checks whether a param is explicitly set. */
-  protected def isSet(param: Param[_]): Boolean = paramMap.contains(param)
 
   /**
    * Sets a parameter in the own parameter map.

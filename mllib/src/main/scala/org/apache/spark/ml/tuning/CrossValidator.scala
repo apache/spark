@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.{StructType, SchemaRDD}
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
@@ -99,6 +99,11 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     Params.copyValues(this, cvModel)
     cvModel
   }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    map(estimator).transform(schema, paramMap)
+  }
 }
 
 /**
@@ -109,7 +114,12 @@ class CrossValidatorModel private[ml] (
     override val fittingParamMap: ParamMap,
     bestModel: Model,
     metric: Double) extends Model with CrossValidatorParams {
+
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     bestModel.transform(dataset, paramMap)
+  }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    bestModel.transform(schema, paramMap)
   }
 }

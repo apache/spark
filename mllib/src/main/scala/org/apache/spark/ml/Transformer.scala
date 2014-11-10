@@ -17,11 +17,14 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.types.{StructField, StructType}
+
 import scala.annotation.varargs
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.ml.param._
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.{DataType, SchemaRDD}
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
@@ -80,6 +83,24 @@ abstract class UnaryTransformer[IN, OUT: TypeTag, SELF <: UnaryTransformer[IN, O
    * param map.
    */
   protected def createTransformFunc(paramMap: ParamMap): IN => OUT
+
+  /**
+   * Validates the input type. Throw an exception if it is invalid.
+   */
+  protected def validateInputType(inputType: DataType): Unit = {}
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    val inputType = schema(map(inputCol)).dataType
+    validateInputType(inputType)
+    if (schema.fieldNames.contains(map(outputCol))) {
+      throw new IllegalArgumentException(s"Output column ${map(outputCol)} already exists.")
+    }
+    val output = ScalaReflection.schemaFor[OUT]
+    val outputFields = schema.fields :+
+      StructField(map(outputCol), output.dataType, output.nullable)
+    StructType(outputFields)
+  }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._

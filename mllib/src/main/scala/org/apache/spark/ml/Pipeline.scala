@@ -20,12 +20,18 @@ package org.apache.spark.ml
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.{StructType, SchemaRDD}
 
 /**
  * A stage in a pipeline, either an Estimator or an Transformer.
  */
-abstract class PipelineStage
+abstract class PipelineStage {
+
+  /**
+   * Derives the output schema from the input schema and parameters.
+   */
+  def transform(schema: StructType, paramMap: ParamMap): StructType
+}
 
 /**
  * A simple pipeline, which acts as an estimator.
@@ -70,6 +76,11 @@ class Pipeline extends Estimator[PipelineModel] {
 
     new PipelineModel(this, map, transformers.toArray)
   }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    map(stages).foldLeft(schema)((cur, stage) => stage.transform(cur, paramMap))
+  }
 }
 
 /**
@@ -99,8 +110,10 @@ class PipelineModel(
   }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transformers.foldLeft(dataset) { (dataset, transformer) =>
-      transformer.transform(dataset, paramMap)
-    }
+    transformers.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
+  }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    transformers.foldLeft(schema)((cur, transformer) => transformer.transform(cur, paramMap))
   }
 }

@@ -20,8 +20,9 @@ package org.apache.spark.ml.feature
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
+import org.apache.spark.sql.catalyst.types.StructField
+import org.apache.spark.sql.{StructType, SchemaRDD}
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Row
@@ -52,6 +53,17 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     Params.copyValues(this, model)
     model
   }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    val inputType = schema(map(inputCol)).dataType
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input column ${map(inputCol)} must be a vector column")
+    require(!schema.fieldNames.contains(map(outputCol)),
+      s"Output column ${map(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
+    StructType(outputFields)
+  }
 }
 
 /**
@@ -72,5 +84,16 @@ class StandardScalerModel private[ml] (
       scaler.transform(v)
     }
     dataset.select(Star(None), scale.call(map(inputCol).attr) as map(outputCol))
+  }
+
+  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+    val map = this.paramMap ++ paramMap
+    val inputType = schema(map(inputCol)).dataType
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input column ${map(inputCol)} must be a vector column")
+    require(!schema.fieldNames.contains(map(outputCol)),
+      s"Output column ${map(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField(map(outputCol), new VectorUDT, false)
+    StructType(outputFields)
   }
 }
