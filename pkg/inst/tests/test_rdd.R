@@ -203,3 +203,16 @@ test_that("minimum() on RDDs", {
   min <- minimum(rdd)
   expect_equal(min, 1)
 })
+
+test_that("keys() on RDDs", {
+  keys <- keys(intRdd)
+  actual <- collect(keys)
+  expect_equal(actual, lapply(intPairs, function(x) { x[[1]] }))
+})
+
+test_that("values() on RDDs", {
+  values <- values(intRdd)
+  actual <- collect(values)
+  expect_equal(actual, lapply(intPairs, function(x) { x[[2]] }))
+})
+
