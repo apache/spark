@@ -50,6 +50,30 @@
         </dependency>
       </dependencies>
     </profile>
+    <profile>
+      <id>hbase-hadoop2</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>hadoop2</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>hbase-hadoop1</id>
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <properties>
+        <hbase.version>0.98.7-hadoop1</hbase.version>
+      </properties>
+    </profile>
+
   </profiles>
 
   <dependencies>
@@ -121,36 +145,121 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase</artifactId>
-      <version>${hbase.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>asm</groupId>
-          <artifactId>asm</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.jboss.netty</groupId>
-          <artifactId>netty</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.jruby</groupId>
-          <artifactId>jruby-complete</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-testing-util</artifactId>
+        <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jruby</groupId>
+            <artifactId>jruby-complete</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-protocol</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-common</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-client</artifactId>
+        <version>${hbase.version}</version>
+        <exclusions>
+         <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>netty</artifactId>
+         </exclusion>
+       </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-server</artifactId>
+        <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce-client-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-auth</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop1-compat</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-math</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-server</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <!-- hbase uses v2.4, which is better, but ...-->
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-hadoop-compat</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-hadoop-compat</artifactId>
+        <version>${hbase.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+      </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_${scala.binary.version}</artifactId>
