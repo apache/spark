@@ -335,7 +335,6 @@ private[nio] class ConnectionManager(
 
         while(!keyInterestChangeRequests.isEmpty) {
           val (key, ops) = keyInterestChangeRequests.dequeue()
-
           try {
             if (key.isValid) {
               val connection = connectionsByKey.getOrElse(key, null)
@@ -360,16 +359,16 @@ private[nio] class ConnectionManager(
                 }
               }
             } else {
-              logInfo("Key not valid ? " + key)
+              logInfo("Key not valid ?" + key)
               throw new CancelledKeyException()
             }
           } catch {
             case e: CancelledKeyException => {
-              logInfo("key already cancelled ? " + key, e)
+              logInfo("key already cancelled ? " + mkAddressInfoStringByKey(key), e)
               triggerForceCloseByException(key, e)
             }
             case e: Exception => {
-              logError("Exception processing key " + key, e)
+              logError("Exception processing key. " + mkAddressInfoStringByKey(key), e)
               triggerForceCloseByException(key, e)
             }
           }
@@ -394,11 +393,11 @@ private[nio] class ConnectionManager(
                   }
                 } catch {
                   case e: CancelledKeyException => {
-                    logInfo("key already cancelled ? " + key, e)
+                    logInfo("key already cancelled ? " + mkAddressInfoStringByKey(key), e)
                     triggerForceCloseByException(key, e)
                   }
                   case e: Exception => {
-                    logError("Exception processing key " + key, e)
+                    logError("Exception processing key. " + mkAddressInfoStringByKey(key), e)
                     triggerForceCloseByException(key, e)
                   }
                 }
@@ -443,11 +442,11 @@ private[nio] class ConnectionManager(
               // weird, but we saw this happening - even though key.isValid was true,
               // key.isAcceptable would throw CancelledKeyException.
               case e: CancelledKeyException => {
-                logInfo("key already cancelled ? " + key, e)
+                logInfo(s"key already cancelled ? " + mkAddressInfoStringByKey(key), e)
                 triggerForceCloseByException(key, e)
               }
               case e: Exception => {
-                logError("Exception processing key " + key, e)
+                logError("Exception processing key. " + mkAddressInfoStringByKey(key), e)
                 triggerForceCloseByException(key, e)
               }
             }
@@ -491,6 +490,83 @@ private[nio] class ConnectionManager(
 
   def addConnection(connection: Connection) {
     connectionsByKey += ((connection.key, connection))
+  }
+
+  private def getRemoteSocketAddressByKey(key: SelectionKey) : InetSocketAddress = {
+    val channel = key.channel
+    assert(channel.isInstanceOf[SocketChannel])
+
+    try {
+      channel match {
+        case sc: SocketChannel => {
+          channel.asInstanceOf[SocketChannel].
+            socket.getRemoteSocketAddress.asInstanceOf[InetSocketAddress]
+        }
+        case other => {
+          logWarning(s"Failed to get remote socket address by key ${key} because " +
+            s"key is not for InetSocketAddress but for ${other.getClass.getName}")
+          null
+        }
+      }
+    } catch {
+      case e: NullPointerException => {
+        logWarning(s"Failed to get remote socket address by key ${key} because of " +
+          "unexpected NPE", e)
+        null
+      }
+    }
+  }
+
+  private def getLocalSocketAddressByKey(key: SelectionKey) : InetSocketAddress = {
+    val channel = key.channel
+    assert(channel.isInstanceOf[ServerSocketChannel] || channel.isInstanceOf[SocketChannel])
+
+    try {
+      channel match {
+        case ssc: ServerSocketChannel => {
+          ssc.socket.getLocalSocketAddress.asInstanceOf[InetSocketAddress]
+        }
+        case sc: SocketChannel => {
+          sc.socket.getLocalSocketAddress.asInstanceOf[InetSocketAddress]
+        }
+        case other => {
+          logWarning(s"Failed to get local socket address by key ${key} because " +
+            s"key is not for InetSocketAddress but for ${other.getClass.getName}")
+          null
+        }
+      }
+    } catch {
+      case e: NullPointerException => {
+        logWarning(s"Failed to get local socket address by key ${key} because " +
+          "unexpected NPE", e)
+        null
+      }
+    }
+  }
+
+  private def mkAddressInfoStringByKey(key: SelectionKey) : String = {
+    val (channelType, info) =
+      try {
+        val channel = key.channel
+        channel match {
+          case s: SocketChannel => {
+            (s.getClass.getName, s"remote=${getRemoteSocketAddressByKey(key)}")
+          }
+          case s: ServerSocketChannel => {
+            (s.getClass.getName, s"bind=${getLocalSocketAddressByKey(key)}")
+          }
+          case s => {
+            logWarning(s"Failed to get channel info for ${key} because of unexpected channel type")
+            (s.getClass.getName, null)
+          }
+        }
+      } catch {
+        case e: NullPointerException => {
+          logWarning(s"Failed to get channel info because of unexpected NPE", e)
+          (null, null)
+        }
+      }
+    s"[key(${key}), type(${channelType}), info(${info})]"
   }
 
   def removeConnection(connection: Connection) {
