@@ -27,9 +27,10 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.JobExecutionStatus._
 import org.apache.spark.SparkContext._
 
-class StatusAPISuite extends FunSuite with Matchers with SharedSparkContext {
+class StatusAPISuite extends FunSuite with Matchers with LocalSparkContext {
 
   test("basic status API usage") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
     val jobFuture = sc.parallelize(1 to 10000, 2).map(identity).groupBy(identity).collectAsync()
     val jobId: Int = eventually(timeout(10 seconds)) {
       val jobIds = jobFuture.jobIds
@@ -58,6 +59,16 @@ class StatusAPISuite extends FunSuite with Matchers with SharedSparkContext {
   }
 
   test("getJobIdsForGroup()") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
+    // Passing `null` should return jobs that were not run in a job group:
+    val defaultJobGroupFuture = sc.parallelize(1 to 1000).countAsync()
+    val defaultJobGroupJobId = eventually(timeout(10 seconds)) {
+      defaultJobGroupFuture.jobIds.head
+    }
+    eventually(timeout(10 seconds)) {
+      sc.statusAPI.getJobIdsForGroup(null).toSet should be (Set(defaultJobGroupJobId))
+    }
+    // Test jobs submitted in job groups:
     sc.setJobGroup("my-job-group", "description")
     sc.statusAPI.getJobIdsForGroup("my-job-group") should be (Seq.empty)
     val firstJobFuture = sc.parallelize(1 to 1000).countAsync()

@@ -34,14 +34,17 @@ class SparkStatusAPI private (sc: SparkContext) {
   private val jobProgressListener = sc.jobProgressListener
 
   /**
-   * Return a list of all known jobs in a particular job group.  The returned list may contain
-   * running, failed, and completed jobs, and may vary across invocations of this method.  This
-   * method does not guarantee the order of the elements in its result.
+   * Return a list of all known jobs in a particular job group.  If `jobGroup` is `null`, then
+   * returns all known jobs that are not associated with a job group.
+   *
+   * The returned list may contain running, failed, and completed jobs, and may vary across
+   * invocations of this method.  This method does not guarantee the order of the elements in
+   * its result.
    */
   def getJobIdsForGroup(jobGroup: String): Array[Int] = {
     jobProgressListener.synchronized {
       val jobData = jobProgressListener.jobIdToData.valuesIterator
-      jobData.filter(_.jobGroup.exists(_ == jobGroup)).map(_.jobId).toArray
+      jobData.filter(_.jobGroup.orNull == jobGroup).map(_.jobId).toArray
     }
   }
 
