@@ -360,8 +360,6 @@ object TestSettings {
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
-    // Enable Tachyon local testing.
-    libraryDependencies += "org.tachyonproject" % "tachyon" % "0.5.0" % "test" classifier "tests",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
