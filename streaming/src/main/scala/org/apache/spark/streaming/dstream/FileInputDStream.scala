@@ -240,11 +240,11 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
                 false
               }
             }
-        }.map {
-          path =>
-            newFiles = fs.listStatus(path).toList.flatMap(dfs(_,
-              depth + directoryDepth - path.depth())).map(_.getPath.toString)
-        }
+          }
+      }.map {
+        path =>
+          newFiles = fs.listStatus(path).toList.flatMap(dfs(_,
+            depth + directoryDepth - path.depth())).map(_.getPath.toString)
       }
 
       val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
