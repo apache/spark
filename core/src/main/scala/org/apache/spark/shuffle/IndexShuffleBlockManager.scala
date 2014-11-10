@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
@@ -39,11 +39,11 @@ import org.apache.spark.storage._
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getSortBasedShuffleBlockData().
 private[spark]
-class IndexShuffleBlockManager extends ShuffleBlockManager {
+class IndexShuffleBlockManager(conf: SparkConf) extends ShuffleBlockManager {
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
-  private val transportConf = SparkTransportConf.fromSparkConf(SparkEnv.get.conf)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
   /**
    * Mapping to a single shuffleBlockId with reduce ID 0.
