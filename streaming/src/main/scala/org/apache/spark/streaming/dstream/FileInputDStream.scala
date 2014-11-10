@@ -120,15 +120,15 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    val fileRDDs = for (file <- files; rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file))
-      yield {
+    val fileRDDs = files.map(file =>{
+      val rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file)
       if (rdd.partitions.size == 0) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +
           "Refer to the streaming programming guide for more details.")
       }
       rdd
-    }
+    })
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
