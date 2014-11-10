@@ -6,5 +6,6 @@ dist
 env
 initdb.py
 logs
+*.cfg
 MANIFEST
 secrets.py
