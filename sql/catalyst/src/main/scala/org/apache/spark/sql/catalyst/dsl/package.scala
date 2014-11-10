@@ -84,6 +84,7 @@ package object dsl {
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
     def === (other: Expression) = EqualTo(expr, other)
+    def -=- (other: Expression) = EqualTo(expr, other)
     def <=> (other: Expression) = EqualNullSafe(expr, other)
     def !== (other: Expression) = Not(EqualTo(expr, other))
 
@@ -168,7 +169,7 @@ package object dsl {
       def <= (other: Symbol)  = LessThanOrEqual(literal, other)
       def > (other: Symbol)   = GreaterThan(literal, other)
       def >= (other: Symbol)  = GreaterThanOrEqual(literal, other)
-      def === (other: Symbol) = EqualTo(literal, other)
+      def -=- (other: Symbol) = EqualTo(literal, other)
       def <=> (other: Symbol) = EqualNullSafe(literal, other)
       def !== (other: Symbol) = Not(EqualTo(literal, other))
     }

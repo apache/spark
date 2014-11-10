@@ -30,13 +30,6 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
 
-/*
- * Note: the DSL conversions collide with the scalatest === operator!
- * We can apply the scalatest conversion explicitly:
- *   assert(X === Y) --> assert(EQ(X).===(Y))
- */
-import org.scalatest.Assertions.{convertToEqualizer => EQ}
-
 case class TestRDDEntry(key: Int, value: String)
 
 case class NullReflectData(
@@ -179,7 +172,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(EQ(actualCodec).===(TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil))
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -195,7 +188,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(EQ(actualCodec).===(TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil))
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -211,7 +204,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(EQ(actualCodec).===("UNCOMPRESSED" :: Nil))
+    assert(actualCodec === "UNCOMPRESSED" :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -227,7 +220,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(EQ(actualCodec).===(TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil))
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -243,7 +236,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(EQ(actualCodec).===(TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil))
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -292,8 +285,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     }
 
     val result = query.collect()
-    assert(EQ(result.size).===(9), "self-join result has incorrect size")
-    assert(EQ(result(0).size).===(12), "result row has incorrect size")
+    assert(result.size === 9, "self-join result has incorrect size")
+    assert(result(0).size === 12, "result row has incorrect size")
     result.zipWithIndex.foreach {
       case (row, index) => row.zipWithIndex.foreach {
         case (field, column) => assert(field != null, s"self-join contains null value in row $index field $column")
@@ -303,7 +296,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("Import of simple Parquet file") {
     val result = parquetFile(ParquetTestData.testDir.toString).collect()
-    assert(EQ(result.size).===(15))
+    assert(result.size === 15)
     result.zipWithIndex.foreach {
       case (row, index) => {
         val checkBoolean =
@@ -311,12 +304,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
             row(0) == true
           else
             row(0) == false
-        assert(EQ(checkBoolean).===(true), s"boolean field value in line $index did not match")
-        if (index % 5 == 0) assert(EQ(row(1)).===(5), s"int field value in line $index did not match")
-        assert(EQ(row(2)).===("abc"), s"string field value in line $index did not match")
-        assert(EQ(row(3)).===((index.toLong << 33)), s"long value in line $index did not match")
-        assert(EQ(row(4)).===(2.5F), s"float field value in line $index did not match")
-        assert(EQ(row(5)).===(4.5D), s"double field value in line $index did not match")
+        assert(checkBoolean === true, s"boolean field value in line $index did not match")
+        if (index % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
+        assert(row(2) === "abc", s"string field value in line $index did not match")
+        assert(row(3) === (index.toLong << 33), s"long value in line $index did not match")
+        assert(row(4) === 2.5F, s"float field value in line $index did not match")
+        assert(row(5) === 4.5D, s"double field value in line $index did not match")
       }
     }
   }
@@ -326,11 +319,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     result.zipWithIndex.foreach {
       case (row, index) => {
           if (index % 3 == 0)
-            assert(EQ(row(0)).===(true), s"boolean field value in line $index did not match (every third row)")
+            assert(row(0) === true, s"boolean field value in line $index did not match (every third row)")
           else
-            assert(EQ(row(0)).===(false), s"boolean field value in line $index did not match")
-        assert(EQ(row(1)).===((index.toLong << 33)), s"long field value in line $index did not match")
-        assert(EQ(row.size).===(2), s"number of columns in projection in line $index is incorrect")
+            assert(row(0) === false, s"boolean field value in line $index did not match")
+        assert(row(1) === (index.toLong << 33), s"long field value in line $index did not match")
+        assert(row.size === 2, s"number of columns in projection in line $index is incorrect")
       }
     }
   }
@@ -388,8 +381,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val rdd_copy = sql("SELECT * FROM tmpx").collect()
     val rdd_orig = rdd.collect()
     for(i <- 0 to 99) {
-      assert(EQ(rdd_copy(i).apply(0)).===(rdd_orig(i).key),   s"key error in line $i")
-      assert(EQ(rdd_copy(i).apply(1)).===(rdd_orig(i).value), s"value error in line $i")
+      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,   s"key error in line $i")
+      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value error in line $i")
     }
     Utils.deleteRecursively(file)
   }
@@ -403,11 +396,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     dest_rdd.registerTempTable("dest")
     sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
     val rdd_copy1 = sql("SELECT * FROM dest").collect()
-    assert(EQ(rdd_copy1.size).===(100))
+    assert(rdd_copy1.size === 100)
 
     sql("INSERT INTO dest SELECT * FROM source")
     val rdd_copy2 = sql("SELECT * FROM dest").collect().sortBy(_.getInt(0))
-    assert(EQ(rdd_copy2.size).===(200))
+    assert(rdd_copy2.size === 200)
     Utils.deleteRecursively(dirname)
   }
 
@@ -415,7 +408,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
-    assert(EQ(double_rdd.size).===(30))
+    assert(double_rdd.size === 30)
 
     // let's restore the original test data
     Utils.deleteRecursively(ParquetTestData.testDir)
@@ -432,7 +425,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val readFile = parquetFile(path)
 
     val rdd_saved = readFile.collect()
-    assert(EQ(rdd_saved(0)).===(Seq.fill(5)(null)))
+    assert(rdd_saved(0) === Seq.fill(5)(null))
     Utils.deleteRecursively(file)
     assert(true)
   }
@@ -447,7 +440,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val readFile = parquetFile(path)
 
     val rdd_saved = readFile.collect()
-    assert(EQ(rdd_saved(0)).===(Seq.fill(5)(null)))
+    assert(rdd_saved(0) === Seq.fill(5)(null))
     Utils.deleteRecursively(file)
     assert(true)
   }
@@ -485,11 +478,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val attribute2 = new AttributeReference("second", IntegerType, false)()
     val predicate5 = new GreaterThan(attribute1, attribute2)
     val badfilter = ParquetFilters.createFilter(predicate5)
-    assert(EQ(badfilter.isDefined).===(false))
+    assert(badfilter.isDefined === false)
 
     val predicate6 = And(GreaterThan(attribute1, attribute2), GreaterThan(attribute1, attribute2))
     val badfilter2 = ParquetFilters.createFilter(predicate6)
-    assert(EQ(badfilter2.isDefined).===(false))
+    assert(badfilter2.isDefined === false)
   }
 
   test("test filter by predicate pushdown") {
@@ -499,21 +492,21 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         query1.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
         "Top operator should be ParquetTableScan after pushdown")
       val result1 = query1.collect()
-      assert(EQ(result1.size).===(50))
-      assert(EQ(result1(0)(1)).===(100))
-      assert(EQ(result1(49)(1)).===(149))
+      assert(result1.size === 50)
+      assert(result1(0)(1) === 100)
+      assert(result1(49)(1) === 149)
       val query2 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200")
       assert(
         query2.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
         "Top operator should be ParquetTableScan after pushdown")
       val result2 = query2.collect()
-      assert(EQ(result2.size).===(50))
+      assert(result2.size === 50)
       if (myval == "myint" || myval == "mylong") {
-        assert(EQ(result2(0)(1)).===(151))
-        assert(EQ(result2(49)(1)).===(200))
+        assert(result2(0)(1) === 151)
+        assert(result2(49)(1) === 200)
       } else {
-        assert(EQ(result2(0)(1)).===(150))
-        assert(EQ(result2(49)(1)).===(199))
+        assert(result2(0)(1) === 150)
+        assert(result2(49)(1) === 199)
       }
     }
     for(myval <- Seq("myint", "mylong")) {
@@ -522,11 +515,11 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         query3.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
         "Top operator should be ParquetTableScan after pushdown")
       val result3 = query3.collect()
-      assert(EQ(result3.size).===(20))
-      assert(EQ(result3(0)(1)).===(0))
-      assert(EQ(result3(9)(1)).===(9))
-      assert(EQ(result3(10)(1)).===(191))
-      assert(EQ(result3(19)(1)).===(200))
+      assert(result3.size === 20)
+      assert(result3(0)(1) === 0)
+      assert(result3(9)(1) === 9)
+      assert(result3(10)(1) === 191)
+      assert(result3(19)(1) === 200)
     }
     for(myval <- Seq("mydouble", "myfloat")) {
       val result4 =
@@ -541,18 +534,18 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
           // currently no way to specify float constants in SqlParser?
           sql(s"SELECT * FROM testfiltersource WHERE $myval > 190.5 OR $myval < 10").collect()
         }
-      assert(EQ(result4.size).===(20))
-      assert(EQ(result4(0)(1)).===(0))
-      assert(EQ(result4(9)(1)).===(9))
-      assert(EQ(result4(10)(1)).===(191))
-      assert(EQ(result4(19)(1)).===(200))
+      assert(result4.size === 20)
+      assert(result4(0)(1) === 0)
+      assert(result4(9)(1) === 9)
+      assert(result4(10)(1) === 191)
+      assert(result4(19)(1) === 200)
     }
     val query5 = sql(s"SELECT * FROM testfiltersource WHERE myboolean = true AND myint < 40")
     assert(
       query5.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val booleanResult = query5.collect()
-    assert(EQ(booleanResult.size).===(10))
+    assert(booleanResult.size === 10)
     for(i <- 0 until 10) {
       if (!booleanResult(i).getBoolean(0)) {
         fail(s"Boolean value in result row $i not true")
@@ -566,16 +559,16 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query6.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val stringResult = query6.collect()
-    assert(EQ(stringResult.size).===(1))
+    assert(stringResult.size === 1)
     assert(stringResult(0).getString(2) == "100", "stringvalue incorrect")
-    assert(EQ(stringResult(0).getInt(1)).===(100))
+    assert(stringResult(0).getInt(1) === 100)
 
     val query7 = sql(s"SELECT * FROM testfiltersource WHERE myoptint < 40")
     assert(
       query7.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val optResult = query7.collect()
-    assert(EQ(optResult.size).===(20))
+    assert(optResult.size === 20)
     for(i <- 0 until 20) {
       if (optResult(i)(7) != i * 2) {
         fail(s"optional Int value in result row $i should be ${2*4*i}")
@@ -587,21 +580,21 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         query8.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
         "Top operator should be ParquetTableScan after pushdown")
       val result8 = query8.collect()
-      assert(EQ(result8.size).===(25))
-      assert(EQ(result8(0)(7)).===(100))
-      assert(EQ(result8(24)(7)).===(148))
+      assert(result8.size === 25)
+      assert(result8(0)(7) === 100)
+      assert(result8(24)(7) === 148)
       val query9 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200")
       assert(
         query9.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
         "Top operator should be ParquetTableScan after pushdown")
       val result9 = query9.collect()
-      assert(EQ(result9.size).===(25))
+      assert(result9.size === 25)
       if (myval == "myoptint" || myval == "myoptlong") {
-        assert(EQ(result9(0)(7)).===(152))
-        assert(EQ(result9(24)(7)).===(200))
+        assert(result9(0)(7) === 152)
+        assert(result9(24)(7) === 200)
       } else {
-        assert(EQ(result9(0)(7)).===(150))
-        assert(EQ(result9(24)(7)).===(198))
+        assert(result9(0)(7) === 150)
+        assert(result9(24)(7) === 198)
       }
     }
     val query10 = sql("SELECT * FROM testfiltersource WHERE myoptstring = \"100\"")
@@ -609,15 +602,15 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query10.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result10 = query10.collect()
-    assert(EQ(result10.size).===(1))
+    assert(result10.size === 1)
     assert(result10(0).getString(8) == "100", "stringvalue incorrect")
-    assert(EQ(result10(0).getInt(7)).===(100))
+    assert(result10(0).getInt(7) === 100)
     val query11 = sql(s"SELECT * FROM testfiltersource WHERE myoptboolean = true AND myoptint < 40")
     assert(
       query11.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result11 = query11.collect()
-    assert(EQ(result11.size).===(7))
+    assert(result11.size === 7)
     for(i <- 0 until 6) {
       if (!result11(i).getBoolean(6)) {
         fail(s"optional Boolean value in result row $i not true")
@@ -632,7 +625,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query12.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result12 = query12.collect()
-    assert(EQ(result12.size).===(54))
+    assert(result12.size === 54)
     assert(result12(0).getString(2) == "6")
     assert(result12(4).getString(2) == "50")
     assert(result12(53).getString(2) == "99")
@@ -642,7 +635,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query13.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result13 = query13.collect()
-    assert(EQ(result13.size).===(53))
+    assert(result13.size === 53)
     assert(result13(0).getString(2) == "6")
     assert(result13(4).getString(2) == "51")
     assert(result13(52).getString(2) == "99")
@@ -652,7 +645,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query14.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result14 = query14.collect()
-    assert(EQ(result14.size).===(148))
+    assert(result14.size === 148)
     assert(result14(0).getString(2) == "0")
     assert(result14(46).getString(2) == "50")
     assert(result14(147).getString(2) == "200")
@@ -662,7 +655,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       query15.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
       "Top operator should be ParquetTableScan after pushdown")
     val result15 = query15.collect()
-    assert(EQ(result15.size).===(147))
+    assert(result15.size === 147)
     assert(result15(0).getString(2) == "0")
     assert(result15(46).getString(2) == "100")
     assert(result15(146).getString(2) == "200")
@@ -670,7 +663,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     val query = sql(s"SELECT mystring FROM testfiltersource WHERE myint < 10")
-    assert(EQ(query.collect().size).===(10))
+    assert(query.collect().size === 10)
   }
 
   test("Importing nested Parquet file (Addressbook)") {
@@ -679,32 +672,32 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .toSchemaRDD
       .collect()
     assert(result != null)
-    assert(EQ(result.size).===(2))
+    assert(result.size === 2)
     val first_record = result(0)
     val second_record = result(1)
     assert(first_record != null)
     assert(second_record != null)
-    assert(EQ(first_record.size).===(3))
-    assert(EQ(second_record(1)).===(null))
-    assert(EQ(second_record(2)).===(null))
-    assert(EQ(second_record(0)).===("A. Nonymous"))
-    assert(EQ(first_record(0)).===("Julien Le Dem"))
+    assert(first_record.size === 3)
+    assert(second_record(1) === null)
+    assert(second_record(2) === null)
+    assert(second_record(0) === "A. Nonymous")
+    assert(first_record(0) === "Julien Le Dem")
     val first_owner_numbers = first_record(1)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
     val first_contacts = first_record(2)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
     assert(first_owner_numbers != null)
-    assert(EQ(first_owner_numbers(0)).===("555 123 4567"))
-    assert(EQ(first_owner_numbers(2)).===("XXX XXX XXXX"))
-    assert(EQ(first_contacts(0)
-      .asInstanceOf[CatalystConverter.StructScalaType[_]].size).===(2))
+    assert(first_owner_numbers(0) === "555 123 4567")
+    assert(first_owner_numbers(2) === "XXX XXX XXXX")
+    assert(first_contacts(0)
+      .asInstanceOf[CatalystConverter.StructScalaType[_]].size === 2)
     val first_contacts_entry_one = first_contacts(0)
       .asInstanceOf[CatalystConverter.StructScalaType[_]]
-    assert(EQ(first_contacts_entry_one(0)).===("Dmitriy Ryaboy"))
-    assert(EQ(first_contacts_entry_one(1)).===("555 987 6543"))
+    assert(first_contacts_entry_one(0) === "Dmitriy Ryaboy")
+    assert(first_contacts_entry_one(1) === "555 987 6543")
     val first_contacts_entry_two = first_contacts(1)
       .asInstanceOf[CatalystConverter.StructScalaType[_]]
-    assert(EQ(first_contacts_entry_two(0)).===("Chris Aniszczyk"))
+    assert(first_contacts_entry_two(0) === "Chris Aniszczyk")
   }
 
   test("Importing nested Parquet file (nested numbers)") {
@@ -712,31 +705,31 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .parquetFile(ParquetTestData.testNestedDir2.toString)
       .toSchemaRDD
       .collect()
-    assert(EQ(result.size).===(1), "number of top-level rows incorrect")
-    assert(EQ(result(0).size).===(5), "number of fields in row incorrect")
-    assert(EQ(result(0)(0)).===(1))
-    assert(EQ(result(0)(1)).===(7))
+    assert(result.size === 1, "number of top-level rows incorrect")
+    assert(result(0).size === 5, "number of fields in row incorrect")
+    assert(result(0)(0) === 1)
+    assert(result(0)(1) === 7)
     val subresult1 = result(0)(2).asInstanceOf[CatalystConverter.ArrayScalaType[_]]
-    assert(EQ(subresult1.size).===(3))
-    assert(EQ(subresult1(0)).===((1.toLong << 32)))
-    assert(EQ(subresult1(1)).===((1.toLong << 33)))
-    assert(EQ(subresult1(2)).===((1.toLong << 34)))
+    assert(subresult1.size === 3)
+    assert(subresult1(0) === (1.toLong << 32))
+    assert(subresult1(1) === (1.toLong << 33))
+    assert(subresult1(2) === (1.toLong << 34))
     val subresult2 = result(0)(3)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
       .asInstanceOf[CatalystConverter.StructScalaType[_]]
-    assert(EQ(subresult2.size).===(2))
-    assert(EQ(subresult2(0)).===(2.5))
-    assert(EQ(subresult2(1)).===(false))
+    assert(subresult2.size === 2)
+    assert(subresult2(0) === 2.5)
+    assert(subresult2(1) === false)
     val subresult3 = result(0)(4)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
-    assert(EQ(subresult3.size).===(2))
-    assert(EQ(subresult3(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]].size).===(2))
+    assert(subresult3.size === 2)
+    assert(subresult3(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]].size === 2)
     val subresult4 = subresult3(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]]
-    assert(EQ(subresult4(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)).===(7))
-    assert(EQ(subresult4(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)).===(8))
-    assert(EQ(subresult3(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]].size).===(1))
-    assert(EQ(subresult3(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
-      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)).===(9))
+    assert(subresult4(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 7)
+    assert(subresult4(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 8)
+    assert(subresult3(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]].size === 1)
+    assert(subresult3(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 9)
   }
 
   test("Simple query on addressbook") {
@@ -744,8 +737,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .parquetFile(ParquetTestData.testNestedDir1.toString)
       .toSchemaRDD
     val tmp = data.where('owner === "Julien Le Dem").select('owner as 'a, 'contacts as 'c).collect()
-    assert(EQ(tmp.size).===(1))
-    assert(EQ(tmp(0)(0)).===("Julien Le Dem"))
+    assert(tmp.size === 1)
+    assert(tmp(0)(0) === "Julien Le Dem")
   }
 
   test("Projection in addressbook") {
@@ -753,37 +746,37 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     data.registerTempTable("data")
     val query = sql("SELECT owner, contacts[1].name FROM data")
     val tmp = query.collect()
-    assert(EQ(tmp.size).===(2))
-    assert(EQ(tmp(0).size).===(2))
-    assert(EQ(tmp(0)(0)).===("Julien Le Dem"))
-    assert(EQ(tmp(0)(1)).===("Chris Aniszczyk"))
-    assert(EQ(tmp(1)(0)).===("A. Nonymous"))
-    assert(EQ(tmp(1)(1)).===(null))
+    assert(tmp.size === 2)
+    assert(tmp(0).size === 2)
+    assert(tmp(0)(0) === "Julien Le Dem")
+    assert(tmp(0)(1) === "Chris Aniszczyk")
+    assert(tmp(1)(0) === "A. Nonymous")
+    assert(tmp(1)(1) === null)
   }
 
   test("Simple query on nested int data") {
     val data = parquetFile(ParquetTestData.testNestedDir2.toString).toSchemaRDD
     data.registerTempTable("data")
     val result1 = sql("SELECT entries[0].value FROM data").collect()
-    assert(EQ(result1.size).===(1))
-    assert(EQ(result1(0).size).===(1))
-    assert(EQ(result1(0)(0)).===(2.5))
+    assert(result1.size === 1)
+    assert(result1(0).size === 1)
+    assert(result1(0)(0) === 2.5)
     val result2 = sql("SELECT entries[0] FROM data").collect()
-    assert(EQ(result2.size).===(1))
+    assert(result2.size === 1)
     val subresult1 = result2(0)(0).asInstanceOf[CatalystConverter.StructScalaType[_]]
-    assert(EQ(subresult1.size).===(2))
-    assert(EQ(subresult1(0)).===(2.5))
-    assert(EQ(subresult1(1)).===(false))
+    assert(subresult1.size === 2)
+    assert(subresult1(0) === 2.5)
+    assert(subresult1(1) === false)
     val result3 = sql("SELECT outerouter FROM data").collect()
     val subresult2 = result3(0)(0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
-    assert(EQ(subresult2(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)).===(7))
-    assert(EQ(subresult2(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)).===(8))
-    assert(EQ(result3(0)(0)
+    assert(subresult2(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 7)
+    assert(subresult2(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 8)
+    assert(result3(0)(0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]](1)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
-      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)).===(9))
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 9)
   }
 
   test("nested structs") {
@@ -791,17 +784,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .toSchemaRDD
     data.registerTempTable("data")
     val result1 = sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
-    assert(EQ(result1.size).===(1))
-    assert(EQ(result1(0).size).===(1))
-    assert(EQ(result1(0)(0)).===(false))
+    assert(result1.size === 1)
+    assert(result1(0).size === 1)
+    assert(result1(0)(0) === false)
     val result2 = sql("SELECT booleanNumberPairs[0].value[1].truth FROM data").collect()
-    assert(EQ(result2.size).===(1))
-    assert(EQ(result2(0).size).===(1))
-    assert(EQ(result2(0)(0)).===(true))
+    assert(result2.size === 1)
+    assert(result2(0).size === 1)
+    assert(result2(0)(0) === true)
     val result3 = sql("SELECT booleanNumberPairs[1].value[0].truth FROM data").collect()
-    assert(EQ(result3.size).===(1))
-    assert(EQ(result3(0).size).===(1))
-    assert(EQ(result3(0)(0)).===(false))
+    assert(result3.size === 1)
+    assert(result3(0).size === 1)
+    assert(result3(0)(0) === false)
   }
 
   test("simple map") {
@@ -810,38 +803,38 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .toSchemaRDD
     data.registerTempTable("mapTable")
     val result1 = sql("SELECT data1 FROM mapTable").collect()
-    assert(EQ(result1.size).===(1))
-    assert(EQ(result1(0)(0)
+    assert(result1.size === 1)
+    assert(result1(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, _]]
-      .getOrElse("key1", 0)).===(1))
-    assert(EQ(result1(0)(0)
+      .getOrElse("key1", 0) === 1)
+    assert(result1(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, _]]
-      .getOrElse("key2", 0)).===(2))
+      .getOrElse("key2", 0) === 2)
     val result2 = sql("""SELECT data1["key1"] FROM mapTable""").collect()
-    assert(EQ(result2(0)(0)).===(1))
+    assert(result2(0)(0) === 1)
   }
 
   test("map with struct values") {
     val data = parquetFile(ParquetTestData.testNestedDir4.toString).toSchemaRDD
     data.registerTempTable("mapTable")
     val result1 = sql("SELECT data2 FROM mapTable").collect()
-    assert(EQ(result1.size).===(1))
+    assert(result1.size === 1)
     val entry1 = result1(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
       .getOrElse("seven", null)
     assert(entry1 != null)
-    assert(EQ(entry1(0)).===(42))
-    assert(EQ(entry1(1)).===("the answer"))
+    assert(entry1(0) === 42)
+    assert(entry1(1) === "the answer")
     val entry2 = result1(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
       .getOrElse("eight", null)
     assert(entry2 != null)
-    assert(EQ(entry2(0)).===(49))
-    assert(EQ(entry2(1)).===(null))
+    assert(entry2(0) === 49)
+    assert(entry2(1) === null)
     val result2 = sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM mapTable""").collect()
-    assert(EQ(result2.size).===(1))
-    assert(EQ(result2(0)(0)).===(42.toLong))
-    assert(EQ(result2(0)(1)).===("the answer"))
+    assert(result2.size === 1)
+    assert(result2(0)(0) === 42.toLong)
+    assert(result2(0)(1) === "the answer")
   }
 
   test("Writing out Addressbook and reading it back in") {
@@ -855,12 +848,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .toSchemaRDD
       .registerTempTable("tmpcopy")
     val tmpdata = sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
-    assert(EQ(tmpdata.size).===(2))
-    assert(EQ(tmpdata(0).size).===(2))
-    assert(EQ(tmpdata(0)(0)).===("Julien Le Dem"))
-    assert(EQ(tmpdata(0)(1)).===("Chris Aniszczyk"))
-    assert(EQ(tmpdata(1)(0)).===("A. Nonymous"))
-    assert(EQ(tmpdata(1)(1)).===(null))
+    assert(tmpdata.size === 2)
+    assert(tmpdata(0).size === 2)
+    assert(tmpdata(0)(0) === "Julien Le Dem")
+    assert(tmpdata(0)(1) === "Chris Aniszczyk")
+    assert(tmpdata(1)(0) === "A. Nonymous")
+    assert(tmpdata(1)(1) === null)
     Utils.deleteRecursively(tmpdir)
   }
 
@@ -873,26 +866,26 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .toSchemaRDD
       .registerTempTable("tmpmapcopy")
     val result1 = sql("""SELECT data1["key2"] FROM tmpmapcopy""").collect()
-    assert(EQ(result1.size).===(1))
-    assert(EQ(result1(0)(0)).===(2))
+    assert(result1.size === 1)
+    assert(result1(0)(0) === 2)
     val result2 = sql("SELECT data2 FROM tmpmapcopy").collect()
-    assert(EQ(result2.size).===(1))
+    assert(result2.size === 1)
     val entry1 = result2(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
       .getOrElse("seven", null)
     assert(entry1 != null)
-    assert(EQ(entry1(0)).===(42))
-    assert(EQ(entry1(1)).===("the answer"))
+    assert(entry1(0) === 42)
+    assert(entry1(1) === "the answer")
     val entry2 = result2(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
       .getOrElse("eight", null)
     assert(entry2 != null)
-    assert(EQ(entry2(0)).===(49))
-    assert(EQ(entry2(1)).===(null))
+    assert(entry2(0) === 49)
+    assert(entry2(1) === null)
     val result3 = sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM tmpmapcopy""").collect()
-    assert(EQ(result3.size).===(1))
-    assert(EQ(result3(0)(0)).===(42.toLong))
-    assert(EQ(result3(0)(1)).===("the answer"))
+    assert(result3.size === 1)
+    assert(result3(0)(0) === 42.toLong)
+    assert(result3(0)(1) === "the answer")
     Utils.deleteRecursively(tmpdir)
   }
 
@@ -901,7 +894,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(tmpdir)
     createParquetFile[TestRDDEntry](tmpdir.toString()).registerTempTable("tmpemptytable")
     val result1 = sql("SELECT * FROM tmpemptytable").collect()
-    assert(EQ(result1.size).===(0))
+    assert(result1.size === 0)
     Utils.deleteRecursively(tmpdir)
   }
 
@@ -915,7 +908,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)
-      assert(EQ(a.dataType).===(b.dataType))
+      assert(a.dataType === b.dataType)
     }
   }
 
