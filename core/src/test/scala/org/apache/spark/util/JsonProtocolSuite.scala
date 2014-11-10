@@ -21,9 +21,6 @@ import java.util.Properties
 
 import scala.collection.Map
 
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -43,10 +40,13 @@ class JsonProtocolSuite extends FunSuite {
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
+    val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
+      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -69,6 +69,7 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(taskGettingResult, taskGettingResultJsonString)
     testEvent(taskEnd, taskEndJsonString)
     testEvent(taskEndWithHadoopInput, taskEndWithHadoopInputJsonString)
+    testEvent(taskEndWithOutput, taskEndWithOutputJsonString)
     testEvent(jobStart, jobStartJsonString)
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
@@ -83,7 +84,8 @@ class JsonProtocolSuite extends FunSuite {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
-    testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
+    testTaskMetrics(makeTaskMetrics(
+      33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
 
     // StorageLevel
@@ -154,12 +156,22 @@ class JsonProtocolSuite extends FunSuite {
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = false)
     assert(metrics.inputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.inputMetrics.isEmpty)
+  }
+
+  test("OutputMetrics backward compatibility") {
+    // OutputMetrics were added after 1.1
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    assert(metrics.outputMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Output Metrics" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.outputMetrics.isEmpty)
   }
 
   test("BlockManager events backward compatibility") {
@@ -581,9 +593,9 @@ class JsonProtocolSuite extends FunSuite {
       d: Long,
       e: Int,
       f: Int,
-      hasHadoopInput: Boolean) = {
+      hasHadoopInput: Boolean,
+      hasOutput: Boolean) = {
     val t = new TaskMetrics
-    val sw = new ShuffleWriteMetrics
     t.hostname = "localhost"
     t.executorDeserializeTime = a
     t.executorRunTime = b
@@ -604,9 +616,16 @@ class JsonProtocolSuite extends FunSuite {
       sr.remoteBlocksFetched = f
       t.setShuffleReadMetrics(Some(sr))
     }
-    sw.shuffleBytesWritten = a + b + c
-    sw.shuffleWriteTime = b + c + d
-    t.shuffleWriteMetrics = Some(sw)
+    if (hasOutput) {
+      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
+      outputMetrics.bytesWritten = a + b + c
+      t.outputMetrics = Some(outputMetrics)
+    } else {
+      val sw = new ShuffleWriteMetrics
+      sw.shuffleBytesWritten = a + b + c
+      sw.shuffleWriteTime = b + c + d
+      t.shuffleWriteMetrics = Some(sw)
+    }
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
       (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
@@ -924,6 +943,87 @@ class JsonProtocolSuite extends FunSuite {
       |    "Input Metrics": {
       |      "Data Read Method": "Hadoop",
       |      "Bytes Read": 2100
+      |    },
+      |    "Updated Blocks": [
+      |      {
+      |        "Block ID": "rdd_0_0",
+      |        "Status": {
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": false,
+      |            "Replication": 2
+      |          },
+      |          "Memory Size": 0,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 0
+      |        }
+      |      }
+      |    ]
+      |  }
+      |}
+    """
+
+  private val taskEndWithOutputJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerTaskEnd",
+      |  "Stage ID": 1,
+      |  "Stage Attempt ID": 0,
+      |  "Task Type": "ResultTask",
+      |  "Task End Reason": {
+      |    "Reason": "Success"
+      |  },
+      |  "Task Info": {
+      |    "Task ID": 123,
+      |    "Index": 234,
+      |    "Attempt": 67,
+      |    "Launch Time": 345,
+      |    "Executor ID": "executor",
+      |    "Host": "your kind sir",
+      |    "Locality": "NODE_LOCAL",
+      |    "Speculative": false,
+      |    "Getting Result Time": 0,
+      |    "Finish Time": 0,
+      |    "Failed": false,
+      |    "Accumulables": [
+      |      {
+      |        "ID": 1,
+      |        "Name": "Accumulable1",
+      |        "Update": "delta1",
+      |        "Value": "val1"
+      |      },
+      |      {
+      |        "ID": 2,
+      |        "Name": "Accumulable2",
+      |        "Update": "delta2",
+      |        "Value": "val2"
+      |      },
+      |      {
+      |        "ID": 3,
+      |        "Name": "Accumulable3",
+      |        "Update": "delta3",
+      |        "Value": "val3"
+      |      }
+      |    ]
+      |  },
+      |  "Task Metrics": {
+      |    "Host Name": "localhost",
+      |    "Executor Deserialize Time": 300,
+      |    "Executor Run Time": 400,
+      |    "Result Size": 500,
+      |    "JVM GC Time": 600,
+      |    "Result Serialization Time": 700,
+      |    "Memory Bytes Spilled": 800,
+      |    "Disk Bytes Spilled": 0,
+      |    "Input Metrics": {
+      |      "Data Read Method": "Hadoop",
+      |      "Bytes Read": 2100
+      |    },
+      |    "Output Metrics": {
+      |      "Data Write Method": "Hadoop",
+      |      "Bytes Written": 1200
       |    },
       |    "Updated Blocks": [
       |      {

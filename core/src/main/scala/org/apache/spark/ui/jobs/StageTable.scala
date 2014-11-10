@@ -45,6 +45,7 @@ private[ui] class StageTableBase(
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
     <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+    <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
     <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
     <th>
       <!-- Place the shuffle write tooltip on the left (rather than the default position
@@ -151,6 +152,8 @@ private[ui] class StageTableBase(
 
     val inputRead = stageData.inputBytes
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
+    val outputWrite = stageData.outputBytes
+    val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
     val shuffleRead = stageData.shuffleReadBytes
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
@@ -179,6 +182,7 @@ private[ui] class StageTableBase(
         stageData.numFailedTasks, s.numTasks)}
     </td>
     <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
+    <td sorttable_customkey={outputWrite.toString}>{outputWriteWithUnit}</td>
     <td sorttable_customkey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
     <td sorttable_customkey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
   }
