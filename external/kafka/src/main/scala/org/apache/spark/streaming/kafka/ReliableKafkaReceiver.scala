@@ -58,17 +58,19 @@ class ReliableKafkaReceiver[
 
   private val AUTO_OFFSET_COMMIT = "auto.commit.enable"
 
-  /** A HashMap to manage the offset for each topic/partition, this HashMap is called in
-    * synchronized block, so mutable HashMap will not meet concurrency issue.
-    */
+  /**
+   * A HashMap to manage the offset for each topic/partition, this HashMap is called in
+   * synchronized block, so mutable HashMap will not meet concurrency issue.
+   */
   private var topicPartitionOffsetMap: mutable.HashMap[TopicAndPartition, Long] = null
 
   /** A concurrent HashMap to store the stream block id and related offset snapshot. */
   private var blockOffsetMap: ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]] = null
 
-  /** Manage the BlockGenerator in receiver itself for better managing block store and offset
-    * commit.
-    */
+  /**
+   * Manage the BlockGenerator in receiver itself for better managing block store and offset
+   * commit.
+   */
   private var blockGenerator: BlockGenerator = null
 
   /** Kafka offsets checkpoint listener to register into BlockGenerator for offsets checkpoint. */
