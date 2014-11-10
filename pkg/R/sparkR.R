@@ -44,14 +44,20 @@ sparkR.init <- function(
   sparkHome = Sys.getenv("SPARK_HOME"),
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
-  sparkJars = "") {
+  sparkJars = "",
+  sparkRLibDir = "") {
 
   if (exists(".sparkRjsc", envir=.sparkREnv)) {
+    cat("Re-using existing Spark Context. Please restart R to create a new Spark Context\n")
     return(get(".sparkRjsc", envir=.sparkREnv))
   }
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
+  }
+
+  if (nchar(sparkRLibDir) != 0) {
+    .sparkREnv$libname <- sparkRLibDir
   }
 
   sparkEnvirMap <- .jnew("java/util/HashMap")
