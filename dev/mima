@@ -24,14 +24,6 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-# To get spark scala version
-source "$FWDIR"/bin/load-spark-env.sh
-
-if [[ $SPARK_SCALA_VERSION=="2.11" ]]; then
-    echo -e "Mima tests are disabled for spark scala version 2.11."
-    exit 0
-fi
-
 echo -e "q\n" | sbt/sbt oldDeps/update
 rm -f .generated-mima*
 
