@@ -120,6 +120,10 @@ private[spark] class DiskBlockObjectWriter(
   private var writesSinceMetricsUpdate = 0
 
   override def open(): BlockObjectWriter = {
+    val parent = file.getParentFile
+    if (!parent.exists) {
+      parent.mkdirs()
+    }
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
