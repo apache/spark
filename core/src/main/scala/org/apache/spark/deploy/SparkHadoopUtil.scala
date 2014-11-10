@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
@@ -133,14 +134,9 @@ class SparkHadoopUtil extends Logging {
    */
   private[spark] def getFSBytesReadOnThreadCallback(path: Path, conf: Configuration)
     : Option[() => Long] = {
-    val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
-    val scheme = qualifiedPath.toUri().getScheme()
-    val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
     try {
-      val threadStats = stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
-      val statisticsDataClass =
-        Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
-      val getBytesReadMethod = statisticsDataClass.getDeclaredMethod("getBytesRead")
+      val threadStats = getFileSystemThreadStatistics(path, conf)
+      val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesRead")
       val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
@@ -150,6 +146,42 @@ class SparkHadoopUtil extends Logging {
         None
       }
     }
+  }
+
+  /**
+   * Returns a function that can be called to find Hadoop FileSystem bytes written. If
+   * getFSBytesWrittenOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes written on r since t.  Reflection is required because thread-level FileSystem
+   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
+   * Returns None if the required method can't be found.
+   */
+  private[spark] def getFSBytesWrittenOnThreadCallback(path: Path, conf: Configuration)
+    : Option[() => Long] = {
+    try {
+      val threadStats = getFileSystemThreadStatistics(path, conf)
+      val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
+      val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
+      val baselineBytesWritten = f()
+      Some(() => f() - baselineBytesWritten)
+    } catch {
+      case e: NoSuchMethodException => {
+        logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
+        None
+      }
+    }
+  }
+
+  private def getFileSystemThreadStatistics(path: Path, conf: Configuration): Seq[AnyRef] = {
+    val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
+    val scheme = qualifiedPath.toUri().getScheme()
+    val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
+    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+  }
+
+  private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
+    val statisticsDataClass =
+      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+    statisticsDataClass.getDeclaredMethod(methodName)
   }
 }
 
