@@ -25,17 +25,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
-  var dataset: SchemaRDD = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    dataset = sparkContext.parallelize(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
-  }
-
-  override def afterAll(): Unit = {
-    dataset = null
-    super.afterAll()
-  }
+  var dataset: SchemaRDD = sparkContext.parallelize(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
 
   test("logistic regression") {
     val lr = new LogisticRegression
@@ -43,7 +33,6 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
     model.transform(dataset)
       .select('label, 'prediction)
       .collect()
-      .foreach(println)
   }
 
   test("logistic regression with setters") {
@@ -52,8 +41,8 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
       .setRegParam(1.0)
     val model = lr.fit(dataset)
     model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
-      .select('label, 'score, 'prediction).collect()
-      .foreach(println)
+      .select('label, 'score, 'prediction)
+      .collect()
   }
 
   test("logistic regression fit and transform with varargs") {
@@ -61,6 +50,6 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
     val model = lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
     model.transform(dataset, model.threshold -> 0.8, model.scoreCol -> "probability")
       .select('label, 'probability, 'prediction)
-      .foreach(println)
+      .collect()
   }
 }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.{SchemaRDD, StructType}
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
-trait CrossValidatorParams extends Params {
+private[ml] trait CrossValidatorParams extends Params {
   /** param for the estimator to be cross-validated */
   val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
   def getEstimator: Estimator[_] = get(estimator)
