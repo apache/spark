@@ -51,20 +51,14 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("Can still construct a new SparkContext after failing due to missing app name or master") {
+  test("Can still construct a new SparkContext after failing to construct a previous one") {
     withSystemProperty("spark.driver.allowMultipleContexts", "false") {
-      val missingMaster = new SparkConf()
-      val missingAppName = missingMaster.clone.setMaster("local")
-      val validConf = missingAppName.clone.setAppName("test")
-      // We shouldn't be able to construct SparkContexts because these are invalid configurations
+      // This is an invalid configuration (no app name or master URL)
       intercept[SparkException] {
-        new SparkContext(missingMaster)
-      }
-      intercept[SparkException] {
-        new SparkContext(missingAppName)
+        new SparkContext(new SparkConf())
       }
       // Even though those earlier calls failed, we should still be able to create a new context
-      sc = new SparkContext(validConf)
+      sc = new SparkContext(new SparkConf().setMaster("local").setAppName("test"))
     }
   }
 
