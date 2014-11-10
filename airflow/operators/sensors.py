@@ -118,11 +118,13 @@ class HivePartitionSensor(BaseSensorOperator):
 
     def __init__(
             self,
-            table, partition,
+            table, partition="ds='{{ ds }}'",
             hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID'),
             schema='default',
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)
+        if '.' in table:
+            schema, table = table.split('.')
         self.hive_dbid = hive_dbid
         self.hook = HiveHook(hive_dbid=hive_dbid)
         self.table = table
@@ -131,7 +133,7 @@ class HivePartitionSensor(BaseSensorOperator):
 
     def poke(self):
         logging.info(
-            'Poking for table {self.table}, '
+            'Poking for table {self.schema}{self.table}, '
             'partition {self.partition}'.format(**locals()))
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)
