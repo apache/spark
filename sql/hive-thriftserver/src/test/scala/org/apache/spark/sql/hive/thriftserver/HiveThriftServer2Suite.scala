@@ -192,7 +192,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     }
   }
 
-  test("Test JDBC query execution") {
+  ignore("Test JDBC query execution") {
     withJdbcStatement() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -214,7 +214,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     }
   }
 
-  test("SPARK-3004 regression: result set containing NULL") {
+  ignore("SPARK-3004 regression: result set containing NULL") {
     withJdbcStatement() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource(
@@ -239,7 +239,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     }
   }
 
-  test("GetInfo Thrift API") {
+  ignore("GetInfo Thrift API") {
     withCLIServiceClient() { client =>
       val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
@@ -260,7 +260,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     }
   }
 
-  test("Checks Hive version") {
+  ignore("Checks Hive version") {
     withJdbcStatement() { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
@@ -268,7 +268,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     }
   }
 
-  test("SPARK-4292 regression: result set iterator issue") {
+  ignore("SPARK-4292 regression: result set iterator issue") {
     withJdbcStatement() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
