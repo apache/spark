@@ -84,7 +84,7 @@ class PipelineModel(
    * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
    * estimator does not exist in the pipeline.
    */
-  def getModel[M](estimator: Estimator[M]): M = {
+  def getModel[M <: Model](estimator: Estimator[M]): M = {
     val matched = transformers.filter {
       case m: Model => m.parent.eq(estimator)
       case _ => false

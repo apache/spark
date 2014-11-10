@@ -28,11 +28,14 @@ import org.apache.spark.storage.StorageLevel
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
 class BinaryClassificationEvaluator extends Evaluator with Params
-    with HasScoreCol with HasLabelCol with HasMetricName {
+    with HasScoreCol with HasLabelCol {
 
-  setMetricName("areaUnderROC")
-
+  /** param for metric name in evaluation */
+  val metricName: Param[String] = new Param(this, "metricName",
+    "metric name in evaluation (areaUnderROC|areaUnderPR)", Some("areaUnderROC"))
+  def getMetricName: String = get(metricName)
   def setMetricName(value: String): this.type = { set(metricName, value); this }
+
   def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
   def setLabelCol(value: String): this.type = { set(labelCol, value); this }
 

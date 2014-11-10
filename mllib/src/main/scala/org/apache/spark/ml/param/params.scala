@@ -25,7 +25,8 @@ import scala.collection.mutable
 import org.apache.spark.ml.Identifiable
 
 /**
- * A param with self-contained documentation and optionally default value.
+ * A param with self-contained documentation and optionally default value. Primitive-typed param
+ * should use the specialized versions, which are more friendly to Java users.
  *
  * @param parent parent object
  * @param name param name
@@ -59,26 +60,31 @@ class Param[T] (
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
+/** Specialized version of [[Param[Double]] for Java. */
 class DoubleParam(parent: Params, name: String, doc: String, default: Option[Double] = None)
     extends Param[Double](parent, name, doc, default) {
   override def w(value: Double): ParamPair[Double] = ParamPair(this, value)
 }
 
+/** Specialized version of [[Param[Int]] for Java. */
 class IntParam(parent: Params, name: String, doc: String, default: Option[Int] = None)
     extends Param[Int](parent, name, doc, default) {
   override def w(value: Int): ParamPair[Int] = ParamPair(this, value)
 }
 
+/** Specialized version of [[Param[Float]] for Java. */
 class FloatParam(parent: Params, name: String, doc: String, default: Option[Float] = None)
     extends Param[Float](parent, name, doc, default) {
   override def w(value: Float): ParamPair[Float] = ParamPair(this, value)
 }
 
+/** Specialized version of [[Param[Long]] for Java. */
 class LongParam(parent: Params, name: String, doc: String, default: Option[Long] = None)
     extends Param[Long](parent, name, doc, default) {
   override def w(value: Long): ParamPair[Long] = ParamPair(this, value)
 }
 
+/** Specilized version of [[Param[Boolean]] for Java. */
 class BooleanParam(parent: Params, name: String, doc: String, default: Option[Boolean] = None)
     extends Param[Boolean](parent, name, doc, default) {
   override def w(value: Boolean): ParamPair[Boolean] = ParamPair(this, value)

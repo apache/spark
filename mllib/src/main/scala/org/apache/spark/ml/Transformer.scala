@@ -84,7 +84,7 @@ abstract class UnaryTransformer[IN, OUT: TypeTag, SELF <: UnaryTransformer[IN, O
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val udf: IN => OUT = this.createTransformFunc(map)
+    val udf = this.createTransformFunc(map)
     dataset.select(Star(None), udf.call(map(inputCol).attr) as map(outputCol))
   }
 }

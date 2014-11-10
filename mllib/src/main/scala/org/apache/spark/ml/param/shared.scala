@@ -63,12 +63,6 @@ private[ml] trait HasThreshold extends Params {
   def getThreshold: Double = get(threshold)
 }
 
-private[ml] trait HasMetricName extends Params {
-  /** param for metric name in evaluation */
-  val metricName: Param[String] = new Param(this, "metricName", "metric name in evaluation")
-  def getMetricName: String = get(metricName)
-}
-
 private[ml] trait HasInputCol extends Params {
   /** param for input column name */
   val inputCol: Param[String] = new Param(this, "inputCol", "input column name")
