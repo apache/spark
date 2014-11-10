@@ -110,7 +110,7 @@ def webserver(args):
     logging.basicConfig(level=logging.DEBUG,
       format=settings.LOG_FORMAT)
     print(settings.HEADER)
-    from www.app import app
+    from airflow.www.app import app
     print("Starting the web server on port {0} and host {1}.".format(args.port, args.hostname))
     app.run(debug=True, port=args.port, host=args.hostname)
 
