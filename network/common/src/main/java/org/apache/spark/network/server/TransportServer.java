@@ -28,6 +28,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.util.internal.PlatformDependent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,11 +72,14 @@ public class TransportServer implements Closeable {
       NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
     EventLoopGroup workerGroup = bossGroup;
 
+    PooledByteBufAllocator allocator = new PooledByteBufAllocator(
+      conf.preferDirectBufs() && PlatformDependent.directBufferPreferred());
+
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
-      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-      .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+      .option(ChannelOption.ALLOCATOR, allocator)
+      .childOption(ChannelOption.ALLOCATOR, allocator);
 
     if (conf.backLog() > 0) {
       bootstrap.option(ChannelOption.SO_BACKLOG, conf.backLog());

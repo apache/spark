@@ -22,6 +22,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData._
@@ -55,6 +57,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
       val hasAccumulators = accumulables.size > 0
       val hasInput = stageData.inputBytes > 0
+      val hasOutput = stageData.outputBytes > 0
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
       val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
@@ -70,6 +73,12 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
               <li>
                 <strong>Input: </strong>
                 {Utils.bytesToString(stageData.inputBytes)}
+              </li>
+            }}
+            {if (hasOutput) {
+              <li>
+                <strong>Output: </strong>
+                {Utils.bytesToString(stageData.outputBytes)}
               </li>
             }}
             {if (hasShuffleRead) {
@@ -160,6 +169,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input", "")) else Nil} ++
+        {if (hasOutput) Seq(("Output", "")) else Nil} ++
         {if (hasShuffleRead) Seq(("Shuffle Read", ""))  else Nil} ++
         {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write", "")) else Nil} ++
         {if (hasBytesSpilled) Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
@@ -170,7 +180,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
       val taskTable = UIUtils.listingTable(
         unzipped._1,
-        taskRow(hasAccumulators, hasInput, hasShuffleRead, hasShuffleWrite, hasBytesSpilled),
+        taskRow(hasAccumulators, hasInput, hasOutput, hasShuffleRead, hasShuffleWrite,
+          hasBytesSpilled),
         tasks,
         headerClasses = unzipped._2)
       // Excludes tasks which failed and have incomplete metrics
@@ -258,6 +269,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           }
           val inputQuantiles = <td>Input</td> +: getFormattedSizeQuantiles(inputSizes)
 
+          val outputSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.outputMetrics.map(_.bytesWritten).getOrElse(0L).toDouble
+          }
+          val outputQuantiles = <td>Output</td> +: getFormattedSizeQuantiles(outputSizes)
+
           val shuffleReadSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
           }
@@ -294,6 +310,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
             if (hasInput) <tr>{inputQuantiles}</tr> else Nil,
+            if (hasOutput) <tr>{outputQuantiles}</tr> else Nil,
             if (hasShuffleRead) <tr>{shuffleReadQuantiles}</tr> else Nil,
             if (hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
             if (hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
@@ -326,6 +343,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   def taskRow(
       hasAccumulators: Boolean,
       hasInput: Boolean,
+      hasOutput: Boolean,
       hasShuffleRead: Boolean,
       hasShuffleWrite: Boolean,
       hasBytesSpilled: Boolean)(taskData: TaskUIData): Seq[Node] = {
@@ -347,6 +365,12 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
       val inputReadable = maybeInput
         .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+        .getOrElse("")
+
+      val maybeOutput = metrics.flatMap(_.outputMetrics)
+      val outputSortable = maybeOutput.map(_.bytesWritten.toString).getOrElse("")
+      val outputReadable = maybeOutput
+        .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
         .getOrElse("")
 
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
@@ -415,6 +439,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             {inputReadable}
           </td>
         }}
+        {if (hasOutput) {
+          <td sorttable_customkey={outputSortable}>
+            {outputReadable}
+          </td>
+        }}
         {if (hasShuffleRead) {
            <td sorttable_customkey={shuffleReadSortable}>
              {shuffleReadReadable}
@@ -436,11 +465,35 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             {diskBytesSpilledReadable}
           </td>
         }}
-        <td>
-          {errorMessage.map { e => <pre>{e}</pre> }.getOrElse("")}
-        </td>
+        {errorMessageCell(errorMessage)}
       </tr>
     }
+  }
+
+  private def errorMessageCell(errorMessage: Option[String]): Seq[Node] = {
+    val error = errorMessage.getOrElse("")
+    val isMultiline = error.indexOf('\n') >= 0
+    // Display the first line by default
+    val errorSummary = StringEscapeUtils.escapeHtml4(
+      if (isMultiline) {
+        error.substring(0, error.indexOf('\n'))
+      } else {
+        error
+      })
+    val details = if (isMultiline) {
+      // scalastyle:off
+      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stacktrace-details collapsed">
+          <pre>{error}</pre>
+        </div>
+      // scalastyle:on
+    } else {
+      ""
+    }
+    <td>{errorSummary}{details}</td>
   }
 
   private def getSchedulerDelay(info: TaskInfo, metrics: TaskMetrics): Long = {

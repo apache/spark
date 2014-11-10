@@ -649,6 +649,9 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
 
+    def test_sort_on_empty_rdd(self):
+        self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
+
     def test_sample(self):
         rdd = self.sc.parallelize(range(0, 100), 4)
         wo = rdd.sample(False, 0.1, 2).collect()
@@ -1109,6 +1112,25 @@ class InputFormatTests(ReusedPySparkTestCase):
               (u'\x02', [1.0]),
               (u'\x03', [2.0])]
         self.assertEqual(maps, em)
+
+    def test_binary_files(self):
+        path = os.path.join(self.tempdir.name, "binaryfiles")
+        os.mkdir(path)
+        data = "short binary data"
+        with open(os.path.join(path, "part-0000"), 'w') as f:
+            f.write(data)
+        [(p, d)] = self.sc.binaryFiles(path).collect()
+        self.assertTrue(p.endswith("part-0000"))
+        self.assertEqual(d, data)
+
+    def test_binary_records(self):
+        path = os.path.join(self.tempdir.name, "binaryrecords")
+        os.mkdir(path)
+        with open(os.path.join(path, "part-0000"), 'w') as f:
+            for i in range(100):
+                f.write('%04d' % i)
+        result = self.sc.binaryRecords(path, 4).map(int).collect()
+        self.assertEqual(range(100), result)
 
 
 class OutputFormatTests(ReusedPySparkTestCase):
