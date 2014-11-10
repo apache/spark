@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.FunSuite
 
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -25,20 +25,15 @@ import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLog
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.test.TestSQLContext._
 
-class CrossValidatorSuite extends FunSuite with BeforeAndAfterAll {
+class CrossValidatorSuite extends FunSuite {
 
-  var dataset: SchemaRDD = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    dataset = sparkContext.makeRDD(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
-  }
+  val dataset: SchemaRDD = sparkContext.makeRDD(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
 
   test("cross validation with logistic regression") {
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
-      .addGrid(lr.regParam, Array(0.1, 100.0))
-      .addGrid(lr.maxIter, Array(2, 10))
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
     val cv = new CrossValidator()
@@ -48,7 +43,7 @@ class CrossValidatorSuite extends FunSuite with BeforeAndAfterAll {
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
     val bestParamMap = cvModel.bestModel.fittingParamMap
-    assert(bestParamMap(lr.regParam) === 0.1)
+    assert(bestParamMap(lr.regParam) === 0.001)
     assert(bestParamMap(lr.maxIter) === 10)
   }
 }

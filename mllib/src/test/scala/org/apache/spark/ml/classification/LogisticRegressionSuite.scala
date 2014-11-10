@@ -19,12 +19,8 @@ package org.apache.spark.ml.classification
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
-import org.apache.spark.ml.feature.StandardScaler
-import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.sql.test.TestSQLContext._
 
 class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
@@ -33,13 +29,10 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = MLUtils.loadLibSVMFile(
-      sparkContext, "../data/mllib/sample_binary_classification_data.txt")
-    dataset.cache()
+    dataset = sparkContext.parallelize(generateLogisticInput(1.0, 1.0, 1000, 42), 2)
   }
 
   override def afterAll(): Unit = {
-    dataset.unpersist()
     dataset = null
     super.afterAll()
   }
