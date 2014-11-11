@@ -27,7 +27,7 @@ import org.apache.spark.ui.jobs.UIData.JobUIData
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
-  private val sc = parent.sc
+  private val startTime: Option[Long] = parent.sc.map(_.startTime)
   private val listener = parent.listener
 
   private def getSubmissionTime(job: JobUIData): Option[Long] = {
@@ -109,11 +109,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (sc.isDefined) {
+            {if (startTime.isDefined) {
               // Total duration is not meaningful unless the UI is live
               <li>
                 <strong>Total Duration: </strong>
-                {UIUtils.formatDuration(now - sc.get.startTime)}
+                {UIUtils.formatDuration(now - startTime.get)}
               </li>
             }}
             <li>
