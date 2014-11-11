@@ -133,7 +133,6 @@ protected[sql] object DataTypeConversions {
   def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
     case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
     case (d: java.math.BigDecimal, _) => Decimal(BigDecimal(d))
-    case (d: java.math.BigDecimal, _) => BigDecimal(d)
     case (other, _) => other
   }
 
