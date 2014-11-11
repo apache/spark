@@ -1,6 +1,684 @@
 Spark Change Log
 ----------------
 
+Release 1.1.1
+
+  [SPARK-4295][External]Fix exception in SparkSinkSuite
+  maji2014 <maji3@asiainfo.com>
+  2014-11-11 02:18:27 -0800
+  Commit: bf867c3, github.com/apache/spark/pull/3177
+
+  [branch-1.1][SPARK-3990] add a note on ALS usage
+  Xiangrui Meng <meng@databricks.com>
+  2014-11-10 22:39:09 -0800
+  Commit: b2cb357, github.com/apache/spark/pull/3190
+
+  [BRANCH-1.1][SPARK-2652] change the default spark.serializer in pyspark back to Kryo
+  Xiangrui Meng <meng@databricks.com>
+  2014-11-10 22:21:14 -0800
+  Commit: 11798d0, github.com/apache/spark/pull/3187
+
+  [SPARK-4330][Doc] Link to proper URL for YARN overview
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-11-10 22:18:00 -0800
+  Commit: d313be8, github.com/apache/spark/pull/3196
+
+  [SQL] Backport backtick and smallint JDBC fixes to 1.1
+  Michael Armbrust <michael@databricks.com>, ravipesala <ravindra.pesala@huawei.com>, scwf <wangfei1@huawei.com>
+  2014-11-10 19:51:07 -0800
+  Commit: 8a1d818, github.com/apache/spark/pull/3199
+
+  Update versions for 1.1.1 release
+  Andrew Or <andrew@databricks.com>
+  2014-11-10 18:40:34 -0800
+  Commit: 01d233e
+
+  [SPARK-3495][SPARK-3496] Backporting block replication fixes made in master to branch 1.1
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-11-10 18:23:02 -0800
+  Commit: be0cc99, github.com/apache/spark/pull/3191
+
+  [SPARK-3954][Streaming] Optimization to FileInputDStream
+  surq <surq@asiainfo.com>
+  2014-11-10 17:37:16 -0800
+  Commit: 3d889df, github.com/apache/spark/pull/2811
+
+  [SPARK-3971][SQL] Backport #2843 to branch-1.1
+  Cheng Lian <lian@databricks.com>, Cheng Lian <lian.cs.zju@gmail.com>, Michael Armbrust <michael@databricks.com>
+  2014-11-10 17:04:10 -0800
+  Commit: 64945f8, github.com/apache/spark/pull/3113
+
+  [SPARK-4308][SQL] Follow up of #3175 for branch 1.1
+  Cheng Lian <lian@databricks.com>
+  2014-11-10 16:57:34 -0800
+  Commit: b3ef06b, github.com/apache/spark/pull/3176
+
+  [SPARK-2548][HOTFIX][Streaming] Removed use of o.a.s.streaming.Durations in branch 1.1
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-11-10 14:13:42 -0800
+  Commit: 86b1bd0, github.com/apache/spark/pull/3188
+
+  Update RecoverableNetworkWordCount.scala
+  comcmipi <pitonak@fns.uniba.sk>
+  2014-11-10 12:33:48 -0800
+  Commit: 254b135, github.com/apache/spark/pull/2735
+
+  SPARK-2548 [STREAMING] JavaRecoverableWordCount is missing
+  Sean Owen <sowen@cloudera.com>
+  2014-11-10 11:47:27 -0800
+  Commit: cdcf546, github.com/apache/spark/pull/2564
+
+  [SPARK-4169] [Core] Accommodate non-English Locales in unit tests
+  Niklas Wilcke <1wilcke@informatik.uni-hamburg.de>
+  2014-11-10 11:37:38 -0800
+  Commit: dc38def, github.com/apache/spark/pull/3036
+
+  [SPARK-4301] StreamingContext should not allow start() to be called after calling stop()
+  Josh Rosen <joshrosen@databricks.com>
+  2014-11-08 18:10:23 -0800
+  Commit: 78cd3ab, github.com/apache/spark/pull/3160
+
+  [SPARK-4304] [PySpark] Fix sort on empty RDD
+  Davies Liu <davies@databricks.com>
+  2014-11-07 20:53:03 -0800
+  Commit: 4895f65, github.com/apache/spark/pull/3162
+
+  Update JavaCustomReceiver.java
+  xiao321 <1042460381@qq.com>
+  2014-11-07 12:56:49 -0800
+  Commit: 4fb26df, github.com/apache/spark/pull/3153
+
+  [SPARK-4249][GraphX]fix a problem of EdgePartitionBuilder in Graphx
+  lianhuiwang <lianhuiwang09@gmail.com>
+  2014-11-06 10:46:45 -0800
+  Commit: 0a40eac, github.com/apache/spark/pull/3138
+
+  [SPARK-4158] Fix for missing resources.
+  Brenden Matthews <brenden@diddyinc.com>
+  2014-11-05 16:02:44 -0800
+  Commit: c58c1bb, github.com/apache/spark/pull/3024
+
+  SPARK-3223 runAsSparkUser cannot change HDFS write permission properly i...
+  Jongyoul Lee <jongyoul@gmail.com>
+  2014-11-05 15:49:42 -0800
+  Commit: 590a943, github.com/apache/spark/pull/3034
+
+  [branch-1.1][SPARK-4148][PySpark] fix seed distribution and add some tests for rdd.sample
+  Xiangrui Meng <meng@databricks.com>
+  2014-11-05 10:30:10 -0800
+  Commit: 44751af, github.com/apache/spark/pull/3104
+
+  [SPARK-4115][GraphX] Add overrided count for edge counting of EdgeRDD.
+  luluorta <luluorta@gmail.com>
+  2014-11-01 01:22:46 -0700
+  Commit: 1b282cd, github.com/apache/spark/pull/2975
+
+  [SPARK-4097] Fix the race condition of 'thread'
+  zsxwing <zsxwing@gmail.com>
+  2014-10-29 14:42:50 -0700
+  Commit: abdb90b, github.com/apache/spark/pull/2957
+
+  [SPARK-4065] Add check for IPython on Windows
+  Michael Griffiths <msjgriffiths@gmail.com>
+  2014-10-28 12:47:21 -0700
+  Commit: f0c5717, github.com/apache/spark/pull/2910
+
+  [SPARK-4107] Fix incorrect handling of read() and skip() return values (branch-1.1 backport)
+  Josh Rosen <joshrosen@databricks.com>
+  2014-10-28 12:30:12 -0700
+  Commit: 286f1ef, github.com/apache/spark/pull/2974
+
+  [SPARK-4110] Wrong comments about default settings in spark-daemon.sh
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-10-28 12:29:01 -0700
+  Commit: dee3317, github.com/apache/spark/pull/2972
+
+  [MLlib] SPARK-3987: add test case on objective value for NNLS
+  coderxiang <shuoxiangpub@gmail.com>
+  2014-10-27 19:43:39 -0700
+  Commit: 2ef2f5a, github.com/apache/spark/pull/2965
+
+  Fix build breakage introduced by 6c10c2770c718287f9cc2af4109b701fa1057b70
+  Josh Rosen <joshrosen@databricks.com>
+  2014-10-25 20:33:17 -0700
+  Commit: 2eb9d7c
+
+  Revert "[SPARK-4056] Upgrade snappy-java to 1.1.1.5"
+  Josh Rosen <joshrosen@databricks.com>
+  2014-10-25 17:09:01 -0700
+  Commit: c1989aa
+
+  [SPARK-4056] Upgrade snappy-java to 1.1.1.5
+  Josh Rosen <rosenville@gmail.com>, Josh Rosen <joshrosen@databricks.com>
+  2014-10-24 17:21:08 -0700
+  Commit: b7541ae, github.com/apache/spark/pull/2911
+
+  [SPARK-4080] Only throw IOException from [write|read][Object|External]
+  Josh Rosen <joshrosen@databricks.com>
+  2014-10-24 15:06:15 -0700
+  Commit: 6c10c27, github.com/apache/spark/pull/2932
+
+  [SPARK-4006] In long running contexts, we encountered the situation of d...
+  Tal Sliwowicz <tal.s@taboola.com>
+  2014-10-24 13:51:25 -0700
+  Commit: 59297e9, github.com/apache/spark/pull/2915
+
+  [SPARK-4075] [Deploy] Jar url validation is not enough for Jar file
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-10-24 13:08:21 -0700
+  Commit: 80dde80, github.com/apache/spark/pull/2925
+
+  [SPARK-4076] Parameter expansion in spark-config is wrong
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-10-24 13:04:35 -0700
+  Commit: 386fc46, github.com/apache/spark/pull/2930
+
+  [SPARK-2652] [PySpark] donot use KyroSerializer as default serializer
+  Davies Liu <davies@databricks.com>
+  2014-10-23 23:58:00 -0700
+  Commit: 926f8ca, github.com/apache/spark/pull/2916
+
+  [SPARK-3426] Fix sort-based shuffle error when spark.shuffle.compress and spark.shuffle.spill.compress settings are different
+  Josh Rosen <joshrosen@databricks.com>
+  2014-10-22 14:49:58 -0700
+  Commit: 5e191fa, github.com/apache/spark/pull/2890
+
+  [SPARK-3877][YARN] Throw an exception when application is not successful so that the exit code wil be set to 1 (for branch-1.1)
+  zsxwing <zsxwing@gmail.com>
+  2014-10-22 15:08:28 -0700
+  Commit: eb62094, github.com/apache/spark/pull/2748
+
+  [SPARK-4010][Web UI]Spark UI returns 500 in yarn-client mode
+  GuoQiang Li <witgo@qq.com>
+  2014-10-20 11:01:26 -0700
+  Commit: 457ef59, github.com/apache/spark/pull/2858
+
+  [SPARK-3948][Shuffle]Fix stream corruption bug in sort-based shuffle
+  jerryshao <saisai.shao@intel.com>
+  2014-10-20 10:20:21 -0700
+  Commit: 12a61d8, github.com/apache/spark/pull/2824
+
+  [SPARK-2546] Clone JobConf for each task (branch-1.0 / 1.1 backport)
+  Josh Rosen <joshrosen@apache.org>
+  2014-10-19 00:31:06 -0700
+  Commit: 2cd40db, github.com/apache/spark/pull/2684
+
+  SPARK-3926 [CORE] Result of JavaRDD.collectAsMap() is not Serializable
+  Sean Owen <sowen@cloudera.com>
+  2014-10-18 12:33:20 -0700
+  Commit: 327404d, github.com/apache/spark/pull/2805
+
+  [SPARK-3606] [yarn] Correctly configure AmIpFilter for Yarn HA (1.1 vers...
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2014-10-17 00:53:15 -0700
+  Commit: 0d958f1, github.com/apache/spark/pull/2497
+
+  [SPARK-3067] JobProgressPage could not show Fair Scheduler Pools section sometimes
+  yantangzhai <tyz0303@163.com>, YanTangZhai <hakeemzhai@tencent.com>
+  2014-10-16 19:25:37 -0700
+  Commit: 35875e9, github.com/apache/spark/pull/1966
+
+  [SPARK-3890][Docs]remove redundant spark.executor.memory in doc
+  WangTaoTheTonic <barneystinson@aliyun.com>, WangTao <barneystinson@aliyun.com>
+  2014-10-16 19:12:39 -0700
+  Commit: 2c41170, github.com/apache/spark/pull/2745
+
+  [SQL]typo in HiveFromSpark
+  Kun Li <jacky.likun@gmail.com>
+  2014-10-16 19:00:10 -0700
+  Commit: 61e5903, github.com/apache/spark/pull/2809
+
+  SPARK-3807: SparkSql does not work for tables created using custom serde
+  chirag <chirag.aggarwal@guavus.com>
+  2014-10-13 13:47:26 -0700
+  Commit: 925e22d, github.com/apache/spark/pull/2674
+
+  [SPARK-3899][Doc]fix wrong links in streaming doc
+  w00228970 <wangfei1@huawei.com>, wangfei <wangfei1@huawei.com>
+  2014-10-12 23:35:50 -0700
+  Commit: 4fc6638, github.com/apache/spark/pull/2749
+
+  [SPARK-3905][Web UI]The keys for sorting the columns of Executor page ,Stage page Storage page are incorrect
+  GuoQiang Li <witgo@qq.com>
+  2014-10-12 22:48:54 -0700
+  Commit: a36116c, github.com/apache/spark/pull/2763
+
+  [SPARK-3121] Wrong implementation of implicit bytesWritableConverter
+  Jakub Dubovský <james64@inMail.sk>, Dubovsky Jakub <dubovsky@avast.com>
+  2014-10-12 22:03:26 -0700
+  Commit: 0e32579, github.com/apache/spark/pull/2712
+
+  SPARK-3716 [GraphX] Update Analytics.scala for partitionStrategy assignment
+  NamelessAnalyst <NamelessAnalyst@users.noreply.github.com>
+  2014-10-12 14:18:55 -0700
+  Commit: 5a21e3e, github.com/apache/spark/pull/2569
+
+  [SPARK-3711][SQL] Optimize where in clause filter queries
+  Yash Datta <Yash.Datta@guavus.com>
+  2014-10-09 12:59:14 -0700
+  Commit: 18ef22a, github.com/apache/spark/pull/2561
+
+  [SPARK-3844][UI] Truncate appName in WebUI if it is too long
+  Xiangrui Meng <meng@databricks.com>
+  2014-10-09 00:00:24 -0700
+  Commit: 09d6a81, github.com/apache/spark/pull/2707
+
+  [SPARK-3788] [yarn] Fix compareFs to do the right thing for HDFS namespaces (1.1 version).
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2014-10-08 08:51:17 -0500
+  Commit: a44af73, github.com/apache/spark/pull/2650
+
+  [SPARK-3829] Make Spark logo image on the header of HistoryPage as a link to HistoryPage's page #1
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-10-07 16:54:49 -0700
+  Commit: a1f833f, github.com/apache/spark/pull/2690
+
+  [SPARK-3777] Display "Executor ID" for Tasks in Stage page
+  zsxwing <zsxwing@gmail.com>
+  2014-10-07 16:00:22 -0700
+  Commit: e8afb73, github.com/apache/spark/pull/2642
+
+  [SPARK-3731] [PySpark] fix memory leak in PythonRDD
+  Davies Liu <davies.liu@gmail.com>
+  2014-10-07 12:20:12 -0700
+  Commit: 5531830, github.com/apache/spark/pull/2668
+
+  [SPARK-3825] Log more detail when unrolling a block fails
+  Andrew Or <andrewor14@gmail.com>
+  2014-10-07 12:52:10 -0700
+  Commit: 267c7be, github.com/apache/spark/pull/2688
+
+  [SPARK-3808] PySpark fails to start in Windows
+  Masayoshi TSUZUKI <tsudukim@oss.nttdata.co.jp>
+  2014-10-07 11:53:22 -0700
+  Commit: 3a7875d, github.com/apache/spark/pull/2669
+
+  [SPARK-3827] Very long RDD names are not rendered properly in web UI
+  Hossein <hossein@databricks.com>
+  2014-10-07 11:46:26 -0700
+  Commit: 82ab4a7, github.com/apache/spark/pull/2687
+
+  [SPARK-3792][SQL] Enable JavaHiveQLSuite
+  scwf <wangfei1@huawei.com>
+  2014-10-05 17:47:20 -0700
+  Commit: 964e3aa, github.com/apache/spark/pull/2652
+
+  SPARK-1656: Fix potential resource leaks
+  zsxwing <zsxwing@gmail.com>
+  2014-10-05 09:55:17 -0700
+  Commit: c068d90, github.com/apache/spark/pull/577
+
+  [SPARK-3597][Mesos] Implement `killTask`.
+  Brenden Matthews <brenden@diddyinc.com>
+  2014-10-05 09:49:24 -0700
+  Commit: d9cf4d0, github.com/apache/spark/pull/2453
+
+  [SPARK-3774] typo comment in bin/utils.sh
+  Masayoshi TSUZUKI <tsudukim@oss.nttdata.co.jp>
+  2014-10-03 13:12:37 -0700
+  Commit: e4ddede, github.com/apache/spark/pull/2639
+
+  [SPARK-3775] Not suitable error message in spark-shell.cmd
+  Masayoshi TSUZUKI <tsudukim@oss.nttdata.co.jp>
+  2014-10-03 13:09:48 -0700
+  Commit: f130256, github.com/apache/spark/pull/2640
+
+  [SPARK-3535][Mesos] Fix resource handling.
+  Brenden Matthews <brenden@diddyinc.com>
+  2014-10-03 12:58:04 -0700
+  Commit: 6f15097, github.com/apache/spark/pull/2401
+
+  [SPARK-3696]Do not override the user-difined conf_dir
+  WangTaoTheTonic <barneystinson@aliyun.com>
+  2014-10-03 10:42:41 -0700
+  Commit: d5af9e1, github.com/apache/spark/pull/2541
+
+  SPARK-2058: Overriding SPARK_HOME/conf with SPARK_CONF_DIR
+  EugenCepoi <cepoi.eugen@gmail.com>
+  2014-10-03 10:03:15 -0700
+  Commit: 5d991db, github.com/apache/spark/pull/2481
+
+  [DEPLOY] SPARK-3759: Return the exit code of the driver process
+  Eric Eijkelenboom <ee@userreport.com>
+  2014-10-02 18:04:38 -0700
+  Commit: 699af62, github.com/apache/spark/pull/2628
+
+  [SPARK-3755][Core] avoid trying privileged port when request a non-privileged port
+  scwf <wangfei1@huawei.com>
+  2014-10-02 17:47:56 -0700
+  Commit: 16789f6, github.com/apache/spark/pull/2623
+
+  [SQL][Docs] Update the output of printSchema and fix a typo in SQL programming guide.
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-10-02 11:37:24 -0700
+  Commit: 6869351, github.com/apache/spark/pull/2630
+
+  SPARK-3638 | Forced a compatible version of http client in kinesis-asl profile
+  aniketbhatnagar <aniket.bhatnagar@gmail.com>
+  2014-10-01 18:31:18 -0700
+  Commit: c52c231, github.com/apache/spark/pull/2535
+
+  Typo error in KafkaWordCount example
+  Gaspar Munoz <munozs.88@gmail.com>
+  2014-10-01 13:47:22 -0700
+  Commit: 24ee616, github.com/apache/spark/pull/2614
+
+  [SPARK-3756] [Core]check exception is caused by an address-port collision properly
+  scwf <wangfei1@huawei.com>
+  2014-10-01 11:51:30 -0700
+  Commit: b4f690d, github.com/apache/spark/pull/2611
+
+  SPARK-2626 [DOCS] Stop SparkContext in all examples
+  Sean Owen <sowen@cloudera.com>
+  2014-10-01 11:28:22 -0700
+  Commit: 13f33cf, github.com/apache/spark/pull/2575
+
+  [SPARK-3755][Core] Do not bind port 1 - 1024 to server in spark
+  scwf <wangfei1@huawei.com>
+  2014-10-01 11:30:29 -0700
+  Commit: c8c3b49, github.com/apache/spark/pull/2610
+
+  [SPARK-3747] TaskResultGetter could incorrectly abort a stage if it cannot get result for a specific task
+  Reynold Xin <rxin@apache.org>
+  2014-10-01 00:29:14 -0700
+  Commit: a7d2df4, github.com/apache/spark/pull/2599
+
+  SPARK-3745 - fix check-license to properly download and check jar
+  shane knapp <incomplete@gmail.com>
+  2014-09-30 13:11:25 -0700
+  Commit: 06b96d4, github.com/apache/spark/pull/2596
+
+  [SPARK-3709] Executors don't always report broadcast block removal properly back to the driver (for branch-1.1)
+  Reynold Xin <rxin@apache.org>
+  2014-09-30 12:24:58 -0700
+  Commit: a8c6e82, github.com/apache/spark/pull/2591
+
+  [SPARK-3734] DriverRunner should not read SPARK_HOME from submitter's environment
+  Josh Rosen <joshrosen@apache.org>
+  2014-09-29 23:36:10 -0700
+  Commit: 48be657, github.com/apache/spark/pull/2586
+
+  Fixed the condition in StronglyConnectedComponents Issue: SPARK-3635
+  oded <oded@HP-DV6.c4internal.c4-security.com>
+  2014-09-29 18:05:53 -0700
+  Commit: 85dd513, github.com/apache/spark/pull/2486
+
+  [graphX] GraphOps: random pick vertex bug
+  yingjieMiao <yingjie@42go.com>
+  2014-09-29 18:01:27 -0700
+  Commit: e5ab113, github.com/apache/spark/pull/2553
+
+  [SPARK-3032][Shuffle] Fix key comparison integer overflow introduced sorting exception
+  jerryshao <saisai.shao@intel.com>
+  2014-09-29 11:25:32 -0700
+  Commit: df5a62f, github.com/apache/spark/pull/2514
+
+  [CORE] Bugfix: LogErr format in DAGScheduler.scala
+  Zhang, Liye <liye.zhang@intel.com>
+  2014-09-29 01:13:15 -0700
+  Commit: 7d88471, github.com/apache/spark/pull/2572
+
+  [SPARK-3715][Docs]minor typo
+  WangTaoTheTonic <barneystinson@aliyun.com>
+  2014-09-28 18:30:13 -0700
+  Commit: 004b6fa, github.com/apache/spark/pull/2567
+
+  Docs : use "--total-executor-cores" rather than "--cores" after spark-shell
+  CrazyJvm <crazyjvm@gmail.com>
+  2014-09-27 09:41:04 -0700
+  Commit: d9d94e0, github.com/apache/spark/pull/2540
+
+  SPARK-3639 | Removed settings master in examples
+  aniketbhatnagar <aniket.bhatnagar@gmail.com>
+  2014-09-26 09:47:58 -0700
+  Commit: d6ed5ab, github.com/apache/spark/pull/2536
+
+  [SPARK-1853] Show Streaming application code context (file, line number) in Spark Stages UI
+  Mubarak Seyed <mubarak.seyed@gmail.com>, Tathagata Das <tathagata.das1565@gmail.com>
+  2014-09-23 15:09:12 -0700
+  Commit: 505ed6b, github.com/apache/spark/pull/2464
+
+  [SPARK-3653] Respect SPARK_*_MEMORY for cluster mode
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-23 14:00:33 -0700
+  Commit: 5bbc621, github.com/apache/spark/pull/2500
+
+  SPARK-3612. Executor shouldn't quit if heartbeat message fails to reach ...
+  Sandy Ryza <sandy@cloudera.com>
+  2014-09-23 13:44:18 -0700
+  Commit: ffd97be, github.com/apache/spark/pull/2487
+
+  Update docs to use jsonRDD instead of wrong jsonRdd.
+  Grega Kespret <grega.kespret@gmail.com>
+  2014-09-22 10:13:44 -0700
+  Commit: aab0a1d, github.com/apache/spark/pull/2479
+
+  [MLLib] Fix example code variable name misspelling in MLLib Feature Extraction guide
+  RJ Nowling <rnowling@gmail.com>
+  2014-09-22 09:10:41 -0700
+  Commit: 32bb97f, github.com/apache/spark/pull/2459
+
+  Revert "[SPARK-3595] Respect configured OutputCommitters when calling saveAsHadoopFile"
+  Patrick Wendell <pwendell@gmail.com>
+  2014-09-21 13:07:20 -0700
+  Commit: f5bf7de
+
+  [SPARK-3595] Respect configured OutputCommitters when calling saveAsHadoopFile
+  Ian Hummel <ian@themodernlife.net>
+  2014-09-21 13:04:36 -0700
+  Commit: 7a76657, github.com/apache/spark/pull/2450
+
+  [Docs] Fix outdated docs for standalone cluster
+  andrewor14 <andrewor14@gmail.com>, Andrew Or <andrewor14@gmail.com>
+  2014-09-19 16:02:38 -0700
+  Commit: fd88353, github.com/apache/spark/pull/2461
+
+  [SPARK-2062][GraphX] VertexRDD.apply does not use the mergeFunc
+  Larry Xiao <xiaodi@sjtu.edu.cn>, Blie Arkansol <xiaodi@sjtu.edu.cn>, Ankur Dave <ankurdave@gmail.com>
+  2014-09-18 23:32:32 -0700
+  Commit: 1687d6b, github.com/apache/spark/pull/1903
+
+  [Minor Hot Fix] Move a line in SparkSubmit to the right place
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-18 17:49:28 -0700
+  Commit: cf15b22, github.com/apache/spark/pull/2452
+
+  [SPARK-3560] Fixed setting spark.jars system property in yarn-cluster mode
+  Victsm <victor.nju@gmail.com>, Min Shen <mshen@linkedin.com>
+  2014-09-18 15:58:14 -0700
+  Commit: 832dff6, github.com/apache/spark/pull/2449
+
+  [SPARK-3589][Minor]remove redundant code
+  WangTaoTheTonic <barneystinson@aliyun.com>
+  2014-09-18 12:07:24 -0700
+  Commit: 2b28692, github.com/apache/spark/pull/2445
+
+  [SPARK-3565]Fix configuration item not consistent with document
+  WangTaoTheTonic <barneystinson@aliyun.com>
+  2014-09-17 21:59:23 -0700
+  Commit: 32f2222, github.com/apache/spark/pull/2427
+
+  [SPARK-3564][WebUI] Display App ID on HistoryPage
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-09-17 16:31:58 -0700
+  Commit: 3f1f974, github.com/apache/spark/pull/2424
+
+  Docs: move HA subsections to a deeper indentation level
+  Andrew Ash <andrew@andrewash.com>
+  2014-09-17 15:07:57 -0700
+  Commit: 0690410, github.com/apache/spark/pull/2402
+
+  [SQL][DOCS] Improve table caching section
+  Michael Armbrust <michael@databricks.com>
+  2014-09-17 12:41:49 -0700
+  Commit: 85e7c52, github.com/apache/spark/pull/2434
+
+  [SPARK-3490] Disable SparkUI for tests (backport into 1.1)
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-16 18:23:28 -0700
+  Commit: 937de93, github.com/apache/spark/pull/2415
+
+  [SPARK-3555] Fix UISuite race condition
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-16 16:03:20 -0700
+  Commit: 856156b, github.com/apache/spark/pull/2418
+
+  [SQL][DOCS] Improve section on thrift-server
+  Michael Armbrust <michael@databricks.com>
+  2014-09-16 11:51:46 -0700
+  Commit: 75158a7, github.com/apache/spark/pull/2384
+
+  [SPARK-3518] Remove wasted statement in JsonProtocol
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-09-15 16:11:41 -0700
+  Commit: 99a6c5e, github.com/apache/spark/pull/2380
+
+  SPARK-3039: Allow spark to be built using avro-mapred for hadoop2
+  Bertrand Bossy <bertrandbossy@gmail.com>
+  2014-09-14 21:10:17 -0700
+  Commit: 78887f9, github.com/apache/spark/pull/1945
+
+  [SQL] [Docs] typo fixes
+  Nicholas Chammas <nicholas.chammas@gmail.com>
+  2014-09-13 12:34:20 -0700
+  Commit: 70f93d5, github.com/apache/spark/pull/2367
+
+  [SPARK-3515][SQL] Moves test suite setup code to beforeAll rather than in constructor
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-09-12 20:14:09 -0700
+  Commit: 44e534e, github.com/apache/spark/pull/2375
+
+  [SPARK-3500] [SQL] use JavaSchemaRDD as SchemaRDD._jschema_rdd
+  Davies Liu <davies.liu@gmail.com>
+  2014-09-12 19:05:39 -0700
+  Commit: 9c06c72, github.com/apache/spark/pull/2369
+
+  [SPARK-3481] [SQL] Eliminate the error log in local Hive comparison test
+  Cheng Hao <hao.cheng@intel.com>
+  2014-09-12 11:29:30 -0700
+  Commit: 6cbf83c, github.com/apache/spark/pull/2352
+
+  Revert "[Spark-3490] Disable SparkUI for tests"
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-12 10:40:03 -0700
+  Commit: f17b795
+
+  [SPARK-3465] fix task metrics aggregation in local mode
+  Davies Liu <davies.liu@gmail.com>
+  2014-09-11 18:53:26 -0700
+  Commit: e69deb8, github.com/apache/spark/pull/2338
+
+  [SPARK-3429] Don't include the empty string "" as a defaultAclUser
+  Andrew Ash <andrew@andrewash.com>
+  2014-09-11 17:28:36 -0700
+  Commit: 4245404, github.com/apache/spark/pull/2286
+
+  [Spark-3490] Disable SparkUI for tests
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-11 17:18:46 -0700
+  Commit: 2ffc798, github.com/apache/spark/pull/2363
+
+  [SPARK-2140] Updating heap memory calculation for YARN stable and alpha.
+  Chris Cope <ccope@resilientscience.com>
+  2014-09-11 08:13:07 -0500
+  Commit: 06fb2d0, github.com/apache/spark/pull/2253
+
+  HOTFIX: Changing color on doc menu
+  Patrick Wendell <pwendell@gmail.com>
+  2014-09-10 22:14:55 -0700
+  Commit: e51ce9a
+
+  [SPARK-1919] Fix Windows spark-shell --jars
+  Andrew Or <andrewor14@gmail.com>
+  2014-09-02 10:47:05 -0700
+  Commit: 359cd59, github.com/apache/spark/pull/2211
+
+  [SPARK-3061] Fix Maven build under Windows
+  Josh Rosen <joshrosen@apache.org>, Josh Rosen <rosenville@gmail.com>, Josh Rosen <joshrosen@databricks.com>
+  2014-09-02 10:45:14 -0700
+  Commit: 23fd3e8, github.com/apache/spark/pull/2165
+
+  [SPARK-3345] Do correct parameters for ShuffleFileGroup
+  Liang-Chi Hsieh <viirya@gmail.com>
+  2014-09-03 17:04:53 -0700
+  Commit: e5f77ae, github.com/apache/spark/pull/2235
+
+  [SPARK-3193]output errer info when Process exit code is not zero in test suite
+  scwf <wangfei1@huawei.com>
+  2014-09-09 11:57:01 -0700
+  Commit: 2426268, github.com/apache/spark/pull/2108
+
+  SPARK-2425 Don't kill a still-running Application because of some misbehaving Executors
+  Mark Hamstra <markhamstra@gmail.com>
+  2014-09-08 20:51:56 -0700
+  Commit: e884805, github.com/apache/spark/pull/1360
+
+  [SQL] Minor edits to sql programming guide.
+  Henry Cook <hcook@eecs.berkeley.edu>
+  2014-09-08 14:56:37 -0700
+  Commit: 7a236dc, github.com/apache/spark/pull/2316
+
+  [SPARK-938][doc] Add OpenStack Swift support
+  Reynold Xin <rxin@apache.org>, Gil Vernik <gilv@il.ibm.com>
+  2014-09-07 20:56:04 -0700
+  Commit: 8c6306a, github.com/apache/spark/pull/is
+
+  Fixed typos in make-distribution.sh
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-09-07 20:38:32 -0700
+  Commit: e45bfa8, github.com/apache/spark/pull/2121
+
+  [SPARK-3408] Fixed Limit operator so it works with sort-based shuffle.
+  Reynold Xin <rxin@apache.org>
+  2014-09-07 18:42:24 -0700
+  Commit: d555c2e, github.com/apache/spark/pull/2281
+
+  [SQL] Update SQL Programming Guide
+  Michael Armbrust <michael@databricks.com>, Yin Huai <huai@cse.ohio-state.edu>
+  2014-09-07 21:34:46 -0400
+  Commit: 65dae63, github.com/apache/spark/pull/2258
+
+  [SPARK-3394] [SQL] Fix crash in TakeOrdered when limit is 0
+  Eric Liang <ekl@google.com>
+  2014-09-07 17:57:59 -0700
+  Commit: c5d8d82, github.com/apache/spark/pull/2264
+
+  [SPARK-2419][Streaming][Docs] More updates to the streaming programming guide
+  Tathagata Das <tathagata.das1565@gmail.com>, Chris Fregly <chris@fregly.com>
+  2014-09-06 14:46:43 -0700
+  Commit: ce4053c, github.com/apache/spark/pull/2307
+
+  SPARK-3211 .take() is OOM-prone with empty partitions
+  Andrew Ash <andrew@andrewash.com>
+  2014-09-05 18:52:05 -0700
+  Commit: 28ce67b, github.com/apache/spark/pull/2117
+
+  [Docs] fix minor MLlib case typo
+  Nicholas Chammas <nicholas.chammas@gmail.com>
+  2014-09-04 23:37:06 -0700
+  Commit: 6b128be, github.com/apache/spark/pull/2278
+
+  [SPARK-3401][PySpark] Wrong usage of tee command in python/run-tests
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-09-04 10:29:11 -0700
+  Commit: dbf8120, github.com/apache/spark/pull/2272
+
+  [HOTFIX] [SPARK-3400] Revert 9b225ac "fix GraphX EdgeRDD zipPartitions"
+  Ankur Dave <ankurdave@gmail.com>
+  2014-09-03 23:49:47 -0700
+  Commit: 8c40ab5, github.com/apache/spark/pull/2271
+
+  [SPARK-3372] [MLlib] MLlib doesn't pass maven build / checkstyle due to multi-byte character contained in Gradient.scala
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-09-03 20:47:00 -0700
+  Commit: f41c45a, github.com/apache/spark/pull/2248
+
+  [SPARK-2419][Streaming][Docs] Updates to the streaming programming guide
+  Tathagata Das <tathagata.das1565@gmail.com>, Jacek Laskowski <jacek@japila.pl>
+  2014-09-03 17:38:01 -0700
+  Commit: 3111501, github.com/apache/spark/pull/2254
+
+
 Release 1.1.0
 
   [SPARK-3320][SQL] Made batched in-memory column buffer building work for SchemaRDDs with empty partitions
