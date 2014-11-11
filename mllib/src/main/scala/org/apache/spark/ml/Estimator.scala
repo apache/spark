@@ -20,13 +20,16 @@ package org.apache.spark.ml
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 
 /**
+ * :: AlphaComponent ::
  * Abstract class for estimators that fit models to data.
  */
+@AlphaComponent
 abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
 
   /**

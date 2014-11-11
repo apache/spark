@@ -19,9 +19,13 @@ package org.apache.spark.ml
 
 import java.util.UUID
 
+import org.apache.spark.annotation.AlphaComponent
+
 /**
+ * :: AlphaComponent ::
  * Object with a unique id.
  */
+@AlphaComponent
 trait Identifiable extends Serializable {
 
   /**

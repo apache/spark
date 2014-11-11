@@ -17,14 +17,17 @@
 
 package org.apache.spark.ml.evaluation
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{DoubleType, Row, SchemaRDD}
 
 /**
+ * :: AlphaComponent ::
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
+@AlphaComponent
 class BinaryClassificationEvaluator extends Evaluator with Params
   with HasScoreCol with HasLabelCol {
 

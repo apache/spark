@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -28,8 +29,10 @@ import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.storage.StorageLevel
 
 /**
+ * :: AlphaComponent ::
  * Params for logistic regression.
  */
+@AlphaComponent
 private[classification] trait LogisticRegressionParams extends Params
   with HasRegParam with HasMaxIter with HasLabelCol with HasThreshold with HasFeaturesCol
   with HasScoreCol with HasPredictionCol {
@@ -108,8 +111,10 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
 }
 
 /**
+ * :: AlphaComponent ::
  * Model produced by [[LogisticRegression]].
  */
+@AlphaComponent
 class LogisticRegressionModel private[ml] (
     override val parent: LogisticRegression,
     override val fittingParamMap: ParamMap,

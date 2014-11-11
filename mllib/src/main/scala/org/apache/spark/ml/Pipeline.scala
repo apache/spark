@@ -20,12 +20,15 @@ package org.apache.spark.ml
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.sql.{SchemaRDD, StructType}
 
 /**
+ * :: AlphaComponent ::
  * A stage in a pipeline, either an Estimator or an Transformer.
  */
+@AlphaComponent
 abstract class PipelineStage extends Serializable with Logging {
 
   /**
@@ -49,6 +52,7 @@ abstract class PipelineStage extends Serializable with Logging {
 }
 
 /**
+ * :: AlphaComponent ::
  * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
  * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline.fit]] is called, the
  * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator.fit]] method will
@@ -59,6 +63,7 @@ abstract class PipelineStage extends Serializable with Logging {
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
  */
+@AlphaComponent
 class Pipeline extends Estimator[PipelineModel] {
 
   /** param for pipeline stages */
@@ -125,8 +130,10 @@ class Pipeline extends Estimator[PipelineModel] {
 }
 
 /**
+ * :: AlphaComponent ::
  * Represents a compiled pipeline.
  */
+@AlphaComponent
 class PipelineModel(
     override val parent: Pipeline,
     override val fittingParamMap: ParamMap,

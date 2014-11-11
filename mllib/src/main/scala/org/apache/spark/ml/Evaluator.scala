@@ -17,12 +17,15 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.SchemaRDD
 
 /**
+ * :: AlphaComponent ::
  * Abstract class for evaluators that compute metrics from predictions.
  */
+@AlphaComponent
 abstract class Evaluator extends Identifiable {
 
   /**

@@ -17,13 +17,16 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.ParamMap
 
 /**
+ * :: AlphaComponent ::
  * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
  *
  * @tparam M model type
  */
+@AlphaComponent
 abstract class Model[M <: Model[M]] extends Transformer {
   /**
    * The parent estimator that produced this model.

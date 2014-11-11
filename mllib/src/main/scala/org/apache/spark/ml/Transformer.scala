@@ -21,6 +21,7 @@ import scala.annotation.varargs
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
@@ -30,8 +31,10 @@ import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.types._
 
 /**
+ * :: AlphaComponet ::
  * Abstract class for transformers that transform one dataset into another.
  */
+@AlphaComponent
 abstract class Transformer extends PipelineStage with Params {
 
   /**
@@ -80,9 +83,11 @@ abstract class Transformer extends PipelineStage with Params {
 }
 
 /**
+ * :: AlphaComponent ::
  * Abstract class for transformers that take one input column, apply transformation, and output the
  * result as a new column.
  */
+@AlphaComponent
 abstract class UnaryTransformer[IN, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 

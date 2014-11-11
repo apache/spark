@@ -17,14 +17,17 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * :: AlphaComponent ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  */
+@AlphaComponent
 class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
 
   /** number of features */

@@ -19,12 +19,15 @@ package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 
+import org.apache.spark.annotation.AlphaComponent
+
 import scala.annotation.varargs
 import scala.collection.mutable
 
 import org.apache.spark.ml.Identifiable
 
 /**
+ * :: AlphaComponent ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param
  * should use the specialized versions, which are more friendly to Java users.
  *
@@ -33,6 +36,7 @@ import org.apache.spark.ml.Identifiable
  * @param doc documentation
  * @tparam T param value type
  */
+@AlphaComponent
 class Param[T] (
     val parent: Params,
     val name: String,
@@ -102,9 +106,11 @@ class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Opti
 case class ParamPair[T](param: Param[T], value: T)
 
 /**
+ * :: AlphaComponent ::
  * Trait for components that take parameters. This also provides an internal param map to store
  * parameter values attached to the instance.
  */
+@AlphaComponent
 trait Params extends Identifiable with Serializable {
 
   /** Returns all params. */
@@ -198,8 +204,10 @@ private[ml] object Params {
 }
 
 /**
+ * :: AlphaComponent ::
  * A param to value map.
  */
+@AlphaComponent
 class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) extends Serializable {
 
   /**

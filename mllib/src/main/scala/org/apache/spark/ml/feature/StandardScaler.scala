@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.feature
@@ -31,9 +32,11 @@ import org.apache.spark.sql.catalyst.dsl._
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol
 
 /**
+ * :: AlphaComponent ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  */
+@AlphaComponent
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -66,8 +69,10 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
 }
 
 /**
+ * :: AlphaComponent ::
  * Model fitted by [[StandardScaler]].
  */
+@AlphaComponent
 class StandardScalerModel private[ml] (
     override val parent: StandardScaler,
     override val fittingParamMap: ParamMap,
