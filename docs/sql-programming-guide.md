@@ -1059,7 +1059,6 @@ in Hive deployments.
 
 **Major Hive Features**
 
-* Spark SQL does not currently support inserting to tables using dynamic partitioning.
 * Tables with buckets: bucket is the hash partitioning within a Hive table partition. Spark SQL
   doesn't support buckets yet.
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.IOException;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,6 +31,7 @@ import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -39,7 +42,7 @@ public class ExternalShuffleSecuritySuite {
 
   @Before
   public void beforeEach() {
-    RpcHandler handler = new SaslRpcHandler(new ExternalShuffleBlockHandler(),
+    RpcHandler handler = new SaslRpcHandler(new ExternalShuffleBlockHandler(conf),
       new TestSecretKeyHolder("my-app-id", "secret"));
     TransportContext context = new TransportContext(conf, handler);
     this.server = context.createServer();
@@ -54,7 +57,7 @@ public class ExternalShuffleSecuritySuite {
   }
 
   @Test
-  public void testValid() {
+  public void testValid() throws IOException {
     validate("my-app-id", "secret");
   }
 
@@ -77,7 +80,7 @@ public class ExternalShuffleSecuritySuite {
   }
 
   /** Creates an ExternalShuffleClient and attempts to register with the server. */
-  private void validate(String appId, String secretKey) {
+  private void validate(String appId, String secretKey) throws IOException {
     ExternalShuffleClient client =
       new ExternalShuffleClient(conf, new TestSecretKeyHolder(appId, secretKey), true);
     client.init(appId);
