@@ -49,6 +49,28 @@ class SparkStatusAPI private (sc: SparkContext) {
   }
 
   /**
+   * Returns an array containing the ids of all active stages.
+   *
+   * This method does not guarantee the order of the elements in its result.
+   */
+  def getActiveStageIds(): Array[Int] = {
+    jobProgressListener.synchronized {
+      jobProgressListener.activeStages.values.map(_.stageId).toArray
+    }
+  }
+
+  /**
+   * Returns an array containing the ids of all active jobs.
+   *
+   * This method does not guarantee the order of the elements in its result.
+   */
+  def getActiveJobIds(): Array[Int] = {
+    jobProgressListener.synchronized {
+      jobProgressListener.activeJobs.values.map(_.jobId).toArray
+    }
+  }
+
+  /**
    * Returns job information, or `None` if the job info could not be found or was garbage collected.
    */
   def getJobInfo(jobId: Int): Option[SparkJobInfo] = {
