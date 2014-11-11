@@ -696,7 +696,7 @@ private[spark] object ClientBase extends Logging {
   /**
    * Returns a list of URIs representing the user classpath.
    *
-   * @param args Client arguments (when starting the AM) or null (when starting executors).
+   * @param args Client arguments (or null to load list of files from configuration object).
    * @param conf Spark configuration.
    */
   def getUserClasspath(

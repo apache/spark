@@ -36,7 +36,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.executor.ChildExecutorURLClassLoader
+import org.apache.spark.executor.{ChildExecutorURLClassLoader, ExecutorURLClassLoader}
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -450,21 +450,21 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
 
-    val userClassLoader =
-      if (sparkConf.getBoolean("spark.driver.userClassPathFirst", false)) {
-        val classpath = ClientBase.getUserClasspath(null, sparkConf)
-        val urls = classpath.map { entry =>
-          val absPath =
-            if (new File(entry.getPath()).isAbsolute()) {
-              entry.getPath()
-            } else {
-              new File(entry.getPath()).getAbsolutePath()
-            }
-          new URL("file:" + absPath)
+    val classpath = ClientBase.getUserClasspath(null, sparkConf)
+    val urls = classpath.map { entry =>
+      val absPath =
+        if (new File(entry.getPath()).isAbsolute()) {
+          entry.getPath()
+        } else {
+          new File(entry.getPath()).getAbsolutePath()
         }
+      new URL("file:" + absPath)
+    }
+    val userClassLoader =
+      if (ClientBase.isUserClassPathFirst(sparkConf, true)) {
         new ChildExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       } else {
-        Utils.getContextOrSparkClassLoader
+        new ExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       }
 
     val mainMethod = userClassLoader.loadClass(args.userClass)
