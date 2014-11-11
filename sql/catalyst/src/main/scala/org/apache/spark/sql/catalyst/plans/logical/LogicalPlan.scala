@@ -26,25 +26,24 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.trees
 
+/**
+ * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
+ * corresponding statistic produced by the children.  To override this behavior, override
+ * `statistics` and assign it an overriden version of `Statistics`.
+ *
+ * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
+ * performance of the implementations.  The reason is that estimations might get triggered in
+ * performance-critical processes, such as query plan planning.
+ *
+ * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
+ *                    defaults to the product of children's `sizeInBytes`.
+ */
+private[sql] case class Statistics(sizeInBytes: BigInt)
+
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
-  /**
-   * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
-   * corresponding statistic produced by the children.  To override this behavior, override
-   * `statistics` and assign it an overriden version of `Statistics`.
-   *
-   * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
-   * performance of the implementations.  The reason is that estimations might get triggered in
-   * performance-critical processes, such as query plan planning.
-   *
-   * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
-   *                    defaults to the product of children's `sizeInBytes`.
-   */
-  case class Statistics(
-    sizeInBytes: BigInt
-  )
-  lazy val statistics: Statistics = {
+  def statistics: Statistics = {
     if (children.size == 0) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
@@ -54,12 +53,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
-   * Returns the set of attributes that this node takes as
-   * input from its children.
-   */
-  lazy val inputSet: AttributeSet = AttributeSet(children.flatMap(_.output))
-
-  /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it still contains any unresolved placeholders. Implementations of LogicalPlan
    * can override this (e.g.
@@ -67,6 +60,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * should return `false`).
    */
   lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
+
+  override protected def statePrefix = if (!resolved) "'" else super.statePrefix
 
   /**
    * Returns true if all its children of this query plan have been resolved.

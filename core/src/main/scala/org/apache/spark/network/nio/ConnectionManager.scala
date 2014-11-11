@@ -31,7 +31,10 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets.UTF_8
+
 import org.apache.spark._
+import org.apache.spark.network.sasl.{SparkSaslClient, SparkSaslServer}
 import org.apache.spark.util.Utils
 
 import scala.util.Try
@@ -117,7 +120,16 @@ private[nio] class ConnectionManager(
     conf.getInt("spark.core.connection.connect.threads.max", 8),
     conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable](),
-    Utils.namedThreadFactory("handle-connect-executor"))
+    Utils.namedThreadFactory("handle-connect-executor")) {
+
+    override def afterExecute(r: Runnable, t: Throwable): Unit = {
+      super.afterExecute(r, t)
+      if (t != null && NonFatal(t)) {
+        logError("Error in handleConnectExecutor is not handled properly", t)
+      }
+    }
+
+  }
 
   private val serverChannel = ServerSocketChannel.open()
   // used to track the SendingConnections waiting to do SASL negotiation
@@ -589,7 +601,7 @@ private[nio] class ConnectionManager(
     } else {
       var replyToken : Array[Byte] = null
       try {
-        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken)
+        replyToken = waitingConn.sparkSaslClient.response(securityMsg.getToken)
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
@@ -623,7 +635,7 @@ private[nio] class ConnectionManager(
         connection.synchronized {
           if (connection.sparkSaslServer == null) {
             logDebug("Creating sasl Server")
-            connection.sparkSaslServer = new SparkSaslServer(securityManager)
+            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager)
           }
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
@@ -748,9 +760,7 @@ private[nio] class ConnectionManager(
           } catch {
             case e: Exception => {
               logError(s"Exception was thrown while processing message", e)
-              val m = Message.createBufferMessage(bufferMessage.id)
-              m.hasError = true
-              ackMessage = Some(m)
+              ackMessage = Some(Message.createErrorMessage(e, bufferMessage.id))
             }
           } finally {
             sendMessage(connectionManagerId, ackMessage.getOrElse {
@@ -769,7 +779,7 @@ private[nio] class ConnectionManager(
     if (!conn.isSaslComplete()) {
       conn.synchronized {
         if (conn.sparkSaslClient == null) {
-          conn.sparkSaslClient = new SparkSaslClient(securityManager)
+          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager)
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()
@@ -913,8 +923,12 @@ private[nio] class ConnectionManager(
           }
         case scala.util.Success(ackMessage) =>
           if (ackMessage.hasError) {
+            val errorMsgByteBuf = ackMessage.asInstanceOf[BufferMessage].buffers.head
+            val errorMsgBytes = new Array[Byte](errorMsgByteBuf.limit())
+            errorMsgByteBuf.get(errorMsgBytes)
+            val errorMsg = new String(errorMsgBytes, UTF_8)
             val e = new IOException(
-              "sendMessageReliably failed with ACK that signalled a remote error")
+              s"sendMessageReliably failed with ACK that signalled a remote error: $errorMsg")
             if (!promise.tryFailure(e)) {
               logWarning("Ignore error because promise is completed", e)
             }

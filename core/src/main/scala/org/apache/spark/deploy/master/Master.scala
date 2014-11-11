@@ -50,7 +50,7 @@ private[spark] class Master(
     port: Int,
     webUiPort: Int,
     val securityMgr: SecurityManager)
-  extends Actor with ActorLogReceive with Logging {
+  extends Actor with ActorLogReceive with Logging with LeaderElectable {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
@@ -61,7 +61,6 @@ private[spark] class Master(
   val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
   val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
-  val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
 
   val workers = new HashSet[WorkerInfo]
@@ -103,7 +102,7 @@ private[spark] class Master(
 
   var persistenceEngine: PersistenceEngine = _
 
-  var leaderElectionAgent: ActorRef = _
+  var leaderElectionAgent: LeaderElectionAgent = _
 
   private var recoveryCompletionTask: Cancellable = _
 
@@ -130,23 +129,24 @@ private[spark] class Master(
     masterMetricsSystem.start()
     applicationMetricsSystem.start()
 
-    persistenceEngine = RECOVERY_MODE match {
+    val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
-        new ZooKeeperPersistenceEngine(SerializationExtension(context.system), conf)
+        val zkFactory = new ZooKeeperRecoveryModeFactory(conf)
+        (zkFactory.createPersistenceEngine(), zkFactory.createLeaderElectionAgent(this))
       case "FILESYSTEM" =>
-        logInfo("Persisting recovery state to directory: " + RECOVERY_DIR)
-        new FileSystemPersistenceEngine(RECOVERY_DIR, SerializationExtension(context.system))
+        val fsFactory = new FileSystemRecoveryModeFactory(conf)
+        (fsFactory.createPersistenceEngine(), fsFactory.createLeaderElectionAgent(this))
+      case "CUSTOM" =>
+        val clazz = Class.forName(conf.get("spark.deploy.recoveryMode.factory"))
+        val factory = clazz.getConstructor(conf.getClass)
+          .newInstance(conf).asInstanceOf[StandaloneRecoveryModeFactory]
+        (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
       case _ =>
-        new BlackHolePersistenceEngine()
+        (new BlackHolePersistenceEngine(), new MonarchyLeaderAgent(this))
     }
-
-    leaderElectionAgent = RECOVERY_MODE match {
-        case "ZOOKEEPER" =>
-          context.actorOf(Props(classOf[ZooKeeperLeaderElectionAgent], self, masterUrl, conf))
-        case _ =>
-          context.actorOf(Props(classOf[MonarchyLeaderAgent], self))
-      }
+    persistenceEngine = persistenceEngine_
+    leaderElectionAgent = leaderElectionAgent_
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]) {
@@ -165,7 +165,15 @@ private[spark] class Master(
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
-    context.stop(leaderElectionAgent)
+    leaderElectionAgent.stop()
+  }
+
+  override def electedLeader() {
+    self ! ElectedLeader
+  }
+
+  override def revokedLeadership() {
+    self ! RevokedLeadership
   }
 
   override def receiveWithLogging = {
@@ -341,7 +349,14 @@ private[spark] class Master(
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
-          logWarning("Got heartbeat from unregistered worker " + workerId)
+          if (workers.map(_.id).contains(workerId)) {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " Asking it to re-register.")
+            sender ! ReconnectWorker(masterUrl)
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
+          }
       }
     }
 
@@ -714,8 +729,8 @@ private[spark] class Master(
 
     try {
       val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)",
-        HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+        appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
       replayBus.replay()
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)

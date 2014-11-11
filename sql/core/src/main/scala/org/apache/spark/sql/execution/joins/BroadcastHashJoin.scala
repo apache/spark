@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Row, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -49,14 +49,17 @@ case class BroadcastHashJoin(
 
   @transient
   private val broadcastFuture = future {
-    sparkContext.broadcast(buildPlan.executeCollect())
+    // Note that we use .execute().collect() because we don't want to convert data to Scala types
+    val input: Array[Row] = buildPlan.execute().map(_.copy()).collect()
+    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
+    sparkContext.broadcast(hashed)
   }
 
   override def execute() = {
     val broadcastRelation = Await.result(broadcastFuture, 5.minute)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
-      joinIterators(broadcastRelation.value.iterator, streamedIter)
+      hashJoin(streamedIter, broadcastRelation.value)
     }
   }
 }

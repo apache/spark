@@ -21,15 +21,21 @@ application. These properties can be set directly on a
 [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
-`set()` method. For example, we could initialize an application as follows:
+`set()` method. For example, we could initialize an application with two threads as follows:
+
+Note that we run with local[2], meaning two threads - which represents "minimal" parallelism, 
+which can help detect bugs that only exist when we run in a distributed context. 
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster("local")
+             .setMaster("local[2]")
              .setAppName("CountingSheep")
              .set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
+
+Note that we can have more than 1 thread in local mode, and in cases like spark streaming, we may actually
+require one to prevent any sort of starvation issues.  
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
@@ -112,6 +118,18 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.maxResultSize</code></td>
+  <td>1g</td>
+  <td>
+    Limit of total size of serialized results of all partitions for each Spark action (e.g. collect).
+    Should be at least 1M, or 0 for unlimited. Jobs will be aborted if the total size
+    is above this limit. 
+    Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
+    and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
+    out-of-memory errors.
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
@@ -125,11 +143,22 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.classesToRegister</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, give a comma-separated list of custom class names to register
+    with Kryo.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryo.registrator</code></td>
   <td>(none)</td>
   <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    It should be set to a class that extends
+    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
+    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
+    set to a class that extends
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
@@ -161,14 +190,6 @@ Apart from these, the following properties are also available, and may be useful
 #### Runtime Environment
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
-  <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
-</tr>
 <tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
@@ -356,6 +377,16 @@ Apart from these, the following properties are also available, and may be useful
     map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.blockTransferService</code></td>
+  <td>netty</td>
+  <td>
+    Implementation to use for transferring shuffle and cached blocks between executors. There
+    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
+    block transfer is intended to be simpler but equally efficient and is the default option
+    starting in 1.2.
+  </td>
+</tr>
 </table>
 
 #### Spark UI
@@ -365,14 +396,23 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
   <td>
-    Port for your application's dashboard, which shows memory and workload data
+    Port for your application's dashboard, which shows memory and workload data.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI remembers before garbage collecting.
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedJobs</code></td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
   </td>
 </tr>
 <tr>
@@ -522,6 +562,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.default.parallelism</code></td>
   <td>
+    For distributed shuffle operations like <code>reduceByKey</code> and <code>join</code>, the
+    largest number of partitions in a parent RDD.  For operations like <code>parallelize</code>
+    with no parent RDDs, it depends on the cluster manager:
     <ul>
       <li>Local mode: number of cores on the local machine</li>
       <li>Mesos fine grained mode: 8</li>
@@ -529,8 +572,8 @@ Apart from these, the following properties are also available, and may be useful
     </ul>
   </td>
   <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations
-    (<code>groupByKey</code>, <code>reduceByKey</code>, etc) when not set by user.
+    Default number of partitions in RDDs returned by transformations like <code>join</code>,
+    <code>reduceByKey</code>, and <code>parallelize</code> when not set by user.
   </td>
 </tr>
 <tr>
@@ -626,6 +669,15 @@ Apart from these, the following properties are also available, and may be useful
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
+<tr>
+    <td><code>spark.hadoop.cloneConf</code></td>
+    <td>false</td>
+    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
+    This is disabled by default in order to avoid unexpected performance regressions for jobs that
+    are not affected by these issues.</td>
 </tr>
 <tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
@@ -725,7 +777,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>600</td>
+  <td>6000</td>
   <td>
      This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
      enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
@@ -880,8 +932,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1000</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks.
-    (in milliseconds)
+    The interval length for the scheduler to revive the worker resource offers to run tasks
+    (in milliseconds).
   </td>
 </tr>
 </tr>
@@ -893,7 +945,7 @@ Apart from these, the following properties are also available, and may be useful
     to wait for before scheduling begins. Specified as a double between 0 and 1.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
-    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code> 
+    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
   </td>
 </tr>
 <tr>

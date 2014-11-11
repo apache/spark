@@ -17,32 +17,41 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
-import scala.sys.process.{Process, ProcessLogger}
-
 import java.io.File
 import java.net.ServerSocket
 import java.sql.{DriverManager, Statement}
 import java.util.concurrent.TimeoutException
 
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Promise}
+import scala.sys.process.{Process, ProcessLogger}
+import scala.util.Try
+
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
+import org.apache.hive.service.auth.PlainSaslHelper
+import org.apache.hive.service.cli.GetInfoType
+import org.apache.hive.service.cli.thrift.TCLIService.Client
+import org.apache.hive.service.cli.thrift._
+import org.apache.thrift.protocol.TBinaryProtocol
+import org.apache.thrift.transport.TSocket
 import org.scalatest.FunSuite
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.hive.HiveShim
 
 /**
  * Tests for the HiveThriftServer2 using JDBC.
+ *
+ * NOTE: SPARK_PREPEND_CLASSES is explicitly disabled in this test suite. Assembly jar must be
+ * rebuilt after changing HiveThriftServer2 related code.
  */
 class HiveThriftServer2Suite extends FunSuite with Logging {
   Class.forName(classOf[HiveDriver].getCanonicalName)
 
-  private val listeningHost = "localhost"
-  private val listeningPort =  {
+  def randomListeningPort =  {
     // Let the system to choose a random available port to avoid collision with other parallel
     // builds.
     val socket = new ServerSocket(0)
@@ -51,47 +60,12 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     port
   }
 
-  private val warehousePath = getTempFilePath("warehouse")
-  private val metastorePath = getTempFilePath("metastore")
-  private val metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+  def withJdbcStatement(serverStartTimeout: FiniteDuration = 1.minute)(f: Statement => Unit) {
+    val port = randomListeningPort
 
-  def startThriftServerWithin(timeout: FiniteDuration = 30.seconds)(f: Statement => Unit) {
-    val serverScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
-
-    val command =
-      s"""$serverScript
-         |  --master local
-         |  --hiveconf hive.root.logger=INFO,console
-         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$listeningHost
-         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$listeningPort
-       """.stripMargin.split("\\s+").toSeq
-
-    val serverStarted = Promise[Unit]()
-    val buffer = new ArrayBuffer[String]()
-
-    def captureOutput(source: String)(line: String) {
-      buffer += s"$source> $line"
-      if (line.contains("ThriftBinaryCLIService listening on")) {
-        serverStarted.success(())
-      }
-    }
-
-    val process = Process(command).run(
-      ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
-
-    Future {
-      val exitValue = process.exitValue()
-      logInfo(s"Spark SQL Thrift server process exit value: $exitValue")
-    }
-
-    val jdbcUri = s"jdbc:hive2://$listeningHost:$listeningPort/"
-    val user = System.getProperty("user.name")
-
-    try {
-      Await.result(serverStarted.future, timeout)
-
+    startThriftServer(port, serverStartTimeout) {
+      val jdbcUri = s"jdbc:hive2://${"localhost"}:$port/"
+      val user = System.getProperty("user.name")
       val connection = DriverManager.getConnection(jdbcUri, user, "")
       val statement = connection.createStatement()
 
@@ -101,11 +75,95 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
         statement.close()
         connection.close()
       }
+    }
+  }
+
+  def withCLIServiceClient(
+      serverStartTimeout: FiniteDuration = 1.minute)(
+      f: ThriftCLIServiceClient => Unit) {
+    val port = randomListeningPort
+
+    startThriftServer(port) {
+      // Transport creation logics below mimics HiveConnection.createBinaryTransport
+      val rawTransport = new TSocket("localhost", port)
+      val user = System.getProperty("user.name")
+      val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+      val protocol = new TBinaryProtocol(transport)
+      val client = new ThriftCLIServiceClient(new Client(protocol))
+
+      transport.open()
+
+      try {
+        f(client)
+      } finally {
+        transport.close()
+      }
+    }
+  }
+
+  def startThriftServer(
+      port: Int,
+      serverStartTimeout: FiniteDuration = 1.minute)(
+      f: => Unit) {
+    val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
+    val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
+
+    val warehousePath = getTempFilePath("warehouse")
+    val metastorePath = getTempFilePath("metastore")
+    val metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+    val command =
+      s"""$startScript
+         |  --master local
+         |  --hiveconf hive.root.logger=INFO,console
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
+         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=${"localhost"}
+         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$port
+       """.stripMargin.split("\\s+").toSeq
+
+    val serverRunning = Promise[Unit]()
+    val buffer = new ArrayBuffer[String]()
+    val LOGGING_MARK =
+      s"starting ${HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")}, logging to "
+    var logTailingProcess: Process = null
+    var logFilePath: String = null
+
+    def captureLogOutput(line: String): Unit = {
+      buffer += line
+      if (line.contains("ThriftBinaryCLIService listening on")) {
+        serverRunning.success(())
+      }
+    }
+
+    def captureThriftServerOutput(source: String)(line: String): Unit = {
+      if (line.startsWith(LOGGING_MARK)) {
+        logFilePath = line.drop(LOGGING_MARK.length).trim
+        // Ensure that the log file is created so that the `tail' command won't fail
+        Try(new File(logFilePath).createNewFile())
+        logTailingProcess = Process(s"/usr/bin/env tail -f $logFilePath")
+          .run(ProcessLogger(captureLogOutput, _ => ()))
+      }
+    }
+
+    val env = Seq(
+      // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
+      "SPARK_TESTING" -> "0",
+      // Prevents loading classes out of the assembly jar. Otherwise Utils.sparkVersion can't read
+      // proper version information from the jar manifest.
+      "SPARK_PREPEND_CLASSES" -> "")
+
+    Process(command, None, env: _*).run(ProcessLogger(
+      captureThriftServerOutput("stdout"),
+      captureThriftServerOutput("stderr")))
+
+    try {
+      Await.result(serverRunning.future, serverStartTimeout)
+      f
     } catch {
       case cause: Exception =>
         cause match {
           case _: TimeoutException =>
-            logError(s"Failed to start Hive Thrift server within $timeout", cause)
+            logError(s"Failed to start Hive Thrift server within $serverStartTimeout", cause)
           case _ =>
         }
         logError(
@@ -114,30 +172,37 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |HiveThriftServer2Suite failure output
              |=====================================
              |HiveThriftServer2 command line: ${command.mkString(" ")}
-             |JDBC URI: $jdbcUri
-             |User: $user
+             |Binding port: $port
+             |System user: ${System.getProperty("user.name")}
              |
              |${buffer.mkString("\n")}
              |=========================================
              |End HiveThriftServer2Suite failure output
              |=========================================
            """.stripMargin, cause)
+        throw cause
     } finally {
       warehousePath.delete()
       metastorePath.delete()
-      process.destroy()
+      Process(stopScript).run().exitValue()
+      // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
+      Thread.sleep(3.seconds.toMillis)
+      Option(logTailingProcess).map(_.destroy())
+      Option(logFilePath).map(new File(_).delete())
     }
   }
 
   test("Test JDBC query execution") {
-    startThriftServerWithin() { statement =>
+    withJdbcStatement() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
-      val queries = Seq(
-        "CREATE TABLE test(key INT, val STRING)",
-        s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test",
-        "CACHE TABLE test")
+      val queries =
+        s"""SET spark.sql.shuffle.partitions=3;
+           |CREATE TABLE test(key INT, val STRING);
+           |LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test;
+           |CACHE TABLE test;
+         """.stripMargin.split(";").map(_.trim).filter(_.nonEmpty)
 
       queries.foreach(statement.execute)
 
@@ -150,7 +215,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-3004 regression: result set containing NULL") {
-    startThriftServerWithin() { statement =>
+    withJdbcStatement() { statement =>
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource(
           "data/files/small_kv_with_null.txt")
@@ -171,6 +236,58 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       }
 
       assert(!resultSet.next())
+    }
+  }
+
+  test("GetInfo Thrift API") {
+    withCLIServiceClient() { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      assertResult("Spark SQL", "Wrong GetInfo(CLI_DBMS_NAME) result") {
+        client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_NAME).getStringValue
+      }
+
+      assertResult("Spark SQL", "Wrong GetInfo(CLI_SERVER_NAME) result") {
+        client.getInfo(sessionHandle, GetInfoType.CLI_SERVER_NAME).getStringValue
+      }
+
+      assertResult(true, "Spark version shouldn't be \"Unknown\"") {
+        val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
+        logInfo(s"Spark version: $version")
+        version != "Unknown"
+      }
+    }
+  }
+
+  test("Checks Hive version") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+      resultSet.next()
+      assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
+    }
+  }
+
+  test("SPARK-4292 regression: result set iterator issue") {
+    withJdbcStatement() { statement =>
+      val dataFilePath =
+        Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_4292",
+        "CREATE TABLE test_4292(key INT, val STRING)",
+        s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test_4292")
+
+      queries.foreach(statement.execute)
+
+      val resultSet = statement.executeQuery("SELECT key FROM test_4292")
+
+      Seq(238, 86, 311, 27, 165).foreach { key =>
+        resultSet.next()
+        assert(resultSet.getInt(1) == key)
+      }
+
+      statement.executeQuery("DROP TABLE IF EXISTS test_4292")
     }
   }
 }

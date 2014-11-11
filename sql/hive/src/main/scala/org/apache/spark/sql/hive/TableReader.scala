@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
@@ -52,7 +53,8 @@ private[hive]
 class HadoopTableReader(
     @transient attributes: Seq[Attribute],
     @transient relation: MetastoreRelation,
-    @transient sc: HiveContext)
+    @transient sc: HiveContext,
+    @transient hiveExtraConf: HiveConf)
   extends TableReader {
 
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
@@ -63,11 +65,7 @@ class HadoopTableReader(
   // TODO: set aws s3 credentials.
 
   private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
-
-  def broadcastedHiveConf = _broadcastedHiveConf
-
-  def hiveConf = _broadcastedHiveConf.value.value
+    sc.sparkContext.broadcast(new SerializableWritable(hiveExtraConf))
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[Row] =
     makeRDDForTable(
@@ -140,7 +138,7 @@ class HadoopTableReader(
       filterOpt: Option[PathFilter]): RDD[Row] = {
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
-      val partPath = partition.getPartitionPath
+      val partPath = HiveShim.getDataLocationPath(partition)
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
@@ -292,8 +290,23 @@ private[hive] object HadoopTableReader extends HiveInspectors {
           (value: Any, row: MutableRow, ordinal: Int) => row.setFloat(ordinal, oi.get(value))
         case oi: DoubleObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
+        case oi: HiveVarcharObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.setString(ordinal, oi.getPrimitiveJavaObject(value).getValue)
+        case oi: HiveDecimalObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
+        case oi: TimestampObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, oi.getPrimitiveJavaObject(value).clone())
+        case oi: DateObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, oi.getPrimitiveJavaObject(value))
+        case oi: BinaryObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, oi.getPrimitiveJavaObject(value))
         case oi =>
-          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapData(value, oi)
+          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrap(value, oi)
       }
     }
 

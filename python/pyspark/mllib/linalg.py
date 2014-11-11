@@ -29,7 +29,11 @@ import copy_reg
 
 import numpy as np
 
-__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
+from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+    IntegerType, ByteType, Row
+
+
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors', 'DenseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -98,7 +102,61 @@ def _vector_size(v):
         raise TypeError("Cannot treat type %s as a vector" % type(v))
 
 
+def _format_float(f, digits=4):
+    s = str(round(f, digits))
+    if '.' in s:
+        s = s[:s.index('.') + 1 + digits]
+    return s
+
+
+class VectorUDT(UserDefinedType):
+    """
+    SQL user-defined type (UDT) for Vector.
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("type", ByteType(), False),
+            StructField("size", IntegerType(), True),
+            StructField("indices", ArrayType(IntegerType(), False), True),
+            StructField("values", ArrayType(DoubleType(), False), True)])
+
+    @classmethod
+    def module(cls):
+        return "pyspark.mllib.linalg"
+
+    @classmethod
+    def scalaUDT(cls):
+        return "org.apache.spark.mllib.linalg.VectorUDT"
+
+    def serialize(self, obj):
+        if isinstance(obj, SparseVector):
+            indices = [int(i) for i in obj.indices]
+            values = [float(v) for v in obj.values]
+            return (0, obj.size, indices, values)
+        elif isinstance(obj, DenseVector):
+            values = [float(v) for v in obj]
+            return (1, None, None, values)
+        else:
+            raise ValueError("cannot serialize %r of type %r" % (obj, type(obj)))
+
+    def deserialize(self, datum):
+        assert len(datum) == 4, \
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        tpe = datum[0]
+        if tpe == 0:
+            return SparseVector(datum[1], datum[2], datum[3])
+        elif tpe == 1:
+            return DenseVector(datum[3])
+        else:
+            raise ValueError("do not recognize type %r" % tpe)
+
+
 class Vector(object):
+
+    __UDT__ = VectorUDT()
+
     """
     Abstract class for DenseVector and SparseVector
     """
@@ -215,7 +273,7 @@ class DenseVector(Vector):
         return "[" + ",".join([str(v) for v in self.array]) + "]"
 
     def __repr__(self):
-        return "DenseVector(%r)" % self.array
+        return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
         return isinstance(other, DenseVector) and self.array == other.array
@@ -403,7 +461,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(self.indices.size):
+        for i in xrange(len(self.indices)):
             arr[self.indices[i]] = self.values[i]
         return arr
 
@@ -418,7 +476,8 @@ class SparseVector(Vector):
     def __repr__(self):
         inds = self.indices
         vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
+        entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
+                             for i in xrange(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -478,7 +537,7 @@ class Vectors(object):
         returns a NumPy array.
 
         >>> Vectors.dense([1, 2, 3])
-        DenseVector(array('d', [1.0, 2.0, 3.0]))
+        DenseVector([1.0, 2.0, 3.0])
         """
         return DenseVector(elements)
 
@@ -519,6 +578,8 @@ class DenseMatrix(Matrix):
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
         assert len(values) == numRows * numCols
+        if not isinstance(values, array.array):
+            values = array.array('d', values)
         self.values = values
 
     def __reduce__(self):
@@ -535,6 +596,15 @@ class DenseMatrix(Matrix):
                [ 1.,  3.]])
         """
         return np.reshape(self.values, (self.numRows, self.numCols), order='F')
+
+
+class Matrices(object):
+    @staticmethod
+    def dense(numRows, numCols, values):
+        """
+        Create a DenseMatrix
+        """
+        return DenseMatrix(numRows, numCols, values)
 
 
 def _test():

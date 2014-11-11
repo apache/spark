@@ -79,8 +79,9 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
 }
 
 private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
+    columnStats: ColumnStats,
     columnType: ColumnType[T, JvmType])
-  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats, columnType)
+  extends BasicColumnBuilder[T, JvmType](columnStats, columnType)
   with NullableColumnBuilder
 
 private[sql] abstract class NativeColumnBuilder[T <: NativeType](
@@ -91,7 +92,7 @@ private[sql] abstract class NativeColumnBuilder[T <: NativeType](
   with AllCompressionSchemes
   with CompressibleColumnBuilder[T]
 
-private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(new NoopColumnStats, BOOLEAN)
+private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
 
 private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
 
@@ -107,13 +108,16 @@ private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColum
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
+private[sql] class DateColumnBuilder extends NativeColumnBuilder(new DateColumnStats, DATE)
+
 private[sql] class TimestampColumnBuilder
   extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
 
-private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
+private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
 // TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder extends ComplexColumnBuilder(GENERIC)
+private[sql] class GenericColumnBuilder
+  extends ComplexColumnBuilder(new GenericColumnStats, GENERIC)
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
@@ -151,6 +155,7 @@ private[sql] object ColumnBuilder {
       case STRING.typeId    => new StringColumnBuilder
       case BINARY.typeId    => new BinaryColumnBuilder
       case GENERIC.typeId   => new GenericColumnBuilder
+      case DATE.typeId      => new DateColumnBuilder
       case TIMESTAMP.typeId => new TimestampColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 
