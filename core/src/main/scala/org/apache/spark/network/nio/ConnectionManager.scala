@@ -916,7 +916,6 @@ private[nio] class ConnectionManager(
       }
     }
 
-//    ackTimeoutMonitor.schedule(timeoutTask, ackTimeout * 1000)
     val timeoutTaskFuture = ackTimeoutMonitor.schedule(timeoutTask, ackTimeout, TimeUnit.SECONDS)
     val status = new MessageStatus(message, connectionManagerId, s => {
       timeoutTaskFuture.cancel(true)
