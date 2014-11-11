@@ -158,7 +158,7 @@ case class Count(child: Expression) extends PartialAggregate with trees.UnaryNod
 
   override def asPartial: SplitEvaluation = {
     val partialCount = Alias(Count(child), "PartialCount")()
-    SplitEvaluation(Sum(partialCount.toAttribute), partialCount :: Nil)
+    SplitEvaluation(Coalesce(Seq(Sum(partialCount.toAttribute), Literal(0L))), partialCount :: Nil)
   }
 
   override def newInstance() = new CountFunction(child, this)
@@ -325,7 +325,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
-  override def nullable = false
+  override def nullable = true
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
@@ -351,7 +351,7 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
 case class SumDistinct(child: Expression)
   extends AggregateExpression with trees.UnaryNode[Expression] {
 
-  override def nullable = false
+  override def nullable = true
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
@@ -477,9 +477,9 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
   private val zero = Cast(Literal(0), expr.dataType)
 
-  private val sum = MutableLiteral(zero.eval(null), expr.dataType)
+  private val sum = MutableLiteral(null, expr.dataType)
 
-  private val addFunction = Add(sum, Coalesce(Seq(expr, zero)))
+  private val addFunction = If(IsNull(expr), sum, Add(Coalesce(Seq(sum, zero)), expr))
 
   override def update(input: Row): Unit = {
     sum.update(addFunction, input)
@@ -503,9 +503,12 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
   }
 
   override def eval(input: Row): Any = {
-    val zero = Cast(Literal(0), base.dataType)
-    seen.foldLeft(zero.eval(null))(
-      base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
+    if (seen.size == 0) {
+      null
+    } else {
+      seen.reduceLeft(
+        base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
+    }
   }
 }
 

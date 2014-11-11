@@ -198,13 +198,13 @@ class DslQuerySuite extends QueryTest {
   test("zero sum") {
     checkAnswer(
       emptyTableData.aggregate(sum('a)),
-      0)
+      null)
   }
 
   test("zero sum distinct") {
     checkAnswer(
       emptyTableData.aggregate(sumDistinct('a)),
-      0)
+      null)
   }
 
   test("except") {
