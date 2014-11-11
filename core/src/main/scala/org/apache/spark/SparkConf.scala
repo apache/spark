@@ -217,6 +217,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      */
     getAll.filter { case (k, _) => isAkkaConf(k) }
 
+  /**
+   * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
+   * from the start in the Executor.
+   */
+  def getAppId: String = get("spark.app.id")
+
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)
 
@@ -244,6 +250,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val executorClasspathKey = "spark.executor.extraClassPath"
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
+    val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+
+    // Used by Yarn in 1.1 and before
+    sys.props.get("spark.driver.libraryPath").foreach { value =>
+      val warning =
+        s"""
+          |spark.driver.libraryPath was detected (set to '$value').
+          |This is deprecated in Spark 1.2+.
+          |
+          |Please instead use: $driverLibraryPathKey
+        """.stripMargin
+      logWarning(warning)
+    }
 
     // Validate spark.executor.extraJavaOptions
     settings.get(executorOptsKey).map { javaOpts =>

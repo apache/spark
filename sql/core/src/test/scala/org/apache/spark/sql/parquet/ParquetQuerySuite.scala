@@ -77,6 +77,8 @@ case class AllDataTypesWithNonPrimitiveType(
 
 case class BinaryData(binaryData: Array[Byte])
 
+case class NumericData(i: Int, d: Double)
+
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
 
@@ -560,6 +562,103 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(stringResult.size === 1)
     assert(stringResult(0).getString(2) == "100", "stringvalue incorrect")
     assert(stringResult(0).getInt(1) === 100)
+
+    val query7 = sql(s"SELECT * FROM testfiltersource WHERE myoptint < 40")
+    assert(
+      query7.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val optResult = query7.collect()
+    assert(optResult.size === 20)
+    for(i <- 0 until 20) {
+      if (optResult(i)(7) != i * 2) {
+        fail(s"optional Int value in result row $i should be ${2*4*i}")
+      }
+    }
+    for(myval <- Seq("myoptint", "myoptlong", "myoptdouble", "myoptfloat")) {
+      val query8 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
+      assert(
+        query8.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result8 = query8.collect()
+      assert(result8.size === 25)
+      assert(result8(0)(7) === 100)
+      assert(result8(24)(7) === 148)
+      val query9 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200")
+      assert(
+        query9.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result9 = query9.collect()
+      assert(result9.size === 25)
+      if (myval == "myoptint" || myval == "myoptlong") {
+        assert(result9(0)(7) === 152)
+        assert(result9(24)(7) === 200)
+      } else {
+        assert(result9(0)(7) === 150)
+        assert(result9(24)(7) === 198)
+      }
+    }
+    val query10 = sql("SELECT * FROM testfiltersource WHERE myoptstring = \"100\"")
+    assert(
+      query10.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result10 = query10.collect()
+    assert(result10.size === 1)
+    assert(result10(0).getString(8) == "100", "stringvalue incorrect")
+    assert(result10(0).getInt(7) === 100)
+    val query11 = sql(s"SELECT * FROM testfiltersource WHERE myoptboolean = true AND myoptint < 40")
+    assert(
+      query11.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result11 = query11.collect()
+    assert(result11.size === 7)
+    for(i <- 0 until 6) {
+      if (!result11(i).getBoolean(6)) {
+        fail(s"optional Boolean value in result row $i not true")
+      }
+      if (result11(i).getInt(7) != i * 6) {
+        fail(s"optional Int value in result row $i should be ${6*i}")
+      }
+    }
+
+    val query12 = sql("SELECT * FROM testfiltersource WHERE mystring >= \"50\"")
+    assert(
+      query12.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result12 = query12.collect()
+    assert(result12.size === 54)
+    assert(result12(0).getString(2) == "6")
+    assert(result12(4).getString(2) == "50")
+    assert(result12(53).getString(2) == "99")
+
+    val query13 = sql("SELECT * FROM testfiltersource WHERE mystring > \"50\"")
+    assert(
+      query13.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result13 = query13.collect()
+    assert(result13.size === 53)
+    assert(result13(0).getString(2) == "6")
+    assert(result13(4).getString(2) == "51")
+    assert(result13(52).getString(2) == "99")
+
+    val query14 = sql("SELECT * FROM testfiltersource WHERE mystring <= \"50\"")
+    assert(
+      query14.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result14 = query14.collect()
+    assert(result14.size === 148)
+    assert(result14(0).getString(2) == "0")
+    assert(result14(46).getString(2) == "50")
+    assert(result14(147).getString(2) == "200")
+
+    val query15 = sql("SELECT * FROM testfiltersource WHERE mystring < \"50\"")
+    assert(
+      query15.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result15 = query15.collect()
+    assert(result15.size === 147)
+    assert(result15(0).getString(2) == "0")
+    assert(result15(46).getString(2) == "100")
+    assert(result15(146).getString(2) == "200")
   }
 
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
@@ -810,6 +909,37 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)
       assert(a.dataType === b.dataType)
+    }
+  }
+
+  test("read/write fixed-length decimals") {
+    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
+      val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+      val data = sparkContext.parallelize(0 to 1000)
+        .map(i => NumericData(i, i / 100.0))
+        .select('i, 'd cast DecimalType(precision, scale))
+      data.saveAsParquetFile(tempDir)
+      checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+
+    // Decimals with precision above 18 are not yet supported
+    intercept[RuntimeException] {
+      val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+      val data = sparkContext.parallelize(0 to 1000)
+        .map(i => NumericData(i, i / 100.0))
+        .select('i, 'd cast DecimalType(19, 10))
+      data.saveAsParquetFile(tempDir)
+      checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+
+    // Unlimited-length decimals are not yet supported
+    intercept[RuntimeException] {
+      val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+      val data = sparkContext.parallelize(0 to 1000)
+        .map(i => NumericData(i, i / 100.0))
+        .select('i, 'd cast DecimalType.Unlimited)
+      data.saveAsParquetFile(tempDir)
+      checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
     }
   }
 }

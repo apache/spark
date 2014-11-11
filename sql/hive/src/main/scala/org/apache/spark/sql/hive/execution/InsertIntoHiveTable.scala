@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util
+
 import scala.collection.JavaConversions._
 
-import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.common.`type`.HiveVarchar
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
@@ -35,6 +37,7 @@ import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.execution.{Command, SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
@@ -51,7 +54,7 @@ case class InsertIntoHiveTable(
     child: SparkPlan,
     overwrite: Boolean)
     (@transient sc: HiveContext)
-  extends UnaryNode with Command {
+  extends UnaryNode with Command with HiveInspectors {
 
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
@@ -66,42 +69,6 @@ case class InsertIntoHiveTable(
   override def otherCopyArgs = sc :: Nil
 
   def output = child.output
-
-  /**
-   * Wraps with Hive types based on object inspector.
-   * TODO: Consolidate all hive OI/data interface code.
-   */
-  protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
-    case _: JavaHiveVarcharObjectInspector =>
-      (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
-
-    case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[BigDecimal].underlying())
-
-    case soi: StandardStructObjectInspector =>
-      val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
-      (o: Any) => {
-        val struct = soi.create()
-        (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
-          (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
-        }
-        struct
-      }
-
-    case loi: ListObjectInspector =>
-      val wrapper = wrapperFor(loi.getListElementObjectInspector)
-      (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
-
-    case moi: MapObjectInspector =>
-      val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
-      val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
-      (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
-        keyWrapper(key) -> valueWrapper(value)
-      })
-
-    case _ =>
-      identity[Any]
-  }
 
   def saveAsHiveFile(
       rdd: RDD[Row],
@@ -238,6 +205,13 @@ case class InsertIntoHiveTable(
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
     val holdDDLTime = false
     if (partition.nonEmpty) {
+
+      // loadPartition call orders directories created on the iteration order of the this map
+      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
+      table.hiveQlTable.getPartCols().foreach{
+        entry=>
+          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
       db.validatePartitionNameCharacters(partVals)
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
@@ -249,7 +223,7 @@ case class InsertIntoHiveTable(
         db.loadDynamicPartitions(
           outputPath,
           qualifiedTableName,
-          partitionSpec,
+          orderedPartitionSpec,
           overwrite,
           numDynamicPartitions,
           holdDDLTime,
@@ -259,7 +233,7 @@ case class InsertIntoHiveTable(
         db.loadPartition(
           outputPath,
           qualifiedTableName,
-          partitionSpec,
+          orderedPartitionSpec,
           overwrite,
           holdDDLTime,
           inheritTableSpecs,

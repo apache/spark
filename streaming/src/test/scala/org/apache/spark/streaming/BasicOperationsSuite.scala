@@ -17,19 +17,20 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.StreamingContext._
-
-import org.apache.spark.rdd.{BlockRDD, RDD}
-import org.apache.spark.SparkContext._
-import org.apache.spark.HashPartitioner
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.language.existentials
+import scala.reflect.ClassTag
 
 import util.ManualClock
-import org.apache.spark.{SparkException, SparkConf}
-import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import scala.reflect.ClassTag
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import scala.collection.mutable
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
+import org.apache.spark.HashPartitioner
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -373,7 +374,8 @@ class BasicOperationsSuite extends TestSuiteBase {
         Seq(("a", 6), ("b", 3), ("c", 3))
       )
 
-    val updateStateOperation = (s: DStream[String], initialRDD : RDD[(String, Int)]) => {
+    val updateStateOperation = (s: DStream[String]) => {
+      val initialRDD = s.context.sparkContext.makeRDD(initial)
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
         Some(values.sum + state.getOrElse(0))
       }
@@ -384,7 +386,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         new HashPartitioner (numInputPartitions), true, initialRDD)
     }
 
-    testOperationWithInitial(initial, inputData, updateStateOperation, outputData, true)
+    testOperation(inputData, updateStateOperation, outputData, true)
   }
 
   test("updateStateByKey - object lifecycle") {

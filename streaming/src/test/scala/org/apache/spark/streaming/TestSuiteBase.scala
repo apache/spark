@@ -213,34 +213,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   }
 
   /**
-   * Set up required DStreams to test the DStream operation using the sequence
-   * of input collections, and initial sequence.
-   */
-  def setupStreamsWithInitial[U: ClassTag, V: ClassTag](
-      initial: Seq[V],
-      input: Seq[Seq[U]],
-      operation: (DStream[U], RDD[V]) => DStream[V],
-      numPartitions: Int = numInputPartitions
-    ): StreamingContext = {
-    // Create StreamingContext
-    val ssc = new StreamingContext(conf, batchDuration)
-    if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir)
-    }
-
-    // Create initial value RDD
-    val initialRDD = ssc.sc.makeRDD(initial, numInputPartitions)
-
-    // Setup the stream computation
-    val inputStream = new TestInputStream(ssc, input, numPartitions)
-    val operatedStream = operation(inputStream, initialRDD)
-    val outputStream = new TestOutputStreamWithPartitions(operatedStream,
-      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
-    outputStream.register()
-    ssc
-  }
-
-  /**
    * Runs the streams set up in `ssc` on manual clock for `numBatches` batches and
    * returns the collected output. It will wait until `numExpectedOutput` number of
    * output data has been collected or timeout (set by `maxWaitTimeMillis`) is reached.
@@ -347,23 +319,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       }
     }
     logInfo("Output verified successfully")
-  }
-
-  /**
-   * Test unary DStream operation with a list of inputs, initial values, with number of
-   * batches to run same as the number of expected output values
-   */
-  def testOperationWithInitial[U: ClassTag, V: ClassTag](
-      initial: Seq[V],
-      input: Seq[Seq[U]],
-      operation: (DStream[U], RDD[V]) => DStream[V],
-      expectedOutput: Seq[Seq[V]],
-      useSet: Boolean = false
-    ) {
-    val numBatches_ = expectedOutput.size
-    val ssc = setupStreamsWithInitial[U, V](initial, input, operation)
-    val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
-    verifyOutput[V](output, expectedOutput, useSet)
   }
 
   /**

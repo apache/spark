@@ -145,11 +145,16 @@ class FlumePollingStreamSuite extends TestSuiteBase {
     outputStream.register()
 
     ssc.start()
-    writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
-    assertChannelIsEmpty(channel)
-    assertChannelIsEmpty(channel2)
-    sink.stop()
-    channel.stop()
+    try {
+      writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
+      assertChannelIsEmpty(channel)
+      assertChannelIsEmpty(channel2)
+    } finally {
+      sink.stop()
+      sink2.stop()
+      channel.stop()
+      channel2.stop()
+    }
   }
 
   def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
