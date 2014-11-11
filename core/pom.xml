@@ -301,6 +301,11 @@
       <artifactId>py4j</artifactId>
       <version>0.8.2.1</version>
     </dependency>
+    <dependency>
+      <groupId>org.elasticsearch</groupId>
+      <artifactId>elasticsearch-spark_2.10</artifactId>
+      <version>2.1.0.Beta2</version>
+  </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
