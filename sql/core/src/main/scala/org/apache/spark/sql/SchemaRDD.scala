@@ -144,8 +144,9 @@ class SchemaRDD(
     for (i <- 0 to row.length-1) {
       if (!row.isNullAt(i))
       {
-        if (i > 0 && !row.isNullAt(i-1))
+        if (i > 0 && !row.isNullAt(i-1)){
           builder.append(",")
+        }
 
         builder.append(s"""\"${rowSchema.fields(i).name}\":""")
         if (rowSchema.fields(i).dataType == StringType) {
