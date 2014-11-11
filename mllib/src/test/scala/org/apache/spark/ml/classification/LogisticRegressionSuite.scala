@@ -17,22 +17,17 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
+import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.test.TestSQLContext._
 
-class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with Serializable {
+class LogisticRegressionSuite extends FunSuite with LocalSparkContext {
 
-  @transient var dataset: SchemaRDD = _
+  import sqlContext._
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    val points = generateLogisticInput(1.0, 1.0, 100, 42)
-    val rdd = sparkContext.parallelize(points)
-    dataset = createSchemaRDD(rdd)
-  }
+  val dataset: SchemaRDD = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2)
 
   test("logistic regression") {
     val lr = new LogisticRegression
