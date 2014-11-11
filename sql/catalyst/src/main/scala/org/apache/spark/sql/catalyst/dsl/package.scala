@@ -84,8 +84,10 @@ package object dsl {
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
     def === (other: Expression) = EqualTo(expr, other)
+    def -=- (other: Expression) = EqualTo(expr, other)
     def <=> (other: Expression) = EqualNullSafe(expr, other)
     def !== (other: Expression) = Not(EqualTo(expr, other))
+    def !=- (other: Expression) = Not(EqualTo(expr, other))
 
     def in(list: Expression*) = In(expr, list)
 
@@ -149,7 +151,47 @@ package object dsl {
     def lower(e: Expression) = Lower(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
-    // TODO more implicit class for literal?
+
+    implicit class LiteralOnTheLeft[T](x: T) {
+      def literal = Literal(x)
+
+      def + (other: Expression) = Add(literal, other)
+      def - (other: Expression) = Subtract(literal, other)
+      def * (other: Expression) = Multiply(literal, other)
+      def / (other: Expression) = Divide(literal, other)
+      def % (other: Expression) = Remainder(literal, other)
+
+      def && (other: Expression)  = And(literal, other)
+      def || (other: Expression)  = Or(literal, other)
+      def <  (other: Expression)  = LessThan(literal, other)
+      def <= (other: Expression)  = LessThanOrEqual(literal, other)
+      def >  (other: Expression)  = GreaterThan(literal, other)
+      def >= (other: Expression)  = GreaterThanOrEqual(literal, other)
+      /*  === not allowed because it conflicts with scalatest. */
+      def -=- (other: Expression) = EqualTo(literal, other)
+      def <=> (other: Expression) = EqualNullSafe(literal, other)
+      /*  !== not allowed because it conflicts with scalatest. */
+      def !=- (other: Expression) = Not(EqualTo(literal, other))
+
+      def + (other: Symbol) = Add(literal, other)
+      def - (other: Symbol) = Subtract(literal, other)
+      def * (other: Symbol) = Multiply(literal, other)
+      def / (other: Symbol) = Divide(literal, other)
+      def % (other: Symbol) = Remainder(literal, other)
+
+      def && (other: Symbol)  = And(literal, other)
+      def || (other: Symbol)  = Or(literal, other)
+      def <  (other: Symbol)  = LessThan(literal, other)
+      def <= (other: Symbol)  = LessThanOrEqual(literal, other)
+      def >  (other: Symbol)  = GreaterThan(literal, other)
+      def >= (other: Symbol)  = GreaterThanOrEqual(literal, other)
+      /*  === not allowed because it conflicts with scalatest. */
+      def -=- (other: Symbol) = EqualTo(literal, other)
+      def <=> (other: Symbol) = EqualNullSafe(literal, other)
+      /*  !== not allowed because it conflicts with scalatest. */
+      def !=- (other: Symbol) = Not(EqualTo(literal, other))
+    }
+
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
       def attr = analysis.UnresolvedAttribute(s)

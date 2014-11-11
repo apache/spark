@@ -774,4 +774,24 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 ^ c2, 3, row)
     checkEvaluation(~c1, -2, row)
   }
+
+  /*
+   * Testing the DSL conversions which allow literals on the left hand
+   * side of an expression.  The DSL conversions collide with the
+   * scalatest === operator so we can the scalatest conversion
+   * explicitly: assert(X === Y) --> assert(EQ(X).===(Y))
+   */ 
+  import org.scalatest.Assertions.{convertToEqualizer => EQ}
+  test("expressions with a literal on the left") {
+    assert(EQ(-1 + 'x).===(Add(-1, 'x)))
+    assert(EQ(3 + 'x * 'y).===(Add(3, Multiply('x, 'y))))
+    assert(EQ(0 < 'x).===(LessThan(0, 'x)))
+    assert(EQ(1.5 -=- 'x).===(EqualTo(1.5, 'x)))
+    assert(EQ(false !=- 'x).===(Not(EqualTo(false, 'x))))
+    assert(EQ("a string" >= 'x).===(GreaterThanOrEqual("a string", 'x)))
+    //assert(EQ(RichDate("2014-11-05") > 'date).===(GreaterThan(RichDate("2014-11-05"), 'date)))
+    //assert(EQ(RichTimestamp("2014-11-05 12:34:56.789") < 'now)
+    //	   .===(LessThan(RichTimestamp("2014-11-05 12:34:56.789"), 'now)))
+  }
+
 }
