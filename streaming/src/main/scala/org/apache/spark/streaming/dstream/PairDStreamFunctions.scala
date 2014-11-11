@@ -406,17 +406,14 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
-   * @param initial state value of each key.
    * @tparam S State type
    */
   def updateStateByKey[S: ClassTag](
       updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
-      rememberPartitioner: Boolean,
-      initial : RDD[(K, S)]
+      rememberPartitioner: Boolean
     ): DStream[(K, S)] = {
-     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner,
-       rememberPartitioner, Some(initial))
+     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner, None)
   }
 
   /**
@@ -431,14 +428,17 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param initialRDD state value of each key.
    * @tparam S State type
    */
   def updateStateByKey[S: ClassTag](
       updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
-      rememberPartitioner: Boolean
+      rememberPartitioner: Boolean,
+      initialRDD : RDD[(K, S)]
     ): DStream[(K, S)] = {
-     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner, None)
+     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner,
+       rememberPartitioner, Some(initialRDD))
   }
 
   /**
