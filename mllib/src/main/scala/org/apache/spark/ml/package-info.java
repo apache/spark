@@ -16,7 +16,8 @@
  */
 
 /**
- * Spark ML is an ALPHA component that adapts the new set of machine learning APIs.
+ * Spark ML is an ALPHA component that adds a new set of machine learning APIs to let users quickly
+ * assemble and configure practical machine learning pipelines.
  */
 @AlphaComponent
 package org.apache.spark.ml;
