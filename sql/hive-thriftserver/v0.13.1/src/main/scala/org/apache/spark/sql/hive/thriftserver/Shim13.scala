@@ -27,10 +27,9 @@ import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.math._
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
@@ -39,9 +38,9 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.{Row => SparkRow, SchemaRDD}
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.{SchemaRDD, Row => SparkRow}
 
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
@@ -100,6 +99,7 @@ private[hive] class SparkExecuteStatementOperation(
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
+        setState(OperationState.ERROR)
         logError("Error executing query:",e)
         throw new HiveSQLException(e.toString)
     }
@@ -194,14 +194,12 @@ private[hive] class SparkExecuteStatementOperation(
         try {
           sqlOperationConf.verifyAndSet(confEntry.getKey, confEntry.getValue)
         }
-        catch {
-          case e: IllegalArgumentException => {
-            throw new HiveSQLException("Error applying statement specific settings", e)
-          }
+        catch { case e: IllegalArgumentException =>
+          throw new HiveSQLException("Error applying statement specific settings", e)
         }
       }
     }
-    return sqlOperationConf
+    sqlOperationConf
   }
 
   def run(): Unit = {
@@ -219,7 +217,7 @@ private[hive] class SparkExecuteStatementOperation(
       val currentUGI: UserGroupInformation = ShimLoader.getHadoopShims.getUGIForConf(opConfig)
 
       val backgroundOperation: Runnable = new Runnable {
-        def run {
+        def run() {
           val doAsAction: PrivilegedExceptionAction[AnyRef] =
             new PrivilegedExceptionAction[AnyRef] {
               def run: AnyRef = {
@@ -228,23 +226,19 @@ private[hive] class SparkExecuteStatementOperation(
                 try {
                   runInternal(statement)
                 }
-                catch {
-                  case e: HiveSQLException => {
-                    setOperationException(e)
-                    logError("Error running hive query: ", e)
-                  }
+                catch { case e: HiveSQLException =>
+                  setOperationException(e)
+                  logError("Error running hive query: ", e)
                 }
-                return null
+                null
               }
             }
           try {
             ShimLoader.getHadoopShims.doAs(currentUGI, doAsAction)
           }
-          catch {
-            case e: Exception => {
-              setOperationException(new HiveSQLException(e))
-              logError("Error running hive query as user : " + currentUGI.getShortUserName, e)
-            }
+          catch { case e: Exception =>
+            setOperationException(new HiveSQLException(e))
+            logError("Error running hive query as user : " + currentUGI.getShortUserName, e)
           }
           setState(OperationState.FINISHED)
         }
