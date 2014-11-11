@@ -19,7 +19,7 @@
 
 # NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
 
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+export SPARK_HOME="$(cd $(dirname $(readlink -f "$0"))/..; pwd)"
 ORIG_ARGS=("$@")
 
 while (($#)); do

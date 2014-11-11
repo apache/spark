@@ -26,7 +26,7 @@ set -o posix
 CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
 
 # Figure out where Spark is installed
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+FWDIR="$(cd $(dirname $(readlink -f "$0"))/..; pwd)"
 
 function usage {
   echo "Usage: ./bin/spark-sql [options] [cli option]"

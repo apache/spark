@@ -29,7 +29,7 @@ esac
 set -o posix
 
 ## Global script variables
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+FWDIR="$(cd $(dirname $(readlink -f "$0"))/..; pwd)"
 
 function usage() {
   echo "Usage: ./bin/spark-shell [options]"

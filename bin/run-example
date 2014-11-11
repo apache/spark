@@ -19,7 +19,7 @@
 
 SCALA_VERSION=2.10
 
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+FWDIR="$(cd $(dirname $(readlink -f "$0"))/..; pwd)"
 export SPARK_HOME="$FWDIR"
 EXAMPLES_DIR="$FWDIR"/examples
 
