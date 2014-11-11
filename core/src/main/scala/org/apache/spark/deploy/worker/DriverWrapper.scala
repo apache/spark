@@ -17,9 +17,13 @@
 
 package org.apache.spark.deploy.worker
 
+import java.io.File
+import java.net.URL
+
 import akka.actor._
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.executor.{ChildExecutorURLClassLoader, ExecutorURLClassLoader}
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
@@ -28,21 +32,31 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 object DriverWrapper {
   def main(args: Array[String]) {
     args.toList match {
-      case workerUrl :: mainClass :: extraArgs =>
+      case workerUrl :: userJar :: mainClass :: extraArgs =>
         val conf = new SparkConf()
         val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",
           Utils.localHostName(), 0, conf, new SecurityManager(conf))
         actorSystem.actorOf(Props(classOf[WorkerWatcher], workerUrl), name = "workerWatcher")
 
+        val currentLoader = Thread.currentThread.getContextClassLoader
+        val userJarUrl = new File(userJar).toURI().toURL()
+        val loader =
+          if (sys.props.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
+            new ChildExecutorURLClassLoader(Array(userJarUrl), currentLoader)
+          } else {
+            new ExecutorURLClassLoader(Array(userJarUrl), currentLoader)
+          }
+        Thread.currentThread.setContextClassLoader(loader)
+
         // Delegate to supplied main class
-        val clazz = Class.forName(args(1))
+        val clazz = Class.forName(mainClass, true, loader)
         val mainMethod = clazz.getMethod("main", classOf[Array[String]])
         mainMethod.invoke(null, extraArgs.toArray[String])
 
         actorSystem.shutdown()
 
       case _ =>
-        System.err.println("Usage: DriverWrapper <workerUrl> <driverMainClass> [options]")
+        System.err.println("Usage: DriverWrapper <workerUrl> <userJar> <driverMainClass> [options]")
         System.exit(-1)
     }
   }
