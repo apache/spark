@@ -351,6 +351,41 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData, updateStateOperation, outputData, true)
   }
 
+  test("updateStateByKey - simple with initial value RDD") {
+    val initial = Seq(("a", 1), ("c", 2))
+
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 2), ("c", 2)),
+        Seq(("a", 3), ("b", 1), ("c", 2)),
+        Seq(("a", 4), ("b", 2), ("c", 3)),
+        Seq(("a", 5), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3)),
+        Seq(("a", 6), ("b", 3), ("c", 3))
+      )
+
+    val updateStateOperation = (s: DStream[String]) => {
+      val initialRDD = s.context.sparkContext.makeRDD(initial)
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some(values.sum + state.getOrElse(0))
+      }
+      s.map(x => (x, 1)).updateStateByKey[Int](updateFunc,
+        new HashPartitioner (numInputPartitions), initialRDD)
+    }
+
+    testOperation(inputData, updateStateOperation, outputData, true)
+  }
+
   test("updateStateByKey - with initial value RDD") {
     val initial = Seq(("a", 1), ("c", 2))
 

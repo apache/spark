@@ -806,15 +806,17 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
    * Performs an order-invariant comparison of lists representing two RDD streams. This allows
    * us to account for ordering variation within individual RDD's which occurs during windowing.
    */
-  public static <T extends Comparable<T>> void assertOrderInvariantEquals(
+  public static <T> void assertOrderInvariantEquals(
       List<List<T>> expected, List<List<T>> actual) {
+    List<Set<T>> expectedSets = new ArrayList<Set<T>>();
     for (List<T> list: expected) {
-      Collections.sort(list);
+      expectedSets.add(Collections.unmodifiableSet(new HashSet<T>(list)));
     }
+    List<Set<T>> actualSets = new ArrayList<Set<T>>();
     for (List<T> list: actual) {
-      Collections.sort(list);
+      actualSets.add(Collections.unmodifiableSet(new HashSet<T>(list)));
     }
-    Assert.assertEquals(expected, actual);
+    Assert.assertEquals(expectedSets, actualSets);
   }
 
 
@@ -1252,12 +1254,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD (tmpRDD);
 
     List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
-        Arrays.asList(new Tuple2<String, Integer>("new york", 7),
-            new Tuple2<String, Integer>("california", 5)),
-        Arrays.asList(new Tuple2<String, Integer>("new york", 11),
-            new Tuple2<String, Integer>("california", 15)),
-        Arrays.asList(new Tuple2<String, Integer>("new york", 11),
-            new Tuple2<String, Integer>("california", 15)));
+        Arrays.asList(new Tuple2<String, Integer>("california", 4),
+            new Tuple2<String, Integer>("new york", 5)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 14),
+            new Tuple2<String, Integer>("new york", 9)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 14),
+            new Tuple2<String, Integer>("new york", 9)));
 
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
@@ -1279,7 +1281,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(updated);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    assertOrderInvariantEquals(expected, result);
   }
 
   @SuppressWarnings("unchecked")

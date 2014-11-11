@@ -443,23 +443,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     scalaFunc
   }
 
-  private def convertUpdateStateFunctionWithIterator[S]
-  (in: JFunction2[JList[V], Optional[S], Optional[S]]):
-  (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)] = {
-    val scalaFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)] = (iterator) => {
-      iterator.flatMap { t =>
-        val list: JList[V] = t._2
-        val scalaState: Optional[S] = JavaUtils.optionToOptional(t._3)
-        val result: Optional[S] = in.apply(list, scalaState)
-        result.isPresent match {
-          case true => Some((t._1, result.get()))
-          case _ => None
-        }
-      }
-    }
-    scalaFunc
-  }
-
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
@@ -526,8 +509,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       initialRDD: JavaPairRDD[K, S]
   ): JavaPairDStream[K, S] = {
     implicit val cm: ClassTag[S] = fakeClassTag
-    dstream.updateStateByKey(convertUpdateStateFunctionWithIterator(updateFunc),
-      partitioner, true, initialRDD)
+    dstream.updateStateByKey(convertUpdateStateFunction(updateFunc), partitioner, initialRDD)
   }
 
   /**
