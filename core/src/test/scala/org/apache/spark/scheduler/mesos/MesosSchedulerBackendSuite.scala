@@ -18,9 +18,9 @@
 package org.apache.spark.scheduler.mesos
 
 import org.scalatest.FunSuite
-import org.apache.spark.{SparkConf, SparkContext, LocalSparkContext}
+import org.apache.spark.{scheduler, SparkConf, SparkContext, LocalSparkContext}
 import org.apache.spark.scheduler.{TaskDescription, WorkerOffer, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerBackend
+import org.apache.spark.scheduler.cluster.mesos.{MemoryUtils, MesosSchedulerBackend}
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.Protos._
 import org.scalatest.mock.EasyMockSugar
@@ -49,18 +49,25 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
 
     val driver = EasyMock.createMock(classOf[SchedulerDriver])
     val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
-    val offers = new java.util.ArrayList[Offer]
-    offers.add(createOffer(1, 101, 1))
-    offers.add(createOffer(1, 99, 1))
 
     val sc = EasyMock.createMock(classOf[SparkContext])
+
     EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
     EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
     EasyMock.expect(sc.executorEnvs).andReturn(new mutable.HashMap).anyTimes()
     EasyMock.expect(sc.conf).andReturn(new SparkConf).anyTimes()
     EasyMock.replay(sc)
+    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val minCpu = 4
+    val offers = new java.util.ArrayList[Offer]
+    offers.add(createOffer(1, minMem, minCpu))
+    offers.add(createOffer(1, minMem - 1, minCpu))
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
-    val workerOffers = Seq(backend.toWorkerOffer(offers.get(0)))
+    val workerOffers = Seq(offers.get(0)).map(o => new WorkerOffer(
+      o.getSlaveId.getValue,
+      o.getHostname,
+      2
+    ))
     val taskDesc = new TaskDescription(1L, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     EasyMock.expect(taskScheduler.resourceOffers(EasyMock.eq(workerOffers))).andReturn(Seq(Seq(taskDesc)))
     EasyMock.expect(taskScheduler.CPUS_PER_TASK).andReturn(2).anyTimes()
