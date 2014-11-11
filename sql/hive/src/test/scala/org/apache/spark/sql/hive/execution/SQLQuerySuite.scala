@@ -168,4 +168,8 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
         sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
   }
+
+ test("drop none-existing table") {
+    checkAnswer(sql("DROP TABLE IF EXISTS not_existing_table"),Seq.empty[Row])
+  }
 }
