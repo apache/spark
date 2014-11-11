@@ -84,7 +84,6 @@ package object dsl {
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
     def === (other: Expression) = EqualTo(expr, other)
-    def -=- (other: Expression) = EqualTo(expr, other)
     def <=> (other: Expression) = EqualNullSafe(expr, other)
     def !== (other: Expression) = Not(EqualTo(expr, other))
 
@@ -148,44 +147,6 @@ package object dsl {
     def max(e: Expression) = Max(e)
     def upper(e: Expression) = Upper(e)
     def lower(e: Expression) = Lower(e)
-
-    /*
-     * Conversions to provide the standard operators in the special case
-     * where a literal is being combined with a symbol. Without these an
-     * expression such as 0 < 'x is not recognized.
-     */
-    class LhsLiteral(x: Any) {
-      val literal = Literal(x)
-      def + (other: Symbol) = Add(literal, other)
-      def - (other: Symbol) = Subtract(literal, other)
-      def * (other: Symbol) = Multiply(literal, other)
-      def / (other: Symbol) = Divide(literal, other)
-      def % (other: Symbol) = Remainder(literal, other)
-
-      def && (other: Symbol) = And(literal, other)
-      def || (other: Symbol) = Or(literal, other)
-
-      def < (other: Symbol)   = LessThan(literal, other)
-      def <= (other: Symbol)  = LessThanOrEqual(literal, other)
-      def > (other: Symbol)   = GreaterThan(literal, other)
-      def >= (other: Symbol)  = GreaterThanOrEqual(literal, other)
-      def -=- (other: Symbol) = EqualTo(literal, other)
-      def <=> (other: Symbol) = EqualNullSafe(literal, other)
-      def !== (other: Symbol) = Not(EqualTo(literal, other))
-    }
-
-    implicit def booleanToLhsLiteral(b: Boolean) = new LhsLiteral(b)
-    implicit def byteToLhsLiteral(b: Byte) = new LhsLiteral(b)
-    implicit def shortToLhsLiteral(s: Short) = new LhsLiteral(s)
-    implicit def intToLhsLiteral(i: Int) = new LhsLiteral(i)
-    implicit def longToLhsLiteral(l: Long) = new LhsLiteral(l)
-    implicit def floatToLhsLiteral(f: Float) = new LhsLiteral(f)
-    implicit def doubleToLhsLiteral(d: Double) = new LhsLiteral(d)
-    implicit def stringToLhsLiteral(s: String) = new LhsLiteral(s)
-    implicit def bigDecimalToLhsLiteral(d: BigDecimal) = new LhsLiteral(d)
-    implicit def decimalToLhsLiteral(d: Decimal) = new LhsLiteral(d)
-    implicit def dateToLhsLiteral(d: Date) = new LhsLiteral(d)
-    implicit def timestampToLhsLiteral(t: Timestamp) = new LhsLiteral(t)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?

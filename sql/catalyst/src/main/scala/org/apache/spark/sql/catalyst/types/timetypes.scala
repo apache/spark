@@ -48,7 +48,7 @@ class RichDate(milliseconds: Long) extends Date(milliseconds) {
 object RichDate {
   def apply(init: String) = new RichDate(Date.valueOf(init).getTime)
 
-  def unapply(richdate: RichDate): Option[Date] = Some(new Date(richdate.getTime)) 
+  def unapply(date: Any): Option[RichDate] = Some(RichDate(date.toString)) 
 }
 
 /**
@@ -72,26 +72,13 @@ class RichTimestamp(milliseconds: Long) extends Timestamp(milliseconds) {
   def <= (that: Timestamp): Boolean = (this.before(that) || this.equals(that))
   def >= (that: Timestamp): Boolean = (this.after(that) || this.equals(that))
   def === (that: Timestamp): Boolean = this.equals(that)
-  // Follow Hive conventions when converting to a String.
-  // Copied from the Cast class.
-  override def toString(): String = { 
-    val jts = new Timestamp(this.getTime)
-    val timestampString = jts.toString
-    val formatted = Cast.threadLocalTimestampFormat.get.format(jts)
-    
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
-      formatted
-    }
-  }
 }
 
 object RichTimestamp {
   def apply(init: String) = new RichTimestamp(Timestamp.valueOf(init).getTime)
 
-  def unapply(richtimestamp: RichTimestamp): Option[Timestamp] = 
-    Some(new Timestamp(richtimestamp.getTime)) 
+  def unapply(timestamp: Any): Option[RichTimestamp] = 
+    Some(RichTimestamp(timestamp.toString)) 
 }
 
 /**
