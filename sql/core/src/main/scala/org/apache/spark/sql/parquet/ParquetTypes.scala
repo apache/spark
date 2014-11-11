@@ -19,6 +19,8 @@ package org.apache.spark.sql.parquet
 
 import java.io.IOException
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -27,8 +29,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
 import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType}
-import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns}
+import parquet.schema.{Type => ParquetType, Types => ParquetTypes, PrimitiveType => ParquetPrimitiveType, MessageType}
+import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns, DecimalMetadata}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
 
@@ -39,17 +41,25 @@ import org.apache.spark.sql.catalyst.types._
 // Implicits
 import scala.collection.JavaConversions._
 
+/** A class representing Parquet info fields we care about, for passing back to Parquet */
+private[parquet] case class ParquetTypeInfo(
+  primitiveType: ParquetPrimitiveTypeName,
+  originalType: Option[ParquetOriginalType] = None,
+  decimalMetadata: Option[DecimalMetadata] = None,
+  length: Option[Int] = None)
+
 private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean =
     classOf[PrimitiveType] isAssignableFrom ctype.getClass
 
   def toPrimitiveDataType(
       parquetType: ParquetPrimitiveType,
-      binayAsString: Boolean): DataType =
+      binaryAsString: Boolean): DataType = {
+    val originalType = parquetType.getOriginalType
+    val decimalInfo = parquetType.getDecimalMetadata
     parquetType.getPrimitiveTypeName match {
       case ParquetPrimitiveTypeName.BINARY
-        if (parquetType.getOriginalType == ParquetOriginalType.UTF8 ||
-          binayAsString) => StringType
+        if (originalType == ParquetOriginalType.UTF8 || binaryAsString) => StringType
       case ParquetPrimitiveTypeName.BINARY => BinaryType
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
@@ -59,9 +69,14 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.INT96 =>
         // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
         sys.error("Potential loss of precision: cannot convert INT96")
+      case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
+        if (originalType == ParquetOriginalType.DECIMAL && decimalInfo.getPrecision <= 18) =>
+          // TODO: for now, our reader only supports decimals that fit in a Long
+          DecimalType(decimalInfo.getPrecision, decimalInfo.getScale)
       case _ => sys.error(
         s"Unsupported parquet datatype $parquetType")
     }
+  }
 
   /**
    * Converts a given Parquet `Type` into the corresponding
@@ -119,7 +134,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
         case ParquetOriginalType.LIST => { // TODO: check enums!
           assert(groupType.getFieldCount == 1)
           val field = groupType.getFields.apply(0)
-          ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
+          if (field.getName == CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME) {
+            val bag = field.asGroupType()
+            assert(bag.getFieldCount == 1)
+            ArrayType(toDataType(bag.getFields.apply(0), isBinaryAsString), containsNull = true)
+          } else {
+            ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
+          }
         }
         case ParquetOriginalType.MAP => {
           assert(
@@ -129,28 +150,32 @@ private[parquet] object ParquetTypesConverter extends Logging {
           assert(
             keyValueGroup.getFieldCount == 2,
             "Parquet Map type malformatted: nested group should have 2 (key, value) fields!")
-          val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
           assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
+
+          val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
           val valueType = toDataType(keyValueGroup.getFields.apply(1), isBinaryAsString)
-          assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-          // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
-          // at here.
-          MapType(keyType, valueType)
+          MapType(keyType, valueType,
+            keyValueGroup.getFields.apply(1).getRepetition != Repetition.REQUIRED)
         }
         case _ => {
           // Note: the order of these checks is important!
           if (correspondsToMap(groupType)) { // MapType
             val keyValueGroup = groupType.getFields.apply(0).asGroupType()
-            val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
             assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
+
+            val keyType = toDataType(keyValueGroup.getFields.apply(0), isBinaryAsString)
             val valueType = toDataType(keyValueGroup.getFields.apply(1), isBinaryAsString)
-            assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-            // TODO: set valueContainsNull explicitly instead of assuming valueContainsNull is true
-            // at here.
-            MapType(keyType, valueType)
+            MapType(keyType, valueType,
+              keyValueGroup.getFields.apply(1).getRepetition != Repetition.REQUIRED)
           } else if (correspondsToArray(groupType)) { // ArrayType
-            val elementType = toDataType(groupType.getFields.apply(0), isBinaryAsString)
-            ArrayType(elementType, containsNull = false)
+            val field = groupType.getFields.apply(0)
+            if (field.getName == CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME) {
+              val bag = field.asGroupType()
+              assert(bag.getFieldCount == 1)
+              ArrayType(toDataType(bag.getFields.apply(0), isBinaryAsString), containsNull = true)
+            } else {
+              ArrayType(toDataType(field, isBinaryAsString), containsNull = false)
+            }
           } else { // everything else: StructType
             val fields = groupType
               .getFields
@@ -171,21 +196,38 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * is not primitive.
    *
    * @param ctype The type to convert
-   * @return The name of the corresponding Parquet primitive type
+   * @return The name of the corresponding Parquet type properties
    */
-  def fromPrimitiveDataType(ctype: DataType):
-      Option[(ParquetPrimitiveTypeName, Option[ParquetOriginalType])] = ctype match {
-    case StringType => Some(ParquetPrimitiveTypeName.BINARY, Some(ParquetOriginalType.UTF8))
-    case BinaryType => Some(ParquetPrimitiveTypeName.BINARY, None)
-    case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN, None)
-    case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE, None)
-    case FloatType => Some(ParquetPrimitiveTypeName.FLOAT, None)
-    case IntegerType => Some(ParquetPrimitiveTypeName.INT32, None)
+  def fromPrimitiveDataType(ctype: DataType): Option[ParquetTypeInfo] = ctype match {
+    case StringType => Some(ParquetTypeInfo(
+      ParquetPrimitiveTypeName.BINARY, Some(ParquetOriginalType.UTF8)))
+    case BinaryType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.BINARY))
+    case BooleanType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.BOOLEAN))
+    case DoubleType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.DOUBLE))
+    case FloatType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.FLOAT))
+    case IntegerType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
     // There is no type for Byte or Short so we promote them to INT32.
-    case ShortType => Some(ParquetPrimitiveTypeName.INT32, None)
-    case ByteType => Some(ParquetPrimitiveTypeName.INT32, None)
-    case LongType => Some(ParquetPrimitiveTypeName.INT64, None)
+    case ShortType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case ByteType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case LongType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT64))
+    case DecimalType.Fixed(precision, scale) if precision <= 18 =>
+      // TODO: for now, our writer only supports decimals that fit in a Long
+      Some(ParquetTypeInfo(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY,
+        Some(ParquetOriginalType.DECIMAL),
+        Some(new DecimalMetadata(precision, scale)),
+        Some(BYTES_FOR_PRECISION(precision))))
     case _ => None
+  }
+
+  /**
+   * Compute the FIXED_LEN_BYTE_ARRAY length needed to represent a given DECIMAL precision.
+   */
+  private[parquet] val BYTES_FOR_PRECISION = Array.tabulate[Int](38) { precision =>
+    var length = 1
+    while (math.pow(2.0, 8 * length - 1) < math.pow(10.0, precision)) {
+      length += 1
+    }
+    length
   }
 
   /**
@@ -235,12 +277,22 @@ private[parquet] object ParquetTypesConverter extends Logging {
       } else {
         if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
-    val primitiveType = fromPrimitiveDataType(ctype)
-    primitiveType.map {
-      case (primitiveType, originalType) =>
-        new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
+    val typeInfo = fromPrimitiveDataType(ctype)
+    typeInfo.map {
+      case ParquetTypeInfo(primitiveType, originalType, decimalMetadata, length) =>
+        val builder = ParquetTypes.primitive(primitiveType, repetition).as(originalType.orNull)
+        for (len <- length) {
+          builder.length(len)
+        }
+        for (metadata <- decimalMetadata) {
+          builder.precision(metadata.getPrecision).scale(metadata.getScale)
+        }
+        builder.named(name)
     }.getOrElse {
       ctype match {
+        case udt: UserDefinedType[_] => {
+          fromDataType(udt.sqlType, name, nullable, inArray)
+        }
         case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,
@@ -249,13 +301,27 @@ private[parquet] object ParquetTypesConverter extends Logging {
             inArray = true)
           ConversionPatterns.listType(repetition, name, parquetElementType)
         }
+        case ArrayType(elementType, true) => {
+          val parquetElementType = fromDataType(
+            elementType,
+            CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+            nullable = true,
+            inArray = false)
+          ConversionPatterns.listType(
+            repetition,
+            name,
+            new ParquetGroupType(
+              Repetition.REPEATED,
+              CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME,
+              parquetElementType))
+        }
         case StructType(structFields) => {
           val fields = structFields.map {
             field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
           new ParquetGroupType(repetition, name, fields)
         }
-        case MapType(keyType, valueType, _) => {
+        case MapType(keyType, valueType, valueContainsNull) => {
           val parquetKeyType =
             fromDataType(
               keyType,
@@ -266,7 +332,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
             fromDataType(
               valueType,
               CatalystConverter.MAP_VALUE_SCHEMA_NAME,
-              nullable = false,
+              nullable = valueContainsNull,
               inArray = false)
           ConversionPatterns.mapType(
             repetition,
@@ -299,14 +365,14 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   def convertFromString(string: String): Seq[Attribute] = {
-    DataType(string) match {
+    Try(DataType.fromJson(string)).getOrElse(DataType.fromCaseClassString(string)) match {
       case s: StructType => s.toAttributes
       case other => sys.error(s"Can convert $string to row")
     }
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
-    StructType.fromAttributes(schema).toString
+    StructType.fromAttributes(schema).json
   }
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {
@@ -370,16 +436,13 @@ private[parquet] object ParquetTypesConverter extends Logging {
       throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")
     }
     val path = origPath.makeQualified(fs)
-    if (!fs.getFileStatus(path).isDir) {
-      throw new IllegalArgumentException(
-        s"Expected $path for be a directory with Parquet files/metadata")
-    }
-    ParquetRelation.enableLogForwarding()
 
     val children = fs.listStatus(path).filterNot { status =>
       val name = status.getPath.getName
-      name(0) == '.' || name == FileOutputCommitter.SUCCEEDED_FILE_NAME
+      (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
     }
+
+    ParquetRelation.enableLogForwarding()
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
     // groups. Since Parquet schema is replicated among all row groups, we only need to touch a

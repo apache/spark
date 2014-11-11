@@ -18,10 +18,12 @@
 package org.apache.spark
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.concurrent.Await
+import scala.collection.JavaConversions._
 
 import akka.actor._
 import akka.pattern.ask
@@ -84,6 +86,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * On the master, it serves as the source of map outputs recorded from ShuffleMapTasks.
    * On the workers, it simply serves as a cache, in which a miss triggers a fetch from the
    * master's corresponding HashMap.
+   *
+   * Note: because mapStatuses is accessed concurrently, subclasses should make sure it's a
+   * thread-safe map.
    */
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
@@ -173,6 +178,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
         }
       } else {
+        logError("Missing all output locations for shuffle " + shuffleId)
         throw new MetadataFetchFailedException(
           shuffleId, reduceId, "Missing all output locations for shuffle " + shuffleId)
       }
@@ -339,11 +345,11 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
  * MapOutputTrackerMaster.
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
-  protected val mapStatuses = new HashMap[Int, Array[MapStatus]]
+  protected val mapStatuses: Map[Int, Array[MapStatus]] =
+    new ConcurrentHashMap[Int, Array[MapStatus]]
 }
 
-private[spark] object MapOutputTracker {
-  private val LOG_BASE = 1.1
+private[spark] object MapOutputTracker extends Logging {
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
@@ -376,37 +382,12 @@ private[spark] object MapOutputTracker {
     statuses.map {
       status =>
         if (status == null) {
+          logError("Missing an output location for shuffle " + shuffleId)
           throw new MetadataFetchFailedException(
             shuffleId, reduceId, "Missing an output location for shuffle " + shuffleId)
         } else {
-          (status.location, decompressSize(status.compressedSizes(reduceId)))
+          (status.location, status.getSizeForBlock(reduceId))
         }
-    }
-  }
-
-  /**
-   * Compress a size in bytes to 8 bits for efficient reporting of map output sizes.
-   * We do this by encoding the log base 1.1 of the size as an integer, which can support
-   * sizes up to 35 GB with at most 10% error.
-   */
-  def compressSize(size: Long): Byte = {
-    if (size == 0) {
-      0
-    } else if (size <= 1L) {
-      1
-    } else {
-      math.min(255, math.ceil(math.log(size) / math.log(LOG_BASE)).toInt).toByte
-    }
-  }
-
-  /**
-   * Decompress an 8-bit encoded block size, using the reverse operation of compressSize.
-   */
-  def decompressSize(compressedSize: Byte): Long = {
-    if (compressedSize == 0) {
-      0
-    } else {
-      math.pow(LOG_BASE, compressedSize & 0xFF).toLong
     }
   }
 }

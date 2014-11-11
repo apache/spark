@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, LinkedHashSet}
+import org.apache.spark.serializer.KryoSerializer
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -45,7 +46,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private val settings = new HashMap[String, String]()
+  private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
@@ -140,6 +141,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  /**
+   * Use Kryo serialization and register the given set of classes with Kryo.
+   * If called multiple times, this will append the classes from all calls together.
+   */
+  def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
+    val allClassNames = new LinkedHashSet[String]()
+    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').filter(!_.isEmpty)
+    allClassNames ++= classes.map(_.getName)
+
+    set("spark.kryo.classesToRegister", allClassNames.mkString(","))
+    set("spark.serializer", classOf[KryoSerializer].getName)
+    this
+  }
+
   /** Remove a parameter from the configuration */
   def remove(key: String): SparkConf = {
     settings.remove(key)
@@ -202,6 +217,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      */
     getAll.filter { case (k, _) => isAkkaConf(k) }
 
+  /**
+   * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
+   * from the start in the Executor.
+   */
+  def getAppId: String = get("spark.app.id")
+
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)
 
@@ -209,6 +230,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   override def clone: SparkConf = {
     new SparkConf(false).setAll(settings)
   }
+
+  /**
+   * By using this instead of System.getenv(), environment variables can be mocked
+   * in unit tests.
+   */
+  private[spark] def getenv(name: String): String = System.getenv(name)
 
   /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
     * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */
@@ -223,11 +250,24 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val executorClasspathKey = "spark.executor.extraClassPath"
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
+    val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+
+    // Used by Yarn in 1.1 and before
+    sys.props.get("spark.driver.libraryPath").foreach { value =>
+      val warning =
+        s"""
+          |spark.driver.libraryPath was detected (set to '$value').
+          |This is deprecated in Spark 1.2+.
+          |
+          |Please instead use: $driverLibraryPathKey
+        """.stripMargin
+      logWarning(warning)
+    }
 
     // Validate spark.executor.extraJavaOptions
     settings.get(executorOptsKey).map { javaOpts =>
       if (javaOpts.contains("-Dspark")) {
-        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts)'. " +
+        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
           "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
         throw new Exception(msg)
       }

@@ -20,7 +20,8 @@ package org.apache.spark.sql.columnar.compression
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.columnar.{BOOLEAN, BooleanColumnStats}
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.columnar.{NoopColumnStats, BOOLEAN}
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
 class BooleanBitSetSuite extends FunSuite {
@@ -31,7 +32,7 @@ class BooleanBitSetSuite extends FunSuite {
     // Tests encoder
     // -------------
 
-    val builder = TestCompressibleColumnBuilder(new BooleanColumnStats, BOOLEAN, BooleanBitSet)
+    val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
     val rows = Seq.fill[Row](count)(makeRandomRow(BOOLEAN))
     val values = rows.map(_.head)
 
@@ -72,10 +73,14 @@ class BooleanBitSetSuite extends FunSuite {
     buffer.rewind().position(headerSize + 4)
 
     val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
+    val mutableRow = new GenericMutableRow(1)
     if (values.nonEmpty) {
       values.foreach {
         assert(decoder.hasNext)
-        assertResult(_, "Wrong decoded value")(decoder.next())
+        assertResult(_, "Wrong decoded value") {
+          decoder.next(mutableRow, 0)
+          mutableRow.getBoolean(0)
+        }
       }
     }
     assert(!decoder.hasNext)

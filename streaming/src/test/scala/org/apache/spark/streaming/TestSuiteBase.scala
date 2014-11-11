@@ -17,19 +17,19 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
-import org.apache.spark.streaming.util.ManualClock
+import java.io.{ObjectInputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
 import scala.reflect.ClassTag
 
-import java.io.{ObjectInputStream, IOException}
-
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{SparkContext, SparkConf, Logging}
+import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -73,7 +73,7 @@ class TestOutputStream[T: ClassTag](parent: DStream[T],
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     output.clear()
   }
@@ -95,7 +95,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     output.clear()
   }
@@ -119,7 +119,11 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def batchDuration = Seconds(1)
 
   // Directory where the checkpoint data will be saved
-  def checkpointDir = "checkpoint"
+  lazy val checkpointDir = {
+    val dir = Utils.createTempDir()
+    logDebug(s"checkpointDir: $dir")
+    dir.toString
+  }
 
   // Number of partitions of the input parallel collections created for testing
   def numInputPartitions = 2
@@ -242,7 +246,9 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     logInfo("numBatches = " + numBatches + ", numExpectedOutput = " + numExpectedOutput)
 
     // Get the output buffer
-    val outputStream = ssc.graph.getOutputStreams.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
+    val outputStream = ssc.graph.getOutputStreams.
+      filter(_.isInstanceOf[TestOutputStreamWithPartitions[_]]).
+      head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     val output = outputStream.output
 
     try {

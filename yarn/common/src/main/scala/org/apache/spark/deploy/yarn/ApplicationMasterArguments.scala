@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.spark.util.IntParam
+import org.apache.spark.util.{MemoryParam, IntParam}
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import collection.mutable.ArrayBuffer
 
 class ApplicationMasterArguments(val args: Array[String]) {
@@ -26,7 +27,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userArgs: Seq[String] = Seq[String]()
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
+  var numExecutors = DEFAULT_NUMBER_EXECUTORS
 
   parseArgs(args.toList)
 
@@ -55,18 +56,13 @@ class ApplicationMasterArguments(val args: Array[String]) {
           numExecutors = value
           args = tail
 
-        case ("--worker-memory" | "--executor-memory") :: IntParam(value) :: tail =>
+        case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>
           executorMemory = value
           args = tail
 
         case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
           executorCores = value
           args = tail
-
-        case Nil =>
-          if (userJar == null || userClass == null) {
-            printUsageAndExit(1)
-          }
 
         case _ =>
           printUsageAndExit(1, args)
@@ -80,16 +76,17 @@ class ApplicationMasterArguments(val args: Array[String]) {
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
     }
-    System.err.println(
-      "Usage: org.apache.spark.deploy.yarn.ApplicationMaster [options] \n" +
-      "Options:\n" +
-      "  --jar JAR_PATH       Path to your application's JAR file (required)\n" +
-      "  --class CLASS_NAME   Name of your application's main class (required)\n" +
-      "  --args ARGS          Arguments to be passed to your application's main class.\n" +
-      "                       Mutliple invocations are possible, each will be passed in order.\n" +
-      "  --num-executors NUM    Number of executors to start (Default: 2)\n" +
-      "  --executor-cores NUM   Number of cores for the executors (Default: 1)\n" +
-      "  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n")
+    System.err.println("""
+      |Usage: org.apache.spark.deploy.yarn.ApplicationMaster [options]
+      |Options:
+      |  --jar JAR_PATH       Path to your application's JAR file
+      |  --class CLASS_NAME   Name of your application's main class
+      |  --args ARGS          Arguments to be passed to your application's main class.
+      |                       Multiple invocations are possible, each will be passed in order.
+      |  --num-executors NUM    Number of executors to start (Default: 2)
+      |  --executor-cores NUM   Number of cores for the executors (Default: 1)
+      |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      """.stripMargin)
     System.exit(exitCode)
   }
 }

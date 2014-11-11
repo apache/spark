@@ -145,11 +145,16 @@ class FlumePollingStreamSuite extends TestSuiteBase {
     outputStream.register()
 
     ssc.start()
-    writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
-    assertChannelIsEmpty(channel)
-    assertChannelIsEmpty(channel2)
-    sink.stop()
-    channel.stop()
+    try {
+      writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
+      assertChannelIsEmpty(channel)
+      assertChannelIsEmpty(channel2)
+    } finally {
+      sink.stop()
+      sink2.stop()
+      channel.stop()
+      channel2.stop()
+    }
   }
 
   def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
@@ -198,7 +203,7 @@ class FlumePollingStreamSuite extends TestSuiteBase {
   }
 
   def assertChannelIsEmpty(channel: MemoryChannel) = {
-    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining");
+    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining")
     queueRemaining.setAccessible(true)
     val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
     assert(m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] === 5000)

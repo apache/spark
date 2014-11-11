@@ -21,11 +21,15 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow}
+import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.{Row, SQLConf, SQLContext}
+import org.apache.spark.sql.{SQLConf, SQLContext}
 
+// TODO: DELETE ME...
 trait Command {
+  this: SparkPlan =>
+
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field
@@ -35,64 +39,80 @@ trait Command {
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Any] = Seq.empty[Any]
+  protected lazy val sideEffectResult: Seq[Row] = Seq.empty[Row]
+
+  override def executeCollect(): Array[Row] = sideEffectResult.toArray
+
+  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+}
+
+// TODO: Replace command with runnable command.
+trait RunnableCommand extends logical.Command {
+  self: Product =>
+
+  def output: Seq[Attribute]
+  def run(sqlContext: SQLContext): Seq[Row]
+}
+
+case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan {
+  /**
+   * A concrete command should override this lazy field to wrap up any side effects caused by the
+   * command or any other computation that should be evaluated exactly once. The value of this field
+   * can be used as the contents of the corresponding RDD generated from the physical plan of this
+   * command.
+   *
+   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
+   * so that the command can be executed eagerly right after the command query is created.
+   */
+  protected[sql] lazy val sideEffectResult: Seq[Row] = cmd.run(sqlContext)
+
+  override def output = cmd.output
+
+  override def children = Nil
+
+  override def executeCollect(): Array[Row] = sideEffectResult.toArray
+
+  override def execute(): RDD[Row] = sqlContext.sparkContext.parallelize(sideEffectResult, 1)
 }
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommand(
-    key: Option[String], value: Option[String], output: Seq[Attribute])(
+case class SetCommand(kv: Option[(String, Option[String])], output: Seq[Attribute])(
     @transient context: SQLContext)
   extends LeafNode with Command with Logging {
 
-  override protected[sql] lazy val sideEffectResult: Seq[String] = (key, value) match {
-    // Set value for key k.
-    case (Some(k), Some(v)) =>
-      if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
-        logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+  override protected lazy val sideEffectResult: Seq[Row] = kv match {
+    // Configures the deprecated "mapred.reduce.tasks" property.
+    case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
+      logWarning(
+        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-        context.setConf(SQLConf.SHUFFLE_PARTITIONS, v)
-        Array(s"${SQLConf.SHUFFLE_PARTITIONS}=$v")
-      } else {
-        context.setConf(k, v)
-        Array(s"$k=$v")
-      }
+      context.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
 
-    // Query the value bound to key k.
-    case (Some(k), _) =>
-      // TODO (lian) This is just a workaround to make the Simba ODBC driver work.
-      // Should remove this once we get the ODBC driver updated.
-      if (k == "-v") {
-        val hiveJars = Seq(
-          "hive-exec-0.12.0.jar",
-          "hive-service-0.12.0.jar",
-          "hive-common-0.12.0.jar",
-          "hive-hwi-0.12.0.jar",
-          "hive-0.12.0.jar").mkString(":")
+    // Configures a single property.
+    case Some((key, Some(value))) =>
+      context.setConf(key, value)
+      Seq(Row(s"$key=$value"))
 
-        Array(
-          "system:java.class.path=" + hiveJars,
-          "system:sun.java.command=shark.SharkServer2")
-      }
-      else {
-        Array(s"$k=${context.getConf(k, "<undefined>")}")
-      }
+    // Queries all key-value pairs that are set in the SQLConf of the context. Notice that different
+    // from Hive, here "SET -v" is an alias of "SET". (In Hive, "SET" returns all changed properties
+    // while "SET -v" returns all properties.)
+    case Some(("-v", None)) | None =>
+      context.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
 
-    // Query all key-value pairs that are set in the SQLConf of the context.
-    case (None, None) =>
-      context.getAllConfs.map { case (k, v) =>
-        s"$k=$v"
-      }.toSeq
+    // Queries the deprecated "mapred.reduce.tasks" property.
+    case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
+      logWarning(
+        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+          s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}"))
 
-    case _ =>
-      throw new IllegalArgumentException()
-  }
-
-  def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map { line => new GenericRow(Array[Any](line)) }
-    context.sparkContext.parallelize(rows, 1)
+    // Queries a single property.
+    case Some((key, None)) =>
+      Seq(Row(s"$key=${context.getConf(key, "<undefined>")}"))
   }
 
   override def otherCopyArgs = context :: Nil
@@ -108,20 +128,19 @@ case class SetCommand(
  */
 @DeveloperApi
 case class ExplainCommand(
-    logicalPlan: LogicalPlan, output: Seq[Attribute])(
+    logicalPlan: LogicalPlan, output: Seq[Attribute], extended: Boolean)(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
   // Run through the optimizer to generate the physical plan.
-  override protected[sql] lazy val sideEffectResult: Seq[String] = try {
-    "Physical execution plan:" +: context.executePlan(logicalPlan).executedPlan.toString.split("\n")
-  } catch { case cause: TreeNodeException[_] =>
-    "Error occurred during query planning: " +: cause.getMessage.split("\n")
-  }
+  override protected lazy val sideEffectResult: Seq[Row] = try {
+    // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
+    val queryExecution = context.executePlan(logicalPlan)
+    val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
 
-  def execute(): RDD[Row] = {
-    val explanation = sideEffectResult.map(row => new GenericRow(Array[Any](row)))
-    context.sparkContext.parallelize(explanation, 1)
+    outputString.split("\n").map(Row(_))
+  } catch { case cause: TreeNodeException[_] =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 
   override def otherCopyArgs = context :: Nil
@@ -131,21 +150,39 @@ case class ExplainCommand(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class CacheCommand(tableName: String, doCache: Boolean)(@transient context: SQLContext)
+case class CacheTableCommand(
+    tableName: String,
+    plan: Option[LogicalPlan],
+    isLazy: Boolean)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult = {
-    if (doCache) {
-      context.cacheTable(tableName)
-    } else {
-      context.uncacheTable(tableName)
+  override protected lazy val sideEffectResult = {
+    import sqlContext._
+
+    plan.foreach(_.registerTempTable(tableName))
+    val schemaRDD = table(tableName)
+    schemaRDD.cache()
+
+    if (!isLazy) {
+      // Performs eager caching
+      schemaRDD.count()
     }
-    Seq.empty[Any]
+
+    Seq.empty[Row]
   }
 
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    context.emptyResult
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class UncacheTableCommand(tableName: String) extends LeafNode with Command {
+  override protected lazy val sideEffectResult: Seq[Row] = {
+    sqlContext.table(tableName).unpersist()
+    Seq.empty[Row]
   }
 
   override def output: Seq[Attribute] = Seq.empty
@@ -159,15 +196,8 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
-    Seq(("# Registered as a temporary table", null, null)) ++
-      child.output.map(field => (field.name, field.dataType.toString, null))
-  }
-
-  override def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map {
-      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
-    }
-    context.sparkContext.parallelize(rows, 1)
+  override protected lazy val sideEffectResult: Seq[Row] = {
+    Row("# Registered as a temporary table", null, null) +:
+      child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }

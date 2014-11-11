@@ -12,7 +12,7 @@ CREATE TABLE part_rc(
     p_comment STRING
 )  STORED AS RCFILE ;
 
-LOAD DATA LOCAL INPATH '../data/files/part.rc' overwrite into table part_rc;
+LOAD DATA LOCAL INPATH '../../data/files/part.rc' overwrite into table part_rc;
 
 -- testWindowingPTFWithPartRC
 select p_mfgr, p_name, p_size, 

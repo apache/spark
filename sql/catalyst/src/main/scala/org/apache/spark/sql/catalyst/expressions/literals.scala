@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -31,8 +32,10 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(d, DecimalType)
+    case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
+    case d: Decimal => Literal(d, DecimalType.Unlimited)
     case t: Timestamp => Literal(t, TimestampType)
+    case d: Date => Literal(d, DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
   }
@@ -52,7 +55,7 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable = true
   def nullable = value == null
-  def references = Set.empty
+
 
   override def toString = if (value != null) value.toString else "null"
 
@@ -61,12 +64,9 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 }
 
 // TODO: Specialize
-case class MutableLiteral(var value: Any, nullable: Boolean = true) extends LeafExpression {
+case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
+    extends LeafExpression {
   type EvaluatedType = Any
-
-  val dataType = Literal(value).dataType
-
-  def references = Set.empty
 
   def update(expression: Expression, input: Row) = {
     value = expression.eval(input)

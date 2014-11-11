@@ -17,7 +17,8 @@ Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bay
 which is typically used for [document
 classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).
 Within that context, each observation is a document and each
-feature represents a term whose value is the frequency of the term. 
+feature represents a term whose value is the frequency of the term.
+Feature values must be nonnegative to represent term frequencies.
 [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
 vectors are usually sparse, and sparse vectors should be supplied as input to take advantage of
@@ -87,11 +88,11 @@ JavaPairRDD<Double, Double> predictionAndLabel =
       return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
+double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
-      return pl._1() == pl._2();
+      return pl._1().equals(pl._2());
     }
-  }).count() / test.count();
+  }).count() / (double) test.count();
 {% endhighlight %}
 </div>
 

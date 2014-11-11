@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 class TestNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType])
-  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats[T, JvmType], columnType)
+  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats, columnType)
   with NullableColumnBuilder
 
 object TestNullableColumnBuilder {
@@ -37,11 +37,15 @@ object TestNullableColumnBuilder {
 class NullableColumnBuilderSuite extends FunSuite {
   import ColumnarTestUtils._
 
-  Seq(INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC, TIMESTAMP).foreach {
+  Seq(
+    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC, DATE, TIMESTAMP
+  ).foreach {
     testNullableColumnBuilder(_)
   }
 
-  def testNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]) {
+  def testNullableColumnBuilder[T <: DataType, JvmType](
+      columnType: ColumnType[T, JvmType]): Unit = {
+
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
     test(s"$typeName column builder: empty column") {

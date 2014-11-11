@@ -32,22 +32,6 @@ object TestJsonData {
           "null":null
       }"""  :: Nil)
 
-  val complexFieldAndType =
-    TestSQLContext.sparkContext.parallelize(
-      """{"struct":{"field1": true, "field2": 92233720368547758070},
-          "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
-          "arrayOfString":["str1", "str2"],
-          "arrayOfInteger":[1, 2147483647, -2147483648],
-          "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808],
-          "arrayOfBigInteger":[922337203685477580700, -922337203685477580800],
-          "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308],
-          "arrayOfBoolean":[true, false, true],
-          "arrayOfNull":[null, null, null, null],
-          "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
-          "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]],
-          "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]]
-         }"""  :: Nil)
-
   val primitiveFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
       """{"num_num_1":11, "num_num_2":null, "num_num_3": 1.1,
@@ -73,7 +57,9 @@ object TestJsonData {
   val arrayElementTypeConflict =
     TestSQLContext.sparkContext.parallelize(
       """{"array1": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}],
-          "array2": [{"field":214748364700}, {"field":1}]}""" :: Nil)
+          "array2": [{"field":214748364700}, {"field":1}]}""" ::
+      """{"array3": [{"field":"str"}, {"field":1}]}""" ::
+      """{"array3": [1, 2, 3]}""" :: Nil)
 
   val missingFields =
     TestSQLContext.sparkContext.parallelize(
@@ -82,4 +68,97 @@ object TestJsonData {
       """{"c":[33, 44]}""" ::
       """{"d":{"field":true}}""" ::
       """{"e":"str"}""" :: Nil)
+
+  val complexFieldAndType1 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"struct":{"field1": true, "field2": 92233720368547758070},
+          "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
+          "arrayOfString":["str1", "str2"],
+          "arrayOfInteger":[1, 2147483647, -2147483648],
+          "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808],
+          "arrayOfBigInteger":[922337203685477580700, -922337203685477580800],
+          "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308],
+          "arrayOfBoolean":[true, false, true],
+          "arrayOfNull":[null, null, null, null],
+          "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
+          "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]],
+          "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]]
+         }"""  :: Nil)
+
+  val complexFieldAndType2 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
+          "complexArrayOfStruct": [
+          {
+            "field1": [
+            {
+              "inner1": "str1"
+            },
+            {
+              "inner2": ["str2", "str22"]
+            }],
+            "field2": [[1, 2], [3, 4]]
+          },
+          {
+            "field1": [
+            {
+              "inner2": ["str3", "str33"]
+            },
+            {
+              "inner1": "str4"
+            }],
+            "field2": [[5, 6], [7, 8]]
+          }],
+          "arrayOfArray1": [
+          [
+            [5]
+          ],
+          [
+            [6, 7],
+            [8]
+          ]],
+          "arrayOfArray2": [
+          [
+            [
+              {
+                "inner1": "str1"
+              }
+            ]
+          ],
+          [
+            [],
+            [
+              {"inner2": ["str3", "str33"]},
+              {"inner2": ["str4"], "inner1": "str11"}
+            ]
+          ],
+          [
+            [
+              {"inner3": [[{"inner4": 2}]]}
+            ]
+          ]]
+      }""" :: Nil)
+
+  val nullsInArrays =
+    TestSQLContext.sparkContext.parallelize(
+      """{"field1":[[null], [[["Test"]]]]}""" ::
+      """{"field2":[null, [{"Test":1}]]}""" ::
+      """{"field3":[[null], [{"Test":"2"}]]}""" ::
+      """{"field4":[[null, [1,2,3]]]}""" :: Nil)
+
+  val jsonArray =
+    TestSQLContext.sparkContext.parallelize(
+      """[{"a":"str_a_1"}]""" ::
+      """[{"a":"str_a_2"}, {"b":"str_b_3"}]""" ::
+      """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
+      """[]""" :: Nil)
+
+  val corruptRecords =
+    TestSQLContext.sparkContext.parallelize(
+      """{""" ::
+      """""" ::
+      """{"a":1, b:2}""" ::
+      """{"a":{, b:3}""" ::
+      """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
+      """]""" :: Nil)
 }

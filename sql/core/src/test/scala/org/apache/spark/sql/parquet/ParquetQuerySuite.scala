@@ -17,24 +17,18 @@
 
 package org.apache.spark.sql.parquet
 
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
-
-import parquet.hadoop.ParquetFileWriter
-import parquet.hadoop.util.ContextUtil
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-
-import org.apache.spark.SparkContext
+import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import parquet.hadoop.ParquetFileWriter
+import parquet.hadoop.util.ContextUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
-
 
 case class TestRDDEntry(key: Int, value: String)
 
@@ -64,8 +58,7 @@ case class AllDataTypes(
     doubleField: Double,
     shortField: Short,
     byteField: Byte,
-    booleanField: Boolean,
-    binaryField: Array[Byte])
+    booleanField: Boolean)
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -76,21 +69,22 @@ case class AllDataTypesWithNonPrimitiveType(
     shortField: Short,
     byteField: Byte,
     booleanField: Boolean,
-    binaryField: Array[Byte],
     array: Seq[Int],
-    map: Map[Int, String],
+    arrayContainsNull: Seq[Option[Int]],
+    map: Map[Int, Long],
+    mapValueContainsNull: Map[Int, Option[Long]],
     data: Data)
+
+case class BinaryData(binaryData: Array[Byte])
+
+case class NumericData(i: Int, d: Double)
 
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
 
   var testRDD: SchemaRDD = null
 
-  // TODO: remove this once SqlParser can parse nested select statements
-  var nestedParserSqlContext: NestedParserSQLContext = null
-
   override def beforeAll() {
-    nestedParserSqlContext = new NestedParserSQLContext(TestSQLContext.sparkContext)
     ParquetTestData.writeFile()
     ParquetTestData.writeFilterFile()
     ParquetTestData.writeNestedFile1()
@@ -116,26 +110,26 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Read/Write All Types") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
-    TestSQLContext.sparkContext.parallelize(range)
-      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
-        (0 to x).map(_.toByte).toArray))
-      .saveAsParquetFile(tempDir)
-    val result = parquetFile(tempDir).collect()
-    range.foreach {
-      i =>
-        assert(result(i).getString(0) == s"$i", s"row $i String field did not match, got ${result(i).getString(0)}")
-        assert(result(i).getInt(1) === i)
-        assert(result(i).getLong(2) === i.toLong)
-        assert(result(i).getFloat(3) === i.toFloat)
-        assert(result(i).getDouble(4) === i.toDouble)
-        assert(result(i).getShort(5) === i.toShort)
-        assert(result(i).getByte(6) === i.toByte)
-        assert(result(i).getBoolean(7) === (i % 2 == 0))
-        assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
-    }
+    val data = sparkContext.parallelize(range)
+      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+
+    data.saveAsParquetFile(tempDir)
+
+    checkAnswer(
+      parquetFile(tempDir),
+      data.toSchemaRDD.collect().toSeq)
   }
 
-  test("Treat binary as string") {
+  test("read/write binary data") {
+    // Since equality for Array[Byte] is broken we test this separately.
+    val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+    sparkContext.parallelize(BinaryData("test".getBytes("utf8")) :: Nil).saveAsParquetFile(tempDir)
+    parquetFile(tempDir)
+      .map(r => new String(r(0).asInstanceOf[Array[Byte]], "utf8"))
+      .collect().toSeq == Seq("test")
+  }
+
+  ignore("Treat binary as string") {
     val oldIsParquetBinaryAsString = TestSQLContext.isParquetBinaryAsString
 
     // Create the test file.
@@ -150,67 +144,131 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       StructField("c2", BinaryType, false) :: Nil)
     val schemaRDD1 = applySchema(rowRDD, schema)
     schemaRDD1.saveAsParquetFile(path)
-    val resultWithBinary = parquetFile(path).collect
-    range.foreach {
-      i =>
-        assert(resultWithBinary(i).getInt(0) === i)
-        assert(resultWithBinary(i)(1) === s"val_$i".getBytes)
-    }
-
-    TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, "true")
-    // This ParquetRelation always use Parquet types to derive output.
-    val parquetRelation = new ParquetRelation(
-      path.toString,
-      Some(TestSQLContext.sparkContext.hadoopConfiguration),
-      TestSQLContext) {
-      override val output =
-        ParquetTypesConverter.convertToAttributes(
-          ParquetTypesConverter.readMetaData(new Path(path), conf).getFileMetaData.getSchema,
-          TestSQLContext.isParquetBinaryAsString)
-    }
-    val schemaRDD = new SchemaRDD(TestSQLContext, parquetRelation)
-    val resultWithString = schemaRDD.collect
-    range.foreach {
-      i =>
-        assert(resultWithString(i).getInt(0) === i)
-        assert(resultWithString(i)(1) === s"val_$i")
-    }
-
-    schemaRDD.registerTempTable("tmp")
     checkAnswer(
-      sql("SELECT c1, c2 FROM tmp WHERE c2 = 'val_5' OR c2 = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      parquetFile(path).select('c1, 'c2.cast(StringType)),
+      schemaRDD1.select('c1, 'c2.cast(StringType)).collect().toSeq)
+
+    setConf(SQLConf.PARQUET_BINARY_AS_STRING, "true")
+    parquetFile(path).printSchema()
+    checkAnswer(
+      parquetFile(path),
+      schemaRDD1.select('c1, 'c2.cast(StringType)).collect().toSeq)
+
 
     // Set it back.
     TestSQLContext.setConf(SQLConf.PARQUET_BINARY_AS_STRING, oldIsParquetBinaryAsString.toString)
   }
 
+  test("Compression options for writing to a Parquetfile") {
+    val defaultParquetCompressionCodec = TestSQLContext.parquetCompressionCodec
+    import scala.collection.JavaConversions._
+
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
+      .map(i => TestRDDEntry(i, s"val_$i"))
+
+    // test default compression codec
+    rdd.saveAsParquetFile(path)
+    var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test uncompressed parquet file with property value "UNCOMPRESSED"
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "UNCOMPRESSED")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test uncompressed parquet file with property value "none"
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "none")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === "UNCOMPRESSED" :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test gzip compression codec
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "gzip")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // test snappy compression codec
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, "snappy")
+
+    rdd.saveAsParquetFile(path)
+    actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
+      .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
+    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+
+    parquetFile(path).registerTempTable("tmp")
+    checkAnswer(
+      sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
+      (5, "val_5") ::
+      (7, "val_7") :: Nil)
+
+    Utils.deleteRecursively(file)
+
+    // TODO: Lzo requires additional external setup steps so leave it out for now
+    // ref.: https://github.com/Parquet/parquet-mr/blob/parquet-1.5.0/parquet-hadoop/src/test/java/parquet/hadoop/example/TestInputOutputFormat.java#L169
+
+    // Set it back.
+    TestSQLContext.setConf(SQLConf.PARQUET_COMPRESSION, defaultParquetCompressionCodec)
+  }
+
   test("Read/Write All Types with non-primitive type") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
-    TestSQLContext.sparkContext.parallelize(range)
+    val data = sparkContext.parallelize(range)
       .map(x => AllDataTypesWithNonPrimitiveType(
         s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
-        (0 to x).map(_.toByte).toArray,
-        (0 until x), (0 until x).map(i => i -> s"$i").toMap, Data((0 until x), Nested(x, s"$x"))))
-      .saveAsParquetFile(tempDir)
-    val result = parquetFile(tempDir).collect()
-    range.foreach {
-      i =>
-        assert(result(i).getString(0) == s"$i", s"row $i String field did not match, got ${result(i).getString(0)}")
-        assert(result(i).getInt(1) === i)
-        assert(result(i).getLong(2) === i.toLong)
-        assert(result(i).getFloat(3) === i.toFloat)
-        assert(result(i).getDouble(4) === i.toDouble)
-        assert(result(i).getShort(5) === i.toShort)
-        assert(result(i).getByte(6) === i.toByte)
-        assert(result(i).getBoolean(7) === (i % 2 == 0))
-        assert(result(i)(8) === (0 to i).map(_.toByte).toArray)
-        assert(result(i)(9) === (0 until i))
-        assert(result(i)(10) === (0 until i).map(i => i -> s"$i").toMap)
-        assert(result(i)(11) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
-    }
+        (0 until x),
+        (0 until x).map(Option(_).filter(_ % 3 == 0)),
+        (0 until x).map(i => i -> i.toLong).toMap,
+        (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
+        Data((0 until x), Nested(x, s"$x"))))
+    data.saveAsParquetFile(tempDir)
+
+    checkAnswer(
+      parquetFile(tempDir),
+      data.toSchemaRDD.collect().toSeq)
   }
 
   test("self-join parquet files") {
@@ -307,19 +365,24 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     }
   }
 
-  test("Saving case class RDD table to file and reading it back in") {
+  test("Read a parquet file instead of a directory") {
     val file = getTempFilePath("parquet")
     val path = file.toString
+    val fsPath = new Path(path)
+    val fs: FileSystem = fsPath.getFileSystem(TestSQLContext.sparkContext.hadoopConfiguration)
     val rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
       .map(i => TestRDDEntry(i, s"val_$i"))
-    rdd.saveAsParquetFile(path)
-    val readFile = parquetFile(path)
+    rdd.coalesce(1).saveAsParquetFile(path)
+
+    val children = fs.listStatus(fsPath).filter(_.getPath.getName.endsWith(".parquet"))
+    assert(children.length > 0)
+    val readFile = parquetFile(path + "/" + children(0).getPath.getName)
     readFile.registerTempTable("tmpx")
     val rdd_copy = sql("SELECT * FROM tmpx").collect()
     val rdd_orig = rdd.collect()
     for(i <- 0 to 99) {
-      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,  s"key error in line $i")
-      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value in line $i")
+      assert(rdd_copy(i).apply(0) === rdd_orig(i).key,   s"key error in line $i")
+      assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value error in line $i")
     }
     Utils.deleteRecursively(file)
   }
@@ -334,32 +397,19 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
     val rdd_copy1 = sql("SELECT * FROM dest").collect()
     assert(rdd_copy1.size === 100)
-    assert(rdd_copy1(0).apply(0) === 1)
-    assert(rdd_copy1(0).apply(1) === "val_1")
-    // TODO: why does collecting break things? It seems InsertIntoParquet::execute() is
-    // executed twice otherwise?!
+
     sql("INSERT INTO dest SELECT * FROM source")
-    val rdd_copy2 = sql("SELECT * FROM dest").collect()
+    val rdd_copy2 = sql("SELECT * FROM dest").collect().sortBy(_.getInt(0))
     assert(rdd_copy2.size === 200)
-    assert(rdd_copy2(0).apply(0) === 1)
-    assert(rdd_copy2(0).apply(1) === "val_1")
-    assert(rdd_copy2(99).apply(0) === 100)
-    assert(rdd_copy2(99).apply(1) === "val_100")
-    assert(rdd_copy2(100).apply(0) === 1)
-    assert(rdd_copy2(100).apply(1) === "val_1")
     Utils.deleteRecursively(dirname)
   }
 
   test("Insert (appending) to same table via Scala API") {
-    // TODO: why does collecting break things? It seems InsertIntoParquet::execute() is
-    // executed twice otherwise?!
     sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
     assert(double_rdd.size === 30)
-    for(i <- (0 to 14)) {
-      assert(double_rdd(i) === double_rdd(i+15), s"error: lines $i and ${i+15} to not match")
-    }
+
     // let's restore the original test data
     Utils.deleteRecursively(ParquetTestData.testDir)
     ParquetTestData.writeFile()
@@ -512,6 +562,63 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(stringResult.size === 1)
     assert(stringResult(0).getString(2) == "100", "stringvalue incorrect")
     assert(stringResult(0).getInt(1) === 100)
+
+    val query7 = sql(s"SELECT * FROM testfiltersource WHERE myoptint < 40")
+    assert(
+      query7.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val optResult = query7.collect()
+    assert(optResult.size === 20)
+    for(i <- 0 until 20) {
+      if (optResult(i)(7) != i * 2) {
+        fail(s"optional Int value in result row $i should be ${2*4*i}")
+      }
+    }
+    for(myval <- Seq("myoptint", "myoptlong", "myoptdouble", "myoptfloat")) {
+      val query8 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
+      assert(
+        query8.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result8 = query8.collect()
+      assert(result8.size === 25)
+      assert(result8(0)(7) === 100)
+      assert(result8(24)(7) === 148)
+      val query9 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200")
+      assert(
+        query9.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result9 = query9.collect()
+      assert(result9.size === 25)
+      if (myval == "myoptint" || myval == "myoptlong") {
+        assert(result9(0)(7) === 152)
+        assert(result9(24)(7) === 200)
+      } else {
+        assert(result9(0)(7) === 150)
+        assert(result9(24)(7) === 198)
+      }
+    }
+    val query10 = sql("SELECT * FROM testfiltersource WHERE myoptstring = \"100\"")
+    assert(
+      query10.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result10 = query10.collect()
+    assert(result10.size === 1)
+    assert(result10(0).getString(8) == "100", "stringvalue incorrect")
+    assert(result10(0).getInt(7) === 100)
+    val query11 = sql(s"SELECT * FROM testfiltersource WHERE myoptboolean = true AND myoptint < 40")
+    assert(
+      query11.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val result11 = query11.collect()
+    assert(result11.size === 7)
+    for(i <- 0 until 6) {
+      if (!result11(i).getBoolean(6)) {
+        fail(s"optional Boolean value in result row $i not true")
+      }
+      if (result11(i).getInt(7) != i * 6) {
+        fail(s"optional Int value in result row $i should be ${6*i}")
+      }
+    }
   }
 
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
@@ -595,11 +702,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Projection in addressbook") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir1.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir1.toString).toSchemaRDD
     data.registerTempTable("data")
-    val query = nestedParserSqlContext.sql("SELECT owner, contacts[1].name FROM data")
+    val query = sql("SELECT owner, contacts[1].name FROM data")
     val tmp = query.collect()
     assert(tmp.size === 2)
     assert(tmp(0).size === 2)
@@ -610,21 +715,19 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Simple query on nested int data") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir2.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir2.toString).toSchemaRDD
     data.registerTempTable("data")
-    val result1 = nestedParserSqlContext.sql("SELECT entries[0].value FROM data").collect()
+    val result1 = sql("SELECT entries[0].value FROM data").collect()
     assert(result1.size === 1)
     assert(result1(0).size === 1)
     assert(result1(0)(0) === 2.5)
-    val result2 = nestedParserSqlContext.sql("SELECT entries[0] FROM data").collect()
+    val result2 = sql("SELECT entries[0] FROM data").collect()
     assert(result2.size === 1)
     val subresult1 = result2(0)(0).asInstanceOf[CatalystConverter.StructScalaType[_]]
     assert(subresult1.size === 2)
     assert(subresult1(0) === 2.5)
     assert(subresult1(1) === false)
-    val result3 = nestedParserSqlContext.sql("SELECT outerouter FROM data").collect()
+    val result3 = sql("SELECT outerouter FROM data").collect()
     val subresult2 = result3(0)(0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
       .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
@@ -637,19 +740,18 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("nested structs") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir3.toString)
+    val data = parquetFile(ParquetTestData.testNestedDir3.toString)
       .toSchemaRDD
     data.registerTempTable("data")
-    val result1 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
+    val result1 = sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
     assert(result1.size === 1)
     assert(result1(0).size === 1)
     assert(result1(0)(0) === false)
-    val result2 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[0].value[1].truth FROM data").collect()
+    val result2 = sql("SELECT booleanNumberPairs[0].value[1].truth FROM data").collect()
     assert(result2.size === 1)
     assert(result2(0).size === 1)
     assert(result2(0)(0) === true)
-    val result3 = nestedParserSqlContext.sql("SELECT booleanNumberPairs[1].value[0].truth FROM data").collect()
+    val result3 = sql("SELECT booleanNumberPairs[1].value[0].truth FROM data").collect()
     assert(result3.size === 1)
     assert(result3(0).size === 1)
     assert(result3(0)(0) === false)
@@ -673,11 +775,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("map with struct values") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir4.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir4.toString).toSchemaRDD
     data.registerTempTable("mapTable")
-    val result1 = nestedParserSqlContext.sql("SELECT data2 FROM mapTable").collect()
+    val result1 = sql("SELECT data2 FROM mapTable").collect()
     assert(result1.size === 1)
     val entry1 = result1(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
@@ -691,7 +791,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
-    val result2 = nestedParserSqlContext.sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM mapTable""").collect()
+    val result2 = sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM mapTable""").collect()
     assert(result2.size === 1)
     assert(result2(0)(0) === 42.toLong)
     assert(result2(0)(1) === "the answer")
@@ -702,15 +802,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     // has no effect in this test case
     val tmpdir = Utils.createTempDir()
     Utils.deleteRecursively(tmpdir)
-    val result = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir1.toString)
-      .toSchemaRDD
+    val result = parquetFile(ParquetTestData.testNestedDir1.toString).toSchemaRDD
     result.saveAsParquetFile(tmpdir.toString)
-    nestedParserSqlContext
-      .parquetFile(tmpdir.toString)
+    parquetFile(tmpdir.toString)
       .toSchemaRDD
       .registerTempTable("tmpcopy")
-    val tmpdata = nestedParserSqlContext.sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
+    val tmpdata = sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
     assert(tmpdata.size === 2)
     assert(tmpdata(0).size === 2)
     assert(tmpdata(0)(0) === "Julien Le Dem")
@@ -721,20 +818,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Writing out Map and reading it back in") {
-    val data = nestedParserSqlContext
-      .parquetFile(ParquetTestData.testNestedDir4.toString)
-      .toSchemaRDD
+    val data = parquetFile(ParquetTestData.testNestedDir4.toString).toSchemaRDD
     val tmpdir = Utils.createTempDir()
     Utils.deleteRecursively(tmpdir)
     data.saveAsParquetFile(tmpdir.toString)
-    nestedParserSqlContext
-      .parquetFile(tmpdir.toString)
+    parquetFile(tmpdir.toString)
       .toSchemaRDD
       .registerTempTable("tmpmapcopy")
-    val result1 = nestedParserSqlContext.sql("""SELECT data1["key2"] FROM tmpmapcopy""").collect()
+    val result1 = sql("""SELECT data1["key2"] FROM tmpmapcopy""").collect()
     assert(result1.size === 1)
     assert(result1(0)(0) === 2)
-    val result2 = nestedParserSqlContext.sql("SELECT data2 FROM tmpmapcopy").collect()
+    val result2 = sql("SELECT data2 FROM tmpmapcopy").collect()
     assert(result2.size === 1)
     val entry1 = result2(0)(0)
       .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
@@ -748,42 +842,64 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
-    val result3 = nestedParserSqlContext.sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM tmpmapcopy""").collect()
+    val result3 = sql("""SELECT data2["seven"].payload1, data2["seven"].payload2 FROM tmpmapcopy""").collect()
     assert(result3.size === 1)
     assert(result3(0)(0) === 42.toLong)
     assert(result3(0)(1) === "the answer")
     Utils.deleteRecursively(tmpdir)
   }
-}
 
-// TODO: the code below is needed temporarily until the standard parser is able to parse
-// nested field expressions correctly
-class NestedParserSQLContext(@transient override val sparkContext: SparkContext) extends SQLContext(sparkContext) {
-  override protected[sql] val parser = new NestedSqlParser()
-}
+  test("Querying on empty parquet throws exception (SPARK-3536)") {
+    val tmpdir = Utils.createTempDir()
+    Utils.deleteRecursively(tmpdir)
+    createParquetFile[TestRDDEntry](tmpdir.toString()).registerTempTable("tmpemptytable")
+    val result1 = sql("SELECT * FROM tmpemptytable").collect()
+    assert(result1.size === 0)
+    Utils.deleteRecursively(tmpdir)
+  }
 
-class NestedSqlLexical(override val keywords: Seq[String]) extends SqlLexical(keywords) {
-  override def identChar = letter | elem('_')
-  delimiters += (".")
-}
+  test("DataType string parser compatibility") {
+    val schema = StructType(List(
+      StructField("c1", IntegerType, false),
+      StructField("c2", BinaryType, false)))
 
-class NestedSqlParser extends SqlParser {
-  override val lexical = new NestedSqlLexical(reservedWords)
+    val fromCaseClassString = ParquetTypesConverter.convertFromString(schema.toString)
+    val fromJson = ParquetTypesConverter.convertFromString(schema.json)
 
-  override protected lazy val baseExpression: PackratParser[Expression] =
-    expression ~ "[" ~ expression <~ "]" ^^ {
-      case base ~ _ ~ ordinal => GetItem(base, ordinal)
-    } |
-    expression ~ "." ~ ident ^^ {
-      case base ~ _ ~ fieldName => GetField(base, fieldName)
-    } |
-    TRUE ^^^ Literal(true, BooleanType) |
-    FALSE ^^^ Literal(false, BooleanType) |
-    cast |
-    "(" ~> expression <~ ")" |
-    function |
-    "-" ~> literal ^^ UnaryMinus |
-    ident ^^ UnresolvedAttribute |
-    "*" ^^^ Star(None) |
-    literal
+    (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
+      assert(a.name == b.name)
+      assert(a.dataType === b.dataType)
+    }
+  }
+
+  test("read/write fixed-length decimals") {
+    for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
+      val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+      val data = sparkContext.parallelize(0 to 1000)
+        .map(i => NumericData(i, i / 100.0))
+        .select('i, 'd cast DecimalType(precision, scale))
+      data.saveAsParquetFile(tempDir)
+      checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+
+    // Decimals with precision above 18 are not yet supported
+    intercept[RuntimeException] {
+      val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+      val data = sparkContext.parallelize(0 to 1000)
+        .map(i => NumericData(i, i / 100.0))
+        .select('i, 'd cast DecimalType(19, 10))
+      data.saveAsParquetFile(tempDir)
+      checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+
+    // Unlimited-length decimals are not yet supported
+    intercept[RuntimeException] {
+      val tempDir = getTempFilePath("parquetTest").getCanonicalPath
+      val data = sparkContext.parallelize(0 to 1000)
+        .map(i => NumericData(i, i / 100.0))
+        .select('i, 'd cast DecimalType.Unlimited)
+      data.saveAsParquetFile(tempDir)
+      checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+  }
 }

@@ -18,13 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.test._
+import org.apache.spark.sql.catalyst.expressions._
 
 /* Implicits */
-import TestSQLContext._
+import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.test.TestSQLContext._
 
 class DslQuerySuite extends QueryTest {
-  import TestData._
+  import org.apache.spark.sql.TestData._
 
   test("table scan") {
     checkAnswer(
@@ -133,6 +134,26 @@ class DslQuerySuite extends QueryTest {
       mapData.take(1).toSeq)
   }
 
+  test("SPARK-3395 limit distinct") {
+    val filtered = TestData.testData2
+      .distinct()
+      .orderBy(SortOrder('a, Ascending), SortOrder('b, Ascending))
+      .limit(1)
+      .registerTempTable("onerow")
+    checkAnswer(
+      sql("select * from onerow inner join testData2 on onerow.a = testData2.a"),
+      (1, 1, 1, 1) ::
+      (1, 1, 1, 2) :: Nil)
+  }
+
+  test("SPARK-3858 generator qualifiers are discarded") {
+    checkAnswer(
+      arrayData.as('ad)
+        .generate(Explode("data" :: Nil, 'data), alias = Some("ex"))
+        .select("ex.data".attr),
+      Seq(1, 2, 3, 2, 3, 4).map(Seq(_)))
+  }
+
   test("average") {
     checkAnswer(
       testData2.groupBy()(avg('a)),
@@ -193,5 +214,15 @@ class DslQuerySuite extends QueryTest {
       (3, "c") ::
       (4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+  }
+
+  test("udf") {
+    val foo = (a: Int, b: String) => a.toString + b
+
+    checkAnswer(
+      // SELECT *, foo(key, value) FROM testData
+      testData.select(Star(None), foo.call('key, 'value)).limit(3),
+      (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+    )
   }
 }

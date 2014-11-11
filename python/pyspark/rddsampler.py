@@ -31,7 +31,7 @@ class RDDSamplerBase(object):
                 "Falling back to default random generator for sampling.")
             self._use_numpy = False
 
-        self._seed = seed if seed is not None else random.randint(0, sys.maxint)
+        self._seed = seed if seed is not None else random.randint(0, 2 ** 32 - 1)
         self._withReplacement = withReplacement
         self._random = None
         self._split = None
@@ -40,14 +40,13 @@ class RDDSamplerBase(object):
     def initRandomGenerator(self, split):
         if self._use_numpy:
             import numpy
-            self._random = numpy.random.RandomState(self._seed)
+            self._random = numpy.random.RandomState(self._seed ^ split)
         else:
-            self._random = random.Random(self._seed)
+            self._random = random.Random(self._seed ^ split)
 
-        for _ in range(0, split):
-            # discard the next few values in the sequence to have a
-            # different seed for the different splits
-            self._random.randint(0, sys.maxint)
+        # mixing because the initial seeds are close to each other
+        for _ in xrange(10):
+            self._random.randint(0, 1)
 
         self._split = split
         self._rand_initialized = True

@@ -186,7 +186,7 @@ JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() 
 ...
 {% endhighlight %}
 
-The full source code is in the example [JavaCustomReceiver.java](https://github.com/apache/spark/blob/master/examples/src/main/java/org/apache/spark/streaming/examples/JavaCustomReceiver.java).
+The full source code is in the example [JavaCustomReceiver.java](https://github.com/apache/spark/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
 
 </div>
 </div>
@@ -215,7 +215,7 @@ And a new input stream can be created with this custom actor as
 val lines = ssc.actorStream[String](Props(new CustomActor()), "CustomReceiver")
 {% endhighlight %}
 
-See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/streaming/examples/ActorWordCount.scala)
+See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/ActorWordCount.scala)
 for an end-to-end example.
 
 

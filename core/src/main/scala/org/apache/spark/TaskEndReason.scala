@@ -69,11 +69,13 @@ case class FetchFailed(
     bmAddress: BlockManagerId,  // Note that bmAddress can be null
     shuffleId: Int,
     mapId: Int,
-    reduceId: Int)
+    reduceId: Int,
+    message: String)
   extends TaskFailedReason {
   override def toErrorString: String = {
     val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
-    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId)"
+    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId, " +
+      s"message=\n$message\n)"
   }
 }
 
@@ -117,8 +119,8 @@ case object TaskKilled extends TaskFailedReason {
  * the task crashed the JVM.
  */
 @DeveloperApi
-case object ExecutorLostFailure extends TaskFailedReason {
-  override def toErrorString: String = "ExecutorLostFailure (executor lost)"
+case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
+  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost)"
 }
 
 /**

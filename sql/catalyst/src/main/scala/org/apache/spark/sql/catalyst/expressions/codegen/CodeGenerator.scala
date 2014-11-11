@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import com.google.common.cache.{CacheLoader, CacheBuilder}
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.language.existentials
 
@@ -25,6 +26,10 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
+
+// These classes are here to avoid issues with serialization and integration with quasiquotes.
+class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
+class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
 
 /**
  * A base class for generators of byte code to perform expression evaluation.  Includes a set of
@@ -51,6 +56,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private val javaSeparator = "$"
 
   /**
+   * Can be flipped on manually in the console to add (expensive) expression evaluation trace code.
+   */
+  var debugLogging = false
+
+  /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
    */
@@ -71,7 +81,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
    * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
    * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
-   * automatically, in order to constrain its memory footprint
+   * automatically, in order to constrain its memory footprint.  Note that this cache does not use
+   * weak keys/values and thus does not respond to memory pressure.
    */
   protected val cache = CacheBuilder.newBuilder()
     .maximumSize(1000)
@@ -403,6 +414,106 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             $primitiveTerm = ${falseEval.primitiveTerm}
           }
         """.children
+
+      case NewSet(elementType) =>
+        q"""
+          val $nullTerm = false
+          val $primitiveTerm = new ${hashSetForType(elementType)}()
+        """.children
+
+      case AddItemToSet(item, set) =>
+        val itemEval = expressionEvaluator(item)
+        val setEval = expressionEvaluator(set)
+
+        val ArrayType(elementType, _) = set.dataType
+
+        itemEval.code ++ setEval.code ++
+        q"""
+           if (!${itemEval.nullTerm}) {
+             ${setEval.primitiveTerm}
+               .asInstanceOf[${hashSetForType(elementType)}]
+               .add(${itemEval.primitiveTerm})
+           }
+
+           val $nullTerm = false
+           val $primitiveTerm = ${setEval.primitiveTerm}
+         """.children
+
+      case CombineSets(left, right) =>
+        val leftEval = expressionEvaluator(left)
+        val rightEval = expressionEvaluator(right)
+
+        val ArrayType(elementType, _) = left.dataType
+
+        leftEval.code ++ rightEval.code ++
+        q"""
+          val $nullTerm = false
+          var $primitiveTerm: ${hashSetForType(elementType)} = null
+
+          {
+            val leftSet = ${leftEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
+            val rightSet = ${rightEval.primitiveTerm}.asInstanceOf[${hashSetForType(elementType)}]
+            val iterator = rightSet.iterator
+            while (iterator.hasNext) {
+              leftSet.add(iterator.next())
+            }
+            $primitiveTerm = leftSet
+          }
+        """.children
+
+      case MaxOf(e1, e2) =>
+        val eval1 = expressionEvaluator(e1)
+        val eval2 = expressionEvaluator(e2)
+
+        eval1.code ++ eval2.code ++
+        q"""
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(e1.dataType)} = ${defaultPrimitive(e1.dataType)}
+
+          if (${eval1.nullTerm}) {
+            $nullTerm = ${eval2.nullTerm}
+            $primitiveTerm = ${eval2.primitiveTerm}
+          } else if (${eval2.nullTerm}) {
+            $nullTerm = ${eval1.nullTerm}
+            $primitiveTerm = ${eval1.primitiveTerm}
+          } else {
+            $nullTerm = false
+            if (${eval1.primitiveTerm} > ${eval2.primitiveTerm}) {
+              $primitiveTerm = ${eval1.primitiveTerm}
+            } else {
+              $primitiveTerm = ${eval2.primitiveTerm}
+            }
+          }
+        """.children
+
+      case UnscaledValue(child) =>
+        val childEval = expressionEvaluator(child)
+
+        childEval.code ++
+        q"""
+         var $nullTerm = ${childEval.nullTerm}
+         var $primitiveTerm: Long = if (!$nullTerm) {
+           ${childEval.primitiveTerm}.toUnscaledLong
+         } else {
+           ${defaultPrimitive(LongType)}
+         }
+         """.children
+
+      case MakeDecimal(child, precision, scale) =>
+        val childEval = expressionEvaluator(child)
+
+        childEval.code ++
+        q"""
+         var $nullTerm = ${childEval.nullTerm}
+         var $primitiveTerm: org.apache.spark.sql.catalyst.types.decimal.Decimal =
+           ${defaultPrimitive(DecimalType())}
+
+         if (!$nullTerm) {
+           $primitiveTerm = new org.apache.spark.sql.catalyst.types.decimal.Decimal()
+           $primitiveTerm = $primitiveTerm.setOrNull(${childEval.primitiveTerm}, $precision, $scale)
+           $nullTerm = $primitiveTerm == null
+         }
+         """.children
     }
 
     // If there was no match in the partial function above, we fall back on calling the interpreted
@@ -420,7 +531,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     // Only inject debugging code if debugging is turned on.
     val debugCode =
-      if (log.isDebugEnabled) {
+      if (debugLogging) {
         val localLogger = log
         val localLoggerTree = reify { localLogger }
         q"""
@@ -454,6 +565,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def accessorForType(dt: DataType) = newTermName(s"get${primitiveForType(dt)}")
   protected def mutatorForType(dt: DataType) = newTermName(s"set${primitiveForType(dt)}")
 
+  protected def hashSetForType(dt: DataType) = dt match {
+    case IntegerType => typeOf[IntegerHashSet]
+    case LongType => typeOf[LongHashSet]
+    case unsupportedType =>
+      sys.error(s"Code generation not support for hashset of type $unsupportedType")
+  }
+
   protected def primitiveForType(dt: DataType) = dt match {
     case IntegerType => "Int"
     case LongType => "Long"
@@ -473,7 +591,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case LongType => ru.Literal(Constant(1L))
     case ByteType => ru.Literal(Constant(-1.toByte))
     case DoubleType => ru.Literal(Constant(-1.toDouble))
-    case DecimalType => ru.Literal(Constant(-1)) // Will get implicity converted as needed.
+    case DecimalType() => q"org.apache.spark.sql.catalyst.types.decimal.Decimal(-1)"
     case IntegerType => ru.Literal(Constant(-1))
     case _ => ru.Literal(Constant(null))
   }

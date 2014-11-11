@@ -32,8 +32,7 @@ public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
     context.isInterrupted();
     context.stageId();
     context.partitionId();
-    context.runningLocally();
-    context.taskMetrics();
+    context.isRunningLocally();
     context.addTaskCompletionListener(this);
   }
 }

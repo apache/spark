@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
+import org.apache.spark.sql.catalyst.util.Metadata
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -41,7 +42,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def foldable: Boolean = false
   def nullable: Boolean
-  def references: Set[Attribute]
+  def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: Row = null): EvaluatedType
@@ -179,6 +180,9 @@ abstract class Expression extends TreeNode[Expression] {
           case i: IntegralType =>
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+          case i: FractionalType =>
+            f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
+              i.asIntegral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
       }
@@ -230,8 +234,6 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   override def foldable = left.foldable && right.foldable
 
-  override def references = left.references ++ right.references
-
   override def toString = s"($left $symbol $right)"
 }
 
@@ -242,5 +244,5 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
-  override def references = child.references
+
 }

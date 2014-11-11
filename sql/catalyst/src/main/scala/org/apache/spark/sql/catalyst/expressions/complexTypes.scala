@@ -31,7 +31,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   /** `Null` is returned for invalid ordinals. */
   override def nullable = true
   override def foldable = child.foldable && ordinal.foldable
-  override def references = children.flatMap(_.references).toSet
+
   def dataType = child.dataType match {
     case ArrayType(dt, _) => dt
     case MapType(_, vt, _) => vt
@@ -100,4 +100,29 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   }
 
   override def toString = s"$child.$fieldName"
+}
+
+/**
+ * Returns an Array containing the evaluation of all children expressions.
+ */
+case class CreateArray(children: Seq[Expression]) extends Expression {
+  override type EvaluatedType = Any
+
+  lazy val childTypes = children.map(_.dataType).distinct
+
+  override lazy val resolved =
+    childrenResolved && childTypes.size <= 1
+
+  override def dataType: DataType = {
+    assert(resolved, s"Invalid dataType of mixed ArrayType ${childTypes.mkString(",")}")
+    ArrayType(childTypes.headOption.getOrElse(NullType))
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: Row): Any = {
+    children.map(_.eval(input))
+  }
+
+  override def toString = s"Array(${children.mkString(",")})"
 }

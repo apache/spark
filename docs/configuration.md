@@ -21,15 +21,21 @@ application. These properties can be set directly on a
 [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
 `SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
-`set()` method. For example, we could initialize an application as follows:
+`set()` method. For example, we could initialize an application with two threads as follows:
+
+Note that we run with local[2], meaning two threads - which represents "minimal" parallelism, 
+which can help detect bugs that only exist when we run in a distributed context. 
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster("local")
+             .setMaster("local[2]")
              .setAppName("CountingSheep")
              .set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
+
+Note that we can have more than 1 thread in local mode, and in cases like spark streaming, we may actually
+require one to prevent any sort of starvation issues.  
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
@@ -104,6 +110,26 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.maxResultSize</code></td>
+  <td>1g</td>
+  <td>
+    Limit of total size of serialized results of all partitions for each Spark action (e.g. collect).
+    Should be at least 1M, or 0 for unlimited. Jobs will be aborted if the total size
+    is above this limit. 
+    Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
+    and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
+    out-of-memory errors.
+  </td>
+</tr>
+<tr>
   <td><code>spark.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
@@ -117,11 +143,22 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.classesToRegister</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization, give a comma-separated list of custom class names to register
+    with Kryo.
+    See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryo.registrator</code></td>
   <td>(none)</td>
   <td>
-    If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    It should be set to a class that extends
+    If you use Kryo serialization, set this class to register your custom classes with Kryo. This
+    property is useful if you need to register your classes in a custom way, e.g. to specify a custom
+    field serializer. Otherwise <code>spark.kryo.classesToRegister</code> is simpler. It should be
+    set to a class that extends
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
@@ -153,14 +190,6 @@ Apart from these, the following properties are also available, and may be useful
 #### Runtime Environment
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
-  <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
-</tr>
 <tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
@@ -207,11 +236,61 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.profile</code></td>
+  <td>false</td>
+  <td>
+    Enable profiling in Python worker, the profile result will show up by `sc.show_profiles()`,
+    or it will be displayed before the driver exiting. It also can be dumped into disk by
+    `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
+    they will not be displayed automatically before driver exiting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.python.profile.dump</code></td>
+  <td>(none)</td>
+  <td>
+    The directory which is used to dump the profile result before driver exiting. 
+    The results will be dumped as separated file for each RDD. They can be loaded
+    by ptats.Stats(). If this is specified, the profile result will not be displayed
+    automatically.
+</tr>
+<tr>
+  <td><code>spark.python.worker.reuse</code></td>
+  <td>true</td>
+  <td>
+    Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
+    does not need to fork() a Python process for every tasks. It will be very useful
+    if there is large broadcast, then the broadcast will not be needed to transfered
+    from JVM to Python worker for every task.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
     Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor 
     process. The user can specify multiple of these and to set multiple environment variables. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.memoryOverhead</code></td>
+  <td>executor memory * 0.07, with minimum of 384</td>
+  <td>
+    This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
+    which is used to calculate the total Mesos task memory. A value of <code>384</code>
+    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
+    overhead. The final overhead will be the larger of either
+    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
   </td>
 </tr>
 </table>
@@ -283,12 +362,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.manager</code></td>
-  <td>HASH</td>
+  <td>sort</td>
   <td>
-    Implementation to use for shuffling data. A hash-based shuffle manager is the default, but
-    starting in Spark 1.1 there is an experimental sort-based shuffle manager that is more 
-    memory-efficient in environments with small executors, such as YARN. To use that, change
-    this value to <code>SORT</code>.
+    Implementation to use for shuffling data. There are two implementations available:
+    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
+    the default option starting in 1.2.
   </td>
 </tr>
 <tr>
@@ -297,6 +375,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
     map-side aggregation and there are at most this many reduce partitions.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.blockTransferService</code></td>
+  <td>netty</td>
+  <td>
+    Implementation to use for transferring shuffle and cached blocks between executors. There
+    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
+    block transfer is intended to be simpler but equally efficient and is the default option
+    starting in 1.2.
   </td>
 </tr>
 </table>
@@ -308,14 +396,23 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
   <td>
-    Port for your application's dashboard, which shows memory and workload data
+    Port for your application's dashboard, which shows memory and workload data.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI remembers before garbage collecting.
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedJobs</code></td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
   </td>
 </tr>
 <tr>
@@ -375,10 +472,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.codec</code></td>
   <td>snappy</td>
   <td>
-    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default,
-    Spark provides three codecs: <code>lz4</code>, <code>lzf</code>, and <code>snappy</code>. You
-    can also use fully qualified class names to specify the codec, e.g.
-    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    The codec used to compress internal data such as RDD partitions, broadcast variables and
+    shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
+    and <code>snappy</code>. You can also use fully qualified class names to specify the codec, 
+    e.g. 
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,    
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
@@ -501,10 +599,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.fetchTimeout</code></td>
-  <td>false</td>
+  <td>60</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver.
+    the driver, in seconds.
   </td>
 </tr>
 <tr>
@@ -568,6 +666,15 @@ Apart from these, the following properties are also available, and may be useful
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
+<tr>
+    <td><code>spark.hadoop.cloneConf</code></td>
+    <td>false</td>
+    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
+    This is disabled by default in order to avoid unexpected performance regressions for jobs that
+    are not affected by these issues.</td>
 </tr>
 <tr>
     <td><code>spark.executor.heartbeatInterval</code></td>
@@ -638,7 +745,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Maximum number of retries when binding to a port before giving up.
+    Default maximum number of retries when binding to a port before giving up.
   </td>
 </tr>
 <tr>
@@ -667,7 +774,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>600</td>
+  <td>6000</td>
   <td>
      This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
      enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
@@ -822,8 +929,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1000</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks.
-    (in milliseconds)
+    The interval length for the scheduler to revive the worker resource offers to run tasks
+    (in milliseconds).
   </td>
 </tr>
 </tr>
@@ -835,7 +942,7 @@ Apart from these, the following properties are also available, and may be useful
     to wait for before scheduling begins. Specified as a double between 0 and 1.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
-    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code> 
+    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
   </td>
 </tr>
 <tr>
@@ -1069,3 +1176,10 @@ compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
+
+# Overriding configuration directory
+
+To specify a different configuration directory other than the default "SPARK_HOME/conf",
+you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
+from this directory.
+

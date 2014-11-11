@@ -193,6 +193,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(rdd.join(emptyKv).collect().size === 0)
     assert(rdd.rightOuterJoin(emptyKv).collect().size === 0)
     assert(rdd.leftOuterJoin(emptyKv).collect().size === 2)
+    assert(rdd.fullOuterJoin(emptyKv).collect().size === 2)
     assert(rdd.cogroup(emptyKv).collect().size === 2)
     assert(rdd.union(emptyKv).collect().size === 2)
   }
@@ -458,6 +459,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
   }
 
+  test("collect large number of empty partitions") {
+    // Regression test for SPARK-4019
+    assert(sc.makeRDD(0 until 10, 1000).repartition(2001).collect().toSet === (0 until 10).toSet)
+  }
+
   test("take") {
     var nums = sc.makeRDD(Range(1, 1000), 1)
     assert(nums.take(0).size === 0)
@@ -519,6 +525,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val sortedLowerK = rdd.takeOrdered(5)
     assert(sortedLowerK.size === 5)
     assert(sortedLowerK === Array(1, 2, 3, 4, 5))
+  }
+
+  test("takeOrdered with limit 0") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedLowerK = rdd.takeOrdered(0)
+    assert(sortedLowerK.size === 0)
   }
 
   test("takeOrdered with custom ordering") {
@@ -673,6 +686,20 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     import scala.reflect.classTag
     assert(data.sortBy(parse, true, 2)(AgeOrdering, classTag[Person]).collect() === ageOrdered)
     assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]).collect() === nameOrdered)
+  }
+
+  test("repartitionAndSortWithinPartitions") {
+    val data = sc.parallelize(Seq((0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)), 2)
+
+    val partitioner = new Partitioner {
+      def numPartitions: Int = 2
+      def getPartition(key: Any): Int = key.asInstanceOf[Int] % 2
+    }
+
+    val repartitioned = data.repartitionAndSortWithinPartitions(partitioner)
+    val partitions = repartitioned.glom().collect()
+    assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
+    assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
   }
 
   test("intersection") {

@@ -17,12 +17,12 @@
 
 package org.apache.spark.partial
 
-import cern.jet.stat.Probability
+import org.apache.commons.math3.distribution.{TDistribution, NormalDistribution}
 
 import org.apache.spark.util.StatCounter
 
 /**
- * An ApproximateEvaluator for sums. It estimates the mean and the cont and multiplies them
+ * An ApproximateEvaluator for sums. It estimates the mean and the count and multiplies them
  * together, then uses the formula for the variance of two independent random variables to get
  * a variance for the result and compute a confidence interval.
  */
@@ -55,9 +55,10 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
       val sumStdev = math.sqrt(sumVar)
       val confFactor = {
         if (counter.count > 100) {
-          Probability.normalInverse(1 - (1 - confidence) / 2)
+          new NormalDistribution().inverseCumulativeProbability(1 - (1 - confidence) / 2)
         } else {
-          Probability.studentTInverse(1 - confidence, (counter.count - 1).toInt)
+          val degreesOfFreedom = (counter.count - 1).toInt
+          new TDistribution(degreesOfFreedom).inverseCumulativeProbability(1 - (1 - confidence) / 2)
         }
       }
       val low = sumEstimate - confFactor * sumStdev

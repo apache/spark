@@ -38,9 +38,7 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
         Iterator()
       }
     }
-    val prunedRDD = PartitionPruningRDD.create(rdd, {
-      x => if (x == 2) true else false
-    })
+    val prunedRDD = PartitionPruningRDD.create(rdd, _ == 2)
     assert(prunedRDD.partitions.length == 1)
     val p = prunedRDD.partitions(0)
     assert(p.index == 0)
@@ -62,13 +60,10 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
         List(split.asInstanceOf[TestPartition].testValue).iterator
       }
     }
-    val prunedRDD1 = PartitionPruningRDD.create(rdd, {
-      x => if (x == 0) true else false
-    })
+    val prunedRDD1 = PartitionPruningRDD.create(rdd, _ == 0)
 
-    val prunedRDD2 = PartitionPruningRDD.create(rdd, {
-      x => if (x == 2) true else false
-    })
+
+    val prunedRDD2 = PartitionPruningRDD.create(rdd, _ == 2)
 
     val merged = prunedRDD1 ++ prunedRDD2
     assert(merged.count() == 2)

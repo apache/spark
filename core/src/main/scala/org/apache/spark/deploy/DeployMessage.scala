@@ -71,6 +71,8 @@ private[deploy] object DeployMessages {
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage
 
+  case class ReconnectWorker(masterUrl: String) extends DeployMessage
+
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 
   case class LaunchExecutor(
@@ -85,8 +87,6 @@ private[deploy] object DeployMessages {
   case class LaunchDriver(driverId: String, driverDesc: DriverDescription) extends DeployMessage
 
   case class KillDriver(driverId: String) extends DeployMessage
-
-  case class UnregisteredWorker() extends DeployMessage
 
   // Worker internal
 

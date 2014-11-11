@@ -16,7 +16,3 @@ CREATE TABLE dest_3(key STRING, c1 INT);
 EXPLAIN FROM src
 INSERT OVERWRITE TABLE dest_2 SELECT value, sum(key) GROUP BY value
 INSERT OVERWRITE TABLE dest_3 SELECT value, sum(key) GROUP BY value limit 20;
-
--- nagative, multi distinct
-explain
-select count(distinct key)+count(distinct value) from src limit 20;

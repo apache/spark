@@ -20,7 +20,7 @@ package org.apache.spark.examples.graphx
 import org.apache.spark.SparkContext._
 import org.apache.spark._
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.lib.Analytics
+
 
 /**
  * Uses GraphX to run PageRank on a LiveJournal social network graph. Download the dataset from
