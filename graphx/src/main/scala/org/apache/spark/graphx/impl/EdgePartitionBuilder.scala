@@ -69,4 +69,36 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
 
     new EdgePartition(srcIds, dstIds, data, index, vertices)
   }
+
+  /** If every edge add to edges in Edge.lexicographicOrdering, we don't need to sort edgeArray. */
+  def toEdgePartitionWithoutSort: EdgePartition[ED, VD] = {
+    val edgeArray = edges.trim().array
+    val srcIds = edgeArray.map(edge => edge.srcId)
+    val dstIds = edgeArray.map(edge => edge.dstId)
+    val data = edgeArray.map(edge => edge.attr)
+    val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
+
+    val edgeNum = edgeArray.length
+    if (edgeNum > 0) {
+      index.update(srcIds(0), 0)
+      var currSrcId: VertexId = srcIds(0)
+      var i = 0
+      while (i < edgeNum) {
+        if (srcIds(i) != currSrcId) {
+          currSrcId = srcIds(i)
+          index.update(currSrcId, i)
+        }
+        i += 1
+      }
+    }
+
+    // Create and populate a VertexPartition with vids from the edges, but no attributes
+    val vidsIter = srcIds.iterator ++ dstIds.iterator
+    val vertexIds = new OpenHashSet[VertexId]
+    vidsIter.foreach(vid => vertexIds.add(vid))
+    val vertices = new VertexPartition(
+      vertexIds, new Array[VD](vertexIds.capacity), vertexIds.getBitSet)
+
+    new EdgePartition(srcIds, dstIds, data, index, vertices)
+  }
 }
