@@ -51,7 +51,7 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
     >>> model = ALS.train(ratings, 1, seed=10)
     >>> model.predictAll(testset).collect()
-    [Rating(1, 1, 1), Rating(1, 2, 1)]
+    [Rating(1, 1, 1.0471...), Rating(1, 2, 1.9679...)]
 
     >>> model = ALS.train(ratings, 4, seed=10)
     >>> model.userFeatures().collect()

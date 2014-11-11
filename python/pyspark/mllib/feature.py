@@ -104,7 +104,7 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
             vector = vector.map(_convert_to_vector)
         else:
             vector = _convert_to_vector(vector)
-        return self.call("transform", dataset)
+        return self.call("transform", vector)
 
 
 class StandardScalerModel(JavaVectorTransformer):
