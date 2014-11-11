@@ -4,11 +4,19 @@ require 'capistrano_recipes/deploy/packserv'
 set :application, "spark"
 set :user, "deploy"
 
+all_app_servers = (4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn05.chi.shopify.com"]
+second_cluster = ((12..15).to_a + (35..45).to_a).map {|i| "dn%02d.chi.shopify.com" % i }
+
 task :production do
-  role :app, *((4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn05.chi.shopify.com"])
+  role :app, *(all_app_servers - second_cluster)
   role :master, "dn05.chi.shopify.com"
   role :history, "dn05.chi.shopify.com"
   role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "platfora2.chi.shopify.com"
+end
+
+task :production_bump do
+  role :app, *second_cluster
+  role :master, "dn11.chi.shopify.com"
 end
 
 task :staging do
