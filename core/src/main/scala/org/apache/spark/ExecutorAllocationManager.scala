@@ -110,6 +110,12 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
 
+  // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
+  // allocation is only supported for YARN and the default number of cores per executor in YARN is
+  // 1, but it might need to be attained differently for different cluster managers
+  private val tasksPerExecutor =
+    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+
   /**
    * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
@@ -217,14 +223,24 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       numExecutorsToAdd = 1
       return 0
     }
+    val maxExecutorsPending = maxPendingExecutors(sc.taskScheduler.numPendingTasks)
+    if (numExecutorsPending >= maxExecutorsPending) {
+      logDebug(s"Not adding executors because there are already $numExecutorsPending " +
+        s"pending and pending tasks could only fill $maxExecutorsPending")
+      numExecutorsToAdd = 1
+      return 0
+    }
 
-    // Request executors with respect to the upper bound
-    val actualNumExecutorsToAdd =
-      if (numExistingExecutors + numExecutorsToAdd <= maxNumExecutors) {
-        numExecutorsToAdd
-      } else {
-        maxNumExecutors - numExistingExecutors
-      }
+    // It's never useful to request more executors than could satisfy all the pending tasks, so
+    // cap request at that amount.
+    // Also cap request with respect to the configured upper bound.
+    val maxExecutorsToAdd = math.min(
+      maxExecutorsPending - numExecutorsPending,
+      maxNumExecutors - numExistingExecutors)
+    assert(maxExecutorsToAdd > 0)
+
+    val actualNumExecutorsToAdd = math.min(numExecutorsToAdd, maxExecutorsToAdd)
+
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
     val addRequestAcknowledged = testing || sc.requestExecutors(actualNumExecutorsToAdd)
     if (addRequestAcknowledged) {
@@ -360,6 +376,10 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     removeTimes.remove(executorId)
   }
 
+  private def maxPendingExecutors(numPendingTasks: Int): Int = {
+    (numPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
+  }
+
   /**
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
@@ -445,6 +465,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
         blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
       allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
     }
+
+    def totalPendingTasks(): Int = stageIdToNumTasks.values.sum
   }
 
 }
