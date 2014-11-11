@@ -40,7 +40,7 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
   private val transportConf = SparkTransportConf.fromSparkConf(sparkConf)
-  private val blockHandler = new ExternalShuffleBlockHandler()
+  private val blockHandler = new ExternalShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext = {
     val handler = if (useSasl) new SaslRpcHandler(blockHandler, securityManager) else blockHandler
     new TransportContext(transportConf, handler)
