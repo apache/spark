@@ -202,7 +202,8 @@ class JsonSuite extends QueryTest {
       StructField("integer", IntegerType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
-      StructField("string", StringType, true) :: Nil)
+      StructField("string", StringType, true) ::
+      StructField("time", TimestampType, true) :: Nil)
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
@@ -216,7 +217,8 @@ class JsonSuite extends QueryTest {
       10,
       21474836470L,
       null,
-      "this is a simple string.") :: Nil
+      "this is a simple string.",
+      java.sql.Timestamp.valueOf("2014-11-11 12:00:00.0")) :: Nil
     )
   }
 
@@ -540,7 +542,8 @@ class JsonSuite extends QueryTest {
       StructField("integer", IntegerType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
-      StructField("string", StringType, true) :: Nil)
+      StructField("string", StringType, true) ::
+      StructField("time", TimestampType, true) :: Nil)
 
     assert(expectedSchema === jsonSchemaRDD.schema)
 
@@ -554,7 +557,8 @@ class JsonSuite extends QueryTest {
       10,
       21474836470L,
       null,
-      "this is a simple string.") :: Nil
+      "this is a simple string.",
+      java.sql.Timestamp.valueOf("2014-11-11 12:00:00.0")) :: Nil
     )
   }
 
@@ -580,7 +584,8 @@ class JsonSuite extends QueryTest {
         10,
         21474836470L,
         null,
-        "this is a simple string.") :: Nil
+        "this is a simple string.",
+        java.sql.Timestamp.valueOf("2014-11-11 12:00:00.0")) :: Nil
     )
   }
 
@@ -596,7 +601,8 @@ class JsonSuite extends QueryTest {
       StructField("integer", IntegerType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
-      StructField("string", StringType, true) :: Nil)
+      StructField("string", StringType, true) ::
+      StructField("time", TimestampType, true) :: Nil)
 
     val jsonSchemaRDD1 = jsonFile(path, schema)
 
@@ -612,7 +618,8 @@ class JsonSuite extends QueryTest {
       10,
       21474836470L,
       null,
-      "this is a simple string.") :: Nil
+      "this is a simple string.",
+      java.sql.Timestamp.valueOf("2014-11-11 12:00:00.0")) :: Nil
     )
 
     val jsonSchemaRDD2 = jsonRDD(primitiveFieldAndType, schema)
@@ -629,7 +636,8 @@ class JsonSuite extends QueryTest {
       10,
       21474836470L,
       null,
-      "this is a simple string.") :: Nil
+      "this is a simple string.",
+      java.sql.Timestamp.valueOf("2014-11-11 12:00:00.0")) :: Nil
     )
   }
 

@@ -131,6 +131,19 @@ protected[sql] object DataTypeConversions {
       StructType(structType.getFields.map(asScalaStructField))
   }
 
+  def guessTypeFromString(s:String): DataType = {
+    try {
+      val res = stringToTime(s)
+      if (res.isInstanceOf[java.sql.Date]) {
+        DateType
+      } else {
+        TimestampType
+      }
+    } catch {
+      case _: Throwable => StringType
+    }
+  }
+
   def stringToTime(s: String): java.util.Date = {
     if (!s.contains('T')) {
       // JDBC escape string

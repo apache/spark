@@ -180,7 +180,10 @@ private[sql] object JsonRDD extends Logging {
   }
 
   private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
-    ScalaReflection.typeOfObject orElse {
+    def autoDetect: PartialFunction[Any, DataType] = {
+      case value: String => DataTypeConversions.guessTypeFromString(value)
+    }
+    autoDetect orElse ScalaReflection.typeOfObject orElse {
       // Since we do not have a data type backed by BigInteger,
       // when we see a Java BigInteger, we use DecimalType.
       case value: java.math.BigInteger => DecimalType.Unlimited
