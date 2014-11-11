@@ -137,34 +137,42 @@ class SchemaRDD(
   private def rowToJSON(row: Row, rowSchema: StructType): String = {
     val builder = new StringBuilder
     builder.append{"{"}
+
     for (i <- 0 to row.length-1) {
-      builder.append(s"""\"${rowSchema.fields(i).name}\":""")
-      if (rowSchema.fields(i).dataType == StringType) {
-        builder.append(s"""\"${row.getString(i)}\"""")
-      }
-      else if (rowSchema.fields(i).dataType == IntegerType) {
-        builder.append(s"""${row.getInt(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == DoubleType) {
-        builder.append(s"""${row.getDouble(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == LongType) {
-        builder.append(s"""${row.getLong(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == DoubleType) {
-        builder.append(s"""${row.getDouble(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == BooleanType) {
-        builder.append(s"""${row.getBoolean(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == FloatType) {
-        builder.append(s"""${row.getFloat(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == ShortType) {
-        builder.append(s"""${row.getShort(i)}""")
-      }
-      else if (rowSchema.fields(i).dataType == ByteType) {
-        builder.append(s"""${row.getByte(i)}""")
+      if (!row.isNullAt(i))
+      {
+        if (i > 0 && !row.isNullAt(i-1))
+          builder.append(",")
+
+        builder.append(s"""\"${rowSchema.fields(i).name}\":""")
+        if (rowSchema.fields(i).dataType == StringType) {
+          builder.append(s"""\"${row.getString(i)}\"""")
+        }
+        else if (rowSchema.fields(i).dataType == IntegerType) {
+          builder.append(s"""${row.getInt(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == DoubleType) {
+          builder.append(s"""${row.getDouble(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == LongType) {
+          builder.append(s"""${row.getLong(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == DoubleType) {
+          builder.append(s"""${row.getDouble(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == BooleanType) {
+          builder.append(s"""${row.getBoolean(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == FloatType) {
+          builder.append(s"""${row.getFloat(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == ShortType) {
+          builder.append(s"""${row.getShort(i)}""")
+        }
+        else if (rowSchema.fields(i).dataType == ByteType) {
+          builder.append(s"""${row.getByte(i)}""")
+        }
+
       }
 
     }
