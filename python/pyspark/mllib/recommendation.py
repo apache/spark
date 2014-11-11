@@ -60,6 +60,18 @@ class MatrixFactorizationModel(object):
 
 class ALS(object):
 
+    """Alternating Least Squares matrix factorization.
+
+    SPARK-3990: In Spark 1.1.x, we use Kryo serialization by default in
+    PySpark. ALS does not work under this default setting. You can switch
+    back to the default Java serialization by setting:
+
+    spark.serializer=org.apache.spark.serializer.JavaSerializer
+
+    Please go to http://spark.apache.org/docs/latest/configuration.html
+    for instructions on how to configure Spark.
+    """
+
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
         sc = ratings.context
