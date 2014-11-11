@@ -116,10 +116,6 @@ abstract class UnaryTransformer[IN, OUT: TypeTag, T <: UnaryTransformer[IN, OUT,
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     transform(dataset.schema, paramMap, logging = true)
-    val inputSchema = dataset.schema
-    logDebug(s"Input schema: ${inputSchema.json}")
-    val outputSchema = transform(dataset.schema, paramMap)
-    logDebug(s"Expected output schema: ${outputSchema.json}")
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val udf = this.createTransformFunc(map)
