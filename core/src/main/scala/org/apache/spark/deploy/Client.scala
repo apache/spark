@@ -155,6 +155,14 @@ object Client {
     }
     conf.set("spark.akka.askTimeout", "10")
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
+
+    // Set the web ui port to be ephemeral so we don't conflict with other spark processes
+    // running on the same box
+    conf.set("spark.ui.port", "0")
+
+    // Set the master property to match the requested mode.
+    conf.set("spark.master", "standalone-cluster")
+
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
     val (actorSystem, _) = AkkaUtils.createActorSystem(
