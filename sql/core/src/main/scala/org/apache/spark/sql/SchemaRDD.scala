@@ -18,7 +18,9 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-
+import java.io.StringWriter
+import com.fasterxml.jackson.core.JsonFactory
+import com.fasterxml.jackson.core.JsonGenerator
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.JavaConversions._
@@ -125,6 +127,30 @@ class SchemaRDD(
     * @group schema
     */
   def schema: StructType = queryExecution.analyzed.schema
+
+
+  def rowToJSON(row: Row, rowSchema: StructType): String = {
+    val builder = new StringBuilder
+    builder.append{"{"}
+    for (i <- 0 to row.length-1) {
+      builder.append(s"""\"${rowSchema.fields(i).name}\":""")
+      if (rowSchema.fields(i).dataType == StringType) {
+        builder.append(s"""\"${row.getString(i)}\"""")
+      }
+      else if (rowSchema.fields(i).dataType == IntegerType) {
+        builder.append(s"""${row.getInt(i)}""")
+      }
+
+    }
+    builder.append{"}"}
+    builder.toString
+  }
+
+  def toJSON: RDD[String] = {
+    val rowSchema = this.schema
+    this.map{row => rowToJSON(row, rowSchema)}
+  }
+
 
   // =======================================================================
   // Query DSL
