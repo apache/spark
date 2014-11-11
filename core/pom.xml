@@ -206,13 +206,6 @@
     </dependency>
     <dependency>
       <groupId>org.tachyonproject</groupId>
-      <artifactId>tachyon</artifactId>
-      <version>0.5.0</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
       <version>0.5.0</version>
       <exclusions>

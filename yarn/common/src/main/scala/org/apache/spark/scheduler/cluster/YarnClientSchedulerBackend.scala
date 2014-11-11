@@ -33,7 +33,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  private var stopping: Boolean = false
+  @volatile private var stopping: Boolean = false
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
