@@ -22,7 +22,6 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark._
 import org.apache.spark.mllib.linalg.DenseMatrix
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -218,8 +217,8 @@ class BlockMatrix(
     (xDim, yDim)
   }
 
+  /* Calculates the information for each block and collects it on the driver */
   private def calculateBlockInfo(): Unit = {
-
     // collect may cause akka frameSize errors
     val blockStartRowColsParts = matrixRDD.mapPartitionsWithIndex { case (partId, iter) =>
       iter.map { case (id, block) =>
@@ -274,6 +273,7 @@ class BlockMatrix(
     this
   }
 
+  /* Add a key to the underlying rdd for partitioning and joins. */
   private def keyBy(part: BlockMatrixPartitioner = partitioner): RDD[(Int, BlockPartition)] = {
     rdd.map { block =>
       part match {
@@ -285,6 +285,12 @@ class BlockMatrix(
     }
   }
 
+  /**
+   * Repartition the BlockMatrix using a different partitioner.
+   *
+   * @param part The partitioner to partition by
+   * @return The repartitioned BlockMatrix
+   */
   def repartition(part: BlockMatrixPartitioner = partitioner): DistributedMatrix = {
     matrixRDD = keyBy(part)
     this
