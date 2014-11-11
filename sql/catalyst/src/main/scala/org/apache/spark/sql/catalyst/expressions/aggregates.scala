@@ -285,7 +285,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
-  override def nullable = false
+  override def nullable = true
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
@@ -409,8 +409,13 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 
   private def addFunction(value: Any) = Add(sum, Literal(value))
 
-  override def eval(input: Row): Any =
-    sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
+  override def eval(input: Row): Any = {
+    if (count == 0L) {
+      null
+    } else {
+      sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
+    }
+  }
 
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)

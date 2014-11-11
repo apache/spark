@@ -170,6 +170,12 @@ class DslQuerySuite extends QueryTest {
       (2.0, 1) :: Nil)
   }
 
+  test("zero average") {
+    checkAnswer(
+      emptyTableData.aggregate(avg('a)),
+      null)
+  }
+
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
   }
