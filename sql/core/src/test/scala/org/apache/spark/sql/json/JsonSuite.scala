@@ -54,9 +54,9 @@ class JsonSuite extends QueryTest {
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
     checkTypePromotion(BigDecimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType))
-    
+
     checkTypePromotion(new Timestamp(intNumber), enforceCorrectType(intNumber, TimestampType))
-    checkTypePromotion(new Timestamp(intNumber.toLong), 
+    checkTypePromotion(new Timestamp(intNumber.toLong),
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strDate = "2014-09-30 12:34:56"
     checkTypePromotion(Timestamp.valueOf(strDate), enforceCorrectType(strDate, TimestampType))
@@ -707,4 +707,5 @@ class JsonSuite extends QueryTest {
 
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
   }
+  
 }

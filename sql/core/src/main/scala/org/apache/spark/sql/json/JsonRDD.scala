@@ -378,7 +378,7 @@ private[sql] object JsonRDD extends Logging {
         case value: java.lang.Long => new Timestamp(value)
         case value: java.lang.String => Timestamp.valueOf(value)
       }
-    }  
+    }
 
   private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
     if (value == null) {

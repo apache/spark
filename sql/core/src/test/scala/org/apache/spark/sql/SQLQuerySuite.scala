@@ -574,6 +574,29 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     clear()
   }
 
+  test("SPARK-4228 SchemaRDD to JSON")
+  {
+    val schema1 = StructType(
+      StructField("f1", IntegerType, false) ::
+      StructField("f2", StringType, false) ::
+      StructField("f3", BooleanType, false) ::
+      StructField("f4", IntegerType, true) :: Nil)
+
+    val rowRDD1 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
+    }
+
+    val schemaRDD1 = applySchema(rowRDD1, schema1)
+    schemaRDD1.registerTempTable("applySchema1")
+    val schemaRDD2 = schemaRDD1.toSchemaRDD
+    val jsonStringRDD = schemaRDD2.toJSON
+    jsonStringRDD.collect().foreach(println _)
+  }
+  
   test("apply schema") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::

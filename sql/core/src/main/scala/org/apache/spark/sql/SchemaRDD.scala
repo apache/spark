@@ -129,7 +129,12 @@ class SchemaRDD(
   def schema: StructType = queryExecution.analyzed.schema
 
 
-  def rowToJSON(row: Row, rowSchema: StructType): String = {
+  /** Transforms a single Row to JSON using StringBuilder
+    *
+    * @param row The row to convert
+    * @param rowSchema the schema object used for conversion
+    */
+  private def rowToJSON(row: Row, rowSchema: StructType): String = {
     val builder = new StringBuilder
     builder.append{"{"}
     for (i <- 0 to row.length-1) {
@@ -140,12 +145,37 @@ class SchemaRDD(
       else if (rowSchema.fields(i).dataType == IntegerType) {
         builder.append(s"""${row.getInt(i)}""")
       }
+      else if (rowSchema.fields(i).dataType == DoubleType) {
+        builder.append(s"""${row.getDouble(i)}""")
+      }
+      else if (rowSchema.fields(i).dataType == LongType) {
+        builder.append(s"""${row.getLong(i)}""")
+      }
+      else if (rowSchema.fields(i).dataType == DoubleType) {
+        builder.append(s"""${row.getDouble(i)}""")
+      }
+      else if (rowSchema.fields(i).dataType == BooleanType) {
+        builder.append(s"""${row.getBoolean(i)}""")
+      }
+      else if (rowSchema.fields(i).dataType == FloatType) {
+        builder.append(s"""${row.getFloat(i)}""")
+      }
+      else if (rowSchema.fields(i).dataType == ShortType) {
+        builder.append(s"""${row.getShort(i)}""")
+      }
+      else if (rowSchema.fields(i).dataType == ByteType) {
+        builder.append(s"""${row.getByte(i)}""")
+      }
 
     }
     builder.append{"}"}
     builder.toString
   }
 
+  /** Returns a new RDD of JSON strings, one string per row
+  *
+  * @group schema
+  */
   def toJSON: RDD[String] = {
     val rowSchema = this.schema
     this.map{row => rowToJSON(row, rowSchema)}
