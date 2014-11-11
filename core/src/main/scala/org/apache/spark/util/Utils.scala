@@ -1528,7 +1528,7 @@ private[spark] object Utils extends Logging {
   def isBindCollision(exception: Throwable): Boolean = {
     exception match {
       case e: BindException =>
-        if (e.getMessage != null && e.getMessage.contains("Address already in use")) {
+        if (e.getMessage != null) {
           return true
         }
         isBindCollision(e.getCause)
