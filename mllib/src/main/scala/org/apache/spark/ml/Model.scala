@@ -20,7 +20,9 @@ package org.apache.spark.ml
 import org.apache.spark.ml.param.ParamMap
 
 /**
- * A fitted model.
+ * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
+ *
+ * @tparam M model type
  */
 abstract class Model[M <: Model[M]] extends Transformer {
   /**
