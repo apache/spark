@@ -84,31 +84,31 @@ class Pipeline extends Estimator[PipelineModel] {
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     // Search for the last estimator.
-    var lastIndexOfEstimator = -1
+    var indexOfLastEstimator = -1
     theStages.view.zipWithIndex.foreach { case (stage, index) =>
       stage match {
         case _: Estimator[_] =>
-          lastIndexOfEstimator = index
+          indexOfLastEstimator = index
         case _ =>
       }
     }
     var curDataset = dataset
     val transformers = ListBuffer.empty[Transformer]
     theStages.view.zipWithIndex.foreach { case (stage, index) =>
-      stage match {
-        case estimator: Estimator[_] =>
-          val transformer = estimator.fit(curDataset, paramMap)
-          if (index < lastIndexOfEstimator) {
-            curDataset = transformer.transform(curDataset, paramMap)
-          }
-          transformers += transformer
-        case transformer: Transformer =>
-          if (index < lastIndexOfEstimator) {
-            curDataset = transformer.transform(curDataset, paramMap)
-          }
-          transformers += transformer
-        case _ =>
-          throw new IllegalArgumentException
+      if (index <= indexOfLastEstimator) {
+        val transformer = stage match {
+          case estimator: Estimator[_] =>
+            estimator.fit(curDataset, paramMap)
+          case t: Transformer =>
+            t
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Do not support stage $stage of type ${stage.getClass}")
+        }
+        curDataset = transformer.transform(curDataset, paramMap)
+        transformers += transformer
+      } else {
+        transformers += stage.asInstanceOf[Transformer]
       }
     }
 
@@ -117,7 +117,10 @@ class Pipeline extends Estimator[PipelineModel] {
 
   override def transform(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
-    map(stages).foldLeft(schema)((cur, stage) => stage.transform(cur, paramMap))
+    val theStages = map(stages)
+    require(theStages.toSet.size == theStages.size,
+      "Cannot have duplicate components in a pipeline.")
+    theStages.foldLeft(schema)((cur, stage) => stage.transform(cur, paramMap))
   }
 }
 

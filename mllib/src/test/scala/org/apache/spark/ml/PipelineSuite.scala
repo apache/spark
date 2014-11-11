@@ -68,4 +68,14 @@ class PipelineSuite extends FunSuite {
     val output = pipelineModel.transform(dataset0)
     assert(output.eq(dataset4))
   }
+
+  test("pipeline with duplicate stages") {
+    val estimator = mock[Estimator[MyModel]]
+    val pipeline = new Pipeline()
+      .setStages(Array(estimator, estimator))
+    val dataset = mock[SchemaRDD]
+    intercept[IllegalArgumentException] {
+      pipeline.fit(dataset)
+    }
+  }
 }
