@@ -43,7 +43,7 @@ public class JavaCrossValidatorSuite implements Serializable {
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
+    jsc = new JavaSparkContext("local", "JavaCrossValidatorSuite");
     jsql = new JavaSQLContext(jsc);
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     dataset = jsql.applySchema(jsc.parallelize(points, 2), LabeledPoint.class);

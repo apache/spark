@@ -151,12 +151,13 @@ trait Params extends Identifiable with Serializable {
   private[ml] def getParam(paramName: String): Param[Any] = {
     val m = this.getClass.getMethod(paramName)
     assert(Modifier.isPublic(m.getModifiers) &&
-      classOf[Param[_]].isAssignableFrom(m.getReturnType))
+      classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
+      m.getParameterTypes.isEmpty)
     m.invoke(this).asInstanceOf[Param[Any]]
   }
 
   /**
-   * Sets a parameter in the own parameter map.
+   * Sets a parameter in the embedded param map.
    */
   private[ml] def set[T](param: Param[T], value: T): this.type = {
     require(param.parent.eq(this))
@@ -165,7 +166,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Gets the value of a parameter.
+   * Gets the value of a parameter in the embedded param map.
    */
   private[ml] def get[T](param: Param[T]): T = {
     require(param.parent.eq(this))
@@ -179,11 +180,6 @@ trait Params extends Identifiable with Serializable {
 }
 
 private[ml] object Params {
-
-  /**
-   * Returns an empty Params implementation without any params.
-   */
-  val empty: Params = new Params {}
 
   /**
    * Copies parameter values from the parent estimator to the child model it produced.
@@ -224,7 +220,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   }
 
   /**
-   * Puts a param pair (overwrites if the input param exists).
+   * Puts a list of param pairs (overwrites if the input params exists).
    */
   def put(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>

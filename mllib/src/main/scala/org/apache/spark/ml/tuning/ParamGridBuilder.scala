@@ -33,7 +33,7 @@ class ParamGridBuilder {
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
   /**
-   * Builds base on parameters with fixed values.
+   * Sets the given parameters in this grid to fixed values.
    */
   def baseOn(paramMap: ParamMap): this.type = {
     baseOn(paramMap.toSeq: _*)
@@ -41,7 +41,7 @@ class ParamGridBuilder {
   }
 
   /**
-   * Builds base on parameters with fixed values.
+   * Sets the given parameters in this grid to fixed values.
    */
   @varargs
   def baseOn(paramPairs: ParamPair[_]*): this.type = {
@@ -59,7 +59,7 @@ class ParamGridBuilder {
     this
   }
 
-  // specialized versions of addMulti for Java.
+  // specialized versions of addGrid for Java.
 
   /**
    * Adds a double param with multiple values.

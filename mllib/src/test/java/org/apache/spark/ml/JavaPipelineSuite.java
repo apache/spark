@@ -28,7 +28,6 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.sql.api.java.JavaSQLContext;
 import org.apache.spark.sql.api.java.JavaSchemaRDD;
-import org.apache.spark.sql.api.java.Row;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite
   .generateLogisticInputAsList;
 
