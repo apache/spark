@@ -130,7 +130,8 @@ class Pipeline extends Estimator[PipelineModel] {
 class PipelineModel(
     override val parent: Pipeline,
     override val fittingParamMap: ParamMap,
-    val transformers: Array[Transformer]) extends Model[PipelineModel] with Logging {
+    val transformers: Array[Transformer])
+  extends Model[PipelineModel] with Logging {
 
   /**
    * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input

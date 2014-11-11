@@ -84,7 +84,7 @@ abstract class Transformer extends PipelineStage with Params {
  * result as a new column.
  */
 abstract class UnaryTransformer[IN, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
-    extends Transformer with HasInputCol with HasOutputCol with Logging {
+  extends Transformer with HasInputCol with HasOutputCol with Logging {
 
   def setInputCol(value: String): T = { set(inputCol, value); this.asInstanceOf[T] }
   def setOutputCol(value: String): T = { set(outputCol, value); this.asInstanceOf[T] }

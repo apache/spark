@@ -21,13 +21,12 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{DoubleType, Row, SchemaRDD}
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Evaluator for binary classification, which expects two input columns: score and label.
  */
 class BinaryClassificationEvaluator extends Evaluator with Params
-    with HasScoreCol with HasLabelCol {
+  with HasScoreCol with HasLabelCol {
 
   /** param for metric name in evaluation */
   val metricName: Param[String] = new Param(this, "metricName",

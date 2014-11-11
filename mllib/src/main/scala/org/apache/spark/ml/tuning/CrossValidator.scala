@@ -111,7 +111,8 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 class CrossValidatorModel private[ml] (
     override val parent: CrossValidator,
     override val fittingParamMap: ParamMap,
-    val bestModel: Model[_]) extends Model[CrossValidatorModel] with CrossValidatorParams {
+    val bestModel: Model[_])
+  extends Model[CrossValidatorModel] with CrossValidatorParams {
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     bestModel.transform(dataset, paramMap)

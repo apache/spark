@@ -37,7 +37,8 @@ class Param[T] (
     val parent: Params,
     val name: String,
     val doc: String,
-    val defaultValue: Option[T] = None) extends Serializable {
+    val defaultValue: Option[T] = None)
+  extends Serializable {
 
   /**
    * Creates a param pair with the given value (for Java).
@@ -62,31 +63,36 @@ class Param[T] (
 
 /** Specialized version of [[Param[Double]]] for Java. */
 class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double] = None)
-    extends Param[Double](parent, name, doc, defaultValue) {
+  extends Param[Double](parent, name, doc, defaultValue) {
+
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
 class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int] = None)
-    extends Param[Int](parent, name, doc, defaultValue) {
+  extends Param[Int](parent, name, doc, defaultValue) {
+
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
 class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float] = None)
-    extends Param[Float](parent, name, doc, defaultValue) {
+  extends Param[Float](parent, name, doc, defaultValue) {
+
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
 class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long] = None)
-    extends Param[Long](parent, name, doc, defaultValue) {
+  extends Param[Long](parent, name, doc, defaultValue) {
+
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
 class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean] = None)
-    extends Param[Boolean](parent, name, doc, defaultValue) {
+  extends Param[Boolean](parent, name, doc, defaultValue) {
+
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
