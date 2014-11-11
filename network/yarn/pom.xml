@@ -29,7 +29,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-network-yarn_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Yarn Shuffle Service Code</name>
+  <name>Spark Project YARN Shuffle Service</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-yarn</sbt.project.name>

@@ -29,6 +29,8 @@ private[spark] object ToolTips {
 
   val INPUT = "Bytes read from Hadoop or from Spark storage."
 
+  val OUTPUT = "Bytes written to Hadoop."
+
   val SHUFFLE_WRITE = "Bytes written to disk in order to be read by a shuffle in a future stage."
 
   val SHUFFLE_READ =

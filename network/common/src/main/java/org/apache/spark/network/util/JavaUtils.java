@@ -44,36 +44,11 @@ public class JavaUtils {
   /** Closes the given object, ignoring IOExceptions. */
   public static void closeQuietly(Closeable closeable) {
     try {
-      closeable.close();
+      if (closeable != null) {
+        closeable.close();
+      }
     } catch (IOException e) {
       logger.error("IOException should not have been thrown.", e);
-    }
-  }
-
-  // TODO: Make this configurable, do not use Java serialization!
-  public static <T> T deserialize(byte[] bytes) {
-    try {
-      ObjectInputStream is = new ObjectInputStream(new ByteArrayInputStream(bytes));
-      Object out = is.readObject();
-      is.close();
-      return (T) out;
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Could not deserialize object", e);
-    } catch (IOException e) {
-      throw new RuntimeException("Could not deserialize object", e);
-    }
-  }
-
-  // TODO: Make this configurable, do not use Java serialization!
-  public static byte[] serialize(Object object) {
-    try {
-      ByteArrayOutputStream baos = new ByteArrayOutputStream();
-      ObjectOutputStream os = new ObjectOutputStream(baos);
-      os.writeObject(object);
-      os.close();
-      return baos.toByteArray();
-    } catch (IOException e) {
-      throw new RuntimeException("Could not serialize object", e);
     }
   }
 

@@ -29,7 +29,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-network-shuffle_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Shuffle Streaming Service Code</name>
+  <name>Spark Project Shuffle Streaming Service</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-shuffle</sbt.project.name>

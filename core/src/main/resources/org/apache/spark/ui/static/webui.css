@@ -120,6 +120,20 @@ pre {
   border: none;
 }
 
+.stacktrace-details {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+}
+
+.stacktrace-details.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+}
+
 span.expand-additional-metrics {
   cursor: pointer;
 }

@@ -412,6 +412,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(d, LongType), null)
     checkEvaluation(Cast(d, FloatType), null)
     checkEvaluation(Cast(d, DoubleType), null)
+    checkEvaluation(Cast(d, DecimalType.Unlimited), null)
+    checkEvaluation(Cast(d, DecimalType(10, 2)), null)
     checkEvaluation(Cast(d, StringType), "1970-01-01")
     checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
   }
