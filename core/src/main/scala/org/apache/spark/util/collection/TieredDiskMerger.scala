@@ -17,11 +17,11 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{File, FileOutputStream, BufferedOutputStream}
+import java.io.File
 import java.util.Comparator
 import java.util.concurrent.{PriorityBlockingQueue, CountDownLatch}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -159,10 +159,11 @@ private[spark] class TieredDiskMerger[K, C](
    * either receive the notification that no more blocks are coming in, or until maxMergeFactor
    * merge is required no matter what.
    *
-   * E.g. if maxMergeFactor is 10 and we have 19 or more on-disk blocks, a 10-block merge will put us
-   * at 10 or more blocks, so we might as well carry it out now.
+   * E.g. if maxMergeFactor is 10 and we have 19 or more on-disk blocks, a 10-block merge will put
+   * us at 10 or more blocks, so we might as well carry it out now.
    */
-  private def shouldMergeNow(): Boolean = doneRegistering || onDiskBlocks.size() >= maxMergeFactor * 2 - 1
+  private def shouldMergeNow(): Boolean = doneRegistering ||
+    onDiskBlocks.size() >= maxMergeFactor * 2 - 1
 
   private final class DiskToDiskMerger extends Thread {
     setName(s"tiered-merge-thread-${Thread.currentThread().getId}")
@@ -180,7 +181,7 @@ private[spark] class TieredDiskMerger[K, C](
         }
 
         if (onDiskBlocks.size() > maxMergeFactor) {
-          val blocksToMerge = new ArrayBuffer[DiskShuffleBlock]()
+          val blocksToMerge = new mutable.ArrayBuffer[DiskShuffleBlock]()
           // Try to pick the smallest merge width that will result in the next merge being the final
           // merge.
           val mergeFactor = math.min(onDiskBlocks.size - maxMergeFactor + 1, maxMergeFactor)

@@ -22,7 +22,7 @@ import java.util.Comparator
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark._
@@ -73,11 +73,19 @@ private[spark] class SortShuffleReader[K, C](
   private var _memoryBytesSpilled: Long = 0L
   private var _diskBytesSpilled: Long = 0L
 
-  /** ArrayBuffer to store in-memory shuffle blocks */
-  private val inMemoryBlocks = new ArrayBuffer[MemoryShuffleBlock]()
+  /** Queue to store in-memory shuffle blocks */
+  private val inMemoryBlocks = new mutable.Queue[MemoryShuffleBlock]()
 
-  /** Manage the BlockManagerId and related shuffle blocks */
-  private var  statuses: Array[(BlockManagerId, Long)] = _
+  /** number of bytes left to fetch */
+  private var unfetchedBytes: Long = 0L
+
+  /**
+   * Maintain the relation between shuffle block and its size. The reason we should maintain this
+   * is that the request shuffle block size is not equal to the result size because of
+   * compression of size. So here we should maintain this make sure the correctness of our
+   * algorithm.
+   */
+  private val shuffleBlockMap = new mutable.HashMap[ShuffleBlockId, (BlockManagerId, Long)]()
 
   /** keyComparator for mergeSort, id keyOrdering is not available,
     * using hashcode of key to compare */
@@ -99,14 +107,16 @@ private[spark] class SortShuffleReader[K, C](
   override def read(): Iterator[Product2[K, C]] = {
     tieredMerger.start()
 
+    computeShuffleBlocks()
+
     for ((blockId, blockOption) <- fetchRawBlocks()) {
       val blockData = blockOption match {
         case Success(block) => block
         case Failure(e) =>
           blockId match {
-            case ShuffleBlockId (shufId, mapId, _) =>
-              val address = statuses(mapId.toInt)._1
-              throw new FetchFailedException (address, shufId.toInt, mapId.toInt, startPartition,
+            case b @ ShuffleBlockId(shuffleId, mapId, _) =>
+              val address = shuffleBlockMap(b)._1
+              throw new FetchFailedException (address, shuffleId.toInt, mapId.toInt, startPartition,
                 Utils.exceptionString (e))
             case _ =>
               throw new SparkException (
@@ -114,21 +124,27 @@ private[spark] class SortShuffleReader[K, C](
           }
       }
 
-      inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
       shuffleRawBlockFetcherItr.currentResult = null
 
       // Try to fit block in memory. If this fails, merge in-memory blocks to disk.
       val blockSize = blockData.size
       val granted = shuffleMemoryManager.tryToAcquire(blockSize)
       val block = MemoryShuffleBlock(blockId, blockData)
-      if (granted < blockSize) {
+      if (granted >= blockSize) {
+        inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
+      } else {
         logInfo(s"Granted $granted memory is not enough to store shuffle block id $blockId, " +
           s"block size $blockSize, spilling in-memory blocks to release the memory")
 
         shuffleMemoryManager.release(granted)
         spillInMemoryBlocks(block)
       }
+
+      unfetchedBytes -= shuffleBlockMap(blockId.asInstanceOf[ShuffleBlockId])._2
     }
+
+    // Make sure all the blocks have been fetched.
+    assert(unfetchedBytes == 0L)
 
     tieredMerger.doneRegisteringOnDiskBlocks()
 
@@ -158,10 +174,25 @@ private[spark] class SortShuffleReader[K, C](
     // Write merged blocks to disk
     val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
 
-    _memoryBytesSpilled += inMemoryBlocks.map(_.blockData.size()).sum
+    // If the remaining unfetched data would fit inside our current allocation, we don't want to
+    // waste time spilling blocks beyond the space needed for it.
+    // We use the request size to calculate the remaining spilled size to make sure the
+    // correctness, since the request size is slightly different from result block size because
+    // of size compression.
+    var bytesToSpill = unfetchedBytes
+    val blocksToSpill = new mutable.ArrayBuffer[MemoryShuffleBlock]()
+    blocksToSpill += tippingBlock
+    bytesToSpill -= shuffleBlockMap(tippingBlock.blockId.asInstanceOf[ShuffleBlockId])._2
+    while (bytesToSpill > 0 && !inMemoryBlocks.isEmpty) {
+      val block = inMemoryBlocks.dequeue()
+      blocksToSpill += block
+      bytesToSpill -= shuffleBlockMap(block.blockId.asInstanceOf[ShuffleBlockId])._2
+    }
+
+    _memoryBytesSpilled += blocksToSpill.map(_.blockData.size()).sum
 
     if (inMemoryBlocks.size > 1) {
-      val itrGroup = inMemoryBlocksToIterators(inMemoryBlocks)
+      val itrGroup = inMemoryBlocksToIterators(blocksToSpill)
       val partialMergedItr =
         MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
       val curWriteMetrics = new ShuffleWriteMetrics()
@@ -190,7 +221,7 @@ private[spark] class SortShuffleReader[K, C](
 
     } else {
       val fos = new FileOutputStream(file)
-      val buffer = inMemoryBlocks.map(_.blockData.nioByteBuffer()).head
+      val buffer = blocksToSpill.map(_.blockData.nioByteBuffer()).head
       var channel = fos.getChannel
       var success = false
 
@@ -236,26 +267,36 @@ private[spark] class SortShuffleReader[K, C](
     }
   }
 
-  private def fetchRawBlocks(): Iterator[(BlockId, Try[ManagedBuffer])] = {
-    statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
+  private def computeShuffleBlocks(): Unit = {
+    val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
 
-    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]()
+    val splitsByAddress = new mutable.HashMap[BlockManagerId, mutable.ArrayBuffer[(Int, Long)]]()
     for (((address, size), index) <- statuses.zipWithIndex) {
-      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
+      splitsByAddress.getOrElseUpdate(address, mutable.ArrayBuffer()) += ((index, size))
     }
 
-    val blocksByAddress = splitsByAddress.toSeq.map { case (address, splits) =>
-      val blocks = splits.map { s =>
-        (ShuffleBlockId(handle.shuffleId, s._1, startPartition), s._2)
+    splitsByAddress.foreach { case (id, blocks) =>
+      blocks.foreach { case (idx, len) =>
+        shuffleBlockMap.put(ShuffleBlockId(handle.shuffleId, idx, startPartition), (id, len))
+        unfetchedBytes += len
       }
-      (address, blocks.toSeq)
+    }
+  }
+
+  private def fetchRawBlocks(): Iterator[(BlockId, Try[ManagedBuffer])] = {
+    val blocksByAddress = new mutable.HashMap[BlockManagerId,
+      mutable.ArrayBuffer[(ShuffleBlockId, Long)]]()
+
+    shuffleBlockMap.foreach { case (block, (id, len)) =>
+      blocksByAddress.getOrElseUpdate(id,
+        mutable.ArrayBuffer[(ShuffleBlockId, Long)]()) += ((block, len))
     }
 
     shuffleRawBlockFetcherItr = new ShuffleRawBlockFetcherIterator(
       context,
       SparkEnv.get.blockManager.shuffleClient,
       blockManager,
-      blocksByAddress,
+      blocksByAddress.toSeq,
       conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
 
     val completionItr = CompletionIterator[
