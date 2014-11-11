@@ -30,24 +30,6 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
 
 private[graphx]
-class RoutingTableMessageRDDFunctions(self: RDD[RoutingTableMessage]) {
-  /** Copartition an `RDD[RoutingTableMessage]` with the vertex RDD with the given `partitioner`. */
-  def copartitionWithVertices(partitioner: Partitioner): RDD[RoutingTableMessage] = {
-    new ShuffledRDD[VertexId, Int, Int](
-      self, partitioner).setSerializer(new RoutingTableMessageSerializer)
-  }
-}
-
-private[graphx]
-object RoutingTableMessageRDDFunctions {
-  import scala.language.implicitConversions
-
-  implicit def rdd2RoutingTableMessageRDDFunctions(rdd: RDD[RoutingTableMessage]) = {
-    new RoutingTableMessageRDDFunctions(rdd)
-  }
-}
-
-private[graphx]
 object RoutingTablePartition {
   /**
    * A message from an edge partition to a vertex specifying the position in which the edge
