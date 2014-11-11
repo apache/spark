@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.types.{DataType, StructType}
+import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.test.ExamplePointUDT
 
 class HiveMetastoreCatalogSuite extends FunSuite {
 
@@ -28,5 +29,11 @@ class HiveMetastoreCatalogSuite extends FunSuite {
 
     val datatype = HiveMetastoreTypes.toDataType(metastr)
     assert(datatype.isInstanceOf[StructType])
+  }
+
+  test("udt to metastore type conversion") {
+    val udt = new ExamplePointUDT
+    assert(HiveMetastoreTypes.toMetastoreType(udt) ===
+      HiveMetastoreTypes.toMetastoreType(udt.sqlType))
   }
 }

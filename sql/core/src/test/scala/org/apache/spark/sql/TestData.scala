@@ -64,11 +64,12 @@ object TestData {
       BinaryData("123".getBytes(), 4) :: Nil).toSchemaRDD
   binaryData.registerTempTable("binaryData")
 
-  // TODO: There is no way to express null primitives as case classes currently...
+  case class TestData3(a: Int, b: Option[Int])
   val testData3 =
-    logical.LocalRelation('a.int, 'b.int).loadData(
-      (1, null) ::
-      (2, 2) :: Nil)
+    TestSQLContext.sparkContext.parallelize(
+      TestData3(1, None) ::
+      TestData3(2, Some(2)) :: Nil).toSchemaRDD
+  testData3.registerTempTable("testData3")
 
   val emptyTableData = logical.LocalRelation('a.int, 'b.int)
 
@@ -177,4 +178,12 @@ object TestData {
     Salary(0, 2000.0) ::
     Salary(1, 1000.0) :: Nil)
   salary.registerTempTable("salary")
+
+  case class ComplexData(m: Map[Int, String], s: TestData, a: Seq[Int], b: Boolean)
+  val complexData =
+    TestSQLContext.sparkContext.parallelize(
+      ComplexData(Map(1 -> "1"), TestData(1, "1"), Seq(1), true)
+        :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
+        :: Nil).toSchemaRDD
+  complexData.registerTempTable("complexData")
 }

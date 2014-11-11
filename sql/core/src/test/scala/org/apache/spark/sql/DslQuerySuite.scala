@@ -19,14 +19,13 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.test._
 
 /* Implicits */
-import TestSQLContext._
+import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.test.TestSQLContext._
 
 class DslQuerySuite extends QueryTest {
-  import TestData._
+  import org.apache.spark.sql.TestData._
 
   test("table scan") {
     checkAnswer(
@@ -215,5 +214,15 @@ class DslQuerySuite extends QueryTest {
       (3, "c") ::
       (4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+  }
+
+  test("udf") {
+    val foo = (a: Int, b: String) => a.toString + b
+
+    checkAnswer(
+      // SELECT *, foo(key, value) FROM testData
+      testData.select(Star(None), foo.call('key, 'value)).limit(3),
+      (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+    )
   }
 }

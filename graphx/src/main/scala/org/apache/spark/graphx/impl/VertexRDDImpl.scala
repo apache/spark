@@ -25,8 +25,6 @@ import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.RoutingTableMessageRDDFunctions._
-import org.apache.spark.graphx.impl.VertexRDDFunctions._
 
 class VertexRDDImpl[VD] private[graphx] (
     val partitionsRDD: RDD[ShippableVertexPartition[VD]],
@@ -135,7 +133,7 @@ class VertexRDDImpl[VD] private[graphx] (
       case _ =>
         this.withPartitionsRDD[VD3](
           partitionsRDD.zipPartitions(
-            other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
             (partIter, msgs) => partIter.map(_.leftJoin(msgs)(f))
           }
         )
@@ -164,7 +162,7 @@ class VertexRDDImpl[VD] private[graphx] (
       case _ =>
         this.withPartitionsRDD(
           partitionsRDD.zipPartitions(
-            other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true) {
             (partIter, msgs) => partIter.map(_.innerJoin(msgs)(f))
           }
         )
@@ -173,7 +171,7 @@ class VertexRDDImpl[VD] private[graphx] (
 
   override def aggregateUsingIndex[VD2: ClassTag](
       messages: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] = {
-    val shuffled = messages.copartitionWithVertices(this.partitioner.get)
+    val shuffled = messages.partitionBy(this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
       thisIter.map(_.aggregateUsingIndex(msgIter, reduceFunc))
     }

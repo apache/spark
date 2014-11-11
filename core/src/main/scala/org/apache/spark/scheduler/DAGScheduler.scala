@@ -1053,7 +1053,7 @@ class DAGScheduler(
         logInfo("Resubmitted " + task + ", so marking it as still running")
         stage.pendingTasks += task
 
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleToMapStage(shuffleId)
 
@@ -1063,7 +1063,7 @@ class DAGScheduler(
         if (runningStages.contains(failedStage)) {
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
             s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some("Fetch failure"))
+          markStageAsFinished(failedStage, Some(failureMessage))
           runningStages -= failedStage
         }
 
@@ -1094,7 +1094,7 @@ class DAGScheduler(
           handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
         }
 
-      case ExceptionFailure(className, description, stackTrace, metrics) =>
+      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>

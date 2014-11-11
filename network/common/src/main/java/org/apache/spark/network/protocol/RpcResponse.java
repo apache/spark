@@ -36,20 +36,17 @@ public final class RpcResponse implements ResponseMessage {
   public Type type() { return Type.RpcResponse; }
 
   @Override
-  public int encodedLength() { return 8 + 4 + response.length; }
+  public int encodedLength() { return 8 + Encoders.ByteArrays.encodedLength(response); }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
-    buf.writeInt(response.length);
-    buf.writeBytes(response);
+    Encoders.ByteArrays.encode(buf, response);
   }
 
   public static RpcResponse decode(ByteBuf buf) {
     long requestId = buf.readLong();
-    int responseLen = buf.readInt();
-    byte[] response = new byte[responseLen];
-    buf.readBytes(response);
+    byte[] response = Encoders.ByteArrays.decode(buf);
     return new RpcResponse(requestId, response);
   }
 

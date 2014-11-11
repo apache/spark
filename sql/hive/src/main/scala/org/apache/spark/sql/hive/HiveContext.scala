@@ -21,6 +21,10 @@ import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList}
 
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
@@ -46,6 +50,7 @@ import org.apache.spark.sql.execution.ExtractPythonUdfs
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.sources.DataSourceStrategy
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -85,7 +90,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * SerDe.
    */
   private[spark] def convertMetastoreParquet: Boolean =
-    getConf("spark.sql.hive.convertMetastoreParquet", "false") == "true"
+    getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -95,7 +100,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (dialect == "sql") {
       super.sql(sqlText)
     } else if (dialect == "hiveql") {
-      new SchemaRDD(this, HiveQl.parseSql(sqlText))
+      new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
     }  else {
       sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
     }
@@ -318,7 +323,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           driver.close()
           HiveShim.processResults(results)
         case _ =>
-          sessionState.out.println(tokens(0) + " " + cmd_1)
+          if (sessionState.out != null) {
+            sessionState.out.println(tokens(0) + " " + cmd_1)
+          }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }
     } catch {
@@ -341,7 +348,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override val strategies: Seq[Strategy] = Seq(
+    override val strategies: Seq[Strategy] = extraStrategies ++ Seq(
+      DataSourceStrategy,
       CommandStrategy(self),
       HiveCommandStrategy(self),
       TakeOrdered,
@@ -366,11 +374,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
 
-    override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
-
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType, DateType, TimestampType, BinaryType)
+        ShortType, DateType, TimestampType, BinaryType)
 
     protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -388,6 +394,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       case (d: Date, DateType) => new DateWritable(d).toString
       case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
       case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
+      case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
+        HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -406,6 +414,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "null"
       case (s: String, StringType) => "\"" + s + "\""
+      case (decimal, DecimalType()) => decimal.toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -422,7 +431,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         command.executeCollect().map(_.head.toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.collect().toSeq
+        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.

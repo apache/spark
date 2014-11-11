@@ -52,8 +52,10 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
   protected val COUNT = Keyword("COUNT")
+  protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
+  protected val DOUBLE = Keyword("DOUBLE")
   protected val ELSE = Keyword("ELSE")
   protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
@@ -240,6 +242,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | termExpression ~ (RLIKE  ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (REGEXP ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (LIKE   ~> termExpression) ^^ { case e1 ~ e2 => Like(e1, e2) }
+    | termExpression ~ (NOT ~ LIKE ~> termExpression) ^^ { case e1 ~ e2 => Not(Like(e1, e2)) }
     | termExpression ~ (IN ~ "(" ~> rep1sep(termExpression, ",")) <~ ")" ^^ {
         case e1 ~ e2 => In(e1, e2)
       }
@@ -385,5 +388,15 @@ class SqlParser extends AbstractSparkSQLParser {
     }
 
   protected lazy val dataType: Parser[DataType] =
-    STRING ^^^ StringType | TIMESTAMP ^^^ TimestampType
+    ( STRING ^^^ StringType
+    | TIMESTAMP ^^^ TimestampType
+    | DOUBLE ^^^ DoubleType
+    | fixedDecimalType
+    | DECIMAL ^^^ DecimalType.Unlimited
+    )
+
+  protected lazy val fixedDecimalType: Parser[DataType] =
+    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
+    }
 }

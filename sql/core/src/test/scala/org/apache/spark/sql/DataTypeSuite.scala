@@ -69,7 +69,7 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(LongType)
   checkDataTypeJsonRepr(FloatType)
   checkDataTypeJsonRepr(DoubleType)
-  checkDataTypeJsonRepr(DecimalType)
+  checkDataTypeJsonRepr(DecimalType.Unlimited)
   checkDataTypeJsonRepr(TimestampType)
   checkDataTypeJsonRepr(StringType)
   checkDataTypeJsonRepr(BinaryType)

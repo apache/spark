@@ -28,8 +28,6 @@ import org.apache.spark.graphx.impl.RoutingTablePartition
 import org.apache.spark.graphx.impl.ShippableVertexPartition
 import org.apache.spark.graphx.impl.VertexAttributeBlock
 import org.apache.spark.graphx.impl.VertexRDDImpl
-import org.apache.spark.graphx.impl.RoutingTableMessageRDDFunctions._
-import org.apache.spark.graphx.impl.VertexRDDFunctions._
 
 /**
  * Extends `RDD[(VertexId, VD)]` by ensuring that there is only one entry for each vertex and by
@@ -242,7 +240,7 @@ object VertexRDD {
   def apply[VD: ClassTag](vertices: RDD[(VertexId, VD)]): VertexRDD[VD] = {
     val vPartitioned: RDD[(VertexId, VD)] = vertices.partitioner match {
       case Some(p) => vertices
-      case None => vertices.copartitionWithVertices(new HashPartitioner(vertices.partitions.size))
+      case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.size))
     }
     val vertexPartitions = vPartitioned.mapPartitions(
       iter => Iterator(ShippableVertexPartition(iter)),
@@ -283,7 +281,7 @@ object VertexRDD {
     ): VertexRDD[VD] = {
     val vPartitioned: RDD[(VertexId, VD)] = vertices.partitioner match {
       case Some(p) => vertices
-      case None => vertices.copartitionWithVertices(new HashPartitioner(vertices.partitions.size))
+      case None => vertices.partitionBy(new HashPartitioner(vertices.partitions.size))
     }
     val routingTables = createRoutingTables(edges, vPartitioned.partitioner.get)
     val vertexPartitions = vPartitioned.zipPartitions(routingTables, preservesPartitioning = true) {
@@ -325,7 +323,7 @@ object VertexRDD {
       .setName("VertexRDD.createRoutingTables - vid2pid (aggregation)")
 
     val numEdgePartitions = edges.partitions.size
-    vid2pid.copartitionWithVertices(vertexPartitioner).mapPartitions(
+    vid2pid.partitionBy(vertexPartitioner).mapPartitions(
       iter => Iterator(RoutingTablePartition.fromMsgs(numEdgePartitions, iter)),
       preservesPartitioning = true)
   }
