@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql._
+import java.io.File
+
+import com.google.common.io.Files
+import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHive
 
 /* Implicits */
@@ -90,5 +92,33 @@ class InsertIntoHiveTableSuite extends QueryTest {
     )
 
     sql("DROP TABLE hiveTableWithMapValue")
+  }
+
+  test("SPARK-4203:random partition directory order") {
+    createTable[TestData]("tmp_table")
+    val tmpDir = Files.createTempDir()
+    sql(s"CREATE TABLE table_with_partition(c1 string) PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string) location '${tmpDir.toURI.toString}'  ")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='1') SELECT 'blarr' FROM tmp_table")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='2') SELECT 'blarr' FROM tmp_table")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='3') SELECT 'blarr' FROM tmp_table")
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (p1='a',p2='b',p3='c',p4='c',p5='4') SELECT 'blarr' FROM tmp_table")
+    def listFolders(path: File, acc: List[String]): List[List[String]] = {
+      val dir = path.listFiles()
+      val folders = dir.filter(_.isDirectory).toList
+      if (folders.isEmpty) {
+        List(acc.reverse)
+      } else {
+        folders.flatMap(x => listFolders(x, x.getName :: acc))
+      }
+    }
+    val expected = List(
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=2"::Nil,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil ,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil ,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
+    )
+    assert(listFolders(tmpDir,List()).sortBy(_.toString()) == expected.sortBy(_.toString))
+    sql("DROP TABLE table_with_partition")
+    sql("DROP TABLE tmp_table")
   }
 }

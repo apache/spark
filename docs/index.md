@@ -112,6 +112,7 @@ options for deployment:
 **External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
+* [Spark Wiki](https://cwiki.apache.org/confluence/display/SPARK)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),

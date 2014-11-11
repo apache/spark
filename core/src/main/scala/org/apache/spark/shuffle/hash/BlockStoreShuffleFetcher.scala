@@ -25,7 +25,7 @@ import org.apache.spark._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
-import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.util.CompletionIterator
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
   def fetch[T](
@@ -64,8 +64,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
           blockId match {
             case ShuffleBlockId(shufId, mapId, _) =>
               val address = statuses(mapId.toInt)._1
-              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId,
-                Utils.exceptionString(e))
+              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
             case _ =>
               throw new SparkException(
                 "Failed to get block " + blockId + ", which is not a shuffle block", e)
