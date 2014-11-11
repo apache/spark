@@ -75,4 +75,21 @@ public class TransportConf {
    * Only relevant if maxIORetries > 0.
    */
   public int ioRetryWaitTime() { return conf.getInt("spark.shuffle.io.retryWaitMs", 5000); }
+
+  /**
+   * Minimum size of a block that we should start using memory map rather than reading in through
+   * normal IO operations. This prevents Spark from memory mapping very small blocks. In general,
+   * memory mapping has high overhead for blocks close to or below the page size of the OS.
+   */
+  public int memoryMapBytes() {
+    return conf.getInt("spark.storage.memoryMapThreshold", 2 * 1024 * 1024);
+  }
+
+  /**
+   * Whether to initialize shuffle FileDescriptor lazily or not. If true, file descriptors are
+   * created only when data is going to be transferred. This can reduce the number of open files.
+   */
+  public boolean lazyFileDescriptor() {
+    return conf.getBoolean("spark.shuffle.io.lazyFD", true);
+  }
 }
