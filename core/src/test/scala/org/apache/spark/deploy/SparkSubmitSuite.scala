@@ -464,6 +464,7 @@ object JarCreationTest extends Logging {
       } catch {
         case t: Throwable =>
           exception = t + "\n" + t.getStackTraceString
+          exception = exception.replaceAll("\n", "\n\t")
       }
       Option(exception).toSeq.iterator
     }.collect()
