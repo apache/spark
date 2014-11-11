@@ -55,13 +55,15 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-          parent.basePath, parent.listener, parent.killEnabled)
+          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          killEnabled = parent.killEnabled)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, parent.killEnabled)
+          parent.listener, isFairScheduler = parent.isFairScheduler,
+          killEnabled = parent.killEnabled)
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, parent.killEnabled)
+          parent.listener, isFairScheduler = parent.isFairScheduler)
 
       val summary: NodeSeq =
         <div>

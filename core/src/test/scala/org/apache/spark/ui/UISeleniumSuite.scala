@@ -17,8 +17,6 @@
 
 package org.apache.spark.ui
 
-import org.apache.spark.api.java.StorageLevels
-import org.apache.spark.{SparkException, SparkConf, SparkContext}
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
@@ -26,6 +24,9 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.api.java.StorageLevels
+import org.apache.spark.{SparkException, SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
 import org.apache.spark.LocalSparkContext._
 
 /**
@@ -89,7 +90,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
         sc.parallelize(1 to 10).map { x => throw new Exception()}.collect()
       }
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
-        go to sc.ui.get.appUIAddress
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
         find(id("active")).get.text should be("Active Stages (0)")
         find(id("failed")).get.text should be("Failed Stages (1)")
       }
@@ -101,11 +102,43 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
         sc.parallelize(1 to 10).map { x => unserializableObject}.collect()
       }
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
-        go to sc.ui.get.appUIAddress
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
         find(id("active")).get.text should be("Active Stages (0)")
         // The failure occurs before the stage becomes active, hence we should still show only one
         // failed stage, not two:
         find(id("failed")).get.text should be("Failed Stages (1)")
+      }
+    }
+  }
+
+  test("spark.ui.killEnabled should properly control kill button display") {
+    def getSparkContext(killEnabled: Boolean): SparkContext = {
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName("test")
+        .set("spark.ui.enabled", "true")
+        .set("spark.ui.killEnabled", killEnabled.toString)
+      new SparkContext(conf)
+    }
+
+    def hasKillLink = find(className("kill-link")).isDefined
+    def runSlowJob(sc: SparkContext) {
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+    }
+
+    withSpark(getSparkContext(killEnabled = true)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
+        assert(hasKillLink)
+      }
+    }
+
+    withSpark(getSparkContext(killEnabled = false)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/stages")
+        assert(!hasKillLink)
       }
     }
   }

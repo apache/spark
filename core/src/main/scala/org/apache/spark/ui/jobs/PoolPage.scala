@@ -38,7 +38,8 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
         case None => Seq[StageInfo]()
       }
       val activeStagesTable = new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-        parent.basePath, parent.listener, parent.killEnabled)
+        parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+        killEnabled = parent.killEnabled)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getPoolForName(poolName).get).toSeq

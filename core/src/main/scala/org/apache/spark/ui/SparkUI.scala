@@ -43,6 +43,8 @@ private[spark] class SparkUI private (
   extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
   with Logging {
 
+  val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
+
   /** Initialize all components of the server. */
   def initialize() {
     attachTab(new JobsTab(this))
@@ -59,8 +61,6 @@ private[spark] class SparkUI private (
     sc.foreach { _.env.metricsSystem.getServletHandlers.foreach(attachHandler) }
   }
   initialize()
-
-  val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
   def getAppName = appName
 
