@@ -562,6 +562,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.default.parallelism</code></td>
   <td>
+    For distributed shuffle operations like <code>reduceByKey</code> and <code>join</code>, the
+    largest number of partitions in a parent RDD.  For operations like <code>parallelize</code>
+    with no parent RDDs, it depends on the cluster manager:
     <ul>
       <li>Local mode: number of cores on the local machine</li>
       <li>Mesos fine grained mode: 8</li>
@@ -569,8 +572,8 @@ Apart from these, the following properties are also available, and may be useful
     </ul>
   </td>
   <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations
-    (<code>groupByKey</code>, <code>reduceByKey</code>, etc) when not set by user.
+    Default number of partitions in RDDs returned by transformations like <code>join</code>,
+    <code>reduceByKey</code>, and <code>parallelize</code> when not set by user.
   </td>
 </tr>
 <tr>
