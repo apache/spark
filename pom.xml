@@ -25,7 +25,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>1.1.1-SNAPSHOT</version>
+  <version>1.1.1</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -40,7 +40,7 @@
     <connection>scm:git:git@github.com:apache/spark.git</connection>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/spark.git</url>
-    <tag>HEAD</tag>
+    <tag>v1.1.1-rc1</tag>
   </scm>
   <developers>
     <developer>
@@ -133,7 +133,7 @@
     <chill.version>0.3.6</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
-    <avro.mapred.classifier></avro.mapred.classifier>
+    <avro.mapred.classifier />
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.8.3</aws.java.sdk.version>
     <aws.kinesis.client.version>1.1.0</aws.kinesis.client.version>
