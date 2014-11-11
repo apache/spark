@@ -52,6 +52,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val lastStageData = lastStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }
+      val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
+      val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
       val duration: Option[Long] = {
         job.startTime.map { start =>
           val end = job.endTime.getOrElse(System.currentTimeMillis())
@@ -68,8 +70,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <div><em>{lastStageData.flatMap(_.description).getOrElse("")}</em></div>
-          <a href={detailUrl}>{lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")}</a>
+          <div><em>{lastStageDescription}</em></div>
+          <a href={detailUrl}>{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.startTime.getOrElse(-1).toString}>
           {formattedSubmissionTime}
