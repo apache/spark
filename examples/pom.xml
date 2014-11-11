@@ -34,47 +34,6 @@
   <name>Spark Project Examples</name>
   <url>http://spark.apache.org/</url>
 
-  <profiles>
-    <profile>
-      <id>kinesis-asl</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-          <version>${commons.httpclient.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hbase-hadoop2</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>hadoop2</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>hbase-hadoop1</id>
-      <activation>
-        <property>
-          <name>!hbase.profile</name>
-        </property>
-      </activation>
-      <properties>
-        <hbase.version>0.98.7-hadoop1</hbase.version>
-      </properties>
-    </profile>
-  </profiles>
-
   <dependencies>
     <!-- Promote Guava to compile scope in this module so it's included while shading. -->
     <dependency>
@@ -405,6 +364,29 @@
           <version>${commons.httpclient.version}</version>
         </dependency>
       </dependencies>
+    </profile>
+    <profile>
+      <id>hbase-hadoop2</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>hadoop2</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>hbase-hadoop1</id>
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <properties>
+        <hbase.version>0.98.7-hadoop1</hbase.version>
+      </properties>
     </profile>
     <profile>
       <!-- We add source directories specific to Scala 2.10 and 2.11 since some examples
