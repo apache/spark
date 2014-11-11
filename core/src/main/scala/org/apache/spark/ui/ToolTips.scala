@@ -24,11 +24,28 @@ private[spark] object ToolTips {
        scheduler delay is large, consider decreasing the size of tasks or decreasing the size
        of task results."""
 
+  val TASK_DESERIALIZATION_TIME =
+    """Time spent deserializating the task closure on the executor."""
+
   val INPUT = "Bytes read from Hadoop or from Spark storage."
+
+  val OUTPUT = "Bytes written to Hadoop."
 
   val SHUFFLE_WRITE = "Bytes written to disk in order to be read by a shuffle in a future stage."
 
   val SHUFFLE_READ =
     """Bytes read from remote executors. Typically less than shuffle write bytes
        because this does not include shuffle data read locally."""
+
+  val GETTING_RESULT_TIME =
+    """Time that the driver spends fetching task results from workers. If this is large, consider
+       decreasing the amount of data returned from each task."""
+
+  val RESULT_SERIALIZATION_TIME =
+    """Time spent serializing the task result on the executor before sending it back to the
+       driver."""
+
+  val GC_TIME =
+    """Time that the executor spent paused for Java garbage collection while the task was
+       running."""
 }

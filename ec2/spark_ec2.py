@@ -40,9 +40,11 @@ from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBS
 from boto import ec2
 
 DEFAULT_SPARK_VERSION = "1.1.0"
+SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
+MESOS_SPARK_EC2_BRANCH = "v4"
 # A URL prefix from which to fetch AMI information
-AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
+AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
 
 
 class UsageError(Exception):
@@ -583,10 +585,23 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
-    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git -b v4")
+    ssh(
+        host=master,
+        opts=opts,
+        command="rm -rf spark-ec2"
+        + " && "
+        + "git clone https://github.com/mesos/spark-ec2.git -b {b}".format(b=MESOS_SPARK_EC2_BRANCH)
+    )
 
     print "Deploying files to master..."
-    deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes, modules)
+    deploy_files(
+        conn=conn,
+        root_dir=SPARK_EC2_DIR + "/" + "deploy.generic",
+        opts=opts,
+        master_nodes=master_nodes,
+        slave_nodes=slave_nodes,
+        modules=modules
+    )
 
     print "Running setup on master..."
     setup_spark_cluster(master, opts)
@@ -723,6 +738,8 @@ def get_num_disks(instance_type):
 # cluster (e.g. lists of masters and slaves). Files are only deployed to
 # the first master instance in the cluster, and we expect the setup
 # script to be run on that instance to copy them to other nodes.
+#
+# root_dir should be an absolute path to the directory with the files we want to deploy.
 def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     active_master = master_nodes[0].public_dns_name
 
