@@ -318,7 +318,8 @@ object FileInputDStream {
    */
   private val MIN_REMEMBER_DURATION = Minutes(1)
 
-  def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
+  def defaultFilter(path: Path): Boolean = 
+    !path.getName.startsWith(".") && !path.getName.endsWith("_COPYING_")
 
   /**
    * Calculate the number of last batches to remember, such that all the files selected in
