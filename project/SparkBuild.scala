@@ -275,7 +275,8 @@ object Assembly {
         // This must match the same name used in maven (see network/yarn/pom.xml)
         "spark-" + v + "-yarn-shuffle.jar"
       } else {
-        mName + "-" + v + "-hadoop" + Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar"
+        mName + "-" + v + "-hadoop" +
+          Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar"
       }
     },
     mergeStrategy in assembly := {
