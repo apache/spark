@@ -31,7 +31,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,
     preservePartitioning: Boolean,
-    initial : Option[RDD[(K, S)]]
+    initialRDD : Option[RDD[(K, S)]]
   ) extends DStream[(K, S)](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -95,7 +95,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
         // Try to get the parent RDD
         parent.getOrCompute(validTime) match {
           case Some(parentRDD) => {   // If parent RDD exists, then compute as usual
-            initial match {
+            initialRDD match {
               case None => {
                 // Define the function for the mapPartition operation on grouped RDD;
                 // first map the grouped tuple to tuples of required type,
@@ -110,8 +110,8 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
                 // logDebug("Generating state RDD for time " + validTime + " (first)")
                 Some (sessionRDD)
               }
-              case Some (initialRDD) => {
-                computeUsingPreviousRDD(parentRDD, initialRDD)
+              case Some (initialStateRDD) => {
+                computeUsingPreviousRDD(parentRDD, initialStateRDD)
               }
             }
           }

@@ -1252,12 +1252,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD (tmpRDD);
 
     List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
-        Arrays.asList(new Tuple2<String, Integer>("california", 5),
-            new Tuple2<String, Integer>("new york", 7)),
-        Arrays.asList(new Tuple2<String, Integer>("california", 15),
-            new Tuple2<String, Integer>("new york", 11)),
-        Arrays.asList(new Tuple2<String, Integer>("california", 15),
-            new Tuple2<String, Integer>("new york", 11)));
+        Arrays.asList(new Tuple2<String, Integer>("new york", 7),
+            new Tuple2<String, Integer>("california", 5)),
+        Arrays.asList(new Tuple2<String, Integer>("new york", 11),
+            new Tuple2<String, Integer>("california", 15)),
+        Arrays.asList(new Tuple2<String, Integer>("new york", 11),
+            new Tuple2<String, Integer>("california", 15)));
 
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
