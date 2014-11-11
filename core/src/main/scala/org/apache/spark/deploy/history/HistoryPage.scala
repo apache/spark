@@ -26,6 +26,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   private val pageSize = 20
+  private val maxNumIndices = 4
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
@@ -52,8 +53,21 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
                 <span style="float: right">
-                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt;</a>}
-                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}>&gt;</a>}
+                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt; </a>}
+                  {if (actualPage > 1) <a href={"/?page=1"}>1</a>}
+                  {if (actualPage - maxNumIndices > 2) " ... " }
+                  {(1 to maxNumIndices).reverse.filter(actualPage - _ > 1).map {offset =>
+                    val nextPage = actualPage - offset
+                    <a href={"/?page=" + (nextPage)}> {nextPage} </a>
+                  }}
+                  {actualPage}
+                  {(1 to maxNumIndices).filter(actualPage + _ < pageCount).map{offset =>
+                    val nextPage = actualPage + offset
+                    <a href={"/?page=" + nextPage}> {nextPage} </a>
+                  }}
+                  {if (actualPage + maxNumIndices < pageCount - 1) " ... " }
+                  {if (actualPage < pageCount) <a href={"/?page=" + pageCount}>{pageCount}</a>}
+                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}> &gt;</a>}
                 </span>
               </h4> ++
               appTable
