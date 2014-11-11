@@ -39,12 +39,24 @@ class SQLQuerySuite extends QueryTest {
   test("ordering not in agg") {
     checkAnswer(
       sql("SELECT key FROM src GROUP BY key, value ORDER BY value"),
-      sql("""
+      sql( """
         SELECT key
         FROM (
           SELECT key, value
           FROM src
           GROUP BY key, value
           ORDER BY value) a""").collect().toSeq)
+  }
+
+  test("SPARK-3708 Backticks aren't handled correctly is aliases") {
+    checkAnswer(
+      sql("SELECT k FROM (SELECT `key` AS `k` FROM src) a"),
+      sql("SELECT `key` FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3834 Backticks not correctly handled in subquery aliases") {
+    checkAnswer(
+      sql("SELECT a.key FROM (SELECT key FROM src) `a`"),
+      sql("SELECT `key` FROM src").collect().toSeq)
   }
 }
