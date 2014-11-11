@@ -43,7 +43,11 @@ private[jobs] object UIData {
     var endTime: Option[Long] = None,
     var stageIds: Seq[Int] = Seq.empty,
     var jobGroup: Option[String] = None,
-    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN
+    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
+    var numTasks: Int = 0,
+    var numActiveTasks: Int = 0,
+    var numCompletedTasks: Int = 0,
+    var numFailedTasks: Int = 0
   )
 
   class StageUIData {

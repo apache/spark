@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -59,7 +59,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val failedStages = ListBuffer[StageInfo]()
   val stageIdToData = new HashMap[(StageId, StageAttemptId), StageUIData]
   val stageIdToInfo = new HashMap[StageId, StageInfo]
-  
+  val stageIdToActiveJobIds = new HashMap[StageId, HashSet[JobId]]
+
   // Number of completed and failed stages, may not actually equal to completedStages.size and 
   // failedStages.size respectively due to completedStage and failedStages only maintain the latest
   // part of the stages, the earlier ones will be removed when there are too many stages for 
@@ -86,6 +87,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         jobGroup, JobExecutionStatus.RUNNING)
     jobIdToData(jobStart.jobId) = jobData
     activeJobs(jobStart.jobId) = jobData
+    for (stageId <- jobStart.stageIds) {
+      stageIdToActiveJobIds.getOrElseUpdate(stageId, new HashSet[StageId]).add(jobStart.jobId)
+    }
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
@@ -101,6 +105,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       case JobFailed(exception) =>
         failedJobs += jobData
         jobData.status = JobExecutionStatus.FAILED
+    }
+    for (stageId <- jobData.stageIds) {
+      stageIdToActiveJobIds.get(stageId).foreach(_.remove(jobEnd.jobId))
     }
   }
 
@@ -138,6 +145,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       stages.take(toRemove).foreach { s =>
         stageIdToData.remove((s.stageId, s.attemptId))
         stageIdToInfo.remove(s.stageId)
+        stageIdToActiveJobIds.remove(s.stageId)
       }
       stages.trimStart(toRemove)
     }
@@ -162,6 +170,14 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo])
     stages(stage.stageId) = stage
+
+    for (
+      activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
+      jobId <- activeJobsDependentOnStage;
+      jobData <- jobIdToData.get(jobId)
+    ) {
+      jobData.numTasks += stage.numTasks
+    }
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
@@ -173,6 +189,13 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       })
       stageData.numActiveTasks += 1
       stageData.taskData.put(taskInfo.taskId, new TaskUIData(taskInfo))
+    }
+    for (
+      activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskStart.stageId);
+      jobId <- activeJobsDependentOnStage;
+      jobData <- jobIdToData.get(jobId)
+    ) {
+      jobData.numActiveTasks += 1
     }
   }
 
@@ -208,6 +231,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       execSummary.taskTime += info.duration
       stageData.numActiveTasks -= 1
 
+      val isRecomputation = stageData.completedIndices.contains(info.index)
+
       val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
         taskEnd.reason match {
           case org.apache.spark.Success =>
@@ -231,6 +256,22 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskData.taskInfo = info
       taskData.taskMetrics = metrics
       taskData.errorMessage = errorMessage
+
+      for (
+        activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
+      ) {
+        jobData.numActiveTasks -= 1
+        taskEnd.reason match {
+          case Success =>
+            if (!isRecomputation) {
+              jobData.numCompletedTasks += 1
+            }
+          case _ =>
+            jobData.numFailedTasks += 1
+        }
+      }
     }
   }
 

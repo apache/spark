@@ -69,20 +69,6 @@ private[ui] class StageTableBase(
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: Int, total: Int): Seq[Node] =
-  {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
-
-    <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%; left:0;">
-        {completed}/{total} { if (failed > 0) s"($failed failed)" else "" }
-      </span>
-      <div class="bar bar-completed" style={completeWidth}></div>
-      <div class="bar bar-running" style={startWidth}></div>
-    </div>
-  }
-
   private def makeDescription(s: StageInfo): Seq[Node] = {
     // scalastyle:off
     val killLink = if (killEnabled) {
@@ -172,7 +158,7 @@ private[ui] class StageTableBase(
     <td valign="middle">{submissionTime}</td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
     <td class="progress-cell">
-      {makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,
+      {UIUtils.makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,
         stageData.numFailedTasks, s.numTasks)}
     </td>
     <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
