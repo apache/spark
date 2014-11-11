@@ -36,8 +36,8 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  */
 class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerParams {
 
-  def setInputCol(value: String): this.type = { set(inputCol, value); this }
-  def setOutputCol(value: String): this.type = { set(outputCol, value); this }
+  def setInputCol(value: String): this.type = set(inputCol, value)
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
     transform(dataset.schema, paramMap, logging = true)
@@ -74,8 +74,8 @@ class StandardScalerModel private[ml] (
     scaler: feature.StandardScalerModel)
   extends Model[StandardScalerModel] with StandardScalerParams {
 
-  def setInputCol(value: String): this.type = { set(inputCol, value); this }
-  def setOutputCol(value: String): this.type = { set(outputCol, value); this }
+  def setInputCol(value: String): this.type = set(inputCol, value)
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     transform(dataset.schema, paramMap, logging = true)

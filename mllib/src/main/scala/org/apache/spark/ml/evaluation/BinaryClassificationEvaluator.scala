@@ -32,10 +32,10 @@ class BinaryClassificationEvaluator extends Evaluator with Params
   val metricName: Param[String] = new Param(this, "metricName",
     "metric name in evaluation (areaUnderROC|areaUnderPR)", Some("areaUnderROC"))
   def getMetricName: String = get(metricName)
-  def setMetricName(value: String): this.type = { set(metricName, value); this }
+  def setMetricName(value: String): this.type = set(metricName, value)
 
-  def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
-  def setLabelCol(value: String): this.type = { set(labelCol, value); this }
+  def setScoreCol(value: String): this.type = set(scoreCol, value)
+  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   override def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double = {
     val map = this.paramMap ++ paramMap

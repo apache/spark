@@ -86,8 +86,8 @@ abstract class Transformer extends PipelineStage with Params {
 abstract class UnaryTransformer[IN, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
-  def setInputCol(value: String): T = { set(inputCol, value); this.asInstanceOf[T] }
-  def setOutputCol(value: String): T = { set(outputCol, value); this.asInstanceOf[T] }
+  def setInputCol(value: String): T = set(inputCol, value).asInstanceOf[T]
+  def setOutputCol(value: String): T = set(outputCol, value).asInstanceOf[T]
 
   /**
    * Creates the transform function using the given param map. The input param map already takes

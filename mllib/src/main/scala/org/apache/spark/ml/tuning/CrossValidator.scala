@@ -55,13 +55,10 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
 
   private val f2jBLAS = new F2jBLAS
 
-  def setEstimator(value: Estimator[_]): this.type = { set(estimator, value); this }
-  def setEstimatorParamMaps(value: Array[ParamMap]): this.type = {
-    set(estimatorParamMaps, value)
-    this
-  }
-  def setEvaluator(value: Evaluator): this.type = { set(evaluator, value); this }
-  def setNumFolds(value: Int): this.type = { set(numFolds, value); this }
+  def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
+  def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
+  def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
+  def setNumFolds(value: Int): this.type = set(numFolds, value)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): CrossValidatorModel = {
     val map = this.paramMap ++ paramMap

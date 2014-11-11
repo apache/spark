@@ -29,7 +29,7 @@ class HashingTF extends UnaryTransformer[Iterable[_], Vector, HashingTF] {
 
   /** number of features */
   val numFeatures = new IntParam(this, "numFeatures", "number of features", Some(1 << 18))
-  def setNumFeatures(value: Int) = { set(numFeatures, value); this }
+  def setNumFeatures(value: Int) = set(numFeatures, value)
   def getNumFeatures: Int = get(numFeatures)
 
   override protected def createTransformFunc(paramMap: ParamMap): Iterable[_] => Vector = {

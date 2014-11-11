@@ -75,13 +75,13 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
   setMaxIter(100)
   setThreshold(0.5)
 
-  def setRegParam(value: Double): this.type = { set(regParam, value); this }
-  def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
-  def setLabelCol(value: String): this.type = { set(labelCol, value); this }
-  def setThreshold(value: Double): this.type = { set(threshold, value); this }
-  def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }
-  def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
-  def setPredictionCol(value: String): this.type = { set(predictionCol, value); this }
+  def setRegParam(value: Double): this.type = set(regParam, value)
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+  def setThreshold(value: Double): this.type = set(threshold, value)
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  def setScoreCol(value: String): this.type = set(scoreCol, value)
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
     transform(dataset.schema, paramMap, logging = true)
@@ -116,10 +116,10 @@ class LogisticRegressionModel private[ml] (
     val weights: Vector)
   extends Model[LogisticRegressionModel] with LogisticRegressionParams {
 
-  def setThreshold(value: Double): this.type = { set(threshold, value); this }
-  def setFeaturesCol(value: String): this.type = { set(featuresCol, value); this }
-  def setScoreCol(value: String): this.type = { set(scoreCol, value); this }
-  def setPredictionCol(value: String): this.type = { set(predictionCol, value); this }
+  def setThreshold(value: Double): this.type = set(threshold, value)
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  def setScoreCol(value: String): this.type = set(scoreCol, value)
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(schema: StructType, paramMap: ParamMap): StructType = {
     transformSchema(schema, paramMap, fitting = false)
