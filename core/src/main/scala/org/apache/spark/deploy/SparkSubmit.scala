@@ -279,6 +279,10 @@ object SparkSubmit {
       sysProps.getOrElseUpdate(k, v)
     }
 
+    if (deployMode == CLUSTER) {
+      sysProps -= ("spark.driver.host")
+    }
+
     // Resolve paths in certain spark properties
     val pathConfigs = Seq(
       "spark.jars",
