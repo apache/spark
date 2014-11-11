@@ -95,7 +95,7 @@ class KafkaReceiver[
     consumerConnector = Consumer.create(consumerConfig)
     logInfo("Connected to " + zkConnect)
 
-    val keyDecoder = manifest[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
+    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[K]]
     val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
