@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark._
-import org.apache.spark.mllib.linalg.DenseMatrix
+import org.apache.spark.mllib.linalg.{Matrices, DenseMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
@@ -322,4 +322,81 @@ class BlockMatrix(
     val localMat = collect()
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.values)
   }
+
+  def add(other: DistributedMatrix): DistributedMatrix = {
+    other match {
+      // We really need a function to check if two matrices are partitioned similarly
+      case otherBlocked: BlockMatrix =>
+        if (checkPartitioning(otherBlocked, OperationNames.add)){
+          val addedBlocks = rdd.zip(otherBlocked.rdd).map{ case (a, b) =>
+            val result = a.mat.toBreeze + b.mat.toBreeze
+            new BlockPartition(a.blockIdRow, a.blockIdCol,
+              Matrices.fromBreeze(result).asInstanceOf[DenseMatrix])
+          }
+          new BlockMatrix(numRowBlocks, numColBlocks, addedBlocks, partitioner)
+        } else {
+          throw new SparkException(
+            "Cannot add matrices with non-matching partitioners")
+        }
+      case _ =>
+        throw new IllegalArgumentException("Cannot add matrices of different types")
+    }
+  }
+
+  def multiply(other: DistributedMatrix): BlockMatrix = {
+    other match {
+      case otherBlocked: BlockMatrix =>
+        if (checkPartitioning(otherBlocked, OperationNames.multiply)){
+
+          val resultPartitioner = new GridPartitioner(numRowBlocks, otherBlocked.numColBlocks,
+            partitioner.rowPerBlock, otherBlocked.partitioner.colPerBlock)
+
+          val multiplyBlocks = matrixRDD.join(otherBlocked.matrixRDD, partitioner).
+            map { case (key, (mat1, mat2)) =>
+            val C = mat1.mat multiply mat2.mat
+            (mat1.blockIdRow + numRowBlocks * mat2.blockIdCol, C.toBreeze)
+          }.reduceByKey(resultPartitioner, (a, b) => a + b)
+
+          val newBlocks = multiplyBlocks.map{ case (index, mat) =>
+            val colId = index / numRowBlocks
+            val rowId = index - colId * numRowBlocks
+            new BlockPartition(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
+          }
+          new BlockMatrix(numRowBlocks, otherBlocked.numColBlocks, newBlocks, resultPartitioner)
+        } else {
+          throw new SparkException(
+            "Cannot multiply matrices with non-matching partitioners")
+        }
+      case _ =>
+        throw new IllegalArgumentException("Cannot add matrices of different types")
+    }
+  }
+
+  private def checkPartitioning(other: BlockMatrix, operation: Int): Boolean = {
+    val otherPartitioner = other.partitioner
+    operation match {
+      case OperationNames.add =>
+        partitioner.equals(otherPartitioner)
+      case OperationNames.multiply =>
+        partitioner.name == "column" && otherPartitioner.name == "row" &&
+          partitioner.numPartitions == otherPartitioner.numPartitions &&
+          partitioner.colPerBlock == otherPartitioner.rowPerBlock &&
+          numColBlocks == other.numRowBlocks
+      case _ =>
+        throw new IllegalArgumentException("Unsupported operation")
+    }
+  }
+}
+
+/**
+ * Maintains supported and default block matrix operation names.
+ *
+ * Currently supported operations: `add`, `multiply`.
+ */
+private object OperationNames {
+
+  val add: Int = 1
+  val multiply: Int = 2
+
+}
 }
