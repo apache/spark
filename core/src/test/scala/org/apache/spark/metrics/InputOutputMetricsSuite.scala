@@ -17,19 +17,17 @@
 
 package org.apache.spark.metrics
 
-import java.io.{FileWriter, PrintWriter, File}
-import org.apache.hadoop.io.{Text, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-
-import org.apache.spark.util.Utils
-import org.apache.spark.SharedSparkContext
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.scheduler.{SparkListenerTaskEnd, SparkListener}
-
-import org.scalatest.FunSuite
+import java.io.{File, FileWriter, PrintWriter}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.apache.spark.SharedSparkContext
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.util.Utils
+import org.scalatest.FunSuite
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -69,6 +67,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
     val bytesRead2 = runAndReturnBytesRead {
       sc.textFile(tmpFilePath, 4).coalesce(2).count()
     }
+    assert(bytesRead != 0)
     assert(bytesRead2 == bytesRead)
     assert(bytesRead2 >= tmpFile.length())
   }
@@ -86,7 +85,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
     }
 
     // for count and coelesce, the same bytes should be read.
-    assert(bytesRead2 >= bytesRead2)
+    assert(bytesRead2 >= bytesRead)
   }
 
   test("input metrics for new Hadoop API with coalesce") {
@@ -98,6 +97,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
       sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
         classOf[Text]).coalesce(5).count()
     }
+    assert(bytesRead != 0)
     assert(bytesRead2 == bytesRead)
     assert(bytesRead >= tmpFile.length())
   }

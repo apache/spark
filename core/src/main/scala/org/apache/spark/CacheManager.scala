@@ -46,7 +46,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         // Partition is already materialized, so just return its values
         val existingMetrics = context.taskMetrics.inputMetrics
         val prevBytesRead = existingMetrics
-          .filter( _.readMethod == blockResult.inputMetrics.readMethod)
+          .filter(_.readMethod == blockResult.inputMetrics.readMethod)
           .map(_.bytesRead)
           .getOrElse(0L)
 

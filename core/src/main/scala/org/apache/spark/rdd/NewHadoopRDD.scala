@@ -185,7 +185,8 @@ class NewHadoopRDD[K, V](
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength + bytesReadAtStart
+              inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength +
+                bytesReadAtStart
               context.taskMetrics.inputMetrics = Some(inputMetrics)
             } catch {
               case e: java.io.IOException =>
