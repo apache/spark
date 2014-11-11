@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.hadoop.hive.ql.session.SessionState
+import scala.collection.JavaConversions._
 
-import org.apache.spark.scheduler.{SplitInfo, StatsReportListener}
-import org.apache.spark.Logging
+import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 /** A singleton object for the master program. The slaves should not access this. */
 private[hive] object SparkSQLEnv extends Logging {
@@ -33,14 +32,18 @@ private[hive] object SparkSQLEnv extends Logging {
 
   def init() {
     if (hiveContext == null) {
-      sparkContext = new SparkContext(new SparkConf()
-        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}"))
+      val sparkConf = new SparkConf()
+        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}")
+        .set("spark.sql.hive.version", "0.12.0")
+      sparkContext = new SparkContext(sparkConf)
 
       sparkContext.addSparkListener(new StatsReportListener())
+      hiveContext = new HiveContext(sparkContext)
 
-      hiveContext = new HiveContext(sparkContext) {
-        @transient override lazy val sessionState = SessionState.get()
-        @transient override lazy val hiveconf = sessionState.getConf
+      if (log.isDebugEnabled) {
+        hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
+          logDebug(s"HiveConf var: $k=$v")
+        }
       }
     }
   }

@@ -48,43 +48,35 @@ case class SetCommand(
   extends LeafNode with Command with Logging {
 
   override protected[sql] lazy val sideEffectResult: Seq[String] = (key, value) match {
-    // Set value for key k.
-    case (Some(k), Some(v)) =>
-      if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
-        logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+    // Configures the deprecated "mapred.reduce.tasks" property.
+    case (Some(SQLConf.Deprecated.MAPRED_REDUCE_TASKS), Some(v)) =>
+      logWarning(
+        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-        context.setConf(SQLConf.SHUFFLE_PARTITIONS, v)
-        Array(s"${SQLConf.SHUFFLE_PARTITIONS}=$v")
-      } else {
-        context.setConf(k, v)
-        Array(s"$k=$v")
-      }
+      context.setConf(SQLConf.SHUFFLE_PARTITIONS, v)
+      Seq(s"${SQLConf.SHUFFLE_PARTITIONS}=$v")
 
-    // Query the value bound to key k.
-    case (Some(k), _) =>
-      // TODO (lian) This is just a workaround to make the Simba ODBC driver work.
-      // Should remove this once we get the ODBC driver updated.
-      if (k == "-v") {
-        val hiveJars = Seq(
-          "hive-exec-0.12.0.jar",
-          "hive-service-0.12.0.jar",
-          "hive-common-0.12.0.jar",
-          "hive-hwi-0.12.0.jar",
-          "hive-0.12.0.jar").mkString(":")
+    // Configures a single property.
+    case (Some(k), Some(v)) =>
+      context.setConf(k, v)
+      Seq(s"$k=$v")
 
-        Array(
-          "system:java.class.path=" + hiveJars,
-          "system:sun.java.command=shark.SharkServer2")
-      }
-      else {
-        Array(s"$k=${context.getConf(k, "<undefined>")}")
-      }
+    // Queries all key-value pairs that are set in the SQLConf of the context. Notice that different
+    // from Hive, here "SET -v" is an alias of "SET". (In Hive, "SET" returns all changed properties
+    // while "SET -v" returns all properties.)
+    case (Some("-v") | None, None) =>
+      context.getAllConfs.map { case (k, v) => s"$k=$v" }.toSeq
 
-    // Query all key-value pairs that are set in the SQLConf of the context.
-    case (None, None) =>
-      context.getAllConfs.map { case (k, v) =>
-        s"$k=$v"
-      }.toSeq
+    // Queries the deprecated "mapred.reduce.tasks" property.
+    case (Some(SQLConf.Deprecated.MAPRED_REDUCE_TASKS), None) =>
+      logWarning(
+        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+          s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
+      Seq(s"${SQLConf.SHUFFLE_PARTITIONS}=${context.numShufflePartitions}")
+
+    // Queries a single property.
+    case (Some(k), None) =>
+      Seq(s"$k=${context.getConf(k, "<undefined>")}")
 
     case _ =>
       throw new IllegalArgumentException()

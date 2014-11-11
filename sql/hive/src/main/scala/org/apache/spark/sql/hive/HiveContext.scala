@@ -222,17 +222,29 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
-   * SQLConf and HiveConf contracts: when the hive session is first initialized, params in
-   * HiveConf will get picked up by the SQLConf.  Additionally, any properties set by
-   * set() or a SET command inside sql() will be set in the SQLConf *as well as*
-   * in the HiveConf.
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. reuse existing started SessionState if any
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   *    set in the SQLConf *as well as* in the HiveConf.
    */
-  @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient protected[hive] lazy val sessionState = {
-    val ss = new SessionState(hiveconf)
-    setConf(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
-    ss
-  }
+  @transient protected[hive] lazy val (hiveconf, sessionState) =
+    Option(SessionState.get())
+      .orElse {
+        val newState = new SessionState(new HiveConf(classOf[SessionState]))
+        // Only starts newly created `SessionState` instance.  Any existing `SessionState` instance
+        // returned by `SessionState.get()` must be the most recently started one.
+        SessionState.start(newState)
+        Some(newState)
+      }
+      .map { state =>
+        setConf(state.getConf.getAllProperties)
+        if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
+        if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
+        (state.getConf, state)
+      }
+      .get
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
@@ -290,6 +302,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
       SessionState.start(sessionState)
 
+      // Makes sure the session represented by the `sessionState` field is activated. This implies
+      // Spark SQL Hive support uses a single `SessionState` for all Hive operations and breaks
+      // session isolation under multi-user scenarios (i.e. HiveThriftServer2).
+      // TODO Fix session isolation
+      if (SessionState.get() != sessionState) {
+        SessionState.start(sessionState)
+      }
+
       proc match {
         case driver: Driver =>
           driver.init()
@@ -306,7 +326,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           driver.destroy()
           results
         case _ =>
-          sessionState.out.println(tokens(0) + " " + cmd_1)
+          if (sessionState.out != null) {
+            sessionState.out.println(tokens(0) + " " + cmd_1)
+          }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }
     } catch {

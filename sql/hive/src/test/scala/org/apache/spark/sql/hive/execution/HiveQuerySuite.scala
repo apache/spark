@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
-import org.apache.spark.sql.{SchemaRDD, Row}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -313,10 +312,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: registered table") {
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
-        TestData(2, "str2") :: Nil)
+        TestData(2, "str2") :: Nil).toSchemaRDD
     testData.registerTempTable("REGisteredTABle")
 
     assertResult(Array(Array(2, "str2"))) {
@@ -327,7 +326,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.exists(_ == "== Physical Plan ==")
+    explanation.contains("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -467,10 +466,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     // Describe a registered temporary table.
-    val testData: SchemaRDD =
+    val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
-        TestData(1, "str2") :: Nil)
+        TestData(1, "str2") :: Nil).toSchemaRDD
     testData.registerTempTable("test_describe_commands2")
 
     assertResult(
@@ -520,10 +519,15 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-
+    val KV = "([^=]+)=([^=]*)".r
+    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
+      rdd.collect().map {
+        case Row(key: String, value: String) => key -> value
+        case Row(KV(key, value)) => key -> value
+      }.toSet
     clear()
 
-    // "set" itself returns all config variables currently specified in SQLConf.
+    // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
     assert(sql("SET").collect().size == 0)
 
@@ -532,46 +536,21 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
-    }
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
       sql(s"SET").collect().map(_.getString(0))
     }
-
-    // "set key"
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey").collect().map(_.getString(0))
+    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      collectResults(sql("SET -v"))
     }
 
-    assertResult(Array(s"$nonexistentKey=<undefined>")) {
-      sql(s"SET $nonexistentKey").collect().map(_.getString(0))
-    }
-
-    // Assert that sql() should have the same effects as sql() by repeating the above using sql().
-    clear()
-    assert(sql("SET").collect().size == 0)
-
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey=$testVal").collect().map(_.getString(0))
-    }
-
-    assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql("SET").collect().map(_.getString(0))
-    }
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Array(s"$testKey=$testVal", s"${testKey + testKey}=${testVal + testVal}")) {
-      sql("SET").collect().map(_.getString(0))
-    }
-
-    assertResult(Array(s"$testKey=$testVal")) {
-      sql(s"SET $testKey").collect().map(_.getString(0))
+    // "SET key"
+    assertResult(Set(testKey -> testVal)) {
+      collectResults(sql(s"SET $testKey"))
     }
 
     assertResult(Array(s"$nonexistentKey=<undefined>")) {
