@@ -1229,7 +1229,6 @@
       <id>yarn-alpha</id>
       <modules>
         <module>yarn</module>
-        <module>network/yarn</module>
       </modules>
     </profile>
 
