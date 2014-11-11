@@ -37,7 +37,7 @@ class Param[T] (
     val parent: Params,
     val name: String,
     val doc: String,
-    val default: Option[T] = None) extends Serializable {
+    val defaultValue: Option[T] = None) extends Serializable {
 
   /**
    * Creates a param pair with the given value (for Java).
@@ -50,8 +50,8 @@ class Param[T] (
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
 
   override def toString: String = {
-    if (default.isDefined) {
-      s"$name: $doc (default: ${default.get})"
+    if (defaultValue.isDefined) {
+      s"$name: $doc (default: ${defaultValue.get})"
     } else {
       s"$name: $doc"
     }
@@ -61,32 +61,32 @@ class Param[T] (
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /** Specialized version of [[Param[Double]]] for Java. */
-class DoubleParam(parent: Params, name: String, doc: String, default: Option[Double] = None)
-    extends Param[Double](parent, name, doc, default) {
+class DoubleParam(parent: Params, name: String, doc: String, defaultValue: Option[Double] = None)
+    extends Param[Double](parent, name, doc, defaultValue) {
   override def w(value: Double): ParamPair[Double] = super.w(value)
 }
 
 /** Specialized version of [[Param[Int]]] for Java. */
-class IntParam(parent: Params, name: String, doc: String, default: Option[Int] = None)
-    extends Param[Int](parent, name, doc, default) {
+class IntParam(parent: Params, name: String, doc: String, defaultValue: Option[Int] = None)
+    extends Param[Int](parent, name, doc, defaultValue) {
   override def w(value: Int): ParamPair[Int] = super.w(value)
 }
 
 /** Specialized version of [[Param[Float]]] for Java. */
-class FloatParam(parent: Params, name: String, doc: String, default: Option[Float] = None)
-    extends Param[Float](parent, name, doc, default) {
+class FloatParam(parent: Params, name: String, doc: String, defaultValue: Option[Float] = None)
+    extends Param[Float](parent, name, doc, defaultValue) {
   override def w(value: Float): ParamPair[Float] = super.w(value)
 }
 
 /** Specialized version of [[Param[Long]]] for Java. */
-class LongParam(parent: Params, name: String, doc: String, default: Option[Long] = None)
-    extends Param[Long](parent, name, doc, default) {
+class LongParam(parent: Params, name: String, doc: String, defaultValue: Option[Long] = None)
+    extends Param[Long](parent, name, doc, defaultValue) {
   override def w(value: Long): ParamPair[Long] = super.w(value)
 }
 
 /** Specialized version of [[Param[Boolean]]] for Java. */
-class BooleanParam(parent: Params, name: String, doc: String, default: Option[Boolean] = None)
-    extends Param[Boolean](parent, name, doc, default) {
+class BooleanParam(parent: Params, name: String, doc: String, defaultValue: Option[Boolean] = None)
+    extends Param[Boolean](parent, name, doc, defaultValue) {
   override def w(value: Boolean): ParamPair[Boolean] = super.w(value)
 }
 
@@ -224,7 +224,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
    */
   def get[T](param: Param[T]): Option[T] = {
     map.get(param.asInstanceOf[Param[Any]])
-      .orElse(param.default)
+      .orElse(param.defaultValue)
       .asInstanceOf[Option[T]]
   }
 

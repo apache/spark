@@ -27,10 +27,10 @@ class ParamsSuite extends FunSuite {
   test("param") {
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "max number of iterations")
-    assert(maxIter.default.get === 100)
+    assert(maxIter.defaultValue.get === 100)
     assert(maxIter.parent.eq(solver))
     assert(maxIter.toString === "maxIter: max number of iterations (default: 100)")
-    assert(inputCol.default === None)
+    assert(inputCol.defaultValue === None)
   }
 
   test("param pair") {
@@ -47,7 +47,7 @@ class ParamsSuite extends FunSuite {
     val map0 = ParamMap.empty
 
     assert(!map0.contains(maxIter))
-    assert(map0(maxIter) === maxIter.default.get)
+    assert(map0(maxIter) === maxIter.defaultValue.get)
     map0.put(maxIter, 10)
     assert(map0.contains(maxIter))
     assert(map0(maxIter) === 10)
