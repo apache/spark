@@ -25,7 +25,7 @@ import org.apache.spark.shuffle.hash.HashShuffleReader
 
 private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager {
 
-  private val indexShuffleBlockManager = new IndexShuffleBlockManager()
+  private val indexShuffleBlockManager = new IndexShuffleBlockManager(conf)
   private val shuffleMapNumber = new ConcurrentHashMap[Int, Int]()
 
   /**
