@@ -95,7 +95,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     val cvModel = new CrossValidatorModel(this, map, bestModel)
-    Params.copyValues(this, cvModel)
+    Params.inheritValues(map, this, cvModel)
     cvModel
   }
 

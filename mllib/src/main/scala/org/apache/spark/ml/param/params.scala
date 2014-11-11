@@ -144,14 +144,9 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Internal param map.
-   */
-  protected val paramMap: ParamMap = ParamMap.empty
-
-  /**
    * Sets a parameter in the own parameter map.
    */
-  protected def set[T](param: Param[T], value: T): this.type = {
+  private[ml] def set[T](param: Param[T], value: T): this.type = {
     require(param.parent.eq(this))
     paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
@@ -160,10 +155,15 @@ trait Params extends Identifiable with Serializable {
   /**
    * Gets the value of a parameter.
    */
-  protected def get[T](param: Param[T]): T = {
+  private[ml] def get[T](param: Param[T]): T = {
     require(param.parent.eq(this))
     paramMap(param)
   }
+
+  /**
+   * Internal param map.
+   */
+  protected val paramMap: ParamMap = ParamMap.empty
 }
 
 private[ml] object Params {
@@ -174,12 +174,18 @@ private[ml] object Params {
   val empty: Params = new Params {}
 
   /**
-   * Copy parameter values that are explicitly set from one Params instance to another.
+   * Copies parameter values from the parent estimator to the child model it produced.
+   * @param paramMap the param map that holds parameters of the parent
+   * @param parent the parent estimator
+   * @param child the child model
    */
-  private[ml] def copyValues[F <: Params, T <: F](from: F, to: T): Unit = {
-    from.params.foreach { param =>
-      if (from.isSet(param)) {
-        to.set(to.getParam(param.name), from.get(param))
+  private[ml] def inheritValues[E <: Params, M <: E](
+      paramMap: ParamMap,
+      parent: E,
+      child: M): Unit = {
+    parent.params.foreach { param =>
+      if (paramMap.contains(param)) {
+        child.set(child.getParam(param.name), paramMap(param))
       }
     }
   }

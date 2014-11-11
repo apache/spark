@@ -49,7 +49,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
       }
     val scaler = new feature.StandardScaler().fit(input)
     val model = new StandardScalerModel(this, map, scaler)
-    Params.copyValues(this, model)
+    Params.inheritValues(map, this, model)
     model
   }
 

@@ -66,7 +66,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
     val lrm = new LogisticRegressionModel(this, map, lr.run(instances).weights)
     instances.unpersist()
     // copy model params
-    Params.copyValues(this, lrm)
+    Params.inheritValues(map, this, lrm)
     lrm
   }
 
