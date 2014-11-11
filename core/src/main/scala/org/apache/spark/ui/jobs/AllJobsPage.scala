@@ -44,7 +44,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       <th>Description</th>
       <th>Submitted</th>
       <th>Duration</th>
-      <th>Tasks: Succeeded/Total</th>
+      <th>Tasks (for all stages): Succeeded/Total</th>
     }
 
     def makeRow(job: JobUIData): Seq[Node] = {
