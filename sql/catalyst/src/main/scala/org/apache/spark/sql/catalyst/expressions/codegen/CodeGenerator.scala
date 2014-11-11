@@ -235,7 +235,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           val $primitiveTerm: ${termForType(dataType)} = $value
          """.children
 
-      case Cast(e @ BinaryType(), StringType) =>
+      case Cast(BinaryType(e), StringType) =>
         val eval = expressionEvaluator(e)
         eval.code ++
         q"""
@@ -247,16 +247,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
               new String(${eval.primitiveTerm}.asInstanceOf[Array[Byte]])
         """.children
 
-      case Cast(child @ NumericType(), IntegerType) =>
+      case Cast(NumericType(child), IntegerType) =>
         child.castOrNull(c => q"$c.toInt", IntegerType)
 
-      case Cast(child @ NumericType(), LongType) =>
+      case Cast(NumericType(child), LongType) =>
         child.castOrNull(c => q"$c.toLong", LongType)
 
-      case Cast(child @ NumericType(), DoubleType) =>
+      case Cast(NumericType(child), DoubleType) =>
         child.castOrNull(c => q"$c.toDouble", DoubleType)
 
-      case Cast(child @ NumericType(), FloatType) =>
+      case Cast(NumericType(child), FloatType) =>
         child.castOrNull(c => q"$c.toFloat", IntegerType)
 
       // Special handling required for timestamps in hive test cases since the toString function
@@ -301,13 +301,13 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         """.children
       */
 
-      case GreaterThan(e1 @ NumericType(), e2 @ NumericType()) =>
+      case GreaterThan(NumericType(e1), NumericType(e2)) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 > $eval2" }
-      case GreaterThanOrEqual(e1 @ NumericType(), e2 @ NumericType()) =>
+      case GreaterThanOrEqual(NumericType(e1), NumericType(e2)) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 >= $eval2" }
-      case LessThan(e1 @ NumericType(), e2 @ NumericType()) =>
+      case LessThan(NumericType(e1), NumericType(e2)) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 < $eval2" }
-      case LessThanOrEqual(e1 @ NumericType(), e2 @ NumericType()) =>
+      case LessThanOrEqual(NumericType(e1), NumericType(e2)) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 <= $eval2" }
 
       case And(e1, e2) =>
@@ -546,7 +546,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected def getColumn(inputRow: TermName, dataType: DataType, ordinal: Int) = {
     dataType match {
-      case dt @ NativeType() => q"$inputRow.${accessorForType(dt)}($ordinal)"
+      case NativeType(dt) => q"$inputRow.${accessorForType(dt)}($ordinal)"
       case _ => q"$inputRow.apply($ordinal).asInstanceOf[${termForType(dataType)}]"
     }
   }
@@ -557,7 +557,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       ordinal: Int,
       value: TermName) = {
     dataType match {
-      case dt @ NativeType() => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
+      case NativeType(dt) => q"$destinationRow.${mutatorForType(dt)}($ordinal, $value)"
       case _ => q"$destinationRow.update($ordinal, $value)"
     }
   }

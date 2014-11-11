@@ -62,6 +62,10 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
+object BinaryPredicate {
+  def unapply(a: BinaryPredicate): Option[(Expression, Expression)] = Some((a.left, a.right))
+}
+
 abstract class BinaryPredicate extends BinaryExpression with Predicate {
   self: Product =>
   def nullable = left.nullable || right.nullable
@@ -99,7 +103,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression])
   extends Predicate {
 
   def children = child
@@ -154,6 +158,10 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
       }
     }
   }
+}
+
+object BinaryComparison {
+  def unapply(a: BinaryComparison): Option[(Expression, Expression)] = Some((a.left, a.right))
 }
 
 abstract class BinaryComparison extends BinaryPredicate {

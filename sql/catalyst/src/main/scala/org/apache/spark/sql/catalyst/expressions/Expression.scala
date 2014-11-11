@@ -227,6 +227,10 @@ abstract class Expression extends TreeNode[Expression] {
   }
 }
 
+object BinaryExpression {
+  def unapply(a: BinaryExpression): Option[(Expression, Expression)] = Some((a.left, a.right))
+}
+
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
@@ -243,6 +247,4 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
-
-
 }
