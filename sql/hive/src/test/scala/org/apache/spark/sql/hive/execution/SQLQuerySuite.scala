@@ -48,20 +48,6 @@ class SQLQuerySuite extends QueryTest {
           ORDER BY value) a""").collect().toSeq)
   }
 
-  test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil).registerTempTable("nested")
-    checkAnswer(
-      sql("SELECT f1.f2.f3 FROM nested"),
-      1)
-  }
-
-  test("test CTAS") {
-    checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
-    checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
-      sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
-  }
-
   test("SPARK-3708 Backticks aren't handled correctly is aliases") {
     checkAnswer(
       sql("SELECT k FROM (SELECT `key` AS `k` FROM src) a"),
