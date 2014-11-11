@@ -776,6 +776,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("comparison operators for RichDate and RichTimestamp") {
+    import org.scalatest.Assertions.{convertToEqualizer => EQ}
     assert(EQ(RichDate("2014-11-05") < RichDate("2014-11-06")).===(true))
     assert(EQ(RichDate("2014-11-05") <= RichDate("2013-11-06")).===(false))
     assert(EQ(RichTimestamp("2014-11-05 12:34:56.5432") > RichTimestamp("2014-11-05 00:00:00"))
