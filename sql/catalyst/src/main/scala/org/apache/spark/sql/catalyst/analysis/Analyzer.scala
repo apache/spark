@@ -39,7 +39,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
 
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
-  val fixedPoint = Option(System.getProperty("spark.catalyst.fixedPoint")).getOrElse("100").toInt
+  val fixedPoint = FixedPoint(Option(System.getProperty("spark.catalyst.fixedPoint")).getOrElse("100").toInt)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
