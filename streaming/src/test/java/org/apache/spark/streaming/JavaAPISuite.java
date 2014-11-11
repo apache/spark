@@ -1241,6 +1241,49 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @SuppressWarnings("unchecked")
   @Test
+  public void testUpdateStateByKeyWithInitial() {
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
+
+    List<Tuple2<String, Integer>> initial = Arrays.asList (
+            new Tuple2<String, Integer> ("california", 1),
+            new Tuple2<String, Integer> ("new york", 2));
+
+    JavaRDD<Tuple2<String, Integer>> tmpRDD = ssc.sparkContext().parallelize(initial);
+    JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD (tmpRDD);
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, Integer>("california", 5),
+            new Tuple2<String, Integer>("new york", 7)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 15),
+            new Tuple2<String, Integer>("new york", 11)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 15),
+            new Tuple2<String, Integer>("new york", 11)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> updated = pairStream.updateStateByKey(
+        new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
+        @Override
+        public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
+          int out = 0;
+          if (state.isPresent()) {
+            out = out + state.get();
+          }
+          for (Integer v: values) {
+            out = out + v;
+          }
+          return Optional.of(out);
+        }
+        }, new HashPartitioner(1), initialRDD);
+    JavaTestUtils.attachTestOutputStream(updated);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void testReduceByKeyAndWindowWithInverse() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 

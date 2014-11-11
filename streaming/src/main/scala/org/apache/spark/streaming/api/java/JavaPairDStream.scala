@@ -443,6 +443,23 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     scalaFunc
   }
 
+  private def convertUpdateStateFunctionWithIterator[S]
+  (in: JFunction2[JList[V], Optional[S], Optional[S]]):
+  (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)] = {
+    val scalaFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)] = (iterator) => {
+      iterator.flatMap { t =>
+        val list: JList[V] = t._2
+        val scalaState: Optional[S] = JavaUtils.optionToOptional(t._3)
+        val result: Optional[S] = in.apply(list, scalaState)
+        result.isPresent match {
+          case true => Some((t._1, result.get()))
+          case _ => None
+        }
+      }
+    }
+    scalaFunc
+  }
+
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
@@ -492,6 +509,26 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.updateStateByKey(convertUpdateStateFunction(updateFunc), partitioner)
   }
 
+  /**
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of the key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream.
+   * @param initialRDD initial state value of each key.
+   * @tparam S State type
+   */
+  def updateStateByKey[S](
+      updateFunc: JFunction2[JList[V], Optional[S], Optional[S]],
+      partitioner: Partitioner,
+      initialRDD: JavaPairRDD[K, S]
+  ): JavaPairDStream[K, S] = {
+    implicit val cm: ClassTag[S] = fakeClassTag
+    dstream.updateStateByKey(convertUpdateStateFunctionWithIterator(updateFunc),
+      partitioner, true, initialRDD)
+  }
 
   /**
    * Return a new DStream by applying a map function to the value of each key-value pairs in
