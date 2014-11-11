@@ -29,7 +29,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-network-common_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Common Network Code</name>
+  <name>Spark Project Networking</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-common</sbt.project.name>
@@ -50,6 +50,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <version>11.0.2</version> <!-- yarn 2.4.0's version -->
       <scope>provided</scope>
     </dependency>
 

@@ -17,16 +17,21 @@
 
 package org.apache.spark.metrics
 
-import org.scalatest.FunSuite
+import java.io.{FileWriter, PrintWriter, File}
 
 import org.apache.spark.SharedSparkContext
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListenerTaskEnd, SparkListener}
+
+import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem}
 
 import scala.collection.mutable.ArrayBuffer
 
-import java.io.{FileWriter, PrintWriter, File}
-
-class InputMetricsSuite extends FunSuite with SharedSparkContext {
+class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with ShouldMatchers {
   test("input metrics when reading text file with single split") {
     val file = new File(getClass.getSimpleName + ".txt")
     val pw = new PrintWriter(new FileWriter(file))
@@ -72,5 +77,33 @@ class InputMetricsSuite extends FunSuite with SharedSparkContext {
     sc.listenerBus.waitUntilEmpty(500)
     assert(taskBytesRead.length == 2)
     assert(taskBytesRead.sum >= file.length())
+  }
+
+  test("output metrics when writing text file") {
+    val fs = FileSystem.getLocal(new Configuration())
+    val outPath = new Path(fs.getWorkingDirectory, "outdir")
+
+    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(outPath, fs.getConf).isDefined) {
+      val taskBytesWritten = new ArrayBuffer[Long]()
+      sc.addSparkListener(new SparkListener() {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+          taskBytesWritten += taskEnd.taskMetrics.outputMetrics.get.bytesWritten
+        }
+      })
+
+      val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
+
+      try {
+        rdd.saveAsTextFile(outPath.toString)
+        sc.listenerBus.waitUntilEmpty(500)
+        assert(taskBytesWritten.length == 2)
+        val outFiles = fs.listStatus(outPath).filter(_.getPath.getName != "_SUCCESS")
+        taskBytesWritten.zip(outFiles).foreach { case (bytes, fileStatus) =>
+          assert(bytes >= fileStatus.getLen)
+        }
+      } finally {
+        fs.delete(outPath, true)
+      }
+    }
   }
 }

@@ -115,7 +115,7 @@ private[spark] class FixedLengthBinaryRecordReader
     if (currentPosition < splitEnd) {
       // setup a buffer to store the record
       val buffer = recordValue.getBytes
-      fileInputStream.read(buffer, 0, recordLength)
+      fileInputStream.readFully(buffer)
       // update our current position
       currentPosition = currentPosition + recordLength
       // return true
