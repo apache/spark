@@ -189,7 +189,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = makeBlockManager(2000, "exec1")
     store2 = makeBlockManager(2000, "exec2")
 
-    val peers = master.getPeers(store.blockManagerId, 1)
+    val peers = master.getPeers(store.blockManagerId)
     assert(peers.size === 1, "master did not return the other manager as a peer")
     assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
 
@@ -448,7 +448,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
-    System.out.println(list2DiskGet)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
     assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
     assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
