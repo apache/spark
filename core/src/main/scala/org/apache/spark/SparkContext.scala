@@ -202,7 +202,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
-  // Set Spark driver host and port system properties. Ignore host setting in yarn-cluster mode.
+  // Set Spark driver host and port system properties. Ignore host setting in all cluster modes.
   if (master.contains("cluster")) {
     conf.set("spark.driver.host", Utils.localHostName())
   } else {
