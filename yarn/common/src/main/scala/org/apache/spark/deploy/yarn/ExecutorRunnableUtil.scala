@@ -111,20 +111,16 @@ trait ExecutorRunnableUtil extends Logging {
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
-    val userClassPath =
-      if (ClientBase.isUserClassPathFirst(sparkConf, false)) {
-        ClientBase.getUserClasspath(null, sparkConf).flatMap { uri =>
-          val absPath =
-            if (new File(uri.getPath()).isAbsolute()) {
-              uri.getPath()
-            } else {
-              ClientBase.buildPath(Environment.PWD.$(), uri.getPath())
-            }
-          Seq("--user-class-path", "file:" + absPath)
-        }.toSeq
-      } else {
-        Nil
-      }
+    val userClassPath = ClientBase.getUserClasspath(null, sparkConf).flatMap { uri =>
+      val absPath =
+        if (new File(uri.getPath()).isAbsolute()) {
+          uri.getPath()
+        } else {
+          ClientBase.buildPath(Environment.PWD.$(), uri.getPath())
+        }
+      Seq("--user-class-path", "file:" + absPath)
+    }.toSeq
+
     val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java",
       "-server",
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
