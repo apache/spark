@@ -201,7 +201,7 @@ class GMMExpectationMaximization private (
   /** Sum the values in array of doubles */
   private def sum(x : Array[Double]) : Double = {
     var s : Double = 0.0
-    x.foreach(u => s += u)
+    (0 until x.length).foreach(j => s += x(j))
     s
   }
   

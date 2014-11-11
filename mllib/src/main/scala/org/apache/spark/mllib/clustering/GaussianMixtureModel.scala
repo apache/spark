@@ -25,7 +25,10 @@ import org.apache.spark.mllib.linalg.Vector
  * from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are the respective 
  * mean and covariance for each Gaussian distribution i=1..k. 
  */
-class GaussianMixtureModel(val w: Array[Double], val mu: Array[Vector], val sigma: Array[Matrix]) {
+class GaussianMixtureModel(
+  val w: Array[Double], 
+  val mu: Array[Vector], 
+  val sigma: Array[Matrix]) extends Serializable {
   
   /** Number of gaussians in mixture */
   def k: Int = w.length;
