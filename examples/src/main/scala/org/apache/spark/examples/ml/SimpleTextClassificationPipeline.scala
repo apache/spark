@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.{StringType, DataType, SQLContext}
-
 import scala.beans.BeanInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -26,6 +24,7 @@ import org.apache.spark.ml.{Pipeline, UnaryTransformer}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.sql.{DataType, SQLContext, StringType}
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
