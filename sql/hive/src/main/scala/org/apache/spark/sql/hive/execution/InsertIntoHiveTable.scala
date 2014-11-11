@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util
+
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.common.`type`.HiveVarchar
@@ -203,6 +205,13 @@ case class InsertIntoHiveTable(
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
     val holdDDLTime = false
     if (partition.nonEmpty) {
+
+      // loadPartition call orders directories created on the iteration order of the this map
+      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
+      table.hiveQlTable.getPartCols().foreach{
+        entry=>
+          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
       db.validatePartitionNameCharacters(partVals)
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
@@ -214,7 +223,7 @@ case class InsertIntoHiveTable(
         db.loadDynamicPartitions(
           outputPath,
           qualifiedTableName,
-          partitionSpec,
+          orderedPartitionSpec,
           overwrite,
           numDynamicPartitions,
           holdDDLTime,
@@ -224,7 +233,7 @@ case class InsertIntoHiveTable(
         db.loadPartition(
           outputPath,
           qualifiedTableName,
-          partitionSpec,
+          orderedPartitionSpec,
           overwrite,
           holdDDLTime,
           inheritTableSpecs,

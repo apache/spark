@@ -390,6 +390,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case d: DecimalType => HiveShim.decimalMetastoreString(d)
     case TimestampType => "timestamp"
     case NullType => "void"
+    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
 }
 
