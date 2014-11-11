@@ -270,8 +270,14 @@ object Assembly {
 
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
-    jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
-      Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
+    jarName in assembly <<= (version, moduleName) map { (v, mName) =>
+      if (mName.contains("network-yarn")) {
+        // This must match the same name used in maven (see network/yarn/pom.xml)
+        "spark-" + v + "-yarn-shuffle.jar"
+      } else {
+        mName + "-" + v + "-hadoop" + Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar"
+      }
+    },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
