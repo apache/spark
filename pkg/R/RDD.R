@@ -426,7 +426,8 @@ setMethod("flatMap",
           function(X, FUN) {
             partitionFunc <- function(part) {
               unlist(
-                lapply(part, FUN)
+                lapply(part, FUN),
+                recursive = F
               )
             }
             lapplyPartition(X, partitionFunc)
@@ -932,6 +933,36 @@ setMethod("mapValues",
               list(x[[1]], FUN(x[[2]]))
             }
             lapply(X, func)
+          })
+
+#' Pass each value in the key-value pair RDD through a flatMap function without
+#' changing the keys; this also retains the original RDD's partitioning.
+#' 
+#' The same as 'flatMapValues()' in Spark.
+#'
+#' @param X The RDD to apply the transformation.
+#' @param FUN the transformation to apply on the value of each element.
+#' @return a new RDD created by the transformation.
+#' @rdname flatMapValues
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list(1, c(1,2)), list(2, c(3,4))))
+#' collect(flatMapValues(rdd, function(x) { x }))
+#' Output: list(list(1,1), list(1,2), list(2,3), list(2,4))
+#'}
+setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") })
+
+#' @rdname flatMapValues
+#' @aliases flatMapValues,RDD,function-method
+setMethod("flatMapValues",
+          signature(X = "RDD", FUN = "function"),
+          function(X, FUN) {
+            flatMapFunc <- function(x) {
+              lapply(FUN(x[[2]]), function(v) { list(x[[1]], v) })
+            }
+            flatMap(X, flatMapFunc)
           })
 
 ############ Shuffle Functions ############

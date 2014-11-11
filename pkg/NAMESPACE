@@ -13,6 +13,7 @@ exportMethods(
               "Filter",
               "filter",
               "flatMap",
+              "flatMapValues",
               "groupByKey",
               "keys",
               "length",

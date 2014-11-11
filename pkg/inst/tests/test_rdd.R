@@ -33,6 +33,12 @@ test_that("mapPartitions on RDD", {
   expect_equal(actual, list(15, 40))
 })
 
+test_that("flatMap() on RDDs", {
+  flat <- flatMap(intRdd, function(x) { list(x, x) })
+  actual <- collect(flat)
+  expect_equal(actual, rep(intPairs, each=2))
+})
+
 test_that("Filter on RDD", {
   filtered.rdd <- Filter(function(x) { x %% 2 == 0 }, rdd)
   actual <- collect(filtered.rdd)
@@ -184,6 +190,18 @@ test_that("mapValues() on pairwise RDDs", {
   expect_equal(actual, lapply(intPairs, function(x) {
     list(x[[1]], x[[2]] * 2)
     }))
+})
+
+test_that("flatMapValues() on pairwise RDDs", {
+  l <- parallelize(sc, list(list(1, c(1,2)), list(2, c(3,4))))
+  actual <- collect(flatMapValues(l, function(x) { x }))
+  expect_equal(actual, list(list(1,1), list(1,2), list(2,3), list(2,4)))
+  
+  # Generate x to x+1 for every value
+  actual <- collect(flatMapValues(intRdd, function(x) { x:(x + 1) }))
+  expect_equal(actual, 
+               list(list(1L, -1), list(1L, 0), list(2L, 100), list(2L, 101),
+                    list(2L, 1), list(2L, 2), list(1L, 200), list(1L, 201)))
 })
 
 test_that("distinct() on RDDs", {
