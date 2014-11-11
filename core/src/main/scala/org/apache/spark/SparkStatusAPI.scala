@@ -109,3 +109,4 @@ private[spark] object SparkStatusAPI {
     new SparkStatusAPI(sc)
   }
 }
+

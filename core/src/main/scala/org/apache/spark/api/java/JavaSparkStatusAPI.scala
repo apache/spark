@@ -74,3 +74,4 @@ private[spark] object JavaSparkStatusAPI {
     new JavaSparkStatusAPI(sc)
   }
 }
+
