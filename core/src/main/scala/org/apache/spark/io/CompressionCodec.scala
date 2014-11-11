@@ -49,46 +49,29 @@ trait CompressionCodec {
 
 private[spark] object CompressionCodec extends Logging {
 
-  private val configKey = "spark.io.compression.codec"
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
 
   def createCodec(conf: SparkConf): CompressionCodec = {
-    conf.getOption(configKey)
-        .map(createCodec(conf, _))
-        .orElse(createCodecFromName(conf, DEFAULT_COMPRESSION_CODEC))
-        .orElse({
-          logWarning("Default codec " + DEFAULT_COMPRESSION_CODEC +
-            " is unavailable. Faling back to " + FALLBACK_COMPRESSION_CODEC)
-          createCodecFromName(conf, FALLBACK_COMPRESSION_CODEC)
-        })
-        .getOrElse(throw new IllegalArgumentException("The codec [" +
-          FALLBACK_COMPRESSION_CODEC + "] is not available."))
+    createCodec(conf, conf.get("spark.io.compression.codec", DEFAULT_COMPRESSION_CODEC))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    createCodecFromName(conf, codecName)
-      .getOrElse(throw new IllegalArgumentException("The specified codec [" +
-                  codecName + "] is not available."))
-  }
-
-  private def createCodecFromName(conf: SparkConf, codecName : String)
-      : Option[CompressionCodec] = {
     val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
-    try {
+    val codec = try {
       val ctor = Class.forName(codecClass, true, Utils.getContextOrSparkClassLoader)
         .getConstructor(classOf[SparkConf])
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
-        .filter(_.isAvailable())
     } catch {
       case e: ClassNotFoundException => None
     }
+    codec.filter(_.isAvailable())
+      .getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available."))
   }
 
   val DEFAULT_COMPRESSION_CODEC = "snappy"
-  val FALLBACK_COMPRESSION_CODEC = "lzf"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
