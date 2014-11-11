@@ -61,7 +61,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
       case "areaUnderPR" =>
         metrics.areaUnderPR()
       case other =>
-        throw new IllegalArgumentException(s"Do not support metric $other.")
+        throw new IllegalArgumentException(s"Does not support metric $other.")
     }
     metrics.unpersist()
     metric
