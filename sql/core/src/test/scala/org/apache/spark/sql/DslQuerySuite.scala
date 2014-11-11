@@ -158,6 +158,10 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       testData2.groupBy()(avg('a)),
       2.0)
+
+    checkAnswer(
+      testData2.groupBy()(avg('a), sumDistinct('a)), // non-partial
+      (2.0, 6.0) :: Nil)
   }
 
   test("null average") {
@@ -168,16 +172,28 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       testData3.groupBy()(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
+
+    checkAnswer(
+      testData3.groupBy()(avg('b), sumDistinct('b)), // non-partial
+      (2.0, 2.0) :: Nil)
   }
 
   test("zero average") {
     checkAnswer(
       emptyTableData.aggregate(avg('a)),
       null)
+
+    checkAnswer(
+      emptyTableData.aggregate(avg('a), sumDistinct('b)), // non-partial
+      (null, null) :: Nil)
   }
 
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
+
+    checkAnswer(
+      testData2.aggregate(count('a), sumDistinct('a)), // non-partial
+      (6, 6.0) :: Nil)
   }
 
   test("null count") {
@@ -195,10 +211,19 @@ class DslQuerySuite extends QueryTest {
       testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
     )
+
+    checkAnswer(
+      testData3.groupBy()(count('b), countDistinct('b), sumDistinct('b)), // non-partial
+      (1, 1, 2) :: Nil
+    )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.aggregate(count('a), sumDistinct('a)), // non-partial
+      (0, null) :: Nil)
   }
 
   test("zero sum") {
