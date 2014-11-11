@@ -32,7 +32,39 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends Params
   with HasRegParam with HasMaxIter with HasLabelCol with HasThreshold with HasFeaturesCol
-  with HasScoreCol with HasPredictionCol
+  with HasScoreCol with HasPredictionCol {
+
+  /**
+   * Validates and transforms the input schema with the provided param map.
+   * @param schema input schema
+   * @param paramMap additional parameters
+   * @param fitting whether this is in fitting
+   * @return output schema
+   */
+  protected def transformSchema(
+      schema: StructType,
+      paramMap: ParamMap,
+      fitting: Boolean): StructType = {
+    val map = this.paramMap ++ paramMap
+    val featuresType = schema(map(featuresCol)).dataType
+    // TODO: Support casting Array[Double] and Array[Float] to Vector.
+    require(featuresType.isInstanceOf[VectorUDT],
+      s"Features column ${map(featuresCol)} must be a vector column but got $featuresType.")
+    if (fitting) {
+      val labelType = schema(map(labelCol)).dataType
+      require(labelType == DoubleType,
+        s"Cannot convert label column ${map(labelCol)} of type $labelType to a double column.")
+    }
+    val fieldNames = schema.fieldNames
+    require(!fieldNames.contains(map(scoreCol)), s"Score column ${map(scoreCol)} already exists.")
+    require(!fieldNames.contains(map(predictionCol)),
+      s"Prediction column ${map(predictionCol)} already exists.")
+    val outputFields = schema.fields ++ Seq(
+      StructField(map(scoreCol), DoubleType, false),
+      StructField(map(predictionCol), DoubleType, false))
+    StructType(outputFields)
+  }
+}
 
 /**
  * Logistic regression.
@@ -71,22 +103,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
   }
 
   override def transform(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    val featuresType = schema(map(featuresCol)).dataType
-    // TODO: Support casting Array[Double] and Array[Float] to Vector.
-    require(featuresType.isInstanceOf[VectorUDT],
-      s"Features column ${map(featuresCol)} must be a vector column but got $featuresType.")
-    val labelType = schema(map(labelCol)).dataType
-    require(labelType == DoubleType,
-      s"Cannot convert label column ${map(labelCol)} of type $labelType to a double column.")
-    val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(map(scoreCol)), s"Score column ${map(scoreCol)} already exists.")
-    require(!fieldNames.contains(map(predictionCol)),
-      s"Prediction column ${map(predictionCol)} already exists.")
-    val outputFields = schema.fields ++ Seq(
-      StructField(map(scoreCol), DoubleType, false),
-      StructField(map(predictionCol), DoubleType, false))
-    StructType(outputFields)
+    transformSchema(schema, paramMap, fitting = true)
   }
 }
 
@@ -104,19 +121,7 @@ class LogisticRegressionModel private[ml] (
   def setPredictionCol(value: String): this.type = { set(predictionCol, value); this }
 
   override def transform(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = this.paramMap ++ paramMap
-    val featuresType = schema(map(featuresCol)).dataType
-    // TODO: Support casting Array[Double] and Array[Float] to Vector.
-    require(featuresType.isInstanceOf[VectorUDT],
-      s"Features column ${map(featuresCol)} must be a vector column but got $featuresType.")
-    val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(map(scoreCol)), s"Score column ${map(scoreCol)} already exists.")
-    require(!fieldNames.contains(map(predictionCol)),
-      s"Prediction column ${map(predictionCol)} already exists.")
-    val outputFields = schema.fields ++ Seq(
-      StructField(map(scoreCol), DoubleType, false),
-      StructField(map(predictionCol), DoubleType, false))
-    StructType(outputFields)
+    transformSchema(schema, paramMap, fitting = false)
   }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
