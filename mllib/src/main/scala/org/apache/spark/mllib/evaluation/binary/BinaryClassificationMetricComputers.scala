@@ -20,26 +20,41 @@ package org.apache.spark.mllib.evaluation.binary
 /**
  * Trait for a binary classification evaluation metric computer.
  */
-private[evaluation] trait BinaryClassificationMetricComputer extends Serializable {
+private[mllib] trait BinaryClassificationMetricComputer extends Serializable {
   def apply(c: BinaryConfusionMatrix): Double
 }
 
 /** Precision. */
-private[evaluation] object Precision extends BinaryClassificationMetricComputer {
+private[mllib] object Precision extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
     c.numTruePositives.toDouble / (c.numTruePositives + c.numFalsePositives)
 }
 
 /** False positive rate. */
-private[evaluation] object FalsePositiveRate extends BinaryClassificationMetricComputer {
+private[mllib] object FalsePositiveRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
     c.numFalsePositives.toDouble / c.numNegatives
 }
 
 /** Recall. */
-private[evaluation] object Recall extends BinaryClassificationMetricComputer {
+private[mllib] object Recall extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
     c.numTruePositives.toDouble / c.numPositives
+}
+
+/**
+ * MatthewsCorrelationCoefficient
+ * @see http://en.wikipedia.org/wiki/Matthews_correlation_coefficient
+ */
+private[mllib] object MatthewsCorrelationCoefficient extends BinaryClassificationMetricComputer {
+  override def apply(c: BinaryConfusionMatrix): Double = {
+    val a = c.numTruePositives * c.numTrueNegatives - c.numFalsePositives * c.numFalseNegatives
+    val b = (c.numTruePositives + c.numFalsePositives) *
+      (c.numTruePositives + c.numFalseNegatives) *
+      (c.numTrueNegatives + c.numFalsePositives) *
+      (c.numTrueNegatives + c.numFalseNegatives)
+    a / Math.sqrt(b)
+  }
 }
 
 /**
@@ -47,7 +62,7 @@ private[evaluation] object Recall extends BinaryClassificationMetricComputer {
  * @param beta the beta constant in F-Measure
  * @see http://en.wikipedia.org/wiki/F1_score
  */
-private[evaluation] case class FMeasure(beta: Double) extends BinaryClassificationMetricComputer {
+private[mllib] case class FMeasure(beta: Double) extends BinaryClassificationMetricComputer {
   private val beta2 = beta * beta
   override def apply(c: BinaryConfusionMatrix): Double = {
     val precision = Precision(c)
