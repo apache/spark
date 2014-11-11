@@ -53,7 +53,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
     val scoreAndLabels = dataset.select(map(scoreCol).attr, map(labelCol).attr)
       .map { case Row(score: Double, label: Double) =>
         (score, label)
-      }.persist(StorageLevel.MEMORY_AND_DISK)
+      }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = map(metricName) match {
       case "areaUnderROC" =>
@@ -63,7 +63,7 @@ class BinaryClassificationEvaluator extends Evaluator with Params
       case other =>
         throw new IllegalArgumentException(s"Do not support metric $other.")
     }
-    scoreAndLabels.unpersist()
+    metrics.unpersist()
     metric
   }
 }

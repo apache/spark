@@ -31,7 +31,7 @@ abstract class Model[M <: Model[M]] extends Transformer {
   val parent: Estimator[M]
 
   /**
-   * Fitting parameters, such that parent.fit(..., trainingParamMap) could reproduce the model.
+   * Fitting parameters, such that parent.fit(..., fittingParamMap) could reproduce the model.
    */
   val fittingParamMap: ParamMap
 }

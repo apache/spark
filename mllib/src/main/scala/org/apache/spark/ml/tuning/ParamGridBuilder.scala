@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.ml.param._
 
 /**
- * Builder for a param grid used in grid search.
+ * Builder for a param grid used in grid search-based model selection.
  */
 class ParamGridBuilder {
 
