@@ -44,7 +44,7 @@ private[classification] trait LogisticRegressionParams extends Params
    * @param fitting whether this is in fitting
    * @return output schema
    */
-  protected def transformSchema(
+  protected def validateAndTransformSchema(
       schema: StructType,
       paramMap: ParamMap,
       fitting: Boolean): StructType = {
@@ -87,7 +87,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val instances = dataset.select(map(labelCol).attr, map(featuresCol).attr)
@@ -105,8 +105,8 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
     lrm
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
-    transformSchema(schema, paramMap, fitting = true)
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    validateAndTransformSchema(schema, paramMap, fitting = true)
   }
 }
 
@@ -126,12 +126,12 @@ class LogisticRegressionModel private[ml] (
   def setScoreCol(value: String): this.type = set(scoreCol, value)
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
-    transformSchema(schema, paramMap, fitting = false)
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    validateAndTransformSchema(schema, paramMap, fitting = false)
   }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val score: Vector => Double = (v) => {

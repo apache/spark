@@ -66,7 +66,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): CrossValidatorModel = {
     val map = this.paramMap ++ paramMap
     val schema = dataset.schema
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     val sqlCtx = dataset.sqlContext
     val est = map(estimator)
     val eval = map(evaluator)
@@ -99,9 +99,9 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     cvModel
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
-    map(estimator).transform(schema, paramMap)
+    map(estimator).transformSchema(schema, paramMap)
   }
 }
 
@@ -120,7 +120,7 @@ class CrossValidatorModel private[ml] (
     bestModel.transform(dataset, paramMap)
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
-    bestModel.transform(schema, paramMap)
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    bestModel.transformSchema(schema, paramMap)
   }
 }

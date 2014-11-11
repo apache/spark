@@ -34,16 +34,19 @@ abstract class PipelineStage extends Serializable with Logging {
   /**
    * Derives the output schema from the input schema and parameters.
    */
-  def transform(schema: StructType, paramMap: ParamMap): StructType
+  def transformSchema(schema: StructType, paramMap: ParamMap): StructType
 
   /**
    * Derives the output schema from the input schema and parameters, optionally with logging.
    */
-  protected def transform(schema: StructType, paramMap: ParamMap, logging: Boolean): StructType = {
+  protected def transformSchema(
+      schema: StructType,
+      paramMap: ParamMap,
+      logging: Boolean): StructType = {
     if (logging) {
       logDebug(s"Input schema: ${schema.json}")
     }
-    val outputSchema = transform(schema, paramMap)
+    val outputSchema = transformSchema(schema, paramMap)
     if (logging) {
       logDebug(s"Expected output schema: ${outputSchema.json}")
     }
@@ -85,7 +88,7 @@ class Pipeline extends Estimator[PipelineModel] {
    * @return fitted pipeline
    */
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     // Search for the last estimator.
@@ -120,12 +123,12 @@ class Pipeline extends Estimator[PipelineModel] {
     new PipelineModel(this, map, transformers.toArray)
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     require(theStages.toSet.size == theStages.size,
       "Cannot have duplicate components in a pipeline.")
-    theStages.foldLeft(schema)((cur, stage) => stage.transform(cur, paramMap))
+    theStages.foldLeft(schema)((cur, stage) => stage.transformSchema(cur, paramMap))
   }
 }
 
@@ -159,11 +162,11 @@ class PipelineModel(
   }
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     transformers.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
-    transformers.foldLeft(schema)((cur, transformer) => transformer.transform(cur, paramMap))
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    transformers.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, paramMap))
   }
 }

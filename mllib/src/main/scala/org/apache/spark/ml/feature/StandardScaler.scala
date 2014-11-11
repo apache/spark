@@ -43,7 +43,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def fit(dataset: SchemaRDD, paramMap: ParamMap): StandardScalerModel = {
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val input = dataset.select(map(inputCol).attr)
@@ -56,7 +56,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     model
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
@@ -83,7 +83,7 @@ class StandardScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transform(dataset.schema, paramMap, logging = true)
+    transformSchema(dataset.schema, paramMap, logging = true)
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val scale: (Vector) => Vector = (v) => {
@@ -92,7 +92,7 @@ class StandardScalerModel private[ml] (
     dataset.select(Star(None), scale.call(map(inputCol).attr) as map(outputCol))
   }
 
-  override def transform(schema: StructType, paramMap: ParamMap): StructType = {
+  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
