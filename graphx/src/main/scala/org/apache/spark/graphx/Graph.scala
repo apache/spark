@@ -195,6 +195,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the underlying index structures can be reused.
    *
    * @param map the function from an edge object to a new edge value.
+   * @param mapUsesSrcAttr indicates whether the source vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the source vertex attribute
+   * is not needed.
+   * @param mapUsesDstAttr indicates whether the destination vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the destination vertex attribute
+   * is not needed.
    *
    * @tparam ED2 the new edge data type
    *
@@ -207,8 +213,10 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
-    mapTriplets((pid, iter) => iter.map(map))
+  def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2,
+      tripletFields: TripletFields = TripletFields.All)
+    : Graph[VD, ED2] = {
+    mapTriplets((pid, iter) => iter.map(map), tripletFields)
   }
 
   /**
@@ -223,12 +231,18 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the underlying index structures can be reused.
    *
    * @param map the iterator transform
+   * @param mapUsesSrcAttr indicates whether the source vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the source vertex attribute
+   * is not needed.
+   * @param mapUsesDstAttr indicates whether the destination vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the destination vertex attribute
+   * is not needed.
    *
    * @tparam ED2 the new edge data type
    *
    */
-  def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2])
-    : Graph[VD, ED2]
+  def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+    tripletFields: TripletFields): Graph[VD, ED2]
 
   /**
    * Reverses all edges in the graph.  If this graph contains an edge from a to b then the returned
@@ -258,7 +272,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def subgraph(
       epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-      vpred: (VertexId, VD) => Boolean = ((v, d) => true))
+      vpred: (VertexId, VD) => Boolean = ((v, d) => true),
+      tripletFields: TripletFields = TripletFields.All)
     : Graph[VD, ED]
 
   /**
@@ -303,6 +318,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * direction is `Either`, `mapFunc` will be run on edges with *either* vertex in the active set
    * . If the direction is `Both`, `mapFunc` will be run on edges with *both* vertices in the
    * active set. The active set must have the same index as the graph's vertices.
+   * @param mapUsesSrcAttr indicates whether the source vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the source vertex attribute
+   * is not needed.
+   * @param mapUsesDstAttr indicates whether the destination vertex attribute should be included in
+   * the triplet. Setting this to false can improve performance if the destination vertex attribute
+   * is not needed.
    *
    * @example We can use this function to compute the in-degree of each
    * vertex
@@ -322,12 +343,13 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
+      tripletFields: TripletFields = TripletFields.All,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
     : VertexRDD[A]
 
   /**
-   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.  The
-   * input table should contain at most one entry for each vertex.  If no entry in `other` is
+   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.
+   * The input table should contain at most one entry for each vertex.  If no entry in `other` is
    * provided for a particular vertex in the graph, the map function receives `None`.
    *
    * @tparam U the type of entry in the table of updates

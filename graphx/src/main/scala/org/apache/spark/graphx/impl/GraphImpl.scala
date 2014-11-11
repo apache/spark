@@ -127,26 +127,26 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def mapTriplets[ED2: ClassTag](
-      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+      tripletFields: TripletFields): Graph[VD, ED2] = {
     vertices.cache()
-    val mapUsesSrcAttr = accessesVertexAttr(f, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(f, "dstAttr")
-    replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
+    replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
     val newEdges = replicatedVertexView.edges.mapEdgePartitions { (pid, part) =>
-      part.map(f(pid, part.tripletIterator(mapUsesSrcAttr, mapUsesDstAttr)))
+      part.map(f(pid, part.tripletIterator(tripletFields.useSrc,  tripletFields.useDst)))
     }
     new GraphImpl(vertices, replicatedVertexView.withEdges(newEdges))
   }
 
   override def subgraph(
       epred: EdgeTriplet[VD, ED] => Boolean = x => true,
-      vpred: (VertexId, VD) => Boolean = (a, b) => true): Graph[VD, ED] = {
+      vpred: (VertexId, VD) => Boolean = (a, b) => true,
+      tripletFields: TripletFields = TripletFields.All): Graph[VD, ED] = {
     vertices.cache()
     // Filter the vertices, reusing the partitioner and the index from this graph
     val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
     // Filter the triplets. We must always upgrade the triplet view fully because vpred always runs
     // on both src and dst vertices
-    replicatedVertexView.upgrade(vertices, true, true)
+    replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
     val newEdges = replicatedVertexView.edges.filter(epred, vpred)
     new GraphImpl(newVerts, replicatedVertexView.withEdges(newEdges))
   }
@@ -171,15 +171,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
+      tripletFields: TripletFields,
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)]): VertexRDD[A] = {
 
     vertices.cache()
-
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
-    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
-    replicatedVertexView.upgrade(vertices, mapUsesSrcAttr, mapUsesDstAttr)
+    replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
     val view = activeSetOpt match {
       case Some((activeSet, _)) =>
         replicatedVertexView.withActiveSet(activeSet)
@@ -220,8 +218,8 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
         }
 
         // Scan edges and run the map function
-        val mapOutputs = edgePartition.upgradeIterator(edgeIter, mapUsesSrcAttr, mapUsesDstAttr)
-          .flatMap(mapFunc(_))
+        val mapOutputs = edgePartition.upgradeIterator(edgeIter, tripletFields.useSrc,
+          tripletFields.useDst).flatMap(mapFunc(_))
         // Note: This doesn't allow users to send messages to arbitrary vertices.
         edgePartition.vertices.aggregateUsingIndex(mapOutputs, reduceFunc).iterator
     }).setName("GraphImpl.mapReduceTriplets - preAgg")
@@ -251,14 +249,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  /** Test whether the closure accesses the the attribute with name `attrName`. */
-  private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
-    try {
-      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
-    } catch {
-      case _: ClassNotFoundException => true // if we don't know, be conservative
-    }
-  }
 } // end of class GraphImpl
 
 

@@ -85,7 +85,7 @@ object PageRank extends Logging {
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr )
+      .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.SrcOnly )
       // Set the vertex attributes to the initial pagerank values
       .mapVertices( (id, attr) => resetProb )
 
@@ -97,7 +97,7 @@ object PageRank extends Logging {
       // Compute the outgoing rank contributions of each vertex, perform local preaggregation, and
       // do the final aggregation at the receiving vertices. Requires a shuffle for aggregation.
       val rankUpdates = rankGraph.mapReduceTriplets[Double](
-        e => Iterator((e.dstId, e.srcAttr * e.attr)), _ + _)
+        e => Iterator((e.dstId, e.srcAttr * e.attr)), _ + _, TripletFields.SrcAndEdge)
 
       // Apply the final rank updates to get the new ranks, using join to preserve ranks of vertices
       // that didn't receive a message. Requires a shuffle for broadcasting updated ranks to the
@@ -171,7 +171,7 @@ object PageRank extends Logging {
 
     // Execute a dynamic version of Pregel.
     Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
-      vertexProgram, sendMessage, messageCombiner)
+      vertexProgram, sendMessage, messageCombiner, TripletFields.SrcAndEdge)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
 }
