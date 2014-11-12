@@ -405,15 +405,22 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 
   private var count: Long = _
   private val sum = MutableLiteral(zero.eval(null), expr.dataType)
-  private val sumAsDouble = Cast(sum, DoubleType)
 
-  private def addFunction(value: Any) = Add(sum, Literal(value))
+  private def addFunction(value: Any) = Add(sum, Literal(value, expr.dataType))
 
   override def eval(input: Row): Any = {
     if (count == 0L) {
       null
     } else {
-      sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
+      val calcType =
+        if (DecimalType.isFixed(expr.dataType)) {
+          DecimalType.Unlimited
+        } else {
+          base.dataType
+        }
+      Cast(Divide(
+        Cast(sum, calcType),
+        Cast(Literal(count), calcType)), base.dataType).eval(null)
     }
   }
 
@@ -484,13 +491,13 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
   private val sum = MutableLiteral(null, expr.dataType)
 
-  private val addFunction = If(IsNull(expr), sum, Add(Coalesce(Seq(sum, zero)), expr))
+  private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), expr), sum))
 
   override def update(input: Row): Unit = {
     sum.update(addFunction, input)
   }
 
-  override def eval(input: Row): Any = sum.eval(null)
+  override def eval(input: Row): Any = Cast(sum, base.dataType).eval(null)
 }
 
 case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
@@ -511,8 +518,10 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
     if (seen.size == 0) {
       null
     } else {
-      seen.reduceLeft(
-        base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
+      Cast(Literal(
+        seen.reduceLeft(
+          base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
+        base.dataType).eval(null)
     }
   }
 }

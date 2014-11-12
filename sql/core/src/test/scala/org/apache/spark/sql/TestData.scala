@@ -54,6 +54,17 @@ object TestData {
       TestData2(3, 2) :: Nil).toSchemaRDD
   testData2.registerTempTable("testData2")
 
+  case class DecimalData(a: BigDecimal, b: BigDecimal)
+  val decimalData =
+    TestSQLContext.sparkContext.parallelize(
+      DecimalData(1, 1) ::
+      DecimalData(1, 2) ::
+      DecimalData(2, 1) ::
+      DecimalData(2, 2) ::
+      DecimalData(3, 1) ::
+      DecimalData(3, 2) :: Nil).toSchemaRDD
+  decimalData.registerTempTable("decimalData")
+
   case class BinaryData(a: Array[Byte], b: Int)
   val binaryData =
     TestSQLContext.sparkContext.parallelize(
