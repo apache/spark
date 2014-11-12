@@ -154,9 +154,9 @@ class LinearRegressionWithSGD(object):
                                   our model.
 
                                   :Allowed values:
-                                     - "l1" for using L1Updater,
-                                     - "l2" for using SquaredL2Updater,
-                                     - "none" for no regularizer.
+                                     - "l1" for using L1 regularization (lasso),
+                                     - "l2" for using L2 regularization (ridge),
+                                     - "none" for no regularization
 
                                      (default: "none")
 
