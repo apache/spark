@@ -17,26 +17,17 @@
 
 package org.apache.spark.mllib.util
 
-import org.scalatest.Suite
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, Suite}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
 
 trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient var sc: SparkContext = _
-
-  override def beforeAll() {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
-    sc = new SparkContext(conf)
-    super.beforeAll()
-  }
+  @transient val sc = new SparkContext("local", "test")
+  @transient lazy val sqlContext = new SQLContext(sc)
 
   override def afterAll() {
-    if (sc != null) {
-      sc.stop()
-    }
+    sc.stop()
     super.afterAll()
   }
 }

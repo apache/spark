@@ -115,6 +115,9 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def deserialize(datum: Any): Vector = {
     datum match {
+      // TODO: something wrong with UDT serialization
+      case v: Vector =>
+        v
       case row: Row =>
         require(row.length == 4,
           s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")

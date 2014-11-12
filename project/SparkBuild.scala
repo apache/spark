@@ -31,8 +31,8 @@ object BuildCommons {
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-  sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
-  streamingMqtt, streamingTwitter, streamingZeromq) =
+    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
+    streamingMqtt, streamingTwitter, streamingZeromq) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
       "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
@@ -68,8 +68,8 @@ object SparkBuild extends PomBuild {
       profiles ++= Seq("spark-ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
-      println("NOTE: SPARK_HIVE is deprecated, please use -Phive flag.")
-      profiles ++= Seq("hive")
+      println("NOTE: SPARK_HIVE is deprecated, please use -Phive and -Phive-thriftserver flags.")
+      profiles ++= Seq("hive", "hive-thriftserver")
     }
     Properties.envOrNone("SPARK_HADOOP_VERSION") match {
       case Some(v) =>
@@ -91,13 +91,21 @@ object SparkBuild extends PomBuild {
     profiles
   }
 
-  override val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+  override val profiles = {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
     case None => backwardCompatibility
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
         println("Note: We ignore environment variables, when use of profile is detected in " +
           "conjunction with environment variable.")
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
+    }
+    if (profiles.exists(_.contains("scala-"))) {
+      profiles
+    } else {
+      println("Enabled default scala profile")
+      profiles ++ Seq("scala-2.10")
+    }
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -136,7 +144,8 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects).foreach(enable(sharedSettings))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
+    .foreach(enable(sharedSettings ++ ExludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -176,6 +185,16 @@ object SparkBuild extends PomBuild {
 
 object Flume {
   lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
+/**
+  This excludes library dependencies in sbt, which are specified in maven but are
+  not needed by sbt build.
+  */
+object ExludedDependencies {
+  lazy val settings = Seq(
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+  )
 }
 
 /**
@@ -353,8 +372,11 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
+    // This places test scope jars on the classpath of executors during tests.
+    javaOptions in Test += 
+      "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
+      map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",
-
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
