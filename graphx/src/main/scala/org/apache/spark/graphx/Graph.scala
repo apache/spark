@@ -207,8 +207,39 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
-    mapTriplets((pid, iter) => iter.map(map))
+  def mapTriplets[ED2: ClassTag](
+      map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
+    mapTriplets((pid, iter) => iter.map(map), TripletFields.All)
+  }
+
+  /**
+   * Transforms each edge attribute using the map function, passing it the adjacent vertex
+   * attributes as well. If adjacent vertex values are not required,
+   * consider using `mapEdges` instead.
+   *
+   * @note This does not change the structure of the
+   * graph or modify the values of this graph.  As a consequence
+   * the underlying index structures can be reused.
+   *
+   * @param map the function from an edge object to a new edge value.
+   * @param tripletFields which fields should be included in the edge triplet passed to the map
+   *   function. If not all fields are needed, specifying this can improve performance.
+   *
+   * @tparam ED2 the new edge data type
+   *
+   * @example This function might be used to initialize edge
+   * attributes based on the attributes associated with each vertex.
+   * {{{
+   * val rawGraph: Graph[Int, Int] = someLoadFunction()
+   * val graph = rawGraph.mapTriplets[Int]( edge =>
+   *   edge.src.data - edge.dst.data)
+   * }}}
+   *
+   */
+  def mapTriplets[ED2: ClassTag](
+      map: EdgeTriplet[VD, ED] => ED2,
+      tripletFields: TripletFields): Graph[VD, ED2] = {
+    mapTriplets((pid, iter) => iter.map(map), tripletFields)
   }
 
   /**
@@ -223,12 +254,15 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * the underlying index structures can be reused.
    *
    * @param map the iterator transform
+   * @param tripletFields which fields should be included in the edge triplet passed to the map
+   *   function. If not all fields are needed, specifying this can improve performance.
    *
    * @tparam ED2 the new edge data type
    *
    */
-  def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2])
-    : Graph[VD, ED2]
+  def mapTriplets[ED2: ClassTag](
+      map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2],
+      tripletFields: TripletFields): Graph[VD, ED2]
 
   /**
    * Reverses all edges in the graph.  If this graph contains an edge from a to b then the returned
@@ -287,6 +321,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * "sent" to either vertex in the edge.  The `reduceFunc` is then used to combine the output of
    * the map phase destined to each vertex.
    *
+   * This function is deprecated in 1.2.0 because of SPARK-3936. Use aggregateMessages instead.
+   *
    * @tparam A the type of "message" to be sent to each vertex
    *
    * @param mapFunc the user defined map function which returns 0 or
@@ -296,13 +332,15 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * be commutative and associative and is used to combine the output
    * of the map phase
    *
-   * @param activeSetOpt optionally, a set of "active" vertices and a direction of edges to
-   * consider when running `mapFunc`. If the direction is `In`, `mapFunc` will only be run on
-   * edges with destination in the active set.  If the direction is `Out`,
-   * `mapFunc` will only be run on edges originating from vertices in the active set. If the
-   * direction is `Either`, `mapFunc` will be run on edges with *either* vertex in the active set
-   * . If the direction is `Both`, `mapFunc` will be run on edges with *both* vertices in the
-   * active set. The active set must have the same index as the graph's vertices.
+   * @param activeSetOpt an efficient way to run the aggregation on a subset of the edges if
+   * desired. This is done by specifying a set of "active" vertices and an edge direction. The
+   * `sendMsg` function will then run only on edges connected to active vertices by edges in the
+   * specified direction. If the direction is `In`, `sendMsg` will only be run on edges with
+   * destination in the active set. If the direction is `Out`, `sendMsg` will only be run on edges
+   * originating from vertices in the active set. If the direction is `Either`, `sendMsg` will be
+   * run on edges with *either* vertex in the active set. If the direction is `Both`, `sendMsg`
+   * will be run on edges with *both* vertices in the active set. The active set must have the
+   * same index as the graph's vertices.
    *
    * @example We can use this function to compute the in-degree of each
    * vertex
@@ -319,6 +357,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * predicate or implement PageRank.
    *
    */
+  @deprecated("use aggregateMessages", "1.2.0")
   def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
@@ -326,8 +365,80 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
     : VertexRDD[A]
 
   /**
-   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.  The
-   * input table should contain at most one entry for each vertex.  If no entry in `other` is
+   * Aggregates values from the neighboring edges and vertices of each vertex. The user-supplied
+   * `sendMsg` function is invoked on each edge of the graph, generating 0 or more messages to be
+   * sent to either vertex in the edge. The `mergeMsg` function is then used to combine all messages
+   * destined to the same vertex.
+   *
+   * @tparam A the type of message to be sent to each vertex
+   *
+   * @param sendMsg runs on each edge, sending messages to neighboring vertices using the
+   *   [[EdgeContext]].
+   * @param mergeMsg used to combine messages from `sendMsg` destined to the same vertex. This
+   *   combiner should be commutative and associative.
+   * @param tripletFields which fields should be included in the [[EdgeContext]] passed to the
+   *   `sendMsg` function. If not all fields are needed, specifying this can improve performance.
+   *
+   * @example We can use this function to compute the in-degree of each
+   * vertex
+   * {{{
+   * val rawGraph: Graph[_, _] = Graph.textFile("twittergraph")
+   * val inDeg: RDD[(VertexId, Int)] =
+   *   aggregateMessages[Int](ctx => ctx.sendToDst(1), _ + _)
+   * }}}
+   *
+   * @note By expressing computation at the edge level we achieve
+   * maximum parallelism.  This is one of the core functions in the
+   * Graph API in that enables neighborhood level computation. For
+   * example this function can be used to count neighbors satisfying a
+   * predicate or implement PageRank.
+   *
+   */
+  def aggregateMessages[A: ClassTag](
+      sendMsg: EdgeContext[VD, ED, A] => Unit,
+      mergeMsg: (A, A) => A,
+      tripletFields: TripletFields = TripletFields.All)
+    : VertexRDD[A] = {
+    aggregateMessagesWithActiveSet(sendMsg, mergeMsg, tripletFields, None)
+  }
+
+  /**
+   * Aggregates values from the neighboring edges and vertices of each vertex. The user-supplied
+   * `sendMsg` function is invoked on each edge of the graph, generating 0 or more messages to be
+   * sent to either vertex in the edge. The `mergeMsg` function is then used to combine all messages
+   * destined to the same vertex.
+   *
+   * This variant can take an active set to restrict the computation and is intended for internal
+   * use only.
+   *
+   * @tparam A the type of message to be sent to each vertex
+   *
+   * @param sendMsg runs on each edge, sending messages to neighboring vertices using the
+   *   [[EdgeContext]].
+   * @param mergeMsg used to combine messages from `sendMsg` destined to the same vertex. This
+   *   combiner should be commutative and associative.
+   * @param tripletFields which fields should be included in the [[EdgeContext]] passed to the
+   *   `sendMsg` function. If not all fields are needed, specifying this can improve performance.
+   * @param activeSetOpt an efficient way to run the aggregation on a subset of the edges if
+   *   desired. This is done by specifying a set of "active" vertices and an edge direction. The
+   *   `sendMsg` function will then run on only edges connected to active vertices by edges in the
+   *   specified direction. If the direction is `In`, `sendMsg` will only be run on edges with
+   *   destination in the active set. If the direction is `Out`, `sendMsg` will only be run on edges
+   *   originating from vertices in the active set. If the direction is `Either`, `sendMsg` will be
+   *   run on edges with *either* vertex in the active set. If the direction is `Both`, `sendMsg`
+   *   will be run on edges with *both* vertices in the active set. The active set must have the
+   *   same index as the graph's vertices.
+   */
+  private[graphx] def aggregateMessagesWithActiveSet[A: ClassTag](
+      sendMsg: EdgeContext[VD, ED, A] => Unit,
+      mergeMsg: (A, A) => A,
+      tripletFields: TripletFields,
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)])
+    : VertexRDD[A]
+
+  /**
+   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.
+   * The input table should contain at most one entry for each vertex.  If no entry in `other` is
    * provided for a particular vertex in the graph, the map function receives `None`.
    *
    * @tparam U the type of entry in the table of updates

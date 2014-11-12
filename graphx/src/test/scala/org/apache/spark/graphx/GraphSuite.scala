@@ -118,7 +118,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // Each vertex should be replicated to at most 2 * sqrt(p) partitions
       val partitionSets = partitionedGraph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
-        Iterator((part.srcIds ++ part.dstIds).toSet)
+        Iterator((part.iterator.flatMap(e => Iterator(e.srcId, e.dstId))).toSet)
       }.collect
       if (!verts.forall(id => partitionSets.count(_.contains(id)) <= bound)) {
         val numFailures = verts.count(id => partitionSets.count(_.contains(id)) > bound)
@@ -130,7 +130,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // This should not be true for the default hash partitioning
       val partitionSetsUnpartitioned = graph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
-        Iterator((part.srcIds ++ part.dstIds).toSet)
+        Iterator((part.iterator.flatMap(e => Iterator(e.srcId, e.dstId))).toSet)
       }.collect
       assert(verts.exists(id => partitionSetsUnpartitioned.count(_.contains(id)) > bound))
 
@@ -315,6 +315,21 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       }, (a: Int, b: Int) => a + b, Some(changed, EdgeDirection.Out)).collect.toSet
       assert(numOddNeighbors === (2 to n by 2).map(x => (x: VertexId, 1)).toSet)
 
+    }
+  }
+
+  test("aggregateMessages") {
+    withSpark { sc =>
+      val n = 5
+      val agg = starGraph(sc, n).aggregateMessages[String](
+        ctx => {
+          if (ctx.dstAttr != null) {
+            throw new Exception(
+              "expected ctx.dstAttr to be null due to TripletFields, but it was " + ctx.dstAttr)
+          }
+          ctx.sendToDst(ctx.srcAttr)
+        }, _ + _, TripletFields.SrcOnly)
+      assert(agg.collect().toSet === (1 to n).map(x => (x: VertexId, "v")).toSet)
     }
   }
 
