@@ -69,14 +69,14 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
       databaseName: Option[String],
       tableName: String,
       plan: LogicalPlan): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
+    val tblName = processDatabaseAndTableName(databaseName, tableName)._2
     tables += ((tblName, plan))
   }
 
   override def unregisterTable(
       databaseName: Option[String],
       tableName: String) = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
+    val tblName = processDatabaseAndTableName(databaseName, tableName)._2
     tables -= tblName
   }
 
@@ -84,8 +84,8 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables.clear()
   }
 
-  override def tableExists(db: Option[String], tableName: String): Boolean = {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
+  override def tableExists(databaseName: Option[String], tableName: String): Boolean = {
+   val tblName = processDatabaseAndTableName(databaseName, tableName)._2
     tables.get(tblName) match {
       case Some(_) => true
       case None => false
@@ -96,7 +96,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
       databaseName: Option[String],
       tableName: String,
       alias: Option[String] = None): LogicalPlan = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
+    val tblName = processDatabaseAndTableName(databaseName, tableName)._2
     val table = tables.getOrElse(tblName, sys.error(s"Table Not Found: $tableName"))
     val tableWithQualifiers = Subquery(tblName, table)
 
