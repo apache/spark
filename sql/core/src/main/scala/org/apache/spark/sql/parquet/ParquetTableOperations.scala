@@ -160,7 +160,7 @@ case class ParquetTableScan(
       }
     } else {
       baseRDD.map(_._2)
-    }.filter(_ != null) // Parquet's record filters may produce null values
+    }
   }
 
   /**
