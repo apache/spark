@@ -19,6 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, sum => brzSum}
@@ -32,6 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.random.XORShiftRandom
 
 import LDA._
 
@@ -312,69 +314,53 @@ object LDA {
     beta: Double,
     alphaAS: Double): Graph[VD, ED] = {
     val parts = graph.edges.partitions.size
-
-    val sampleTopics = (gen: Random,
-      wMap: mutable.Map[VertexId, Parameter],
-      totalTopicCounter: BDV[Count],
-      t: BDV[Double],
-      t1: BDV[Double],
-      denominator: BDV[Double],
-      denominator1: BDV[Double],
-      d: BDV[Double],
-      d1: BDV[Double],
-      triplet: EdgeTriplet[VD, ED]) => {
-      val term = triplet.srcId
-      val termTopicCounter = triplet.srcAttr
-      val docTopicCounter = triplet.dstAttr
-      val topics = triplet.attr
-      val parameter = wMap.getOrElseUpdate(term, w(totalTopicCounter, denominator, denominator1,
-        termTopicCounter, sumTerms, numTopics, alpha, beta, alphaAS))
-      this.d(denominator, denominator1, termTopicCounter, docTopicCounter,
-        d, d1, sumTerms, numTopics, beta, alphaAS)
-
-      var i = 0
-      while (i < topics.length) {
-        val currentTopic = topics(i)
-        val adjustment = d1(currentTopic) + parameter.dist1(currentTopic) + t1(currentTopic)
-        val newTopic = multinomialDistSampler(gen, docTopicCounter, d, parameter.dist, t,
-          adjustment, currentTopic)
-        assert(newTopic < numTopics)
-        topics(i) = newTopic
-        i += 1
-      }
-      topics
-    }
-
-    graph.mapTriplets {
-      (pid, iter) =>
-        val gen = new Random(parts * innerIter + pid)
+    graph.mapTriplets(
+      (pid, iter) => {
+        val gen = new XORShiftRandom(parts * innerIter + pid)
         val d = BDV.zeros[Double](numTopics)
         val d1 = BDV.zeros[Double](numTopics)
         val wMap = mutable.Map[VertexId, Parameter]()
         val GlobalParameter(totalTopicCounter, t, t1, denominator, denominator1) = broadcast.value
         iter.map {
-          token =>
-            sampleTopics(gen, wMap, totalTopicCounter, t, t1,
-              denominator, denominator1, d, d1, token)
+          triplet =>
+            val term = triplet.srcId
+            val termTopicCounter = triplet.srcAttr
+            val docTopicCounter = triplet.dstAttr
+            val topics = triplet.attr
+            val parameter = wMap.getOrElseUpdate(term, w(totalTopicCounter, denominator,
+              denominator1, termTopicCounter, sumTerms, numTopics, alpha, beta, alphaAS))
+            this.d(denominator, denominator1, termTopicCounter, docTopicCounter,
+              d, d1, sumTerms, numTopics, beta, alphaAS)
+
+            var i = 0
+            while (i < topics.length) {
+              val currentTopic = topics(i)
+              val adjustment = d1(currentTopic) + parameter.dist1(currentTopic) + t1(currentTopic)
+              val newTopic = multinomialDistSampler(gen, docTopicCounter, d, parameter.dist, t,
+                adjustment, currentTopic)
+              assert(newTopic < numTopics)
+              topics(i) = newTopic
+              i += 1
+            }
+            topics
         }
-    }
+      }, TripletFields.All)
   }
 
   private def updateCounter(graph: Graph[VD, ED], numTopics: Int): Graph[VD, ED] = {
-    val newCounter = graph.mapReduceTriplets[BSV[Count]](e => {
-      val docId = e.dstId
-      val wordId = e.srcId
-      val topics = e.attr
+    val newCounter = graph.aggregateMessages[BSV[Count]](ctx => {
+      val topics = ctx.attr
       val vector = BSV.zeros[Count](numTopics)
       for (topic <- topics) {
         vector(topic) += 1
       }
-      vector.compact()
-      Iterator((docId, vector), (wordId, vector))
-    }, _ :+ _).mapValues(t => {
-      t.compact()
-      t
-    })
+      ctx.sendToDst(vector)
+      ctx.sendToSrc(vector)
+    }, (a, b) => {
+      val c = a + b
+      c.compact()
+      c
+    }, TripletFields.EdgeOnly)
     graph.outerJoinVertices(newCounter)((_, _, n) => n.get)
   }
 

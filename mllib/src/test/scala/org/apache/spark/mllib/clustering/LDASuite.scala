@@ -19,13 +19,14 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.scalatest.FunSuite
+
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 import breeze.stats.distributions.Poisson
 import org.apache.spark.mllib.linalg.{Vectors, SparseVector => SSV}
-import org.apache.spark.mllib.util.LocalSparkContext
-import org.scalatest.FunSuite
 
-class LDASuite extends FunSuite with LocalSparkContext {
+class LDASuite extends FunSuite with MLlibTestSparkContext {
 
   import LDASuite._
 
@@ -43,9 +44,10 @@ class LDASuite extends FunSuite with LocalSparkContext {
       pps(i) = lda.perplexity
       i += 1
     }
-    println((System.currentTimeMillis() - startedAt) / 1e3)
 
-    pps.foreach(println)
+    // println((System.currentTimeMillis() - startedAt) / 1e3)
+    // pps.foreach(println)
+
     val ppsDiff = pps.init.zip(pps.tail).map { case (lhs, rhs) => lhs - rhs}
     assert(ppsDiff.count(_ > 0).toDouble / ppsDiff.size > 0.6)
     assert(pps.head - pps.last > 0)
