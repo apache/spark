@@ -26,7 +26,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   private val pageSize = 20
-  private val maxNumIndices = 4
+  private val maxNumIndices = 2
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
@@ -52,23 +52,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
             if (allApps.size > 0) {
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
-                <span style="float: right">
-                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt; </a>}
-                  {if (actualPage > 1) <a href={"/?page=1"}>1</a>}
-                  {if (actualPage - maxNumIndices > 2) " ... " }
-                  {(1 to maxNumIndices).reverse.filter(actualPage - _ > 1).map {offset =>
-                    val nextPage = actualPage - offset
-                    <a href={"/?page=" + (nextPage)}> {nextPage} </a>
-                  }}
-                  {actualPage}
-                  {(1 to maxNumIndices).filter(actualPage + _ < pageCount).map{offset =>
-                    val nextPage = actualPage + offset
-                    <a href={"/?page=" + nextPage}> {nextPage} </a>
-                  }}
-                  {if (actualPage + maxNumIndices < pageCount - 1) " ... " }
-                  {if (actualPage < pageCount) <a href={"/?page=" + pageCount}>{pageCount}</a>}
-                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}> &gt;</a>}
-                </span>
+                  {pageIndices(pageCount, actualPage)}
               </h4> ++
               appTable
             } else {
@@ -88,6 +72,38 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Duration",
     "Spark User",
     "Last Updated")
+
+  private def pageIndices(pageCount: Int, actualPage: Int): Seq[Node] = {
+
+    def rangeIndices(range: Seq[Int], condition: Int => Boolean): Seq[Node] = {
+      range.filter(condition).map(nextPage => <a href={"/?page=" + nextPage}> {nextPage} </a>)
+    }
+
+    val littlerSideIndices =
+      rangeIndices(actualPage-maxNumIndices until actualPage, 1 < _)
+    val greaterSideIndices =
+      rangeIndices(actualPage+1 to actualPage+maxNumIndices, _ < pageCount)
+
+    <span style="float: right">
+      {
+        if (actualPage > 1) {
+          <a href={"/?page=" + (actualPage - 1)}>&lt; </a>
+          <a href={"/?page=1"}>1</a>
+        }
+      }
+      {if (actualPage - maxNumIndices > 2) " ... "}
+      {littlerSideIndices}
+      {actualPage}
+      {greaterSideIndices}
+      {if (actualPage + maxNumIndices < pageCount - 1) " ... "}
+      {
+        if (actualPage < pageCount) {
+          <a href={"/?page=" + pageCount}>{pageCount}</a>
+          <a href={"/?page=" + (actualPage + 1)}> &gt;</a>
+        }
+      }
+    </span>
+  }
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
