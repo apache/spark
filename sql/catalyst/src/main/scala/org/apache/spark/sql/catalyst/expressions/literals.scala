@@ -47,6 +47,8 @@ object Literal {
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case Literal(a: Byte, ByteType) => Some(a.toInt)
+    case Literal(a: Short, ShortType) => Some(a.toInt)
     case _ => None
   }
 }

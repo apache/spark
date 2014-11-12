@@ -343,6 +343,8 @@ class SqlParser extends AbstractSparkSQLParser {
     val bigIntValue = BigDecimal(value)
 
     bigIntValue match {
+      case v if bigIntValue.isValidByte => v.toByteExact
+      case v if bigIntValue.isValidShort => v.toShortExact
       case v if bigIntValue.isValidInt => v.toIntExact
       case v if bigIntValue.isValidLong => v.toLongExact
       case v => v
