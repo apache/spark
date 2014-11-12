@@ -187,7 +187,7 @@ private[ml] object Params {
    * @param parent the parent estimator
    * @param child the child model
    */
-  private[ml] def inheritValues[E <: Params, M <: E](
+  def inheritValues[E <: Params, M <: E](
       paramMap: ParamMap,
       parent: E,
       child: M): Unit = {

@@ -55,11 +55,11 @@ class PipelineSuite extends FunSuite {
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
 
-    assert(pipelineModel.transformers.size === 4)
-    assert(pipelineModel.transformers(0).eq(model0))
-    assert(pipelineModel.transformers(1).eq(transformer1))
-    assert(pipelineModel.transformers(2).eq(model2))
-    assert(pipelineModel.transformers(3).eq(transformer3))
+    assert(pipelineModel.stages.size === 4)
+    assert(pipelineModel.stages(0).eq(model0))
+    assert(pipelineModel.stages(1).eq(transformer1))
+    assert(pipelineModel.stages(2).eq(model2))
+    assert(pipelineModel.stages(3).eq(transformer3))
 
     assert(pipelineModel.getModel(estimator0).eq(model0))
     assert(pipelineModel.getModel(estimator2).eq(model2))

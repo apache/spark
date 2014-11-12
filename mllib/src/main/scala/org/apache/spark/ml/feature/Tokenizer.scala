@@ -15,19 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.feature
 
-import java.util.UUID
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.sql.{DataType, StringType}
 
 /**
- * Object with a unique id.
+ * :: AlphaComponent ::
+ * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  */
-private[ml] trait Identifiable extends Serializable {
+@AlphaComponent
+class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
-  /**
-   * A unique id for the object. The default implementation concatenates the class name, "-", and 8
-   * random hex chars.
-   */
-  private[ml] val uid: String =
-    this.getClass.getSimpleName + "-" + UUID.randomUUID().toString.take(8)
+  protected override def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
+    _.toLowerCase.split("\\s")
+  }
+
+  protected override def validateInputType(inputType: DataType): Unit = {
+    require(inputType == StringType, s"Input type must be string type but got $inputType.")
+  }
 }

@@ -20,11 +20,10 @@ package org.apache.spark.examples.ml
 import scala.beans.BeanInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.{Pipeline, UnaryTransformer}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.{DataType, SQLContext, StringType}
+import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.sql.SQLContext
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
@@ -33,22 +32,8 @@ case class LabeledDocument(id: Long, text: String, label: Double)
 case class Document(id: Long, text: String)
 
 /**
- * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
- */
-class MyTokenizer extends UnaryTransformer[String, Seq[String], MyTokenizer] {
-
-  override def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
-    _.toLowerCase.split("\\s")
-  }
-
-  override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType == StringType, s"Input type must be string type but got $inputType.")
-  }
-}
-
-/**
  * A simple text classification pipeline that recognizes "spark" from input text. This is to show
- * how to define a simple tokenizer and then use it as part of a ML pipeline. Run with
+ * how to create and configure an ML pipeline. Run with
  * {{{
  * bin/run-example ml.SimpleTextClassificationPipeline
  * }}}
@@ -69,7 +54,7 @@ object SimpleTextClassificationPipeline {
       LabeledDocument(3L, "hadoop mapreduce", 0.0)))
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
-    val tokenizer = new MyTokenizer()
+    val tokenizer = new Tokenizer()
       .setInputCol("text")
       .setOutputCol("words")
     val hashingTF = new HashingTF()

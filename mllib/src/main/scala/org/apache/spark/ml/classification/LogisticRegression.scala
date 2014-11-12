@@ -105,7 +105,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
     lrm
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = true)
   }
 }
@@ -118,7 +118,7 @@ class LogisticRegression extends Estimator[LogisticRegressionModel] with Logisti
 class LogisticRegressionModel private[ml] (
     override val parent: LogisticRegression,
     override val fittingParamMap: ParamMap,
-    val weights: Vector)
+    weights: Vector)
   extends Model[LogisticRegressionModel] with LogisticRegressionParams {
 
   def setThreshold(value: Double): this.type = set(threshold, value)
@@ -126,7 +126,7 @@ class LogisticRegressionModel private[ml] (
   def setScoreCol(value: String): this.type = set(scoreCol, value)
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = false)
   }
 

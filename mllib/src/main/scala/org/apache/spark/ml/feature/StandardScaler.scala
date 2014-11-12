@@ -56,7 +56,7 @@ class StandardScaler extends Estimator[StandardScalerModel] with StandardScalerP
     model
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
@@ -92,7 +92,7 @@ class StandardScalerModel private[ml] (
     dataset.select(Star(None), scale.call(map(inputCol).attr) as map(outputCol))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val inputType = schema(map(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],

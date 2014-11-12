@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.types._
 
 /**
- * :: AlphaComponet ::
+ * :: AlphaComponent ::
  * Abstract class for transformers that transform one dataset into another.
  */
 @AlphaComponent
@@ -83,12 +83,10 @@ abstract class Transformer extends PipelineStage with Params {
 }
 
 /**
- * :: AlphaComponent ::
  * Abstract class for transformers that take one input column, apply transformation, and output the
  * result as a new column.
  */
-@AlphaComponent
-abstract class UnaryTransformer[IN, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
+private[ml] abstract class UnaryTransformer[IN, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
   def setInputCol(value: String): T = set(inputCol, value).asInstanceOf[T]

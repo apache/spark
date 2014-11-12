@@ -21,12 +21,12 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.{Params, Param, ParamMap}
 import org.apache.spark.sql.{SchemaRDD, StructType}
 
 /**
  * :: AlphaComponent ::
- * A stage in a pipeline, either an Estimator or an Transformer.
+ * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
 @AlphaComponent
 abstract class PipelineStage extends Serializable with Logging {
@@ -34,7 +34,7 @@ abstract class PipelineStage extends Serializable with Logging {
   /**
    * Derives the output schema from the input schema and parameters.
    */
-  def transformSchema(schema: StructType, paramMap: ParamMap): StructType
+  private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType
 
   /**
    * Derives the output schema from the input schema and parameters, optionally with logging.
@@ -123,7 +123,7 @@ class Pipeline extends Estimator[PipelineModel] {
     new PipelineModel(this, map, transformers.toArray)
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
     require(theStages.toSet.size == theStages.size,
@@ -137,23 +137,23 @@ class Pipeline extends Estimator[PipelineModel] {
  * Represents a compiled pipeline.
  */
 @AlphaComponent
-class PipelineModel(
+class PipelineModel private[ml] (
     override val parent: Pipeline,
     override val fittingParamMap: ParamMap,
-    val transformers: Array[Transformer])
+    private[ml] val stages: Array[Transformer])
   extends Model[PipelineModel] with Logging {
 
   /**
    * Gets the model produced by the input estimator. Throws an NoSuchElementException is the input
    * estimator does not exist in the pipeline.
    */
-  def getModel[M <: Model[M]](estimator: Estimator[M]): M = {
-    val matched = transformers.filter {
-      case m: Model[_] => m.parent.eq(estimator)
+  def getModel[M <: Model[M]](stage: Estimator[M]): M = {
+    val matched = stages.filter {
+      case m: Model[_] => m.parent.eq(stage)
       case _ => false
     }
     if (matched.isEmpty) {
-      throw new NoSuchElementException(s"Cannot find estimator $estimator from the pipeline.")
+      throw new NoSuchElementException(s"Cannot find stage $stage from the pipeline.")
     } else if (matched.size > 1) {
       throw new IllegalStateException(s"Cannot have duplicate estimators in the sample pipeline.")
     } else {
@@ -163,10 +163,10 @@ class PipelineModel(
 
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    transformers.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
+    stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    transformers.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, paramMap))
+  private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
+    stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, paramMap))
   }
 }
