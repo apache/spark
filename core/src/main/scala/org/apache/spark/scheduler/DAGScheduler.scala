@@ -37,7 +37,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ParallelCollectionPartition, RDD}
 import org.apache.spark.storage._
 import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -788,6 +788,22 @@ class DAGScheduler(
     }
   }
 
+  private def tryOrAbortStageFromUnserializableTask[T](stage: Stage, block: => Unit) = {
+    try {
+      block
+      true
+    } catch {
+      case e: NotSerializableException =>
+        abortStage(stage, "Task not serializable: " + e.toString)
+        runningStages -= stage
+        false
+      case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
+        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
+        runningStages -= stage
+        false
+    }
+  }
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -826,42 +842,60 @@ class DAGScheduler(
     // might modify state of objects referenced in their closures. This is necessary in Hadoop
     // where the JobConf/Configuration object is not thread-safe.
     var taskBinary: Broadcast[Array[Byte]] = null
-    try {
+    if (!tryOrAbortStageFromUnserializableTask(stage, {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
-          closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
+          closureSerializer.serialize((stage.rdd, stage.shuffleDep.get): AnyRef).array()
         } else {
-          closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
+          closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func): AnyRef).array()
         }
       taskBinary = sc.broadcast(taskBinaryBytes)
-    } catch {
-      // In the case of a failure during serialization, abort the stage.
-      case e: NotSerializableException =>
-        abortStage(stage, "Task not serializable: " + e.toString)
-        runningStages -= stage
-        return
-      case NonFatal(e) =>
-        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
-        runningStages -= stage
-        return
+    })) {
+      return
     }
 
-    val tasks: Seq[Task[_]] = if (stage.isShuffleMap) {
-      partitionsToCompute.map { id =>
-        val locs = getPreferredLocs(stage.rdd, id)
-        val part = stage.rdd.partitions(id)
-        new ShuffleMapTask(stage.id, taskBinary, part, locs)
+    var tasks: Seq[Task[_]] = null
+    var isSerializationChecked = false
+    if (!tryOrAbortStageFromUnserializableTask(stage, {
+      // In the case of parallel collection partitions, need to serialize a partition
+      // that is non-empty in values. The check below may check if the first task can
+      // be serialized but this is misleading if the first task contains a partition
+      // with no values.
+      //
+      // If other partition types can run into this issue as well, that is, some
+      // partitions are serializable while others aren't in the same task set, then
+      // a more rigorous but expensive serialization of all tasks may be necessary.
+      def verifyParallelCollectionPartition(part: Partition) {
+        if (!isSerializationChecked && part.isInstanceOf[ParallelCollectionPartition[_]]) {
+          val parallelCollectionPart = part.asInstanceOf[ParallelCollectionPartition[_]]
+          if (!parallelCollectionPart.values.isEmpty) {
+            closureSerializer.serialize(parallelCollectionPart)
+            isSerializationChecked = true
+          }
+        }
       }
-    } else {
-      val job = stage.resultOfJob.get
-      partitionsToCompute.map { id =>
-        val p: Int = job.partitions(id)
-        val part = stage.rdd.partitions(p)
-        val locs = getPreferredLocs(stage.rdd, p)
-        new ResultTask(stage.id, taskBinary, part, locs, id)
+
+      tasks = if (stage.isShuffleMap) {
+        partitionsToCompute.map { id =>
+          val locs = getPreferredLocs(stage.rdd, id)
+          val part = stage.rdd.partitions(id)
+          verifyParallelCollectionPartition(part)
+          new ShuffleMapTask(stage.id, taskBinary, part, locs)
+        }
+      } else {
+        val job = stage.resultOfJob.get
+        partitionsToCompute.map { id =>
+          val p: Int = job.partitions(id)
+          val part = stage.rdd.partitions(p)
+          verifyParallelCollectionPartition(part)
+          val locs = getPreferredLocs(stage.rdd, p)
+          new ResultTask(stage.id, taskBinary, part, locs, id)
+        }
       }
+    })) {
+      return
     }
 
     if (tasks.size > 0) {
@@ -872,17 +906,10 @@ class DAGScheduler(
       //
       // We've already serialized RDDs and closures in taskBinary, but here we check for all other
       // objects such as Partition.
-      try {
+      if (!tryOrAbortStageFromUnserializableTask(stage, {
         closureSerializer.serialize(tasks.head)
-      } catch {
-        case e: NotSerializableException =>
-          abortStage(stage, "Task not serializable: " + e.toString)
-          runningStages -= stage
-          return
-        case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
-          abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
-          runningStages -= stage
-          return
+      })) {
+        return
       }
 
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
