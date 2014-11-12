@@ -147,7 +147,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <h4 id="completed">Completed Jobs ({completedJobs.size})</h4> ++ completedJobsTable ++
         <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++ failedJobsTable
 
-      UIUtils.headerSparkPage("Spark Jobs", content, parent)
+      val helpText = """A job is triggered by a action, like "count()" or "saveAsTextFile()".""" +
+        " Click on a job's title to see information about the stages of tasks associated with" +
+        " the job."
+
+      UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))
     }
   }
 }

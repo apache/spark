@@ -169,7 +169,8 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None): Seq[Node] = {
+      refreshInterval: Option[Int] = None,
+      helpText: Option[String] = None): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -178,6 +179,9 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix)}>{tab.name}</a>
       </li>
     }
+    val helpButton: Seq[Node] = helpText.map { helpText =>
+      <a data-toggle="tooltip" data-placement="bottom" title={helpText}>(?)</a>
+    }.getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -201,6 +205,7 @@ private[spark] object UIUtils extends Logging {
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
+                {helpButton}
               </h3>
             </div>
           </div>
