@@ -42,6 +42,14 @@ object Row {
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
+
+  /**
+   * This method can be used to construct a [[MutableRow]] from a [[Row]]
+   */
+  def toMutableRow(row: Row): MutableRow = row match {
+    case x: MutableRow => x
+    case other: Row => new GenericMutableRow(other.toArray)
+  }
 }
 
 /**
