@@ -15,19 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml.param
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+/** A subclass of Params for testing. */
+class TestParams extends Params {
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+  val maxIter = new IntParam(this, "maxIter", "max number of iterations", Some(100))
+  def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
+  def getMaxIter: Int = get(maxIter)
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
+  val inputCol = new Param[String](this, "inputCol", "input column name")
+  def setInputCol(value: String): this.type = { set(inputCol, value); this }
+  def getInputCol: String = get(inputCol)
 
-  override def afterAll() {
-    sc.stop()
-    super.afterAll()
+  override def validate(paramMap: ParamMap) = {
+    val m = this.paramMap ++ paramMap
+    require(m(maxIter) >= 0)
+    require(m.contains(inputCol))
   }
 }

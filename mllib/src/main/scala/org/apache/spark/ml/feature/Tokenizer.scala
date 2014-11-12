@@ -15,19 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml.feature
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.sql.{DataType, StringType}
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+/**
+ * :: AlphaComponent ::
+ * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
+ */
+@AlphaComponent
+class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
+  protected override def createTransformFunc(paramMap: ParamMap): String => Seq[String] = {
+    _.toLowerCase.split("\\s")
+  }
 
-  override def afterAll() {
-    sc.stop()
-    super.afterAll()
+  protected override def validateInputType(inputType: DataType): Unit = {
+    require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 }
