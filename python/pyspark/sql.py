@@ -1870,6 +1870,25 @@ class SchemaRDD(RDD):
         rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
         return SchemaRDD(rdd, self.sql_ctx)
 
+    def toJSON(self):
+        rowSchema = self.schema()
+        def _rowToJSON(row, rowSchema):
+            builder = "{"
+            for i in range(len(row)):
+                if (row[i] != None):
+                    if (i > 0 and row[i-1]):
+                        builder += ","
+                    builder += "\"%s\""%rowSchema.fields[i].name
+                    if (rowSchema.fields[i].dataType.typeName() == "string"):
+                        s = """\"%s\"""" % row[i]
+                        builder += s
+                    else:
+                        builder +=  '%s' % row[i]
+            builder += "}"
+            return builder
+
+        return self.map(lambda row: _rowToJSON(row, rowSchema))
+
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
 
