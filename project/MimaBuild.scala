@@ -37,6 +37,7 @@ object MimaBuild {
       ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$2"),
       ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$1"),
       ProblemFilters.exclude[MissingFieldProblem](fullName),
+      ProblemFilters.exclude[AbstractMethodProblem](fullName), // SPARK-4335
       ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
       ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
       ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName)
