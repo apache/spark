@@ -19,8 +19,7 @@ package org.apache.spark.graphx.api.python
 
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.graphx.VertexRDD
+import org.apache.spark.graphx.api.java.JavaVertexRDD
 import org.apache.spark.rdd.RDD
 
 //class PythonVertexRDD (
@@ -49,13 +48,13 @@ class PythonVertexRDD(parent: RDD[_], schema: String) extends {
 //    System.out.println("PythonVertexRDD constructor")
 //  }
 
-  val asJavaVertexRDD = JavaVertexRDD.fromVertexRDD(this)
+  val asJavaVertexRDD = JavaVertexRDD.fromVertexRDD(parent.asInstanceOf)
 
-  def toVertexRDD[VD](pyRDD: RDD[_], schema: String): JavaRDD[Array[Byte]] = {
+  def toVertexRDD[VD](pyRDD: RDD[_], schema: String): JavaVertexRDD[Array[Byte]] = {
 //    new VertexRDD[VD](PythonRDD.pythonToJava(pyRDD, true), StorageLevel.MEMORY_ONLY)
     System.out.println("In PythonVertexRDD.toVertexRDD()")
-    val propertySchema = new VertexSchema(schema)
-    val vertices = new VertexRDD[VertexSchema](pyRDD.mapPartitions())
+    val propertySchema = new VertexProperty(schema)
+    val vertices = new JavaVertexRDD[VertexProperty](pyRDD.asInstanceOf)
     null
   }
 }
@@ -63,13 +62,14 @@ class PythonVertexRDD(parent: RDD[_], schema: String) extends {
 object PythonVertexRDD {
   val DEFAULT_SPARK_BUFFER_SIZE = 65536
 
-  def toVertexRDD(parent: RDD[_], schema: String) : JavaRDD[Array[Byte]] = {
+  def toVertexRDD(parent: RDD[_], schema: String) : JavaVertexRDD[Array[Byte]] = {
     val pyRDD = new PythonVertexRDD(parent, schema)
     pyRDD.toVertexRDD(parent, schema)
   }
 }
 
-class VertexSchema(val schemaString: String) {
+class VertexProperty(val schemaString: String) {
+  val schema : List[Any] = fromString(schemaString)
 
   /**
    * The vertex property schema is
@@ -78,5 +78,4 @@ class VertexSchema(val schemaString: String) {
    */
   def fromString(schemaString: String) : List[String] =
     schemaString.split(" ").toList
-
 }

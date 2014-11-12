@@ -16,9 +16,17 @@
  */
 package org.apache.spark.graphx.api.java
 
-class JavaEdgeRDD {
+import org.apache.spark.api.java.JavaRDDLike
+import org.apache.spark.graphx._
+
+trait JavaEdgeRDDLike [ED, This <: JavaEdgeRDDLike[ED, This, R],
+R <: JavaRDDLike[Edge[ED], R]]
+  extends Serializable {
+
+  def edgeRDD: EdgeRDD[ED, VD]
+
+  def setName(name: String) =
 
 
 
 }
-

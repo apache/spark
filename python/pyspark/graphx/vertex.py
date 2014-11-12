@@ -233,7 +233,7 @@ class VertexRDD(object):
         python_rdd = sc._jvm.PythonVertexRDD(bytearray(" ".join(x for x in schema.schema)))
         print "in toVertexRDD"
 
-        return python_rdd.asJavaRDD()
+        return python_rdd.asJavaVertexRDD()
 
     def id(self):
         """

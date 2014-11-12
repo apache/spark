@@ -16,11 +16,14 @@
  */
 package org.apache.spark.graphx.api.java
 
-import org.apache.spark.api.java.{JavaRDD, JavaRDDLike}
-import org.apache.spark.graphx.VertexId
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.graphx.{VertexId, VertexRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.{Partition, TaskContext}
 
+import scala.language.implicitConversions
 import scala.reflect._
 
 /**
@@ -32,80 +35,52 @@ import scala.reflect._
  * [[org.apache.spark.graphx.VertexRDD]]
  */
 
-class JavaVertexRDD[@specialized VD: ClassTag](
-    val parent: RDD[(VertexId, VD)],
+class JavaVertexRDD[VD](
+    val vertices: RDD[(VertexId, VD)],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-  extends JavaVertexRDDLike[(VertexId, VD), JavaVertexRDD[VD]] {
+    (implicit val classTag: ClassTag[VD])
+  extends JavaVertexRDDLike[VD, JavaVertexRDD[VD], JavaRDD[(VertexId, VD)]] {
 
-//  val rdd = new VertexRDD(parent, targetStorageLevel)
+  override def vertexRDD = VertexRDD(vertices)
 
-//  val wrapVertexRDD(rdd: RDD[(VertexId, VD)]): This
-//
-//  override def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
-//                                           (f: (VertexId, VD, U) => VD2): JavaVertexRDD[VD2] = {
-//    other match {
-//      case other: JavaVertexRDD[_] =>
-//        innerZipJoin(other)(f)
-//      case _ =>
-//        this.withPartitionsRDD(
-//          partitionsRDD.zipPartitions(
-//            other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
-//            (partIter, msgs) => partIter.map(_.innerJoin(msgs)(f))
-//          }
-//        )
-//    }
-//  }
-//
-//  override def diff(other: VertexRDD[VD]): JavaRDD[(VertexId, VD)] = {
-//    JavaRDD.fromRDD(super[VertexRDD].diff(other))
-//  }
-//
-//  override def mapValues[VD2: ClassTag](f: VD => VD2): JavaVertexRDD[VD2] =
-//    this.mapVertexPartitions(_.map((vid, attr) => f(attr)))
-//
-//  override def mapVertexPartitions[VD2: ClassTag]
-//    (f: ShippableVertexPartition[VD] => ShippableVertexPartition[VD2]): JavaVertexRDD[VD2] = {
-//    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
-//    this.withPartitionsRDD(newPartitionsRDD)
-//  }
-//
-//  override def withPartitionsRDD[VD2: ClassTag]
-//    (partitionsRDD: RDD[ShippableVertexPartition[VD2]]): JavaVertexRDD[VD2] = {
-//    new JavaVertexRDD[VD2](partitionsRDD.firstParent, this.targetStorageLevel)
-//  }
-//
-//  def copartitionWithVertices(partitioner: Partitioner): JavaRDD[(VertexId, VD)] = {
-//
-//    val rdd = new ShuffledRDD[VertexId, VD, VD](rdd, partitioner)
-//
-//    // Set a custom serializer if the data is of int or double type.
-//    if (classTag[VD] == ClassTag.Int) {
-//      rdd.setSerializer(new IntAggMsgSerializer)
-//    } else if (classTag[VD] == ClassTag.Long) {
-//      rdd.setSerializer(new LongAggMsgSerializer)
-//    } else if (classTag[VD] == ClassTag.Double) {
-//      rdd.setSerializer(new DoubleAggMsgSerializer)
-//    }
-//    rdd
-//  }
-//
-//  def innerZipJoin[U: ClassTag, VD2: ClassTag]
-//    (other: JavaVertexRDD[U])
-//    (f: (VertexId, VD, U) => VD2): JavaVertexRDD[VD2] = {
-//    val newPartitionsRDD = partitionsRDD.zipPartitions(
-//      other.partitionsRDD, preservesPartitioning = true
-//    ) { (thisIter, otherIter) =>
-//      val thisPart = thisIter.next()
-//      val otherPart = otherIter.next()
-//      Iterator(thisPart.innerJoin(otherPart)(f))
-//    }
-//    this.withPartitionsRDD(newPartitionsRDD)
-//  }
-  override def wrapRDD(rdd: RDD[(VertexId, VD)]): JavaRDD[(VertexId, VD)] = ???
+  override def wrapRDD(in: RDD[(VertexId, VD)]): JavaRDD[(VertexId, VD)] = {
+    JavaRDD.fromRDD(in)
+  }
 
-  override def rdd: RDD[(VertexId, VD)] = ???
+  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  def cache(): JavaVertexRDD[VD] = vertices.cache().asInstanceOf[JavaVertexRDD[VD]]
 
-  override implicit val classTag: ClassTag[(VertexId, VD)] = _
+  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  def persist(): JavaVertexRDD[VD] = vertices.persist().asInstanceOf[JavaVertexRDD[VD]]
+
+  /** Persist the RDDs of this DStream with the given storage level */
+  def persist(storageLevel: StorageLevel): JavaVertexRDD[VD] =
+    vertices.persist(storageLevel).asInstanceOf[JavaVertexRDD[VD]]
+
+  def unpersist(blocking: Boolean = true) : this.type =
+    JavaVertexRDD(vertices.unpersist(blocking))
+
+  override def compute(part: Partition, context: TaskContext): Iterator[(VertexId, VD)] =
+    vertexRDD.compute(part, context)
+
+
+  def asJavaVertexRDD = JavaRDD.fromRDD(this.vertexRDD)
+
+
+
+
+
+
+}
+
+object JavaVertexRDD {
+
+  implicit def fromVertexRDD[VD: ClassTag](vertices: JavaRDD[(VertexId, VD)]): JavaVertexRDD[VD] =
+    new JavaVertexRDD[VD](vertices)
+
+  implicit def apply[VD: ClassTag](vertices: JavaRDD[(Long, VD)]): JavaVertexRDD[VD] = {
+    new JavaVertexRDD[VD](vertices)
+  }
 }
 
 
