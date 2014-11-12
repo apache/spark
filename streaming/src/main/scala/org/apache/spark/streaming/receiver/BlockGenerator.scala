@@ -84,7 +84,7 @@ private[streaming] class BlockGenerator(
    * Push a single data item into the buffer. All received data items
    * will be periodically pushed into BlockManager.
    */
-  def += (data: Any, metadata: Any = null): Unit = synchronized {
+  def += (data: Any): Unit = synchronized {
     waitToPush()
     currentBuffer += data
   }
