@@ -191,7 +191,7 @@ private[spark] class SortShuffleReader[K, C](
 
     _memoryBytesSpilled += blocksToSpill.map(_.blockData.size()).sum
 
-    if (inMemoryBlocks.size > 1) {
+    if (blocksToSpill.size > 1) {
       val itrGroup = inMemoryBlocksToIterators(blocksToSpill)
       val partialMergedItr =
         MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
@@ -249,14 +249,12 @@ private[spark] class SortShuffleReader[K, C](
 
     logInfo(s"Merged ${blocksToSpill.size} in-memory blocks into file ${file.getName}")
 
-    for (block <- inMemoryBlocks) {
+    for (block <- blocksToSpill) {
       block.blockData.release()
       if (block != tippingBlock) {
         shuffleMemoryManager.release(block.blockData.size)
       }
     }
-
-    inMemoryBlocks.clear()
   }
 
   private def inMemoryBlocksToIterators(blocks: Seq[MemoryShuffleBlock])

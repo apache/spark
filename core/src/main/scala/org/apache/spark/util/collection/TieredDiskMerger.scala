@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Comparator
 import java.util.concurrent.{PriorityBlockingQueue, CountDownLatch}
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -181,7 +181,7 @@ private[spark] class TieredDiskMerger[K, C](
         }
 
         if (onDiskBlocks.size() > maxMergeFactor) {
-          val blocksToMerge = new mutable.ArrayBuffer[DiskShuffleBlock]()
+          val blocksToMerge = new ArrayBuffer[DiskShuffleBlock]()
           // Try to pick the smallest merge width that will result in the next merge being the final
           // merge.
           val mergeFactor = math.min(onDiskBlocks.size - maxMergeFactor + 1, maxMergeFactor)
