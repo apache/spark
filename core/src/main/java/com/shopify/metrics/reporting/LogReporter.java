@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 public class LogReporter extends ScheduledReporter {
   
-  private static final Logger LOGGER = LoggerFactory.getLogger(LogReporter.class);
+  private static final Logger LOGGER = Logger.getLogger(LogReporter.class);
   
   public static Builder forRegistry(MetricRegistry registry) {
     return new Builder(registry);
@@ -90,13 +90,14 @@ public class LogReporter extends ScheduledReporter {
 
     super(registry, "log-reporter", filter, rateUnit, durationUnit);
     this.logger = Logger.getLogger("com.shopify.metrics");
-    String file = String.format("{}/spark.metrics.log", directory);
+    String file = String.format("%s/spark.metrics.log", directory);
 
     try {
       // TODO:: simplify
       PatternLayout layout = new PatternLayout("%d{ISO8601} %c %m%n");
       RollingFileAppender logfile = new RollingFileAppender(layout, file);
 
+      LOGGER.info(String.format("Creating metrics output file: %s", file));
       // TODO:: these should be configurable
       logfile.setMaxFileSize("50MB");
       logfile.setMaxBackupIndex(10);
