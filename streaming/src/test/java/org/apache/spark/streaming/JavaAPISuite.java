@@ -967,7 +967,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             });
 
     JavaTestUtils.attachTestOutputStream(reversed);
-    List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
@@ -1010,7 +1010,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           }
         });
     JavaTestUtils.attachTestOutputStream(flatMapped);
-    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
@@ -1338,7 +1338,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         });
 
     JavaTestUtils.attachTestOutputStream(sorted);
-    List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
