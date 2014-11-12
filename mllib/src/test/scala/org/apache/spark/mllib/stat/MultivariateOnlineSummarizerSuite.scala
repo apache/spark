@@ -139,7 +139,8 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     assert(summarizer.numNonzeros ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
 
     assert(summarizer.variance ~==
-      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5, "variance mismatch")
+      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
+      "variance mismatch")
 
     assert(summarizer.count === 6)
   }
@@ -167,7 +168,8 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
     assert(summarizer.numNonzeros ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
 
     assert(summarizer.variance ~==
-      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5, "variance mismatch")
+      Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
+      "variance mismatch")
 
     assert(summarizer.count === 6)
   }

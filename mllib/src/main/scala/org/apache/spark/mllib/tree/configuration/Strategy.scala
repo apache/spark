@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import scala.beans.BeanProperty
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -27,57 +28,68 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 /**
  * :: Experimental ::
  * Stores all the configuration options for tree construction
- * @param algo classification or regression
- * @param impurity criterion used for information gain calculation
+ * @param algo  Learning goal.  Supported:
+ *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
+ *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+ * @param impurity Criterion used for information gain calculation.
+ *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+ *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
+ *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
- * @param numClassesForClassification number of classes for classification. Default value is 2
- *                                    leads to binary classification
- * @param maxBins maximum number of bins used for splitting features
- * @param quantileCalculationStrategy algorithm for calculating quantiles
+ * @param numClassesForClassification Number of classes for classification.
+ *                                    (Ignored for regression.)
+ *                                    Default value is 2 (binary classification).
+ * @param maxBins Maximum number of bins used for discretizing continuous features and
+ *                for choosing how to split on features at each node.
+ *                More bins give higher granularity.
+ * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
+ *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
  *                                number of discrete values they take. For example, an entry (n ->
  *                                k) implies the feature n is categorical with k categories 0,
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
- * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
- *                      128 MB.
- *
+ * @param minInstancesPerNode Minimum number of instances each child must have after split.
+ *                            Default value is 1. If a split cause left or right child
+ *                            to have less than minInstancesPerNode,
+ *                            this split will not be considered as a valid split.
+ * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
+ *                    If a split has less information gain than minInfoGain,
+ *                    this split will not be considered as a valid split.
+ * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
+ *                      256 MB.
+ * @param subsamplingRate Fraction of the training data used for learning decision tree.
  */
 @Experimental
 class Strategy (
     val algo: Algo,
-    val impurity: Impurity,
-    val maxDepth: Int,
-    val numClassesForClassification: Int = 2,
-    val maxBins: Int = 100,
-    val quantileCalculationStrategy: QuantileStrategy = Sort,
-    val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemoryInMB: Int = 128) extends Serializable {
+    @BeanProperty var impurity: Impurity,
+    @BeanProperty var maxDepth: Int,
+    @BeanProperty var numClassesForClassification: Int = 2,
+    @BeanProperty var maxBins: Int = 32,
+    @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
+    @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+    @BeanProperty var minInstancesPerNode: Int = 1,
+    @BeanProperty var minInfoGain: Double = 0.0,
+    @BeanProperty var maxMemoryInMB: Int = 256,
+    @BeanProperty var subsamplingRate: Double = 1) extends Serializable {
 
   if (algo == Classification) {
     require(numClassesForClassification >= 2)
   }
+  require(minInstancesPerNode >= 1,
+    s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
+  require(maxMemoryInMB <= 10240,
+    s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
+
   val isMulticlassClassification =
     algo == Classification && numClassesForClassification > 2
   val isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 
   /**
-   * Java-friendly constructor.
-   *
-   * @param algo classification or regression
-   * @param impurity criterion used for information gain calculation
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value is 2
-   *                                    leads to binary classification
-   * @param maxBins maximum number of bins used for splitting features
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
-   *                                the number of discrete values they take. For example, an entry
-   *                                (n -> k) implies the feature n is categorical with k categories
-   *                                0, 1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
    */
   def this(
       algo: Algo,
@@ -90,6 +102,10 @@ class Strategy (
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
   }
 
+  /**
+   * Check validity of parameters.
+   * Throws exception if invalid.
+   */
   private[tree] def assertValid(): Unit = {
     algo match {
       case Classification =>

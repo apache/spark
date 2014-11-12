@@ -18,19 +18,16 @@
 package org.apache.spark.examples.mllib
 
 import scala.collection.mutable
-
-import com.esotericsoftware.kryo.Kryo
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.{ Level, Logger }
 import scopt.OptionParser
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.optimization.Constraint._
-import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
-import org.apache.spark.Logging
 import org.apache.spark.mllib.optimization.Constraint
-import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.{ SparkConf, SparkContext }
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.recommendation.{ ALS, MatrixFactorizationModel, Rating }
+import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.evaluation.RankingMetrics
+import org.jblas.DoubleMatrix
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -42,34 +39,27 @@ import org.apache.spark.mllib.evaluation.MulticlassMetrics
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object MovieLensALS {
-
-  class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-      kryo.register(classOf[mutable.BitSet])
-    }
-  }
-  
   case class Params(
-      input: String = null,
-      kryo: Boolean = false,
-      numIterations: Int = 20,
-      userConstraint: String = "SMOOTH",
-      productConstraint: String = "SMOOTH",
-      userLambda: Double = 0.01,
-      productLambda: Double = 0.01,
-      rank: Int = 10,
-      delimiter: String = "::",
-      numUserBlocks: Int = -1,
-      numProductBlocks: Int = -1,
-      implicitPrefs: Boolean = false)
-      
+    input: String = null,
+    kryo: Boolean = false,
+    numIterations: Int = 20,
+    userConstraint: String = "SMOOTH",
+    productConstraint: String = "SMOOTH",
+    userLambda: Double = 1.0,
+    productLambda: Double = 1.0,
+    rank: Int = 10,
+    delimiter: String = "::",
+    numUserBlocks: Int = -1,
+    numProductBlocks: Int = -1,
+    implicitPrefs: Boolean = false,
+    validateRecommendation: Double = 0.0) extends AbstractParams[Params]
+
   def main(args: Array[String]) {
     val defaultParams = Params()
-    
+
     val userConstraints = Constraint.values.toList.mkString(",")
     val productConstraints = Constraint.values.toList.mkString(",")
-    
+
     val parser = new OptionParser[Params]("MovieLensALS") {
       head("MovieLensALS: an example app for ALS on MovieLens data.")
       opt[Int]("rank")
@@ -79,20 +69,20 @@ object MovieLensALS {
         .text(s"number of iterations, default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
       opt[String]("userConstraint")
-      	.text(s"user constraint for quadratic minimization, options ${userConstraints} default: SMOOTH")
-      	.action((x,c) => c.copy(userConstraint = x))
+        .text(s"user constraint for quadratic minimization, options ${userConstraints} default: SMOOTH")
+        .action((x, c) => c.copy(userConstraint = x))
       opt[String]("productConstraint")
-      	.text(s"product constraint for quadratic minimization, options ${productConstraints} default: SMOOTH")
-      	.action((x,c) => c.copy(productConstraint = x))
+        .text(s"product constraint for quadratic minimization, options ${productConstraints} default: SMOOTH")
+        .action((x, c) => c.copy(productConstraint = x))
       opt[Double]("lambdaUser")
         .text(s"lambda for user regularization, default: ${defaultParams.userLambda}")
         .action((x, c) => c.copy(userLambda = x))
       opt[Double]("lambdaProduct")
         .text(s"lambda for product regularization, default: ${defaultParams.productLambda}")
-        .action((x, c) => c.copy(productLambda = x))   
-     opt[String]("delimiter")
-      .text(s"sparse dataset delimiter, default: ${defaultParams.delimiter}")
-      .action((x,c) => c.copy(delimiter = x))
+        .action((x, c) => c.copy(productLambda = x))
+      opt[String]("delimiter")
+        .text(s"sparse dataset delimiter, default: ${defaultParams.delimiter}")
+        .action((x, c) => c.copy(delimiter = x))
       opt[Unit]("kryo")
         .text("use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
@@ -105,6 +95,9 @@ object MovieLensALS {
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
+      opt[Double]("validateRecommendation")
+        .text("ratio for topN product recommendation validation, default : 0.0*numProducts")
+        .action((x, c) => c.copy(validateRecommendation = x))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -130,18 +123,18 @@ object MovieLensALS {
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
-      conf.set("spark.serializer", classOf[KryoSerializer].getName)
-        .set("spark.kryo.registrator", classOf[ALSRegistrator].getName)
+      conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
         .set("spark.kryoserializer.buffer.mb", "8")
     }
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
+    val implicitPrefs = params.implicitPrefs
+
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split(params.delimiter)
-      
-      if (params.implicitPrefs) {
+      if (implicitPrefs) {
         /*
          * MovieLens ratings are on a scale of 1-5:
          * 5: Must see
@@ -168,8 +161,9 @@ object MovieLensALS {
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
-    val splits = ratings.randomSplit(Array(0.8, 0.2))
-    val training = splits(0).cache()
+    val training = ratings.map { x => (x.user, x) }.sample(false, 0.8, 1L).map { x => x._2 }
+    val testSplit = ratings.subtract(training)
+
     val test = if (params.implicitPrefs) {
       /*
        * 0 means "don't know" and positive values mean "confident that the prediction should be 1".
@@ -178,20 +172,23 @@ object MovieLensALS {
        * the confidence. The error is the difference between prediction and either 1 or 0,
        * depending on whether r is positive or negative.
        */
-      splits(1).map(x => Rating(x.user, x.product, if (x.rating > 0) 1.0 else 0.0))
+      testSplit.map(x => Rating(x.user, x.product, if (x.rating > 0) 1.0 else 0.0))
     } else {
-      splits(1)
+      testSplit
     }.cache()
+
+    training.cache
+    test.cache
 
     val numTraining = training.count()
     val numTest = test.count()
     println(s"Training: $numTraining, test: $numTest.")
 
     ratings.unpersist(blocking = false)
-    
+
     val userConstraint = Constraint.withName(params.userConstraint)
     val productConstraint = Constraint.withName(params.productConstraint)
-    
+
     val als = new ALS()
       .setRank(params.rank)
       .setIterations(params.numIterations)
@@ -202,28 +199,114 @@ object MovieLensALS {
       .setImplicitPrefs(params.implicitPrefs)
       .setUserBlocks(params.numUserBlocks)
       .setProductBlocks(params.numProductBlocks)
-    
+
     println(s"Quadratic minimization userConstraint ${userConstraint} productConstraint ${productConstraint}")
-        
+
     val model = als.run(training)
-   
+
     val rmse = computeRmse(model, test, params.implicitPrefs)
-    
+
     println(s"Test RMSE = $rmse.")
-    
+
+    val n = (numMovies * params.validateRecommendation).toInt
+
+    if (n > 0) {
+      val userMapAPI = computeRecommendationMetricsAPI(model,
+        training, test, n)
+
+      println(s"Test userMapAPI = $userMapAPI")
+
+      val userMap = computeRecommendationMetrics(model,
+        training, test, n)
+
+      println(s"Test userMap = $userMap")
+    }
+
     sc.stop()
   }
 
   /** Compute RMSE (Root Mean Squared Error). */
   def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
-
-    def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
-
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
-    val predictionsAndRatings = predictions.map{ x =>
-      ((x.user, x.product), mapPredictedRating(x.rating))
+    val predictionsAndRatings = predictions.map { x =>
+      ((x.user, x.product), mapPredictedRating(x.rating, implicitPrefs))
     }.join(data.map(x => ((x.user, x.product), x.rating))).values
-    
+
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
+  }
+
+  def mapPredictedRating(r: Double, implicitPrefs: Boolean) = {
+    if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
+    else r
+  }
+
+  /**
+   * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
+   */
+  def computeRecommendationMetrics(model: MatrixFactorizationModel,
+    train: RDD[Rating], test: RDD[Rating], n: Int) = {
+
+    val testProductLabels = test.map {
+      x => (x.user, x.product)
+    }.groupByKey.map {
+      case (userId, products) => (userId, products.toArray)
+    }
+
+    val trainProducts = train.map { x => ((x.user, x.product), x.rating) }
+
+    val rankings = model.userFeatures.cartesian(model.productFeatures).map {
+      case ((userId, userFeature), (productId, productFeature)) => {
+        val userVector = new DoubleMatrix(userFeature)
+        val productVector = new DoubleMatrix(productFeature)
+        ((userId, productId), userVector.dot(productVector))
+      }
+    }.leftOuterJoin(trainProducts).filter {
+      case ((userId, productId), (ratingAll, ratingTrain)) =>
+        ratingTrain == None
+    }.map {
+      case ((userId, productId), (ratingAll, ratingTrain)) =>
+        (userId, (productId, ratingAll))
+    }.groupByKey.map {
+      case (user, predictedProducts) =>
+        val sortedProducts = predictedProducts.toArray.sortWith(
+          (predicted1: (Int, Double), predicted2: (Int, Double)) =>
+            predicted1._2 > predicted2._2).take(n)
+        (user, sortedProducts.map { _._1 })
+    }.join(testProductLabels).map {
+      case (user, (pred, lab)) => (pred, lab)
+    }
+
+    val metrics = new RankingMetrics(rankings)
+    println("Using Cartesian")
+    for (i <- 0 until 10) {
+      val k = (i + 1) * 20
+      println(s"k $k prec@k ${metrics.precisionAt(k)}")
+    }
+    metrics.meanAveragePrecision
+  }
+
+  /**
+   * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
+   */
+  def computeRecommendationMetricsAPI(model: MatrixFactorizationModel,
+    train: RDD[Rating], test: RDD[Rating], n: Int) = {
+
+    val testProductLabels = test.map {
+      x => (x.user, x.product)
+    }.groupByKey.map {
+      case (userId, products) => (userId, products.toArray)
+    }
+
+    val rankings = model.recommendAll(n, train).join(testProductLabels).map {
+      case (user, (pred, lab)) => (pred.map { _.product }, lab)
+    }
+
+    val metrics = new RankingMetrics(rankings)
+    println("Using recommendAll API")
+    for (i <- 0 until 10) {
+      val k = (i + 1) * 20
+      println(s"k $k prec@k ${metrics.precisionAt(k)}")
+    }
+    metrics.meanAveragePrecision
   }
 }

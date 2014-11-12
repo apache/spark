@@ -17,15 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.InputFormatInfo
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
-
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
-class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
+private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
   var addJars: String = null
   var files: String = null
   var archives: String = null
@@ -34,32 +33,63 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var userArgs: Seq[String] = Seq[String]()
   var executorMemory = 1024 // MB
   var executorCores = 1
-  var numExecutors = 2
-  var amQueue = sparkConf.get("QUEUE", "default")
+  var numExecutors = DEFAULT_NUMBER_EXECUTORS
+  var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
-  var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
-  var inputFormatInfo: List[InputFormatInfo] = null
   var priority = 0
 
+  // Additional memory to allocate to containers
+  // For now, use driver's memory overhead as our AM container's memory overhead
+  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  private val isDynamicAllocationEnabled =
+    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
+
   parseArgs(args.toList)
+  loadEnvironmentArgs()
+  validateArgs()
 
-  // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
-  // it should default to hdfs://
-  files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
-  archives = Option(archives).getOrElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES").orNull)
+  /** Load any default arguments provided through environment variables and Spark properties. */
+  private def loadEnvironmentArgs(): Unit = {
+    // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
+    // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
+    files = Option(files)
+      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
+      .orNull
+    archives = Option(archives)
+      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
+      .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
+      .orNull
+    // If dynamic allocation is enabled, start at the max number of executors
+    if (isDynamicAllocationEnabled) {
+      val maxExecutorsConf = "spark.dynamicAllocation.maxExecutors"
+      if (!sparkConf.contains(maxExecutorsConf)) {
+        throw new IllegalArgumentException(
+          s"$maxExecutorsConf must be set if dynamic allocation is enabled!")
+      }
+      numExecutors = sparkConf.get(maxExecutorsConf).toInt
+    }
+  }
 
-  // spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
-  // for both yarn-client and yarn-cluster
-  files = Option(files).getOrElse(sparkConf.getOption("spark.yarn.dist.files").
-    map(p => Utils.resolveURIs(p)).orNull)
-  archives = Option(archives).getOrElse(sparkConf.getOption("spark.yarn.dist.archives").
-    map(p => Utils.resolveURIs(p)).orNull)
+  /**
+   * Fail fast if any arguments provided are invalid.
+   * This is intended to be called only after the provided arguments have been parsed.
+   */
+  private def validateArgs(): Unit = {
+    if (numExecutors <= 0) {
+      throw new IllegalArgumentException(
+        "You must specify at least 1 executor!\n" + getUsageMessage())
+    }
+  }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
-    val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
-    val inputFormatMap: HashMap[String, InputFormatInfo] = new HashMap[String, InputFormatInfo]()
-
+    val userArgsBuffer = new ArrayBuffer[String]()
     var args = inputArgs
 
     while (!args.isEmpty) {
@@ -80,10 +110,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case ("--master-class" | "--am-class") :: value :: tail =>
-          if (args(0) == "--master-class") {
-            println("--master-class is deprecated. Use --am-class instead.")
-          }
-          amClass = value
+          println(s"${args(0)} is deprecated and is not used anymore.")
           args = tail
 
         case ("--master-memory" | "--driver-memory") :: MemoryParam(value) :: tail =>
@@ -96,6 +123,11 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
           if (args(0) == "--num-workers") {
             println("--num-workers is deprecated. Use --num-executors instead.")
+          }
+          // Dynamic allocation is not compatible with this option
+          if (isDynamicAllocationEnabled) {
+            throw new IllegalArgumentException("Explicitly setting the number " +
+              "of executors is not compatible with spark.dynamicAllocation.enabled!")
           }
           numExecutors = value
           args = tail
@@ -135,9 +167,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case Nil =>
-          if (userClass == null) {
-            throw new IllegalArgumentException(getUsageMessage())
-          }
 
         case _ =>
           throw new IllegalArgumentException(getUsageMessage(args))
@@ -145,19 +174,16 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     }
 
     userArgs = userArgsBuffer.readOnly
-    inputFormatInfo = inputFormatMap.values.toList
   }
 
-
-  def getUsageMessage(unknownParam: Any = null): String = {
+  private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
-
     message +
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
       "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --arg ARGS                 Argument to be passed to your application's main class.\n" +
+      "  --arg ARG                  Argument to be passed to your application's main class.\n" +
       "                             Multiple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +

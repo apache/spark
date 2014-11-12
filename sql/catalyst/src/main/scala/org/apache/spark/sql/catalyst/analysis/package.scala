@@ -22,4 +22,14 @@ package org.apache.spark.sql.catalyst
  * Analysis consists of translating [[UnresolvedAttribute]]s and [[UnresolvedRelation]]s
  * into fully typed objects using information in a schema [[Catalog]].
  */
-package object analysis
+package object analysis {
+
+  /**
+   * Responsible for resolving which identifiers refer to the same entity.  For example, by using
+   * case insensitive equality.
+   */
+  type Resolver = (String, String) => Boolean
+
+  val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
+  val caseSensitiveResolution = (a: String, b: String) => a == b
+}

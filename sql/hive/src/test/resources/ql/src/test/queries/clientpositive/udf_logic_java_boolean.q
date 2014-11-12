@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 EXPLAIN
 CREATE TEMPORARY FUNCTION test_udf_get_java_boolean AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFTestGetJavaBoolean';
 

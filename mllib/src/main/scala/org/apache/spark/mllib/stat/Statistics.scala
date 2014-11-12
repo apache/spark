@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
@@ -29,6 +30,18 @@ import org.apache.spark.rdd.RDD
  */
 @Experimental
 object Statistics {
+
+  /**
+   * :: Experimental ::
+   * Computes column-wise summary statistics for the input RDD[Vector].
+   *
+   * @param X an RDD[Vector] for which column-wise summary statistics are to be computed.
+   * @return [[MultivariateStatisticalSummary]] object containing column-wise summary statistics.
+   */
+  @Experimental
+  def colStats(X: RDD[Vector]): MultivariateStatisticalSummary = {
+    new RowMatrix(X).computeColumnSummaryStatistics()
+  }
 
   /**
    * :: Experimental ::
@@ -142,7 +155,7 @@ object Statistics {
    * :: Experimental ::
    * Conduct Pearson's independence test for every feature against the label across the input RDD.
    * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
-   * the chi-squared statistic is computed.
+   * the chi-squared statistic is computed. All label and feature values must be categorical.
    *
    * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
    *             Real-valued features will be treated as categorical for each distinct value.

@@ -33,7 +33,7 @@ for %%d in ("%FWDIR%assembly\target\scala-%SCALA_VERSION%\spark-assembly*hadoop*
 )
 if [%FOUND_JAR%] == [0] (
   echo Failed to find Spark assembly JAR.
-  echo You need to build Spark with sbt\sbt assembly before running this program.
+  echo You need to build Spark before running this program.
   goto exit
 )
 :skip_build_test
@@ -59,7 +59,12 @@ for /f %%i in ('echo %1^| findstr /R "\.py"') do (
 )
 
 if [%PYTHON_FILE%] == [] (
-  %PYSPARK_PYTHON%
+  set PYSPARK_SHELL=1
+  if [%IPYTHON%] == [1] (
+	ipython %IPYTHON_OPTS%
+  ) else (
+	%PYSPARK_PYTHON%
+  ) 
 ) else (
   echo.
   echo WARNING: Running python applications through ./bin/pyspark.cmd is deprecated as of Spark 1.0.

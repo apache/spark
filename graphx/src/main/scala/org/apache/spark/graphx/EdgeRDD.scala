@@ -37,7 +37,15 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
-  partitionsRDD.setName("EdgeRDD")
+  override def setName(_name: String): this.type = {
+    if (partitionsRDD.name != null) {
+      partitionsRDD.setName(partitionsRDD.name + ", " + _name)
+    } else {
+      partitionsRDD.setName(_name)
+    }
+    this
+  }
+  setName("EdgeRDD")
 
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
@@ -74,10 +82,15 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
     this
   }
 
-  /** Persists the vertex partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  /** Persists the edge partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
   override def cache(): this.type = {
     partitionsRDD.persist(targetStorageLevel)
     this
+  }
+
+  /** The number of edges in the RDD. */
+  override def count(): Long = {
+    partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
   }
 
   private[graphx] def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](

@@ -111,12 +111,15 @@ class ALS private (
    */
 
   def this() = this(-1, -1, 10, 10, SMOOTH, SMOOTH, 0.01, 0.01, false, 1.0)
+		  
+  /** storage level for user/product in/out links */
+  private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
 
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
    * into; pass -1 for an auto-configured number of blocks. Default: -1.
    */
-  def setBlocks(numBlocks: Int): ALS = {
+  def setBlocks(numBlocks: Int): this.type = {
     this.numUserBlocks = numBlocks
     this.numProductBlocks = numBlocks
     this
@@ -125,7 +128,7 @@ class ALS private (
   /**
    * Set the number of user blocks to parallelize the computation.
    */
-  def setUserBlocks(numUserBlocks: Int): ALS = {
+  def setUserBlocks(numUserBlocks: Int): this.type = {
     this.numUserBlocks = numUserBlocks
     this
   }
@@ -133,19 +136,19 @@ class ALS private (
   /**
    * Set the number of product blocks to parallelize the computation.
    */
-  def setProductBlocks(numProductBlocks: Int): ALS = {
+  def setProductBlocks(numProductBlocks: Int): this.type = {
     this.numProductBlocks = numProductBlocks
     this
   }
 
   /** Set the rank of the feature matrices computed (number of features). Default: 10. */
-  def setRank(rank: Int): ALS = {
+  def setRank(rank: Int): this.type = {
     this.rank = rank
     this
   }
 
   /** Set the number of iterations to run. Default: 10. */
-  def setIterations(iterations: Int): ALS = {
+  def setIterations(iterations: Int): this.type = {
     this.iterations = iterations
     this
   }
@@ -175,9 +178,9 @@ class ALS private (
     if (this.productConstraint == SPARSE) productBeta = 0.99
     this
   }
-
+  
   /** Sets whether to use implicit preference. Default: false. */
-  def setImplicitPrefs(implicitPrefs: Boolean): ALS = {
+  def setImplicitPrefs(implicitPrefs: Boolean): this.type = {
     this.implicitPrefs = implicitPrefs
     this
   }
@@ -187,13 +190,13 @@ class ALS private (
    * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
    */
   @Experimental
-  def setAlpha(alpha: Double): ALS = {
+  def setAlpha(alpha: Double): this.type = {
     this.alpha = alpha
     this
   }
 
   /** Sets a random seed to have deterministic results. */
-  def setSeed(seed: Long): ALS = {
+  def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
   }
@@ -203,6 +206,18 @@ class ALS private (
   private var userBeta = 0.0
   private var productBeta = 0.0
   
+  /**
+   * :: DeveloperApi ::
+   * Sets storage level for intermediate RDDs (user/product in/out links). The default value is
+   * `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g., `MEMORY_AND_DISK_SER` and
+   * set `spark.rdd.compress` to `true` to reduce the space requirement, at the cost of speed.
+   */
+  @DeveloperApi
+  def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
+    this.intermediateRDDStorageLevel = storageLevel
+    this
+  }
+
   /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
@@ -464,8 +479,8 @@ class ALS private (
     }, preservesPartitioning = true)
     val inLinks = links.mapValues(_._1)
     val outLinks = links.mapValues(_._2)
-    inLinks.persist(StorageLevel.MEMORY_AND_DISK)
-    outLinks.persist(StorageLevel.MEMORY_AND_DISK)
+    inLinks.persist(intermediateRDDStorageLevel)
+    outLinks.persist(intermediateRDDStorageLevel)
     (inLinks, outLinks)
   }
   /**

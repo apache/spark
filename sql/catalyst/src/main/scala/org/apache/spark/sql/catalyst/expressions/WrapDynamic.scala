@@ -24,9 +24,7 @@ import org.apache.spark.sql.catalyst.types.DataType
 /**
  * The data type representing [[DynamicRow]] values.
  */
-case object DynamicType extends DataType {
-  def simpleString: String = "dynamic"
-}
+case object DynamicType extends DataType
 
 /**
  * Wrap a [[Row]] as a [[DynamicRow]].
@@ -35,7 +33,7 @@ case class WrapDynamic(children: Seq[Attribute]) extends Expression {
   type EvaluatedType = DynamicRow
 
   def nullable = false
-  def references = children.toSet
+
   def dataType = DynamicType
 
   override def eval(input: Row): DynamicRow = input match {

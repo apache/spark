@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SerializableWritable, SparkException}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
@@ -42,7 +43,7 @@ private[python] object Converter extends Logging {
                   defaultConverter: Converter[Any, Any]): Converter[Any, Any] = {
     converterClass.map { cc =>
       Try {
-        val c = Class.forName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
+        val c = Utils.classForName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
         logInfo(s"Loaded converter: $cc")
         c
       } match {

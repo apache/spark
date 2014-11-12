@@ -39,6 +39,17 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
     Vectors.dense(9.0, 0.0, 0.0, 1.0)
   )
 
+  test("corr(x, y) pearson, 1 value in data") {
+    val x = sc.parallelize(Array(1.0))
+    val y = sc.parallelize(Array(4.0))
+    intercept[RuntimeException] {
+      Statistics.corr(x, y, "pearson")
+    }
+    intercept[RuntimeException] {
+      Statistics.corr(x, y, "spearman")
+    }
+  }
+
   test("corr(x, y) default, pearson") {
     val x = sc.parallelize(xData)
     val y = sc.parallelize(yData)
@@ -58,7 +69,7 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
 
     // RDD of zero variance
     val z = sc.parallelize(zeros)
-    assert(Statistics.corr(x, z).isNaN())
+    assert(Statistics.corr(x, z).isNaN)
   }
 
   test("corr(x, y) spearman") {
@@ -78,7 +89,7 @@ class CorrelationSuite extends FunSuite with LocalSparkContext {
 
     // RDD of zero variance => zero variance in ranks
     val z = sc.parallelize(zeros)
-    assert(Statistics.corr(x, z, "spearman").isNaN())
+    assert(Statistics.corr(x, z, "spearman").isNaN)
   }
 
   test("corr(X) default, pearson") {

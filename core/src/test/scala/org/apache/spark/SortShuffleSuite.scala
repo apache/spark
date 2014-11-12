@@ -24,8 +24,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
 
   override def beforeAll() {
-    System.setProperty("spark.shuffle.manager",
-      "org.apache.spark.shuffle.sort.SortShuffleManager")
+    System.setProperty("spark.shuffle.manager", "sort")
   }
 
   override def afterAll() {

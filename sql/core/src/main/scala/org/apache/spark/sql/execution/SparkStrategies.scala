@@ -23,8 +23,10 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.parquet._
+
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -33,13 +35,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
-        val semiJoin = execution.LeftSemiJoinHash(
+        val semiJoin = joins.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // no predicate can be evaluated by matching hash keys
       case logical.Join(left, right, LeftSemi, condition) =>
-        execution.LeftSemiJoinBNL(
-          planLater(left), planLater(right), condition) :: Nil
+        joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
     }
   }
@@ -49,13 +50,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * evaluated by matching hash keys.
    *
    * This strategy applies a simple optimization based on the estimates of the physical sizes of
-   * the two join sides.  When planning a [[execution.BroadcastHashJoin]], if one side has an
+   * the two join sides.  When planning a [[joins.BroadcastHashJoin]], if one side has an
    * estimated physical size smaller than the user-settable threshold
    * [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]], the planner would mark it as the
    * ''build'' relation and mark the other relation as the ''stream'' side.  The build table will be
    * ''broadcasted'' to all of the executors involved in the join, as a
    * [[org.apache.spark.broadcast.Broadcast]] object.  If both estimates exceed the threshold, they
-   * will instead be used to decide the build side in a [[execution.ShuffledHashJoin]].
+   * will instead be used to decide the build side in a [[joins.ShuffledHashJoin]].
    */
   object HashJoin extends Strategy with PredicateHelper {
 
@@ -65,8 +66,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         left: LogicalPlan,
         right: LogicalPlan,
         condition: Option[Expression],
-        side: BuildSide) = {
-      val broadcastHashJoin = execution.BroadcastHashJoin(
+        side: joins.BuildSide) = {
+      val broadcastHashJoin = execution.joins.BroadcastHashJoin(
         leftKeys, rightKeys, side, planLater(left), planLater(right))
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
@@ -75,27 +76,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if sqlContext.autoBroadcastJoinThreshold > 0 &&
            right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
-        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildRight)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if sqlContext.autoBroadcastJoinThreshold > 0 &&
            left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
-          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
+          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-            BuildRight
+            joins.BuildRight
           } else {
-            BuildLeft
+            joins.BuildLeft
           }
-        val hashJoin =
-          execution.ShuffledHashJoin(
-            leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
+        val hashJoin = joins.ShuffledHashJoin(
+          leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        execution.HashOuterJoin(
+        joins.HashOuterJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
       case _ => Nil
@@ -148,7 +148,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
-      case _: Sum | _: Count => false
+      case _: Sum | _: Count | _: Max | _: CombineSetsAndCount => false
+      // The generated set implementation is pretty limited ATM.
+      case CollectHashSet(exprs) if exprs.size == 1  &&
+           Seq(IntegerType, LongType).contains(exprs.head.dataType) => false
       case _ => true
     }
 
@@ -160,8 +163,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) BuildRight else BuildLeft
-        execution.BroadcastNestedLoopJoin(
+          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+            joins.BuildRight
+          } else {
+            joins.BuildLeft
+          }
+        joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
       case _ => Nil
     }
@@ -170,10 +177,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, _, None) =>
-        execution.CartesianProduct(planLater(left), planLater(right)) :: Nil
+        execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
-          execution.CartesianProduct(planLater(left), planLater(right))) :: Nil
+          execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
     }
   }
@@ -239,8 +246,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         pruneFilterProject(
           projectList,
           filters,
-          identity[Seq[Expression]], // No filters are pushed down.
-          InMemoryColumnarTableScan(_, mem)) :: Nil
+          identity[Seq[Expression]], // All filters still need to be evaluated.
+          InMemoryColumnarTableScan(_,  filters, mem)) :: Nil
       case _ => Nil
     }
   }
@@ -268,10 +275,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
+      case SparkLogicalPlan(alreadyPlanned) => alreadyPlanned :: Nil
       case logical.LocalRelation(output, data) =>
-        ExistingRdd(
+        val nPartitions = if (data.isEmpty) 1 else numPartitions
+        PhysicalRDD(
           output,
-          ExistingRdd.productToRowRdd(sparkContext.parallelize(data, numPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
@@ -283,24 +292,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Generate(generator, join, outer, _, child) =>
         execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
       case logical.NoRelation =>
-        execution.ExistingRdd(Nil, singleRowRdd) :: Nil
+        execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case e @ EvaluatePython(udf, child) =>
+      case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
-      case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
+      case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
       case _ => Nil
     }
   }
 
   case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.SetCommand(key, value) =>
-        Seq(execution.SetCommand(key, value, plan.output)(context))
-      case logical.ExplainCommand(logicalPlan) =>
-        Seq(execution.ExplainCommand(logicalPlan, plan.output)(context))
-      case logical.CacheCommand(tableName, cache) =>
-        Seq(execution.CacheCommand(tableName, cache)(context))
+      case logical.SetCommand(kv) =>
+        Seq(execution.SetCommand(kv, plan.output)(context))
+      case logical.ExplainCommand(logicalPlan, extended) =>
+        Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
+      case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
+        Seq(execution.CacheTableCommand(tableName, optPlan, isLazy))
+      case logical.UncacheTableCommand(tableName) =>
+        Seq(execution.UncacheTableCommand(tableName))
       case _ => Nil
     }
   }
