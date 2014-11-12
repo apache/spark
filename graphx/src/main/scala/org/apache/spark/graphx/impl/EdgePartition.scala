@@ -64,6 +64,7 @@ class EdgePartition[
     activeSet: Option[VertexSet])
   extends Serializable {
 
+  /** No-arg constructor for serialization. */
   private def this() = this(null, null, null, null, null, null, null, null)
 
   /** Return a new `EdgePartition` with the specified edge data. */
@@ -375,12 +376,7 @@ class EdgePartition[
    * @param sendMsg generates messages to neighboring vertices of an edge
    * @param mergeMsg the combiner applied to messages destined to the same vertex
    * @param tripletFields which triplet fields `sendMsg` uses
-   * @param srcMustBeActive if true, edges will only be considered if their source vertex is in the
-   *   active set
-   * @param dstMustBeActive if true, edges will only be considered if their destination vertex is in
-   *   the active set
-   * @param maySatisfyEither if true, only one vertex need be in the active set for an edge to be
-   *   considered
+   * @param activeness criteria for filtering edges based on activeness
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
@@ -388,9 +384,7 @@ class EdgePartition[
       sendMsg: EdgeContext[VD, ED, A] => Unit,
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
-      srcMustBeActive: Boolean,
-      dstMustBeActive: Boolean,
-      maySatisfyEither: Boolean): Iterator[(VertexId, A)] = {
+      activeness: EdgeActiveness): Iterator[(VertexId, A)] = {
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
@@ -401,10 +395,13 @@ class EdgePartition[
       val srcId = local2global(localSrcId)
       val localDstId = localDstIds(i)
       val dstId = local2global(localDstId)
-      val srcIsActive = !srcMustBeActive || isActive(srcId)
-      val dstIsActive = !dstMustBeActive || isActive(dstId)
       val edgeIsActive =
-        if (maySatisfyEither) srcIsActive || dstIsActive else srcIsActive && dstIsActive
+        if (activeness == EdgeActiveness.Neither) true
+        else if (activeness == EdgeActiveness.SrcOnly) isActive(srcId)
+        else if (activeness == EdgeActiveness.DstOnly) isActive(dstId)
+        else if (activeness == EdgeActiveness.Both) isActive(srcId) && isActive(dstId)
+        else if (activeness == EdgeActiveness.Either) isActive(srcId) || isActive(dstId)
+        else throw new Exception("unreachable")
       if (edgeIsActive) {
         val srcAttr = if (tripletFields.useSrc) vertexAttrs(localSrcId) else null.asInstanceOf[VD]
         val dstAttr = if (tripletFields.useDst) vertexAttrs(localDstId) else null.asInstanceOf[VD]
@@ -424,12 +421,7 @@ class EdgePartition[
    * @param sendMsg generates messages to neighboring vertices of an edge
    * @param mergeMsg the combiner applied to messages destined to the same vertex
    * @param tripletFields which triplet fields `sendMsg` uses
-   * @param srcMustBeActive if true, edges will only be considered if their source vertex is in the
-   *   active set
-   * @param dstMustBeActive if true, edges will only be considered if their destination vertex is in
-   *   the active set
-   * @param maySatisfyEither if true, only one vertex need be in the active set for an edge to be
-   *   considered
+   * @param activeness criteria for filtering edges based on activeness
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
@@ -437,9 +429,7 @@ class EdgePartition[
       sendMsg: EdgeContext[VD, ED, A] => Unit,
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
-      srcMustBeActive: Boolean,
-      dstMustBeActive: Boolean,
-      maySatisfyEither: Boolean): Iterator[(VertexId, A)] = {
+      activeness: EdgeActiveness): Iterator[(VertexId, A)] = {
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
@@ -448,8 +438,16 @@ class EdgePartition[
       val clusterSrcId = cluster._1
       val clusterPos = cluster._2
       val clusterLocalSrcId = localSrcIds(clusterPos)
-      val srcIsActive = !srcMustBeActive || isActive(clusterSrcId)
-      if (srcIsActive || maySatisfyEither) {
+
+      val scanCluster =
+        if (activeness == EdgeActiveness.Neither) true
+        else if (activeness == EdgeActiveness.SrcOnly) isActive(clusterSrcId)
+        else if (activeness == EdgeActiveness.DstOnly) true
+        else if (activeness == EdgeActiveness.Both) isActive(clusterSrcId)
+        else if (activeness == EdgeActiveness.Either) true
+        else throw new Exception("unreachable")
+
+      if (scanCluster) {
         var pos = clusterPos
         val srcAttr =
           if (tripletFields.useSrc) vertexAttrs(clusterLocalSrcId) else null.asInstanceOf[VD]
@@ -457,9 +455,13 @@ class EdgePartition[
         while (pos < size && localSrcIds(pos) == clusterLocalSrcId) {
           val localDstId = localDstIds(pos)
           val dstId = local2global(localDstId)
-          val dstIsActive = !dstMustBeActive || isActive(dstId)
           val edgeIsActive =
-            if (maySatisfyEither) srcIsActive || dstIsActive else srcIsActive && dstIsActive
+            if (activeness == EdgeActiveness.Neither) true
+            else if (activeness == EdgeActiveness.SrcOnly) true
+            else if (activeness == EdgeActiveness.DstOnly) isActive(dstId)
+            else if (activeness == EdgeActiveness.Both) isActive(dstId)
+            else if (activeness == EdgeActiveness.Either) isActive(clusterSrcId) || isActive(dstId)
+            else throw new Exception("unreachable")
           if (edgeIsActive) {
             val dstAttr =
               if (tripletFields.useDst) vertexAttrs(localDstId) else null.asInstanceOf[VD]
