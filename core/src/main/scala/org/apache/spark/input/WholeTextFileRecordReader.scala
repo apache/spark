@@ -66,8 +66,8 @@ private[spark] class WholeTextFileRecordReader(
   override def nextKeyValue(): Boolean = {
     if (!processed) {
       val conf = new Configuration
-      val factory = new CompressionCodecFactory(conf);
-      val codec = factory.getCodec(path); // infers from file ext.
+      val factory = new CompressionCodecFactory(conf)
+      val codec = factory.getCodec(path)  // infers from file ext.
       val fileIn = fs.open(path)
       val innerBuffer = if (codec != null) {
         ByteStreams.toByteArray(codec.createInputStream(fileIn))
