@@ -40,45 +40,18 @@ class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
 
   override def next() = {
     val triplet = new EdgeTriplet[VD, ED]
-    triplet.srcId = edgePartition.srcIds(pos)
+    val localSrcId = edgePartition.localSrcIds(pos)
+    val localDstId = edgePartition.localDstIds(pos)
+    triplet.srcId = edgePartition.local2global(localSrcId)
+    triplet.dstId = edgePartition.local2global(localDstId)
     if (includeSrc) {
-      triplet.srcAttr = edgePartition.vertices(triplet.srcId)
+      triplet.srcAttr = edgePartition.vertexAttrs(localSrcId)
     }
-    triplet.dstId = edgePartition.dstIds(pos)
     if (includeDst) {
-      triplet.dstAttr = edgePartition.vertices(triplet.dstId)
+      triplet.dstAttr = edgePartition.vertexAttrs(localDstId)
     }
     triplet.attr = edgePartition.data(pos)
     pos += 1
-    triplet
-  }
-}
-
-/**
- * An Iterator type for internal use that reuses EdgeTriplet objects. This could be an anonymous
- * class in EdgePartition.upgradeIterator, but we name it here explicitly so it is easier to debug /
- * profile.
- */
-private[impl]
-class ReusingEdgeTripletIterator[VD: ClassTag, ED: ClassTag](
-    val edgeIter: Iterator[Edge[ED]],
-    val edgePartition: EdgePartition[ED, VD],
-    val includeSrc: Boolean,
-    val includeDst: Boolean)
-  extends Iterator[EdgeTriplet[VD, ED]] {
-
-  private val triplet = new EdgeTriplet[VD, ED]
-
-  override def hasNext = edgeIter.hasNext
-
-  override def next() = {
-    triplet.set(edgeIter.next())
-    if (includeSrc) {
-      triplet.srcAttr = edgePartition.vertices(triplet.srcId)
-    }
-    if (includeDst) {
-      triplet.dstAttr = edgePartition.vertices(triplet.dstId)
-    }
     triplet
   }
 }

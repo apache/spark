@@ -23,7 +23,6 @@ import org.apache.spark.HashPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.storage.StorageLevel
-
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl._
 import org.apache.spark.graphx.util.BytecodeUtils
@@ -193,37 +192,44 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       case (pid, edgePartition) =>
         // Choose scan method
         val activeFraction = edgePartition.numActives.getOrElse(0) / edgePartition.indexSize.toFloat
-        val edgeIter = activeDirectionOpt match {
+        activeDirectionOpt match {
           case Some(EdgeDirection.Both) =>
             if (activeFraction < 0.8) {
-              edgePartition.indexIterator(srcVertexId => edgePartition.isActive(srcVertexId))
-                .filter(e => edgePartition.isActive(e.dstId))
+              edgePartition.mapReduceTripletsWithIndex(
+                mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+                srcId => edgePartition.isActive(srcId),
+                dstId => edgePartition.isActive(dstId))
             } else {
-              edgePartition.iterator.filter(e =>
-                edgePartition.isActive(e.srcId) && edgePartition.isActive(e.dstId))
+              edgePartition.mapReduceTriplets(
+                mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+                (srcId, dstId) => edgePartition.isActive(srcId) && edgePartition.isActive(dstId))
             }
           case Some(EdgeDirection.Either) =>
             // TODO: Because we only have a clustered index on the source vertex ID, we can't filter
             // the index here. Instead we have to scan all edges and then do the filter.
-            edgePartition.iterator.filter(e =>
-              edgePartition.isActive(e.srcId) || edgePartition.isActive(e.dstId))
+            edgePartition.mapReduceTriplets(
+              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              (srcId, dstId) => edgePartition.isActive(srcId) || edgePartition.isActive(dstId))
           case Some(EdgeDirection.Out) =>
             if (activeFraction < 0.8) {
-              edgePartition.indexIterator(srcVertexId => edgePartition.isActive(srcVertexId))
+              edgePartition.mapReduceTripletsWithIndex(
+                mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+                srcId => edgePartition.isActive(srcId),
+                dstId => true)
             } else {
-              edgePartition.iterator.filter(e => edgePartition.isActive(e.srcId))
+            edgePartition.mapReduceTriplets(
+              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              (srcId, dstId) => edgePartition.isActive(srcId))
             }
           case Some(EdgeDirection.In) =>
-            edgePartition.iterator.filter(e => edgePartition.isActive(e.dstId))
+            edgePartition.mapReduceTriplets(
+              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              (srcId, dstId) => edgePartition.isActive(dstId))
           case _ => // None
-            edgePartition.iterator
+            edgePartition.mapReduceTriplets(
+              mapFunc, reduceFunc, mapUsesSrcAttr, mapUsesDstAttr,
+              (srcId, dstId) => true)
         }
-
-        // Scan edges and run the map function
-        val mapOutputs = edgePartition.upgradeIterator(edgeIter, mapUsesSrcAttr, mapUsesDstAttr)
-          .flatMap(mapFunc(_))
-        // Note: This doesn't allow users to send messages to arbitrary vertices.
-        edgePartition.vertices.aggregateUsingIndex(mapOutputs, reduceFunc).iterator
     }).setName("GraphImpl.mapReduceTriplets - preAgg")
 
     // do the final reduction reusing the index map
@@ -306,9 +312,7 @@ object GraphImpl {
       vertices: VertexRDD[VD],
       edges: EdgeRDD[ED, _]): GraphImpl[VD, ED] = {
     // Convert the vertex partitions in edges to the correct type
-    val newEdges = edges.mapEdgePartitions(
-      (pid, part) => part.withVertices(part.vertices.map(
-        (vid, attr) => null.asInstanceOf[VD])))
+    val newEdges = edges.mapEdgePartitions((pid, part) => part.clearVertices[VD])
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
 
