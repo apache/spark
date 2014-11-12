@@ -1871,6 +1871,7 @@ class SchemaRDD(RDD):
         return SchemaRDD(rdd, self.sql_ctx)
 
     def toJSON(self):
+        """Create a RDD of JSON strings from a SchemaRDD"""
         rowSchema = self.schema()
         def _rowToJSON(row, rowSchema):
             builder = "{"
