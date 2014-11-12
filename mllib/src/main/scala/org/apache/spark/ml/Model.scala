@@ -15,19 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.param.ParamMap
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+/**
+ * :: AlphaComponent ::
+ * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
+ *
+ * @tparam M model type
+ */
+@AlphaComponent
+abstract class Model[M <: Model[M]] extends Transformer {
+  /**
+   * The parent estimator that produced this model.
+   */
+  val parent: Estimator[M]
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
-
-  override def afterAll() {
-    sc.stop()
-    super.afterAll()
-  }
+  /**
+   * Fitting parameters, such that parent.fit(..., fittingParamMap) could reproduce the model.
+   */
+  val fittingParamMap: ParamMap
 }

@@ -15,19 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+/**
+ * Spark ML is an ALPHA component that adds a new set of machine learning APIs to let users quickly
+ * assemble and configure practical machine learning pipelines.
+ */
+@AlphaComponent
+package org.apache.spark.ml;
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
-
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
-
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
-
-  override def afterAll() {
-    sc.stop()
-    super.afterAll()
-  }
-}
+import org.apache.spark.annotation.AlphaComponent;
