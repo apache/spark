@@ -84,7 +84,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables.clear()
   }
 
-  override def tableExists(db: Option[String], tableName: String): Boolean = {
+  override def tableExists(databaseName: Option[String], tableName: String): Boolean = {
    val tblName = processDatabaseAndTableName(databaseName, tableName)._2
     tables.get(tblName) match {
       case Some(_) => true
