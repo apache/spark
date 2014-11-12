@@ -141,11 +141,9 @@ object MovieLensALS {
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
-    val fractions = (0 until numUsers.toInt).map(x => (x + 1, 0.8)).toMap
-    
-    val training = ratings.map { x => (x.user, x) }.sampleByKey(false, fractions).map { x => x._2 }
+    val training = ratings.map { x => (x.user, x) }.sample(false, 0.8, 1L).map { x => x._2 }
     val testSplit = ratings.subtract(training)
-
+    
     val test = if (params.implicitPrefs) {
       /*
        * 0 means "don't know" and positive values mean "confident that the prediction should be 1".
@@ -184,12 +182,17 @@ object MovieLensALS {
     val n = (numMovies * params.validateRecommendation).toInt
 
     if (n > 0) {
-      val userMap = computeRecommendationMetrics(model,
-        training, test,
-        params.implicitPrefs, n)
-      println(s"Test user MAP = $userMap.")
+      val userMapAPI = computeRecommendationMetricsAPI(model,
+        training, test, n)
+      
+      println(s"Test userMapAPI = $userMapAPI")
+      
+      val userMap = computeRecommendationMetrics(model, 
+          training, test, n)
+      
+      println(s"Test userMap = $userMap")
     }
-
+    
     sc.stop()
   }
 
@@ -206,13 +209,12 @@ object MovieLensALS {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
     else r
   }
-
+  
   /**
    * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
    */
   def computeRecommendationMetrics(model: MatrixFactorizationModel,
-    train: RDD[Rating], test: RDD[Rating],
-    implicitPrefs: Boolean, n: Int) = {
+    train: RDD[Rating], test: RDD[Rating], n: Int) = {
 
     val testProductLabels = test.map {
       x => (x.user, x.product)
@@ -245,6 +247,32 @@ object MovieLensALS {
     }
 
     val metrics = new RankingMetrics(rankings)
+    println("Using Cartesian")
+    for (i <- 0 until 10) {
+      val k = (i + 1) * 20
+      println(s"k $k prec@k ${metrics.precisionAt(k)}")
+    }
+    metrics.meanAveragePrecision
+  }
+  
+  /**
+   * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
+   */
+  def computeRecommendationMetricsAPI(model: MatrixFactorizationModel,
+    train: RDD[Rating], test: RDD[Rating], n: Int) = {
+
+    val testProductLabels = test.map {
+      x => (x.user, x.product)
+    }.groupByKey.map {
+      case (userId, products) => (userId, products.toArray)
+    }
+    
+    val rankings = model.recommendAll(n, train).join(testProductLabels).map {
+      case (user, (pred, lab)) => (pred.map{_.product}, lab)
+    }
+    
+    val metrics = new RankingMetrics(rankings)
+    println("Using recommendAll API")
     for (i <- 0 until 10) {
       val k = (i + 1) * 20
       println(s"k $k prec@k ${metrics.precisionAt(k)}")
