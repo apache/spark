@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI}
 
 import scala.collection.JavaConversions._
@@ -161,17 +160,16 @@ private[spark] trait ClientBase extends Logging {
     /**
      * Copy the given main resource to the distributed cache if the scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
-     * Each resource is represented by a 4-tuple of:
+     * Each resource is represented by a 3-tuple of:
      *   (1) destination resource name,
      *   (2) local path to the resource,
      *   (3) Spark property key to set if the scheme is not local, and
-     *   (4) whether to set permissions for this resource
      */
     List(
-      (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR, false),
-      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR, true),
-      ("log4j.properties", oldLog4jConf.orNull, null, true)
-    ).foreach { case (destName, _localPath, confKey, isUserArtifact) =>
+      (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
+      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
+      ("log4j.properties", oldLog4jConf.orNull, null)
+    ).foreach { case (destName, _localPath, confKey) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
@@ -661,9 +659,10 @@ private[spark] object ClientBase extends Logging {
   /**
    * Populate the classpath entry in the given environment map.
    *
-   * Class path isolation, when enabled, makes the user-added jars be loaded from a different
-   * class loader than other class path entries. The extra class path and other uploaded files
-   * are still made available through the system class path.
+   * User jars are generally not added to the JVM's classpath; those are handled by the AM and
+   * executor backend. When the deprecated `spark.yarn.user.classpath.first` is used, user jars are
+   * included in the system classpath, though. The extra class path and other uploaded files are
+   * always made available through the system class path.
    *
    * @param args Client arguments (when starting the AM) or null (when starting executors).
    */
@@ -675,22 +674,13 @@ private[spark] object ClientBase extends Logging {
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(Environment.PWD.$(), env)
-    if (isUserClassPathFirst(sparkConf, args == null)) {
-      addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
-      populateHadoopClasspath(conf, env)
-    } else {
-      // Normally the users app.jar is last in case it conflicts with spark jars.
-      if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-        getUserClasspath(args, sparkConf).foreach { x =>
-          addFileToClasspath(x, null, env)
-        }
+    if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
+      getUserClasspath(args, sparkConf).foreach { x =>
+        addFileToClasspath(x, null, env)
       }
-      addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
-      populateHadoopClasspath(conf, env)
-
-      // Append all jar files under the directory holding cached files to the classpath.
-      addClasspathEntry(buildPath(Environment.PWD.$(), "*"), env)
     }
+    addFileToClasspath(new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    populateHadoopClasspath(conf, env)
   }
 
   /**

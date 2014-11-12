@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.{Socket, URI, URL}
+import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
 
 import akka.actor._
@@ -452,13 +452,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     val classpath = ClientBase.getUserClasspath(null, sparkConf)
     val urls = classpath.map { entry =>
-      val absPath =
-        if (new File(entry.getPath()).isAbsolute()) {
-          entry.getPath()
-        } else {
-          new File(entry.getPath()).getAbsolutePath()
-        }
-      new URL("file:" + absPath)
+      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
     }
     val userClassLoader =
       if (ClientBase.isUserClassPathFirst(sparkConf, true)) {

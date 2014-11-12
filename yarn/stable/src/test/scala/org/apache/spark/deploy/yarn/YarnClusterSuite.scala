@@ -32,9 +32,13 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, TestUtils}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
+/**
+ * Integration tests for Yarn; these tests use a mini Yarn cluster to run Spark-on-Yarn
+ * applications, and require the Spark assembly to be built before they can be successfully
+ * run.
+ */
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers with Logging {
 
   // log4j configuration for the Yarn containers, so that their output is collected
@@ -145,8 +149,6 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     checkResult(executorResult, "OVERRIDDEN")
   }
 
-  // Note: calling this method in client mode requires the Spark assembly to have been built,
-  // since it uses spark-submit.
   private def runSpark(
       clientMode: Boolean,
       klass: Class[_],
@@ -259,8 +261,7 @@ private object YarnClasspathTest {
     }
 
     readResource(args(1))
-    val sc = new SparkContext(new SparkConf().setMaster(args(0))
-      .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    val sc = new SparkContext(new SparkConf().setMaster(args(0)).setAppName("User classpath test"))
     val status = new File(args(1))
     var result = "failure"
     try {

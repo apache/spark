@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker
 
 import java.io.File
-import java.net.URL
 
 import akka.actor._
 

@@ -100,7 +100,6 @@ class ClientBaseSuite extends FunSuite with Matchers {
       }
     })
     cp should contain (Environment.PWD.$())
-    cp should contain (s"${Environment.PWD.$()}${File.separator}*")
     cp should not contain (ClientBase.SPARK_JAR)
     cp should not contain (ClientBase.APP_JAR)
   }

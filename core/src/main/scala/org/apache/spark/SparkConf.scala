@@ -360,8 +360,8 @@ private[spark] object SparkConf extends Logging {
     val configs = Seq(
       DeprecatedConfig("spark.files.userClassPathFirst", "spark.executor.userClassPathFirst",
         "1.3"),
-      DeprecatedConfig("spark.yarn.user.classpath.first", null, "1.3.",
-        "Use spark.{driver,executor}.userClassPathFirst; this option will be removed the future."))
+      DeprecatedConfig("spark.yarn.user.classpath.first", null, "1.3",
+        "Use spark.{driver,executor}.userClassPathFirst instead."))
     configs.map { x => (x.oldName, x) }.toMap
   }
 
@@ -435,12 +435,12 @@ private[spark] object SparkConf extends Logging {
           val message = Option(deprecationMessage).getOrElse(
             s"Please use the alternative '$newName' instead.")
           logWarning(
-            s"The configuration option '$oldName' has been replaced as of Spark $version. " +
-            message)
+            s"The configuration option '$oldName' has been replaced as of Spark $version and " +
+            s"may be removed in the future. $message")
         } else {
           logWarning(
-            s"The configuration option '$oldName' has been deprecated as of Spark $version. " +
-            deprecationMessage)
+            s"The configuration option '$oldName' has been deprecated as of Spark $version and " +
+            s"may be removed in the future. $deprecationMessage")
         }
       }
     }

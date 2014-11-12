@@ -417,7 +417,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     val systemJar = TestUtils.createJarWithFiles(Map("test.resource" -> "SYSTEM"))
     val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"))
     val args = Seq(
-      "--class", ClassPathIsolationTest.getClass.getName.stripSuffix("$"),
+      "--class", UserClasspathFirstTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
       "--conf", "spark.driver.extraClassPath=" + systemJar,
@@ -514,7 +514,7 @@ object SimpleApplicationTest {
   }
 }
 
-object ClassPathIsolationTest {
+object UserClasspathFirstTest {
   def main(args: Array[String]) {
     val ccl = Thread.currentThread().getContextClassLoader()
     val resource = ccl.getResourceAsStream("test.resource")

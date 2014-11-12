@@ -74,7 +74,6 @@ private[spark] class DriverRunner(
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
 
-          /** Replace variables in a command argument passed to us */
           def substituteVariables(argument: String): String = argument match {
             case "{{WORKER_URL}}" => workerUrl
             case "{{USER_JAR}}" => localJarFilename

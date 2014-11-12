@@ -321,7 +321,7 @@ object SparkSubmit {
     }
 
     val loader =
-      if (sysProps.get("spark.driver.userClassPathFirst").getOrElse("false").toBoolean) {
+      if (sysProps.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
         new ChildExecutorURLClassLoader(new Array[URL](0),
           Thread.currentThread.getContextClassLoader)
       } else {
