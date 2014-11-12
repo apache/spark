@@ -49,7 +49,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, "Unknown"))
       }
 
-      val (activeStages, completedOrFailedStages) = stages.partition(_.completionTime.isDefined)
+      val (completedOrFailedStages, activeStages) = stages.partition(_.completionTime.isDefined)
       val (failedStages, completedStages) =
         completedOrFailedStages.partition(_.failureReason.isDefined)
 

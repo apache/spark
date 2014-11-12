@@ -136,6 +136,19 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       numFailedStages += 1
       trimIfNecessary(failedStages)
     }
+
+    for (
+      activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
+      jobId <- activeJobsDependentOnStage;
+      jobData <- jobIdToData.get(jobId)
+    ) {
+      jobData.numActiveStages -= 1
+      if (stage.failureReason.isEmpty) {
+        jobData.numCompletedStages += 1
+      } else {
+        jobData.numFailedStages += 1
+      }
+    }
   }
 
   /** If stages is too large, remove and garbage collect old stages */
@@ -177,6 +190,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numTasks += stage.numTasks
+      jobData.numActiveStages += 1
     }
   }
 

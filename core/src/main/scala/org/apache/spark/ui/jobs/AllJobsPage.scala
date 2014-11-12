@@ -46,7 +46,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       <th>Description</th>
       <th>Submitted</th>
       <th>Duration</th>
-      <th>Tasks (for all stages): Succeeded/Total</th>
+      <th class="sorttable_nosort">Stages: Succeeded/Total</th>
+      <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
     }
 
     def makeRow(job: JobUIData): Seq[Node] = {
@@ -79,6 +80,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {formattedSubmissionTime}
         </td>
         <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
+        <td class="progress-cell">
+          {UIUtils.makeProgressBar(job.numActiveStages, job.numCompletedStages,
+          job.numFailedStages, job.stageIds.size)}
+        </td>
         <td class="progress-cell">
           {UIUtils.makeProgressBar(job.numActiveTasks, job.numCompletedTasks,
           job.numFailedTasks, job.numTasks)}
