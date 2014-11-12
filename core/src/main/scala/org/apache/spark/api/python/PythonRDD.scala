@@ -760,8 +760,6 @@ private[spark] object PythonRDD extends Logging {
 
   /**
    * A helper to convert java.util.List[Double] into Array[Double]
-   * @param list
-   * @return
    */
   def listToArrayDouble(list: JList[Double]): Array[Double] = {
     val r = new Array[Double](list.size)

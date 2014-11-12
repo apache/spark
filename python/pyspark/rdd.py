@@ -322,7 +322,7 @@ class RDD(object):
 
         :param weights: weights for splits, will be normalized if they don't sum to 1
         :param seed: random seed
-        :return: split RDDs in an list
+        :return: split RDDs in a list
 
         >>> rdd = sc.parallelize(range(10), 1)
         >>> rdd1, rdd2, rdd3 = rdd.randomSplit([0.4, 0.6, 1.0], 11)
