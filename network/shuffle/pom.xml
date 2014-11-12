@@ -39,7 +39,7 @@
     <!-- Core dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_2.10</artifactId>
+      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -58,7 +58,7 @@
     <!-- Test dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_2.10</artifactId>
+      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

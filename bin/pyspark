@@ -25,7 +25,7 @@ export SPARK_HOME="$FWDIR"
 
 source "$FWDIR/bin/utils.sh"
 
-SCALA_VERSION=2.10
+source "$FWDIR"/bin/load-spark-env.sh
 
 function usage() {
   echo "Usage: ./bin/pyspark [options]" 1>&2
@@ -40,15 +40,13 @@ fi
 # Exit if the user hasn't compiled Spark
 if [ ! -f "$FWDIR/RELEASE" ]; then
   # Exit if the user hasn't compiled Spark
-  ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
+  ls "$FWDIR"/assembly/target/scala-$SPARK_SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
   if [[ $? != 0 ]]; then
     echo "Failed to find Spark assembly in $FWDIR/assembly/target" 1>&2
     echo "You need to build Spark before running this program" 1>&2
     exit 1
   fi
 fi
-
-. "$FWDIR"/bin/load-spark-env.sh
 
 # In Spark <= 1.1, setting IPYTHON=1 would cause the driver to be launched using the `ipython`
 # executable, while the worker would still be launched using PYSPARK_PYTHON.
