@@ -22,7 +22,7 @@ import java.util.Comparator
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 
-import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark._
@@ -74,7 +74,7 @@ private[spark] class SortShuffleReader[K, C](
   private var _diskBytesSpilled: Long = 0L
 
   /** Queue to store in-memory shuffle blocks */
-  private val inMemoryBlocks = new mutable.Queue[MemoryShuffleBlock]()
+  private val inMemoryBlocks = new Queue[MemoryShuffleBlock]()
 
   /** number of bytes left to fetch */
   private var unfetchedBytes: Long = 0L
@@ -85,7 +85,7 @@ private[spark] class SortShuffleReader[K, C](
    * compression of size. So here we should maintain this make sure the correctness of our
    * algorithm.
    */
-  private val shuffleBlockMap = new mutable.HashMap[ShuffleBlockId, (BlockManagerId, Long)]()
+  private val shuffleBlockMap = new HashMap[ShuffleBlockId, (BlockManagerId, Long)]()
 
   /** keyComparator for mergeSort, id keyOrdering is not available,
     * using hashcode of key to compare */
@@ -109,9 +109,9 @@ private[spark] class SortShuffleReader[K, C](
 
     computeShuffleBlocks()
 
-    for ((blockId, blockOption) <- fetchRawBlocks()) {
+    for ((blockId, blockOption) <- fetchShuffleBlocks()) {
       val blockData = blockOption match {
-        case Success(block) => block
+        case Success(b) => b
         case Failure(e) =>
           blockId match {
             case b @ ShuffleBlockId(shuffleId, mapId, _) =>
@@ -180,7 +180,7 @@ private[spark] class SortShuffleReader[K, C](
     // correctness, since the request size is slightly different from result block size because
     // of size compression.
     var bytesToSpill = unfetchedBytes
-    val blocksToSpill = new mutable.ArrayBuffer[MemoryShuffleBlock]()
+    val blocksToSpill = new ArrayBuffer[MemoryShuffleBlock]()
     blocksToSpill += tippingBlock
     bytesToSpill -= shuffleBlockMap(tippingBlock.blockId.asInstanceOf[ShuffleBlockId])._2
     while (bytesToSpill > 0 && !inMemoryBlocks.isEmpty) {
@@ -247,7 +247,7 @@ private[spark] class SortShuffleReader[K, C](
 
     tieredMerger.registerOnDiskBlock(tmpBlockId, file)
 
-    logInfo(s"Merged ${inMemoryBlocks.size} in-memory blocks into file ${file.getName}")
+    logInfo(s"Merged ${blocksToSpill.size} in-memory blocks into file ${file.getName}")
 
     for (block <- inMemoryBlocks) {
       block.blockData.release()
@@ -267,12 +267,16 @@ private[spark] class SortShuffleReader[K, C](
     }
   }
 
+  /**
+   * Utility function to compute the shuffle blocks and related BlockManagerID, block size,
+   * also the total request shuffle size before starting to fetch the shuffle blocks.
+   */
   private def computeShuffleBlocks(): Unit = {
     val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(handle.shuffleId, startPartition)
 
-    val splitsByAddress = new mutable.HashMap[BlockManagerId, mutable.ArrayBuffer[(Int, Long)]]()
+    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]()
     for (((address, size), index) <- statuses.zipWithIndex) {
-      splitsByAddress.getOrElseUpdate(address, mutable.ArrayBuffer()) += ((index, size))
+      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
     }
 
     splitsByAddress.foreach { case (id, blocks) =>
@@ -283,13 +287,12 @@ private[spark] class SortShuffleReader[K, C](
     }
   }
 
-  private def fetchRawBlocks(): Iterator[(BlockId, Try[ManagedBuffer])] = {
-    val blocksByAddress = new mutable.HashMap[BlockManagerId,
-      mutable.ArrayBuffer[(ShuffleBlockId, Long)]]()
+  private def fetchShuffleBlocks(): Iterator[(BlockId, Try[ManagedBuffer])] = {
+    val blocksByAddress = new HashMap[BlockManagerId, ArrayBuffer[(ShuffleBlockId, Long)]]()
 
     shuffleBlockMap.foreach { case (block, (id, len)) =>
       blocksByAddress.getOrElseUpdate(id,
-        mutable.ArrayBuffer[(ShuffleBlockId, Long)]()) += ((block, len))
+        ArrayBuffer[(ShuffleBlockId, Long)]()) += ((block, len))
     }
 
     shuffleRawBlockFetcherItr = new ShuffleRawBlockFetcherIterator(
