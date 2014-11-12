@@ -24,9 +24,17 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 import org.apache.spark.util.collection.BitSet
 
 /**
- * A collection of edges stored in columnar format, along with any vertex attributes referenced. The
- * edges are stored in 3 large columnar arrays (src, dst, attribute). The arrays are clustered by
- * src. There is an optional active vertex set for filtering computation on the edges.
+ * A collection of edges, along with referenced vertex attributes and an optional active vertex set
+ * for filtering computation on the edges.
+ *
+ * The edges are stored in columnar format in `localSrcIds`, `localDstIds`, and `data`. All
+ * referenced global vertex ids are mapped to a compact set of local vertex ids according to the
+ * `global2local` map. Each local vertex id is a valid index into `vertexAttrs`, which stores the
+ * corresponding vertex attribute, and `local2global`, which stores the reverse mapping to global
+ * vertex id. The global vertex ids that are active are optionally stored in `activeSet`.
+ *
+ * The edges are clustered by source vertex id, and the mapping from global vertex id to the index
+ * of the corresponding edge cluster is stored in `index`.
  *
  * @tparam ED the edge attribute type
  * @tparam VD the vertex attribute type
@@ -46,15 +54,17 @@ import org.apache.spark.util.collection.BitSet
 private[graphx]
 class EdgePartition[
     @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag, VD: ClassTag](
-    val localSrcIds: Array[Int] = null,
-    val localDstIds: Array[Int] = null,
-    val data: Array[ED] = null,
-    val index: GraphXPrimitiveKeyOpenHashMap[VertexId, Int] = null,
-    val global2local: GraphXPrimitiveKeyOpenHashMap[VertexId, Int] = null,
-    val local2global: Array[VertexId] = null,
-    val vertexAttrs: Array[VD] = null,
-    val activeSet: Option[VertexSet] = None
-  ) extends Serializable {
+    localSrcIds: Array[Int],
+    localDstIds: Array[Int],
+    data: Array[ED],
+    index: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],
+    global2local: GraphXPrimitiveKeyOpenHashMap[VertexId, Int],
+    local2global: Array[VertexId],
+    vertexAttrs: Array[VD],
+    activeSet: Option[VertexSet])
+  extends Serializable {
+
+  private def this() = this(null, null, null, null, null, null, null, null)
 
   /** Return a new `EdgePartition` with the specified edge data. */
   def withData[ED2: ClassTag](data: Array[ED2]): EdgePartition[ED2, VD] = {
@@ -85,16 +95,18 @@ class EdgePartition[
   }
 
   /** Return a new `EdgePartition` without any locally cached vertex attributes. */
-  def clearVertices[VD2: ClassTag](): EdgePartition[ED, VD2] = {
+  def withoutVertexAttributes[VD2: ClassTag](): EdgePartition[ED, VD2] = {
     val newVertexAttrs = new Array[VD2](vertexAttrs.length)
     new EdgePartition(
       localSrcIds, localDstIds, data, index, global2local, local2global, newVertexAttrs,
       activeSet)
   }
 
-  private def srcIds(pos: Int): VertexId = local2global(localSrcIds(pos))
+  @inline private def srcIds(pos: Int): VertexId = local2global(localSrcIds(pos))
 
-  private def dstIds(pos: Int): VertexId = local2global(localDstIds(pos))
+  @inline private def dstIds(pos: Int): VertexId = local2global(localDstIds(pos))
+
+  @inline private def attrs(pos: Int): ED = data(pos)
 
   /** Look up vid in activeSet, throwing an exception if it is None. */
   def isActive(vid: VertexId): Boolean = {
@@ -285,7 +297,7 @@ class EdgePartition[
         if (j < other.size && other.srcIds(j) == srcId && other.dstIds(j) == dstId) {
           // ... run `f` on the matching edge
           builder.add(srcId, dstId, localSrcIds(i), localDstIds(i),
-            f(srcId, dstId, this.data(i), other.data(j)))
+            f(srcId, dstId, this.data(i), other.attrs(j)))
         }
       }
       i += 1
@@ -332,27 +344,53 @@ class EdgePartition[
    * It is safe to keep references to the objects from this iterator.
    */
   def tripletIterator(
-      includeSrc: Boolean = true, includeDst: Boolean = true): Iterator[EdgeTriplet[VD, ED]] = {
-    new EdgeTripletIterator(this, includeSrc, includeDst)
+      includeSrc: Boolean = true, includeDst: Boolean = true)
+      : Iterator[EdgeTriplet[VD, ED]] = new Iterator[EdgeTriplet[VD, ED]] {
+    private[this] var pos = 0
+
+    override def hasNext: Boolean = pos < EdgePartition.this.size
+
+    override def next() = {
+      val triplet = new EdgeTriplet[VD, ED]
+      val localSrcId = localSrcIds(pos)
+      val localDstId = localDstIds(pos)
+      triplet.srcId = local2global(localSrcId)
+      triplet.dstId = local2global(localDstId)
+      if (includeSrc) {
+        triplet.srcAttr = vertexAttrs(localSrcId)
+      }
+      if (includeDst) {
+        triplet.dstAttr = vertexAttrs(localDstId)
+      }
+      triplet.attr = data(pos)
+      pos += 1
+      triplet
+    }
   }
 
   /**
    * Send messages along edges and aggregate them at the receiving vertices. Implemented by scanning
-   * all edges sequentially and filtering them with `idPred`.
+   * all edges sequentially.
    *
    * @param sendMsg generates messages to neighboring vertices of an edge
    * @param mergeMsg the combiner applied to messages destined to the same vertex
-   * @param sendMsgUsesSrcAttr whether or not `mapFunc` uses the edge's source vertex attribute
-   * @param sendMsgUsesDstAttr whether or not `mapFunc` uses the edge's destination vertex attribute
-   * @param idPred a predicate to filter edges based on their source and destination vertex ids
+   * @param tripletFields which triplet fields `sendMsg` uses
+   * @param srcMustBeActive if true, edges will only be considered if their source vertex is in the
+   *   active set
+   * @param dstMustBeActive if true, edges will only be considered if their destination vertex is in
+   *   the active set
+   * @param maySatisfyEither if true, only one vertex need be in the active set for an edge to be
+   *   considered
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
-  def aggregateMessages[A: ClassTag](
+  def aggregateMessagesEdgeScan[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
-      idPred: (VertexId, VertexId) => Boolean): Iterator[(VertexId, A)] = {
+      srcMustBeActive: Boolean,
+      dstMustBeActive: Boolean,
+      maySatisfyEither: Boolean): Iterator[(VertexId, A)] = {
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
@@ -363,14 +401,14 @@ class EdgePartition[
       val srcId = local2global(localSrcId)
       val localDstId = localDstIds(i)
       val dstId = local2global(localDstId)
-      if (idPred(srcId, dstId)) {
-        ctx.localSrcId = localSrcId
-        ctx.localDstId = localDstId
-        ctx.srcId = srcId
-        ctx.dstId = dstId
-        ctx.attr = data(i)
-        if (tripletFields.useSrc) { ctx.srcAttr = vertexAttrs(localSrcId) }
-        if (tripletFields.useDst) { ctx.dstAttr = vertexAttrs(localDstId) }
+      val srcIsActive = !srcMustBeActive || isActive(srcId)
+      val dstIsActive = !dstMustBeActive || isActive(dstId)
+      val edgeIsActive =
+        if (maySatisfyEither) srcIsActive || dstIsActive else srcIsActive && dstIsActive
+      if (edgeIsActive) {
+        val srcAttr = if (tripletFields.useSrc) vertexAttrs(localSrcId) else null.asInstanceOf[VD]
+        val dstAttr = if (tripletFields.useDst) vertexAttrs(localDstId) else null.asInstanceOf[VD]
+        ctx.set(srcId, dstId, localSrcId, localDstId, srcAttr, dstAttr, data(i))
         sendMsg(ctx)
       }
       i += 1
@@ -381,22 +419,27 @@ class EdgePartition[
 
   /**
    * Send messages along edges and aggregate them at the receiving vertices. Implemented by
-   * filtering the source vertex index with `srcIdPred`, then scanning edge clusters and filtering
-   * with `dstIdPred`. Both `srcIdPred` and `dstIdPred` must match for an edge to run.
+   * filtering the source vertex index, then scanning each edge cluster.
    *
    * @param sendMsg generates messages to neighboring vertices of an edge
    * @param mergeMsg the combiner applied to messages destined to the same vertex
-   * @param srcIdPred a predicate to filter edges based on their source vertex id
-   * @param dstIdPred a predicate to filter edges based on their destination vertex id
+   * @param tripletFields which triplet fields `sendMsg` uses
+   * @param srcMustBeActive if true, edges will only be considered if their source vertex is in the
+   *   active set
+   * @param dstMustBeActive if true, edges will only be considered if their destination vertex is in
+   *   the active set
+   * @param maySatisfyEither if true, only one vertex need be in the active set for an edge to be
+   *   considered
    *
    * @return iterator aggregated messages keyed by the receiving vertex id
    */
-  def aggregateMessagesWithIndex[A: ClassTag](
+  def aggregateMessagesIndexScan[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
-      srcIdPred: VertexId => Boolean,
-      dstIdPred: VertexId => Boolean): Iterator[(VertexId, A)] = {
+      srcMustBeActive: Boolean,
+      dstMustBeActive: Boolean,
+      maySatisfyEither: Boolean): Iterator[(VertexId, A)] = {
     val aggregates = new Array[A](vertexAttrs.length)
     val bitset = new BitSet(vertexAttrs.length)
 
@@ -405,19 +448,22 @@ class EdgePartition[
       val clusterSrcId = cluster._1
       val clusterPos = cluster._2
       val clusterLocalSrcId = localSrcIds(clusterPos)
-      if (srcIdPred(clusterSrcId)) {
+      val srcIsActive = !srcMustBeActive || isActive(clusterSrcId)
+      if (srcIsActive || maySatisfyEither) {
         var pos = clusterPos
-        ctx.srcId = clusterSrcId
-        ctx.localSrcId = clusterLocalSrcId
-        if (tripletFields.useSrc) { ctx.srcAttr = vertexAttrs(clusterLocalSrcId) }
+        val srcAttr =
+          if (tripletFields.useSrc) vertexAttrs(clusterLocalSrcId) else null.asInstanceOf[VD]
+        ctx.setSrcOnly(clusterSrcId, clusterLocalSrcId, srcAttr)
         while (pos < size && localSrcIds(pos) == clusterLocalSrcId) {
           val localDstId = localDstIds(pos)
           val dstId = local2global(localDstId)
-          if (dstIdPred(dstId)) {
-            ctx.dstId = dstId
-            ctx.localDstId = localDstId
-            ctx.attr = data(pos)
-            if (tripletFields.useDst) { ctx.dstAttr = vertexAttrs(localDstId) }
+          val dstIsActive = !dstMustBeActive || isActive(dstId)
+          val edgeIsActive =
+            if (maySatisfyEither) srcIsActive || dstIsActive else srcIsActive && dstIsActive
+          if (edgeIsActive) {
+            val dstAttr =
+              if (tripletFields.useDst) vertexAttrs(localDstId) else null.asInstanceOf[VD]
+            ctx.setRest(dstId, localDstId, dstAttr, data(pos))
             sendMsg(ctx)
           }
           pos += 1
@@ -435,23 +481,55 @@ private class AggregatingEdgeContext[VD, ED, A](
     bitset: BitSet)
   extends EdgeContext[VD, ED, A] {
 
-  var srcId: VertexId = _
-  var dstId: VertexId = _
-  var srcAttr: VD = _
-  var dstAttr: VD = _
-  var attr: ED = _
+  private[this] var _srcId: VertexId = _
+  private[this] var _dstId: VertexId = _
+  private[this] var _localSrcId: Int = _
+  private[this] var _localDstId: Int = _
+  private[this] var _srcAttr: VD = _
+  private[this] var _dstAttr: VD = _
+  private[this] var _attr: ED = _
 
-  var localSrcId: Int = _
-  var localDstId: Int = _
+  def set(
+      srcId: VertexId, dstId: VertexId,
+      localSrcId: Int, localDstId: Int,
+      srcAttr: VD, dstAttr: VD,
+      attr: ED) {
+    _srcId = srcId
+    _dstId = dstId
+    _localSrcId = localSrcId
+    _localDstId = localDstId
+    _srcAttr = srcAttr
+    _dstAttr = dstAttr
+    _attr = attr
+  }
+
+  def setSrcOnly(srcId: VertexId, localSrcId: Int, srcAttr: VD) {
+    _srcId = srcId
+    _localSrcId = localSrcId
+    _srcAttr = srcAttr
+  }
+
+  def setRest(dstId: VertexId, localDstId: Int, dstAttr: VD, attr: ED) {
+    _dstId = dstId
+    _localDstId = localDstId
+    _dstAttr = dstAttr
+    _attr = attr
+  }
+
+  override def srcId = _srcId
+  override def dstId = _dstId
+  override def srcAttr = _srcAttr
+  override def dstAttr = _dstAttr
+  override def attr = _attr
 
   override def sendToSrc(msg: A) {
-    send(localSrcId, msg)
+    send(_localSrcId, msg)
   }
   override def sendToDst(msg: A) {
-    send(localDstId, msg)
+    send(_localDstId, msg)
   }
 
-  private def send(localId: Int, msg: A) {
+  @inline private def send(localId: Int, msg: A) {
     if (bitset.get(localId)) {
       aggregates(localId) = mergeMsg(aggregates(localId), msg)
     } else {

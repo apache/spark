@@ -29,7 +29,7 @@ import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 private[graphx]
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: ClassTag](
     size: Int = 64) {
-  var edges = new PrimitiveVector[Edge[ED]](size)
+  private[this] val edges = new PrimitiveVector[Edge[ED]](size)
 
   /** Add a new edge to the partition. */
   def add(src: VertexId, dst: VertexId, d: ED) {
@@ -71,7 +71,8 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
       vertexAttrs = new Array[VD](currLocalId + 1)
     }
     new EdgePartition(
-      localSrcIds, localDstIds, data, index, global2local, local2global.trim().array, vertexAttrs)
+      localSrcIds, localDstIds, data, index, global2local, local2global.trim().array, vertexAttrs,
+      None)
   }
 }
 
@@ -87,7 +88,7 @@ class ExistingEdgePartitionBuilder[
     vertexAttrs: Array[VD],
     activeSet: Option[VertexSet],
     size: Int = 64) {
-  var edges = new PrimitiveVector[EdgeWithLocalIds[ED]](size)
+  private[this] val edges = new PrimitiveVector[EdgeWithLocalIds[ED]](size)
 
   /** Add a new edge to the partition. */
   def add(src: VertexId, dst: VertexId, localSrc: Int, localDst: Int, d: ED) {

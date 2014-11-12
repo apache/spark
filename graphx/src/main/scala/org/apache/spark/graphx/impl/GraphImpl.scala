@@ -186,16 +186,16 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
     val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
     val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
-    val tripletFields = TripletFields(mapUsesSrcAttr, mapUsesDstAttr, useEdge = true)
+    val tripletFields = new TripletFields(mapUsesSrcAttr, mapUsesDstAttr, true)
 
-    aggregateMessages(sendMsg, reduceFunc, tripletFields, activeSetOpt)
+    aggregateMessagesWithActiveSet(sendMsg, reduceFunc, tripletFields, activeSetOpt)
   }
 
-  override def aggregateMessages[A: ClassTag](
+  override def aggregateMessagesWithActiveSet[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,
       mergeMsg: (A, A) => A,
       tripletFields: TripletFields,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)]): VertexRDD[A] = {
 
     vertices.cache()
     // For each vertex, replicate its attribute only to partitions where it is
@@ -217,33 +217,31 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
         activeDirectionOpt match {
           case Some(EdgeDirection.Both) =>
             if (activeFraction < 0.8) {
-              edgePartition.aggregateMessagesWithIndex(sendMsg, mergeMsg, tripletFields,
-                srcId => edgePartition.isActive(srcId),
-                dstId => edgePartition.isActive(dstId))
+              edgePartition.aggregateMessagesIndexScan(sendMsg, mergeMsg, tripletFields,
+                true, true, false)
             } else {
-              edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
-                (srcId, dstId) => edgePartition.isActive(srcId) && edgePartition.isActive(dstId))
+              edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
+                true, true, false)
             }
           case Some(EdgeDirection.Either) =>
             // TODO: Because we only have a clustered index on the source vertex ID, we can't filter
             // the index here. Instead we have to scan all edges and then do the filter.
-            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
-              (srcId, dstId) => edgePartition.isActive(srcId) || edgePartition.isActive(dstId))
+            edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
+              true, true, true)
           case Some(EdgeDirection.Out) =>
             if (activeFraction < 0.8) {
-              edgePartition.aggregateMessagesWithIndex(sendMsg, mergeMsg, tripletFields,
-                srcId => edgePartition.isActive(srcId),
-                dstId => true)
+              edgePartition.aggregateMessagesIndexScan(sendMsg, mergeMsg, tripletFields,
+                true, false, false)
             } else {
-            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
-              (srcId, dstId) => edgePartition.isActive(srcId))
+              edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
+                true, false, false)
             }
           case Some(EdgeDirection.In) =>
-            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
-              (srcId, dstId) => edgePartition.isActive(dstId))
+            edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
+              false, true, false)
           case _ => // None
-            edgePartition.aggregateMessages(sendMsg, mergeMsg, tripletFields,
-              (srcId, dstId) => true)
+            edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
+              false, false, false)
         }
     }).setName("GraphImpl.aggregateMessages - preAgg")
 
@@ -327,7 +325,7 @@ object GraphImpl {
       vertices: VertexRDD[VD],
       edges: EdgeRDD[ED, _]): GraphImpl[VD, ED] = {
     // Convert the vertex partitions in edges to the correct type
-    val newEdges = edges.mapEdgePartitions((pid, part) => part.clearVertices[VD])
+    val newEdges = edges.mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
 

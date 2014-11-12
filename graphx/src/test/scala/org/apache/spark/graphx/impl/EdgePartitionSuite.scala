@@ -102,6 +102,16 @@ class EdgePartitionSuite extends FunSuite {
     assert(ep.numActives == Some(2))
   }
 
+  test("tripletIterator") {
+    val builder = new EdgePartitionBuilder[Int, Int]
+    builder.add(1, 2, 0)
+    builder.add(1, 3, 0)
+    builder.add(1, 4, 0)
+    val ep = builder.toEdgePartition
+    val result = ep.tripletIterator().toList.map(et => (et.srcId, et.dstId))
+    assert(result === Seq((1, 2), (1, 3), (1, 4)))
+  }
+
   test("serialization") {
     val aList = List((0, 1, 1), (1, 0, 2), (1, 2, 3), (5, 4, 4), (5, 5, 5))
     val a: EdgePartition[Int, Int] = makeEdgePartition(aList)
@@ -113,7 +123,6 @@ class EdgePartitionSuite extends FunSuite {
     for (ser <- List(javaSer, kryoSer); s = ser.newInstance()) {
       val aSer: EdgePartition[Int, Int] = s.deserialize(s.serialize(a))
       assert(aSer.tripletIterator().toList === a.tripletIterator().toList)
-      assert(aSer.index != null)
     }
   }
 }
