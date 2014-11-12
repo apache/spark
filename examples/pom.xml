@@ -34,48 +34,6 @@
   <name>Spark Project Examples</name>
   <url>http://spark.apache.org/</url>
 
-  <profiles>
-    <profile>
-      <id>kinesis-asl</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.httpcomponents</groupId>
-          <artifactId>httpclient</artifactId>
-          <version>${commons.httpclient.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hbase-hadoop2</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>hadoop2</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>hbase-hadoop1</id>
-      <activation>
-        <property>
-          <name>!hbase.profile</name>
-        </property>
-      </activation>
-      <properties>
-        <hbase.version>0.98.7-hadoop1</hbase.version>
-      </properties>
-    </profile>
-
-  </profiles>
-
   <dependencies>
     <!-- Promote Guava to compile scope in this module so it's included while shading. -->
     <dependency>
@@ -126,22 +84,17 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming-flume_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-zeromq_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-mqtt_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-mqtt_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-zeromq_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -260,11 +213,6 @@
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>algebird-core_${scala.binary.version}</artifactId>
-      <version>0.1.11</version>
-    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
@@ -401,4 +349,147 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>kinesis-asl</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-streaming-kinesis-asl_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpclient</artifactId>
+          <version>${commons.httpclient.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hbase-hadoop2</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>hadoop2</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>hbase-hadoop1</id>
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <properties>
+        <hbase.version>0.98.7-hadoop1</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- We add source directories specific to Scala 2.10 and 2.11 since some examples
+           work only in one and not the other -->
+      <id>scala-2.10</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>com.twitter</groupId>
+          <artifactId>algebird-core_${scala.binary.version}</artifactId>
+          <version>0.1.11</version>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-scala-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/main/scala</source>
+                    <source>scala-2.10/src/main/scala</source>
+                    <source>scala-2.10/src/main/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-scala-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/test/scala</source>
+                    <source>scala-2.10/src/test/scala</source>
+                    <source>scala-2.10/src/test/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>scala-2.11</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <dependencies>
+        <!-- Streaming Kafka and zeromq modules are disabled for now. -->
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-scala-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/main/scala</source>
+                    <source>scala-2.11/src/main/scala</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-scala-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/test/scala</source>
+                    <source>scala-2.11/src/test/scala</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
