@@ -24,18 +24,18 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.api.java.JavaPairRDD
-import org.apache.spark.api.java.JavaUtils
 import com.google.common.base.Optional
+import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.api.java.JavaUtils
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2,
   Function3 => JFunction3, _}
 import org.apache.spark.graphx._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 class JavaGraph[VD, ED](val graph: Graph[VD, ED])(
   implicit val vdTag: ClassTag[VD], implicit val edTag: ClassTag[ED]) extends Serializable {

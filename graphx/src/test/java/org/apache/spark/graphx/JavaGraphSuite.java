@@ -17,45 +17,25 @@
 
 package org.apache.spark.graphx;
 
-import java.io.*;
-import java.net.URI;
+import java.io.File;
+import java.io.Serializable;
 import java.util.*;
 
-import scala.Tuple2;
-import scala.Tuple3;
-import scala.Tuple4;
-
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.base.Optional;
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.compress.DefaultCodec;
-import org.apache.hadoop.mapred.SequenceFileInputFormat;
-import org.apache.hadoop.mapred.SequenceFileOutputFormat;
-import org.apache.hadoop.mapreduce.Job;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
-import org.apache.spark.executor.TaskMetrics;
-import org.apache.spark.partial.BoundedDouble;
-import org.apache.spark.partial.PartialResult;
-import org.apache.spark.storage.StorageLevel;
-import org.apache.spark.util.StatCounter;
-
 import org.apache.spark.graphx.*;
 import org.apache.spark.graphx.api.java.*;
+import org.apache.spark.storage.StorageLevel;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import scala.Tuple2;
+import scala.Tuple4;
 
 public class JavaGraphSuite implements Serializable {
   private transient JavaSparkContext sc;
