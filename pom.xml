@@ -1551,9 +1551,6 @@
       that does not have them.
     -->
     <profile>
-      <id>flume-provided</id>
-    </profile>
-    <profile>
       <id>hadoop-provided</id>
     </profile>
     <profile>
