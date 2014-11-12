@@ -354,22 +354,16 @@ private[spark] class Executor(
       for ((name, timestamp) <- newJars) {
         val localName = name.split("/").last
         if (currentJars.get(name).orElse(currentJars.get(localName)).getOrElse(-1L) < timestamp) {
-          val localFile = new File(SparkFiles.getRootDirectory, localName)
-          if (localFile.exists() && !localFile.canWrite()) {
-            logWarning(s"The file $localName is managed by the cluster backend. If you wish to " +
-              "overwrite it, add it to the SparkContext after it's been initialized.")
-          } else {
-            logInfo("Fetching " + name + " with timestamp " + timestamp)
-            // Fetch file with useCache mode, close cache for local mode.
-            Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
-              env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
-            currentJars(name) = timestamp
-            // Add it to our class loader
-            val url = localFile.toURI.toURL
-            if (!urlClassLoader.getURLs.contains(url)) {
-              logInfo("Adding " + url + " to class loader")
-              urlClassLoader.addURL(url)
-            }
+          logInfo("Fetching " + name + " with timestamp " + timestamp)
+          // Fetch file with useCache mode, close cache for local mode.
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf,
+            env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+          currentJars(name) = timestamp
+          // Add it to our class loader
+          val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+          if (!urlClassLoader.getURLs.contains(url)) {
+            logInfo("Adding " + url + " to class loader")
+            urlClassLoader.addURL(url)
           }
         }
       }
