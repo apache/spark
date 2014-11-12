@@ -139,9 +139,6 @@ echo "========================================================================="
 CURRENT_BLOCK=$BLOCK_BUILD
 
 {
-  # We always build with Hive because the PySpark Spark SQL tests need it.
-  BUILD_MVN_PROFILE_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-0.12.0"
-
 
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   #+ (either resolution or compilation) prompts the user for input either q, r, etc
@@ -151,15 +148,17 @@ CURRENT_BLOCK=$BLOCK_BUILD
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   # First build with 0.12 to ensure patches do not break the hive 12 build
+  HIVE_12_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver -Phive-0.12.0"
   echo "[info] Compile with hive 0.12"
   echo -e "q\n" \
-    | sbt/sbt $BUILD_MVN_PROFILE_ARGS clean hive/compile hive-thriftserver/compile \
+    | sbt/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
   # Then build with default version(0.13.1) because tests are based on this version
-  echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS -Phive"
+  echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS"\
+    " -Phive -Phive-thriftserver"
   echo -e "q\n" \
-    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive package assembly/assembly  \
+    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver package assembly/assembly  \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
@@ -174,7 +173,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   # If the Spark SQL tests are enabled, run the tests with the Hive profiles enabled.
   # This must be a single argument, as it is.
   if [ -n "$_RUN_SQL_TESTS" ]; then
-    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive"
+    SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
   fi
   
   if [ -n "$_SQL_TESTS_ONLY" ]; then
