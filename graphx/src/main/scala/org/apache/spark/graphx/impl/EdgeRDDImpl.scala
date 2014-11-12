@@ -40,8 +40,6 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
   }
   setName("EdgeRDD")
 
-  override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
-
   /**
    * If `partitionsRDD` already has a partitioner, use it. Otherwise assume that the
    * [[PartitionID]]s in `partitionsRDD` correspond to the actual partitions and create a new
@@ -49,15 +47,6 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
    */
   override val partitioner =
     partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
-
-  override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    val p = firstParent[(PartitionID, EdgePartition[ED, VD])].iterator(part, context)
-    if (p.hasNext) {
-      p.next._2.iterator.map(_.copy())
-    } else {
-      Iterator.empty
-    }
-  }
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
 

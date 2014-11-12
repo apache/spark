@@ -20,7 +20,9 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 
 import org.apache.spark.Dependency
+import org.apache.spark.Partition
 import org.apache.spark.SparkContext
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -37,6 +39,20 @@ import org.apache.spark.graphx.impl.EdgeRDDImpl
 abstract class EdgeRDD[ED, VD](
     @transient sc: SparkContext,
     @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
+
+  private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])]
+
+  override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
+
+  override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
+    val p = firstParent[(PartitionID, EdgePartition[ED, VD])].iterator(part, context)
+    if (p.hasNext) {
+      p.next._2.iterator.map(_.copy())
+    } else {
+      Iterator.empty
+    }
+  }
+
   /**
    * Map the values in an edge partitioning preserving the structure but changing the values.
    *
@@ -70,8 +86,6 @@ abstract class EdgeRDD[ED, VD](
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2, _])
       (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3, VD]
-
-  private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])]
 
   private[graphx] def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
       f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): EdgeRDD[ED2, VD2]

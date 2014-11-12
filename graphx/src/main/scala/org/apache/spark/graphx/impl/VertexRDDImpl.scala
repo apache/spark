@@ -38,8 +38,6 @@ class VertexRDDImpl[VD] private[graphx] (
 
   override val partitioner = partitionsRDD.partitioner
 
-  override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
-
   override protected def getPreferredLocations(s: Partition): Seq[String] =
     partitionsRDD.preferredLocations(s)
 
@@ -76,13 +74,6 @@ class VertexRDDImpl[VD] private[graphx] (
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)
-  }
-
-  /**
-   * Provides the `RDD[(VertexId, VD)]` equivalent output.
-   */
-  override def compute(part: Partition, context: TaskContext): Iterator[(VertexId, VD)] = {
-    firstParent[ShippableVertexPartition[VD]].iterator(part, context).next.iterator
   }
 
   override private[graphx] def mapVertexPartitions[VD2: ClassTag](
