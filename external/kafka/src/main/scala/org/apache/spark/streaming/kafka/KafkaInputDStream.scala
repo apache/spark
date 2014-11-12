@@ -128,7 +128,9 @@ class KafkaReceiver[
     def run() {
       logInfo("Starting MessageHandler.")
       try {
-        for (msgAndMetadata <- stream) {
+        val streamIterator = stream.iterator()
+        while (streamIterator.hasNext()) {
+          val msgAndMetadata = streamIterator.next()
           store((msgAndMetadata.key, msgAndMetadata.message))
         }
       } catch {

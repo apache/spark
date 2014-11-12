@@ -206,7 +206,9 @@ class ReliableKafkaReceiver[
     override def run(): Unit = {
       logInfo(s"Starting message process thread ${Thread.currentThread().getId}.")
       try {
-        for (msgAndMetadata <- stream) {
+        val streamIterator = stream.iterator()
+        while (streamIterator.hasNext()) {
+          val msgAndMetadata = streamIterator.next()
           val topicAndPartition = TopicAndPartition(
             msgAndMetadata.topic, msgAndMetadata.partition)
           blockGenerator.synchronized {
