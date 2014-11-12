@@ -99,8 +99,6 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
   private val blockGenerator = new BlockGenerator(new BlockGeneratorListener {
-    def onStoreData(data: Any, metadata: Any): Unit = { }
-
     def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
     def onError(message: String, throwable: Throwable) {

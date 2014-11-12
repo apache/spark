@@ -70,8 +70,8 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    val WALEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, WALEnabled, storageLevel)
+    val walEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
   }
 
   /**

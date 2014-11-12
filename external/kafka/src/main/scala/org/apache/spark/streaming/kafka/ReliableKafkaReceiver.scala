@@ -35,6 +35,19 @@ import org.apache.spark.storage.{StreamBlockId, StorageLevel}
 import org.apache.spark.streaming.receiver.{BlockGeneratorListener, BlockGenerator, Receiver}
 import org.apache.spark.util.Utils
 
+
+/**
+ * ReliableKafkaReceiver offers the ability to reliably store data into BlockManager without loss.
+ * It is turned off by default and will be enabled when
+ * spark.streaming.receiver.writeAheadLog.enable is true. The difference compared to KafkaReceiver
+ * is that this receiver manages topic-partition/offset itself and updates the offset information
+ * after data is reliably stored as write-ahead log. Offsets will only be updated when data is
+ * reliably stored, so the potential data loss problem of KafkaReceiver can be eliminated.
+ *
+ * Note: ReliableKafkaReceiver will set auto.commit.enable to false to turn off automatic offset
+ * commit mechanism in Kafka consumer. So setting this configuration manually within kafkaParams
+ * will not take effect.
+ */
 private[streaming]
 class ReliableKafkaReceiver[
   K: ClassTag,
@@ -44,19 +57,19 @@ class ReliableKafkaReceiver[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel)
-    extends Receiver[Any](storageLevel) with Logging {
+    extends Receiver[(K, V)](storageLevel) with Logging {
+
+  private val groupId = kafkaParams("group.id")
+
+  private val AUTO_OFFSET_COMMIT = "auto.commit.enable"
+
+  private def conf() = SparkEnv.get.conf
 
   /** High level consumer to connect to Kafka. */
   private var consumerConnector: ConsumerConnector = null
 
   /** zkClient to connect to Zookeeper to commit the offsets. */
   private var zkClient: ZkClient = null
-
-  private val groupId = kafkaParams("group.id")
-
-  private def conf() = SparkEnv.get.conf
-
-  private val AUTO_OFFSET_COMMIT = "auto.commit.enable"
 
   /**
    * A HashMap to manage the offset for each topic/partition, this HashMap is called in
@@ -75,12 +88,6 @@ class ReliableKafkaReceiver[
 
   /** Kafka offsets checkpoint listener to register into BlockGenerator for offsets checkpoint. */
   private final class OffsetCheckpointListener extends BlockGeneratorListener {
-    override def onStoreData(data: Any, metadata: Any): Unit = {
-      if (metadata != null) {
-        val kafkaMetadata = metadata.asInstanceOf[(TopicAndPartition, Long)]
-        topicPartitionOffsetMap.put(kafkaMetadata._1, kafkaMetadata._2)
-      }
-    }
 
     override def onGenerateBlock(blockId: StreamBlockId): Unit = {
       // Get a snapshot of current offset map and store with related block id. Since this hook
@@ -91,7 +98,7 @@ class ReliableKafkaReceiver[
     }
 
     override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
-      store(arrayBuffer.asInstanceOf[mutable.ArrayBuffer[Any]])
+      store(arrayBuffer.asInstanceOf[mutable.ArrayBuffer[(K, V)]])
 
       // Commit and remove the related offsets.
       Option(blockOffsetMap.get(blockId)).foreach { offsetMap =>
@@ -202,9 +209,10 @@ class ReliableKafkaReceiver[
         for (msgAndMetadata <- stream) {
           val topicAndPartition = TopicAndPartition(
             msgAndMetadata.topic, msgAndMetadata.partition)
-          val metadata = (topicAndPartition, msgAndMetadata.offset)
-
-          blockGenerator += ((msgAndMetadata.key, msgAndMetadata.message), metadata)
+          blockGenerator.synchronized {
+            blockGenerator += ((msgAndMetadata.key, msgAndMetadata.message))
+            topicPartitionOffsetMap.put(topicAndPartition, msgAndMetadata.offset)
+          }
         }
       } catch {
         case e: Throwable => logError("Error handling message; existing", e)
