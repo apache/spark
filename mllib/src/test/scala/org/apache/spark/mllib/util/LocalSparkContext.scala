@@ -23,7 +23,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 
 trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local[2]", "test")
+  @transient val sc = new SparkContext("local", "test")
   @transient lazy val sqlContext = new SQLContext(sc)
 
   override def afterAll() {
