@@ -90,15 +90,17 @@ class JavaVertexRDD[VD](val vertexRDD: VertexRDD[VD])(implicit val vdTag: ClassT
       f: JFunction3[JLong, VD, Optional[VD2], VD3]): JavaVertexRDD[VD3] = {
     implicit val vd2Tag: ClassTag[VD2] = fakeClassTag
     implicit val vd3Tag: ClassTag[VD3] = fakeClassTag
-    vertexRDD.leftZipJoin(other) { (vid, a, bOpt) => f.call(vid, a, JavaUtils.optionToOptional(bOpt)) }
+    vertexRDD.leftZipJoin(other) {
+      (vid, a, bOpt) => f.call(vid, a, JavaUtils.optionToOptional(bOpt))
+    }
   }
 
   /**
-   * Left joins this JavaVertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
-   * backed by a JavaVertexRDD with the same index then the efficient [[leftZipJoin]] implementation is
-   * used. The resulting JavaVertexRDD contains an entry for each vertex in `this`. If `other` is
-   * missing any vertex in this JavaVertexRDD, `f` is passed `None`. If there are duplicates,
-   * the vertex is picked arbitrarily.
+   * Left joins this JavaVertexRDD with an RDD containing vertex attribute pairs. If the other RDD
+   * is backed by a JavaVertexRDD with the same index then the efficient [[leftZipJoin]]
+   * implementation is used. The resulting JavaVertexRDD contains an entry for each vertex in
+   * `this`. If `other` is missing any vertex in this JavaVertexRDD, `f` is passed `None`. If there
+   * are duplicates, the vertex is picked arbitrarily.
    *
    * @tparam VD2 the attribute type of the other JavaVertexRDD
    * @tparam VD3 the attribute type of the resulting JavaVertexRDD
@@ -106,8 +108,8 @@ class JavaVertexRDD[VD](val vertexRDD: VertexRDD[VD])(implicit val vdTag: ClassT
    * @param other the other JavaVertexRDD with which to join
    * @param f the function mapping a vertex id and its attributes in this and the other vertex set
    * to a new vertex attribute.
-   * @return a JavaVertexRDD containing all the vertices in this JavaVertexRDD with the attributes emitted
-   * by `f`.
+   * @return a JavaVertexRDD containing all the vertices in this JavaVertexRDD with the attributes
+   * emitted by `f`.
    */
   def leftJoin[VD2, VD3](
       other: JavaPairRDD[JLong, VD2],
@@ -116,12 +118,14 @@ class JavaVertexRDD[VD](val vertexRDD: VertexRDD[VD])(implicit val vdTag: ClassT
     implicit val vd2Tag: ClassTag[VD2] = fakeClassTag
     implicit val vd3Tag: ClassTag[VD3] = fakeClassTag
     val scalaOther: RDD[(VertexId, VD2)] = other.rdd.map(kv => (kv._1, kv._2))
-    vertexRDD.leftJoin(scalaOther) { (vid, a, bOpt) => f.call(vid, a, JavaUtils.optionToOptional(bOpt)) }
+    vertexRDD.leftJoin(scalaOther) {
+      (vid, a, bOpt) => f.call(vid, a, JavaUtils.optionToOptional(bOpt))
+    }
   }
 
   /**
-   * Efficiently inner joins this JavaVertexRDD with another JavaVertexRDD sharing the same index. See
-   * [[innerJoin]] for the behavior of the join.
+   * Efficiently inner joins this JavaVertexRDD with another JavaVertexRDD sharing the same index.
+   * See [[innerJoin]] for the behavior of the join.
    */
   def innerZipJoin[U, VD2](
       other: JavaVertexRDD[U],
