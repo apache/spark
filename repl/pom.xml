@@ -127,6 +127,9 @@
   <profiles>
     <profile>
       <id>scala-2.10</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <build>
         <plugins>
           <plugin>
