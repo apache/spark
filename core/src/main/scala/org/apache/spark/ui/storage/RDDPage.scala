@@ -77,6 +77,10 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
               <strong>Disk Size:</strong>
               {Utils.bytesToString(rddInfo.diskSize)}
             </li>
+            <li>
+              <strong>Miss Rate:</strong>
+              {rddInfo.missRate.map(rate => "%0.f".format(rate * 100.0)).getOrElse("(no reads)")}
+            </li>
           </ul>
         </div>
       </div>
