@@ -15,19 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.sql.SchemaRDD
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+/**
+ * :: AlphaComponent ::
+ * Abstract class for evaluators that compute metrics from predictions.
+ */
+@AlphaComponent
+abstract class Evaluator extends Identifiable {
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
-
-  override def afterAll() {
-    sc.stop()
-    super.afterAll()
-  }
+  /**
+   * Evaluates the output.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @param paramMap parameter map that specifies the input columns and output metrics
+   * @return metric
+   */
+  def evaluate(dataset: SchemaRDD, paramMap: ParamMap): Double
 }

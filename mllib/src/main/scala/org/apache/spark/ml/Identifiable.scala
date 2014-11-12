@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import java.util.UUID
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+/**
+ * Object with a unique id.
+ */
+private[ml] trait Identifiable extends Serializable {
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
-
-  override def afterAll() {
-    sc.stop()
-    super.afterAll()
-  }
+  /**
+   * A unique id for the object. The default implementation concatenates the class name, "-", and 8
+   * random hex chars.
+   */
+  private[ml] val uid: String =
+    this.getClass.getSimpleName + "-" + UUID.randomUUID().toString.take(8)
 }
