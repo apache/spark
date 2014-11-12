@@ -35,7 +35,7 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
   test("Regression with continuous features: SquaredError") {
     GradientBoostingSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
-        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
         val rdd = sc.parallelize(arr)
         val categoricalFeaturesInfo = Map.empty[Int, Int]
 
@@ -53,7 +53,7 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
         assert(gbt.weakHypotheses.size === numIterations)
         val gbtTree = gbt.weakHypotheses(0)
 
-        EnsembleTestHelper.validateRegressor(gbt, arr, 0.02)
+        EnsembleTestHelper.validateRegressor(gbt, arr, 0.03)
 
         // Make sure trees are the same.
         assert(gbtTree.toString == dt.toString)
@@ -63,7 +63,7 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
   test("Regression with continuous features: Absolute Error") {
     GradientBoostingSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
-        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
         val rdd = sc.parallelize(arr)
         val categoricalFeaturesInfo = Map.empty[Int, Int]
 
@@ -81,7 +81,7 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
         assert(gbt.weakHypotheses.size === numIterations)
         val gbtTree = gbt.weakHypotheses(0)
 
-        EnsembleTestHelper.validateRegressor(gbt, arr, 0.02)
+        EnsembleTestHelper.validateRegressor(gbt, arr, 0.03)
 
         // Make sure trees are the same.
         assert(gbtTree.toString == dt.toString)
@@ -91,7 +91,7 @@ class GradientBoostingSuite extends FunSuite with LocalSparkContext {
   test("Binary classification with continuous features: Log Loss") {
     GradientBoostingSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
-        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+        val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
         val rdd = sc.parallelize(arr)
         val categoricalFeaturesInfo = Map.empty[Int, Int]
 
