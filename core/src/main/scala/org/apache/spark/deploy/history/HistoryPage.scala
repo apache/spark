@@ -80,9 +80,9 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     }
 
     val littlerSideIndices =
-      rangeIndices(actualPage-maxNumIndices until actualPage, 1 < _)
+      rangeIndices(actualPage - maxNumIndices until actualPage, 1 < _)
     val greaterSideIndices =
-      rangeIndices(actualPage+1 to actualPage+maxNumIndices, _ < pageCount)
+      rangeIndices(actualPage + 1 to actualPage + maxNumIndices, _ < pageCount)
 
     <span style="float: right">
       {
