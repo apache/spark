@@ -39,8 +39,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   }
 
   private def jobsTable(jobs: Seq[JobUIData]): Seq[Node] = {
+    val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
+
     val columns: Seq[Node] = {
-      <th>Job Id (Job Group)</th>
+      <th>{if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"}</th>
       <th>Description</th>
       <th>Submitted</th>
       <th>Duration</th>

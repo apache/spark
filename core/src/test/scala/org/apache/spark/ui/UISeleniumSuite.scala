@@ -142,4 +142,25 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
     }
   }
+
+  test("jobs page should not display job group name unless some job was submitted in a job group") {
+    withSpark(newSparkContext()) { sc =>
+      val ui = sc.ui.get
+      // If no job has been run in a job group, then "(Job Group)" should not appear in the header
+      sc.parallelize(Seq(1, 2, 3)).count()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
+        val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
+        tableHeaders should not contain "Job Id (Job Group)"
+      }
+      // Once at least one job has been run in a job group, then we should display the group name:
+      sc.setJobGroup("my-job-group", "my-job-group-description")
+      sc.parallelize(Seq(1, 2, 3)).count()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
+        val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
+        tableHeaders should contain ("Job Id (Job Group)")
+      }
+    }
+  }
 }
