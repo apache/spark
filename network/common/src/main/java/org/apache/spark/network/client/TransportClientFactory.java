@@ -18,12 +18,12 @@
 package org.apache.spark.network.client;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.base.Preconditions;
@@ -44,7 +44,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.IOMode;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -93,15 +92,17 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) {
+  public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     TransportClient cachedClient = connectionPool.get(address);
     if (cachedClient != null) {
       if (cachedClient.isActive()) {
+        logger.trace("Returning cached connection to {}: {}", address, cachedClient);
         return cachedClient;
       } else {
+        logger.info("Found inactive connection to {}, closing it.", address);
         connectionPool.remove(address, cachedClient); // Remove inactive clients.
       }
     }
@@ -117,7 +118,8 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs());
 
     // Use pooled buffers to reduce temporary buffer allocation
-    bootstrap.option(ChannelOption.ALLOCATOR, createPooledByteBufAllocator());
+    bootstrap.option(ChannelOption.ALLOCATOR, NettyUtils.createPooledByteBufAllocator(
+      conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads()));
 
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
 
@@ -133,10 +135,10 @@ public class TransportClientFactory implements Closeable {
     long preConnect = System.currentTimeMillis();
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
-      throw new RuntimeException(
+      throw new IOException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {
-      throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
+      throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
     }
 
     TransportClient client = clientRef.get();
@@ -187,36 +189,6 @@ public class TransportClientFactory implements Closeable {
     if (workerGroup != null) {
       workerGroup.shutdownGracefully();
       workerGroup = null;
-    }
-  }
-
-  /**
-   * Create a pooled ByteBuf allocator but disables the thread-local cache. Thread-local caches
-   * are disabled because the ByteBufs are allocated by the event loop thread, but released by the
-   * executor thread rather than the event loop thread. Those thread-local caches actually delay
-   * the recycling of buffers, leading to larger memory usage.
-   */
-  private PooledByteBufAllocator createPooledByteBufAllocator() {
-    return new PooledByteBufAllocator(
-        PlatformDependent.directBufferPreferred(),
-        getPrivateStaticField("DEFAULT_NUM_HEAP_ARENA"),
-        getPrivateStaticField("DEFAULT_NUM_DIRECT_ARENA"),
-        getPrivateStaticField("DEFAULT_PAGE_SIZE"),
-        getPrivateStaticField("DEFAULT_MAX_ORDER"),
-        0,  // tinyCacheSize
-        0,  // smallCacheSize
-        0   // normalCacheSize
-    );
-  }
-
-  /** Used to get defaults from Netty's private static fields. */
-  private int getPrivateStaticField(String name) {
-    try {
-      Field f = PooledByteBufAllocator.DEFAULT.getClass().getDeclaredField(name);
-      f.setAccessible(true);
-      return f.getInt(null);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
   }
 }

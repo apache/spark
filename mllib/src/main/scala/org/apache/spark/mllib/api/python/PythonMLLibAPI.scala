@@ -275,12 +275,25 @@ class PythonMLLibAPI extends Serializable {
    * the Py4J documentation.
    */
   def trainALSModel(
-      ratings: JavaRDD[Rating],
+      ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
       lambda: Double,
-      blocks: Int): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(ALS.train(ratings.rdd, rank, iterations, lambda, blocks))
+      blocks: Int,
+      nonnegative: Boolean,
+      seed: java.lang.Long): MatrixFactorizationModel = {
+
+    val als = new ALS()
+      .setRank(rank)
+      .setIterations(iterations)
+      .setLambda(lambda)
+      .setBlocks(blocks)
+      .setNonnegative(nonnegative)
+
+    if (seed != null) als.setSeed(seed)
+
+    val model =  als.run(ratingsJRDD.rdd)
+    new MatrixFactorizationModelWrapper(model)
   }
 
   /**
@@ -295,9 +308,23 @@ class PythonMLLibAPI extends Serializable {
       iterations: Int,
       lambda: Double,
       blocks: Int,
-      alpha: Double): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(
-      ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, lambda, blocks, alpha))
+      alpha: Double,
+      nonnegative: Boolean,
+      seed: java.lang.Long): MatrixFactorizationModel = {
+
+    val als = new ALS()
+      .setImplicitPrefs(true)
+      .setRank(rank)
+      .setIterations(iterations)
+      .setLambda(lambda)
+      .setBlocks(blocks)
+      .setAlpha(alpha)
+      .setNonnegative(nonnegative)
+
+    if (seed != null) als.setSeed(seed)
+
+    val model =  als.run(ratingsJRDD.rdd)
+    new MatrixFactorizationModelWrapper(model)
   }
 
   /**

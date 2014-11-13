@@ -22,6 +22,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 
 import com.google.common.io.CharStreams;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,6 +38,8 @@ public class ExternalShuffleBlockManagerSuite {
   static String hashBlock1 = "Tabular";
 
   static TestShuffleDataContext dataContext;
+
+  static TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
 
   @BeforeClass
   public static void beforeAll() throws IOException {
@@ -56,7 +60,7 @@ public class ExternalShuffleBlockManagerSuite {
 
   @Test
   public void testBadRequests() {
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager();
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf);
     // Unregistered executor
     try {
       manager.getBlockData("app0", "exec1", "shuffle_1_1_0");
@@ -87,7 +91,7 @@ public class ExternalShuffleBlockManagerSuite {
 
   @Test
   public void testSortShuffleBlocks() throws IOException {
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager();
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf);
     manager.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
@@ -106,7 +110,7 @@ public class ExternalShuffleBlockManagerSuite {
 
   @Test
   public void testHashShuffleBlocks() throws IOException {
-    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager();
+    ExternalShuffleBlockManager manager = new ExternalShuffleBlockManager(conf);
     manager.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo("org.apache.spark.shuffle.hash.HashShuffleManager"));
 

@@ -72,7 +72,7 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/clustering.py"
     run_test "pyspark/mllib/feature.py"
     run_test "pyspark/mllib/linalg.py"
-    run_test "pyspark/mllib/random.py"
+    run_test "pyspark/mllib/rand.py"
     run_test "pyspark/mllib/recommendation.py"
     run_test "pyspark/mllib/regression.py"
     run_test "pyspark/mllib/stat.py"

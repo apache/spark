@@ -670,6 +670,9 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
 
+    def test_sort_on_empty_rdd(self):
+        self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
+
     def test_sample(self):
         rdd = self.sc.parallelize(range(0, 100), 4)
         wo = rdd.sample(False, 0.1, 2).collect()

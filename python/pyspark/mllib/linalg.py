@@ -614,8 +614,4 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
-    # remove current path from list of search paths to avoid importing mllib.random
-    # for C{import random}, which is done in an external dependency of pyspark during doctests.
-    import sys
-    sys.path.pop(0)
     _test()

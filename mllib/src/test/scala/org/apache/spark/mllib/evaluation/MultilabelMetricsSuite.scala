@@ -19,10 +19,10 @@ package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
-class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
+class MultilabelMetricsSuite extends FunSuite with MLlibTestSparkContext {
   test("Multilabel evaluation metrics") {
     /*
     * Documents true labels (5x class0, 3x class1, 4x class2):

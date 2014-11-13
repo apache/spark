@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.rdd.RDD
@@ -50,6 +51,17 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    */
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
+  }
+
+
+  /**
+   * Predict values for the given data set using the model trained.
+   *
+   * @param features JavaRDD representing data points to be predicted
+   * @return JavaRDD of predictions for each of the given data points
+   */
+  def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
+    predict(features.rdd)
   }
 
   /**

@@ -35,7 +35,8 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.{SparkTransportConf, NettyBlockTransferService}
-import org.apache.spark.network.shuffle.{ExecutorShuffleInfo, ExternalShuffleClient}
+import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
@@ -72,7 +73,8 @@ private[spark] class BlockManager(
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
     blockTransferService: BlockTransferService,
-    securityManager: SecurityManager)
+    securityManager: SecurityManager,
+    numUsableCores: Int)
   extends BlockDataManager with Logging {
 
   val diskBlockManager = new DiskBlockManager(this, conf)
@@ -120,8 +122,8 @@ private[spark] class BlockManager(
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTranserService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
-    new ExternalShuffleClient(SparkTransportConf.fromSparkConf(conf), securityManager,
-      securityManager.isAuthenticationEnabled())
+    val transConf = SparkTransportConf.fromSparkConf(conf, numUsableCores)
+    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled())
   } else {
     blockTransferService
   }
@@ -173,9 +175,10 @@ private[spark] class BlockManager(
       mapOutputTracker: MapOutputTracker,
       shuffleManager: ShuffleManager,
       blockTransferService: BlockTransferService,
-      securityManager: SecurityManager) = {
+      securityManager: SecurityManager,
+      numUsableCores: Int) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager)
+      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager, numUsableCores)
   }
 
   /**
@@ -939,7 +942,7 @@ private[spark] class BlockManager(
             data.rewind()
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
-              peer.host, peer.port, blockId, new NioManagedBuffer(data), tLevel)
+              peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %s ms"
               .format(System.currentTimeMillis - onePeerStartTime))
             peersReplicatedTo += peer
