@@ -234,3 +234,10 @@ test_that("values() on RDDs", {
   expect_equal(actual, lapply(intPairs, function(x) { x[[2]] }))
 })
 
+test_that("join() on pairwise RDDs", {
+  rdd1 <- parallelize(sc, list(list(1,1), list(2,4)))
+  rdd2 <- parallelize(sc, list(list(1,2), list(1,3)))
+  actual <- collect(join(rdd1, rdd2, 2L))
+  expect_equal(actual, list(list(1, list(1, 2)), list(1, list(1, 3))))
+})
+

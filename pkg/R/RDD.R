@@ -1301,3 +1301,55 @@ setMethod("unionRDD",
             }  
             union.rdd
           })
+
+#' Join two RDDs
+#'
+#' @param rdd1 An RDD.
+#' @param rdd2 An RDD.
+#' @return a new RDD containing all pairs of elements with matching keys in
+#'         two input RDDs.
+#' @rdname join
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
+#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
+#' join(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
+#'}
+setGeneric("join", function(rdd1, rdd2, numPartitions) { standardGeneric("join") })
+
+#' @rdname join
+#' @aliases join,RDD,RDD-method
+setMethod("join",
+          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
+          function(rdd1, rdd2, numPartitions) {
+            if (rdd1@env$serialized != rdd2@env$serialized) {
+              # One of the RDDs is not serialized, we need to serialize it first.
+              if (!rdd1@env$serialized) {
+                rdd1 <- reserialize(rdd1)
+              } else {
+                rdd2 <- reserialize(rdd2)
+              }
+            }  
+            rdd1_tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
+            rdd2_tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
+            
+            doJoin <- function(v) {
+              t1 <- Filter(function(x) { x[[1]] == 1L }, v)
+              t1 <- lapply(t1, function(x) { x[[2]] })
+              t2 <- Filter(function(x) { x[[1]] == 2L }, v)
+              t2 <- lapply(t2, function(x) { x[[2]] })
+              result <- list()
+              for (i in t1) {
+                for (j in t2) {
+                  result[[length(result) + 1L]] <- list(i, j)
+                }
+              }
+              result
+            }
+            
+            joined <- flatMapValues(groupByKey(unionRDD(rdd1_tagged, rdd2_tagged), numPartitions), doJoin)
+          })
+
+
