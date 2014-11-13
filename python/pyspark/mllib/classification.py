@@ -94,7 +94,7 @@ class LogisticRegressionWithSGD(object):
                                   :Allowed values:
                                      - "l1" for using L1 regularization
                                      - "l2" for using L2 regularization
-                                     - "none" for no regularization
+                                     - None for no regularization
 
                                      (default: "l2")
 
@@ -164,7 +164,7 @@ class SVMWithSGD(object):
                                   :Allowed values:
                                      - "l1" for using L1 regularization
                                      - "l2" for using L2 regularization
-                                     - "none" for no regularization
+                                     - None for no regularization
 
                                      (default: "l2")
 

@@ -138,7 +138,7 @@ class LinearRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=1.0, regType="none", intercept=False):
+              initialWeights=None, regParam=0.0, regType=None, intercept=False):
         """
         Train a linear regression model on the given data.
 
@@ -149,16 +149,16 @@ class LinearRegressionWithSGD(object):
         :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
         :param initialWeights:    The initial weights (default: None).
-        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regParam:          The regularizer parameter (default: 0.0).
         :param regType:           The type of regularizer used for training
                                   our model.
 
                                   :Allowed values:
                                      - "l1" for using L1 regularization (lasso),
                                      - "l2" for using L2 regularization (ridge),
-                                     - "none" for no regularization
+                                     - None for no regularization
 
-                                     (default: "none")
+                                     (default: None)
 
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
