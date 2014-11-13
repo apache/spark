@@ -46,8 +46,7 @@ import org.apache.spark.util.Utils
  * This is an abstract base class for Kafka testsuites. This has the functionality to set up
  * and tear down local Kafka servers, and to push data using Kafka producers.
  */
-abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
-  import KafkaTestUtils._
+abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Logging {
 
   var zkAddress: String = _
   var zkClient: ZkClient = _
@@ -78,7 +77,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
     var bindSuccess: Boolean = false
     while(!bindSuccess) {
       try {
-        val brokerProps = getBrokerConfig(brokerPort, zkAddress)
+        val brokerProps = getBrokerConfig()
         brokerConf = new KafkaConfig(brokerProps)
         server = new KafkaServer(brokerConf)
         logInfo("==================== 2 ====================")
@@ -134,19 +133,71 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
     CreateTopicCommand.createTopic(zkClient, topic, 1, 1, "0")
     logInfo("==================== 5 ====================")
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(Seq(server), topic, 0, 1000)
+    waitUntilMetadataIsPropagated(topic, 0)
   }
 
   def produceAndSendMessage(topic: String, sent: Map[String, Int]) {
-    val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
-    producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
+    producer = new Producer[String, String](new ProducerConfig(getProducerConfig()))
     producer.send(createTestMessage(topic, sent): _*)
     producer.close()
     logInfo("==================== 6 ====================")
   }
+
+  private def getBrokerConfig(): Properties = {
+    val props = new Properties()
+    props.put("broker.id", "0")
+    props.put("host.name", "localhost")
+    props.put("port", brokerPort.toString)
+    props.put("log.dir", Utils.createTempDir().getAbsolutePath)
+    props.put("zookeeper.connect", zkAddress)
+    props.put("log.flush.interval.messages", "1")
+    props.put("replica.socket.timeout.ms", "1500")
+    props
+  }
+
+  private def getProducerConfig(): Properties = {
+    val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
+    val props = new Properties()
+    props.put("metadata.broker.list", brokerAddr)
+    props.put("serializer.class", classOf[StringEncoder].getName)
+    props
+  }
+
+  private def waitUntilMetadataIsPropagated(topic: String, partition: Int) {
+    eventually(timeout(1000 milliseconds), interval(100 milliseconds)) {
+      assert(
+        server.apis.leaderCache.keySet.contains(TopicAndPartition(topic, partition)),
+        s"Partition [$topic, $partition] metadata not propagated after timeout"
+      )
+    }
+  }
+
+  class EmbeddedZookeeper(val zkConnect: String) {
+    val random = new Random()
+    val snapshotDir = Utils.createTempDir()
+    val logDir = Utils.createTempDir()
+
+    val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
+    val (ip, port) = {
+      val splits = zkConnect.split(":")
+      (splits(0), splits(1).toInt)
+    }
+    val factory = new NIOServerCnxnFactory()
+    factory.configure(new InetSocketAddress(ip, port), 16)
+    factory.startup(zookeeper)
+
+    val actualPort = factory.getLocalPort
+
+    def shutdown() {
+      factory.shutdown()
+      Utils.deleteRecursively(snapshotDir)
+      Utils.deleteRecursively(logDir)
+    }
+  }
 }
 
-class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
+
+class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
   var ssc: StreamingContext = _
 
   before {
@@ -174,93 +225,23 @@ class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eve
       "auto.offset.reset" -> "smallest")
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc,
-      kafkaParams,
-      Map(topic -> 1),
-      StorageLevel.MEMORY_ONLY)
+      ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
     val result = new mutable.HashMap[String, Long]()
-    stream.map { case (k, v) => v }
-      .countByValue()
-      .foreachRDD { r =>
-        val ret = r.collect()
-        ret.toMap.foreach { kv =>
-          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-          result.put(kv._1, count)
-        }
+    stream.map(_._2).countByValue().foreachRDD { r =>
+      val ret = r.collect()
+      ret.toMap.foreach { kv =>
+        val count = result.getOrElseUpdate(kv._1, 0) + kv._2
+        result.put(kv._1, count)
       }
-    ssc.start()
-    eventually(timeout(3000 milliseconds), interval(100 milliseconds)) {
-      assert(sent.size === result.size)
-      sent.keys.foreach { k => assert(sent(k) === result(k).toInt) }
     }
-
+    ssc.start()
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+      assert(sent.size === result.size)
+      sent.keys.foreach { k =>
+        assert(sent(k) === result(k).toInt)
+      }
+    }
     ssc.stop()
   }
 }
 
-
-object KafkaTestUtils {
-
-  def getBrokerConfig(port: Int, zkConnect: String): Properties = {
-    val props = new Properties()
-    props.put("broker.id", "0")
-    props.put("host.name", "localhost")
-    props.put("port", port.toString)
-    props.put("log.dir", Utils.createTempDir().getAbsolutePath)
-    props.put("zookeeper.connect", zkConnect)
-    props.put("log.flush.interval.messages", "1")
-    props.put("replica.socket.timeout.ms", "1500")
-    props
-  }
-
-  def getProducerConfig(brokerList: String): Properties = {
-    val props = new Properties()
-    props.put("metadata.broker.list", brokerList)
-    props.put("serializer.class", classOf[StringEncoder].getName)
-    props
-  }
-
-  def waitUntilTrue(condition: () => Boolean, waitTime: Long): Boolean = {
-    val startTime = System.currentTimeMillis()
-    while (true) {
-      if (condition())
-        return true
-      if (System.currentTimeMillis() > startTime + waitTime)
-        return false
-      Thread.sleep(waitTime.min(100L))
-    }
-    // Should never go to here
-    throw new RuntimeException("unexpected error")
-  }
-
-  def waitUntilMetadataIsPropagated(servers: Seq[KafkaServer], topic: String, partition: Int,
-      timeout: Long) {
-    assert(waitUntilTrue(() =>
-      servers.foldLeft(true)(_ && _.apis.leaderCache.keySet.contains(
-        TopicAndPartition(topic, partition))), timeout),
-      s"Partition [$topic, $partition] metadata not propagated after timeout")
-  }
-
-  class EmbeddedZookeeper(val zkConnect: String) {
-    val random = new Random()
-    val snapshotDir = Utils.createTempDir()
-    val logDir = Utils.createTempDir()
-
-    val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
-    val (ip, port) = {
-      val splits = zkConnect.split(":")
-      (splits(0), splits(1).toInt)
-    }
-    val factory = new NIOServerCnxnFactory()
-    factory.configure(new InetSocketAddress(ip, port), 16)
-    factory.startup(zookeeper)
-
-    val actualPort = factory.getLocalPort
-
-    def shutdown() {
-      factory.shutdown()
-      Utils.deleteRecursively(snapshotDir)
-      Utils.deleteRecursively(logDir)
-    }
-  }
-}

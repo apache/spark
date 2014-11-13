@@ -127,11 +127,16 @@ public class JavaKafkaStreamSuite implements Serializable {
     );
 
     ssc.start();
-    ssc.awaitTermination(3000);
-
+    long startTime = System.currentTimeMillis();
+    boolean sizeMatches = false;
+    while (!sizeMatches && System.currentTimeMillis() - startTime < 20000) {
+      sizeMatches = sent.size() == result.size();
+      Thread.sleep(200);
+    }
     Assert.assertEquals(sent.size(), result.size());
     for (String k : sent.keySet()) {
       Assert.assertEquals(sent.get(k).intValue(), result.get(k).intValue());
     }
+    ssc.stop();
   }
 }
