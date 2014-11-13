@@ -83,7 +83,7 @@ class ReliableKafkaReceiver[
    */
   private var blockGenerator: BlockGenerator = null
 
-  /** Threadpool running the handlers for receiving message from multiple topics and partitions. */
+  /** Thread pool running the handlers for receiving message from multiple topics and partitions. */
   private var messageHandlerThreadPool: ThreadPoolExecutor = null
 
   override def onStart(): Unit = {
@@ -142,7 +142,6 @@ class ReliableKafkaReceiver[
         messageHandlerThreadPool.submit(new MessageHandler(stream))
       }
     }
-    println("Starting")
   }
 
   override def onStop(): Unit = {
@@ -177,7 +176,7 @@ class ReliableKafkaReceiver[
     }
   }
 
-  /** Store a Kafka message and the associated metadata as a tuple */
+  /** Store a Kafka message and the associated metadata as a tuple. */
   private def storeMessageAndMetadata(
       msgAndMetadata: MessageAndMetadata[K, V]): Unit = synchronized {
     val topicAndPartition = TopicAndPartition(msgAndMetadata.topic, msgAndMetadata.partition)
@@ -185,17 +184,20 @@ class ReliableKafkaReceiver[
     topicPartitionOffsetMap.put(topicAndPartition, msgAndMetadata.offset)
   }
 
-  /** Remember the current offsets for each topic and partition. This is called when a block is generated */
+  /**
+   * Remember the current offsets for each topic and partition. This is called when a block is
+   * generated.
+   */
   private def rememberBlockOffsets(blockId: StreamBlockId): Unit = synchronized {
-    // Get a snapshot of current offset map and store with related block id. Since this hook
-    // function is called in synchronized block, so we can get the snapshot without explicit lock.
+    // Get a snapshot of current offset map and store with related block id.
     val offsetSnapshot = topicPartitionOffsetMap.toMap
     blockOffsetMap.put(blockId, offsetSnapshot)
     topicPartitionOffsetMap.clear()
   }
 
-  /** Store the ready-to-be-stored block and commit the related offsets to zookeeper */
-  private def storeBlockAndCommitOffset(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+  /** Store the ready-to-be-stored block and commit the related offsets to zookeeper. */
+  private def storeBlockAndCommitOffset(
+      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
     store(arrayBuffer.asInstanceOf[mutable.ArrayBuffer[(K, V)]])
     Option(blockOffsetMap.get(blockId)).foreach(commitOffset)
     blockOffsetMap.remove(blockId)
@@ -232,7 +234,6 @@ class ReliableKafkaReceiver[
   private final class MessageHandler(stream: KafkaStream[K, V]) extends Runnable {
     override def run(): Unit = {
       while (!isStopped) {
-        println(s"Starting message process thread ${Thread.currentThread().getId}.")
         try {
           val streamIterator = stream.iterator()
           while (streamIterator.hasNext) {

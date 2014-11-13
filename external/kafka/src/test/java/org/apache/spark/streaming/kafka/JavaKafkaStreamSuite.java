@@ -33,8 +33,6 @@ import kafka.serializer.StringDecoder;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.storage.StorageLevel;
-import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -43,15 +41,17 @@ import org.junit.Test;
 import org.junit.After;
 import org.junit.Before;
 
-public class JavaKafkaStreamSuite extends KafkaStreamSuiteBase implements Serializable {
-    private transient JavaStreamingContext ssc = null;
-    private Random random = new Random();
+public class JavaKafkaStreamSuite implements Serializable {
+  private transient JavaStreamingContext ssc = null;
+  private Random random = new Random();
+  private transient KafkaStreamSuiteBase suiteBase = null;
 
   @Before
   public void setUp() {
-    beforeFunction();
+    suiteBase = new KafkaStreamSuiteBase() { };
+    suiteBase.beforeFunction();
     System.clearProperty("spark.driver.port");
-    ssc = new JavaStreamingContext(sparkConf(), batchDuration());
+    ssc = new JavaStreamingContext(suiteBase.sparkConf(), suiteBase.batchDuration());
   }
 
   @After
@@ -59,7 +59,7 @@ public class JavaKafkaStreamSuite extends KafkaStreamSuiteBase implements Serial
     ssc.stop();
     ssc = null;
     System.clearProperty("spark.driver.port");
-    afterFunction();
+    suiteBase.afterFunction();
   }
 
   @Test
@@ -73,14 +73,14 @@ public class JavaKafkaStreamSuite extends KafkaStreamSuiteBase implements Serial
     sent.put("b", 3);
     sent.put("c", 10);
 
-    createTopic(topic);
+    suiteBase.createTopic(topic);
     HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    produceAndSendMessage(topic,
+    suiteBase.produceAndSendMessage(topic,
       JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
         Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("zookeeper.connect", zkAddress());
+    kafkaParams.put("zookeeper.connect", suiteBase.zkAddress());
     kafkaParams.put("group.id", "test-consumer-" + random.nextInt(10000));
     kafkaParams.put("auto.offset.reset", "smallest");
 

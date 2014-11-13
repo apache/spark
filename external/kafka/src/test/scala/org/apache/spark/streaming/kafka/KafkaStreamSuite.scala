@@ -42,7 +42,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
-abstract class KafkaStreamSuiteBase extends FunSuite with BeforeAndAfter with Logging {
+abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
   import KafkaTestUtils._
 
   val sparkConf = new SparkConf()
@@ -154,7 +154,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with BeforeAndAfter with Lo
   }
 }
 
-class KafkaStreamSuite extends KafkaStreamSuiteBase with Eventually {
+class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
 
   before { beforeFunction() }
   after { afterFunction() }

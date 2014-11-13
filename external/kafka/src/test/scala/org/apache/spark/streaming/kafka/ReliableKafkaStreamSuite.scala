@@ -26,13 +26,14 @@ import scala.util.Random
 
 import kafka.serializer.StringDecoder
 import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.util.Utils
 
-class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with Eventually {
+class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
   val topic = "topic"
   val data = Map("a" -> 10, "b" -> 10, "c" -> 10)
   var groupId: String = _
@@ -85,7 +86,6 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with Eventually {
     }
     ssc.stop()
   }
-/*
   test("Verify the offset commit") {
     // Verify the correctness of offset commit mechanism.
     sparkConf.set("spark.streaming.receiver.writeAheadLog.enable", "true")
@@ -147,7 +147,7 @@ class ReliableKafkaStreamSuite extends KafkaStreamSuiteBase with Eventually {
     }
     ssc.stop()
   }
-*/
+
   /** Getting partition offset from Zookeeper. */
   private def getCommitOffset(groupId: String, topic: String, partition: Int): Long = {
     assert(zkClient != null, "Zookeeper client is not initialized")
