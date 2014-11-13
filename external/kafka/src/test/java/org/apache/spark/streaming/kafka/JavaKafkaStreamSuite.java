@@ -80,8 +80,8 @@ public class JavaKafkaStreamSuite implements Serializable {
     suiteBase.createTopic(topic);
     HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
     suiteBase.produceAndSendMessage(topic,
-            JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
-                    Predef.<Tuple2<String, Object>>conforms()));
+        JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
+            Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("zookeeper.connect", suiteBase.zkAddress());
