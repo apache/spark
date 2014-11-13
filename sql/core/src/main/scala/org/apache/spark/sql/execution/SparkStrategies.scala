@@ -234,7 +234,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           prunePushedDownFilters,
-          ParquetTableScan(_, relation, if (sqlContext.parquetFilterPushDown) filters else Nil)) :: Nil
+          ParquetTableScan(
+            _,
+            relation,
+            if (sqlContext.parquetFilterPushDown) filters else Nil)) :: Nil
 
       case _ => Nil
     }
