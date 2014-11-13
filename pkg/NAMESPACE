@@ -9,6 +9,7 @@ exportMethods(
               "collectPartition",
               "combineByKey",
               "count",
+              "countByValue",
               "distinct",
               "Filter",
               "filter",

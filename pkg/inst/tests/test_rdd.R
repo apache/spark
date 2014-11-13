@@ -15,6 +15,13 @@ test_that("count and length on RDD", {
    expect_equal(length(rdd), 10)
 })
 
+test_that("count by values and keys", {
+  mods <- lapply(rdd, function(x) { x %% 3 })
+  actual <- countByValue(mods)
+  expected <- list(list(0, 3L), list(1, 4L), list(2, 3L))
+  expect_equal(actual, expected)
+})
+
 test_that("lapply on RDD", {
   multiples <- lapply(rdd, function(x) { 2 * x })
   actual <- collect(multiples)

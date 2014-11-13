@@ -359,6 +359,35 @@ setMethod("length",
             count(x)
           })
 
+#' Return the count of each unique value in this RDD as a list of 
+#' (value, count) pairs.
+#' 
+#' Same as countByValue in Spark.
+#'
+#' @param rdd The RDD to count
+#' @return list of (value, count) pairs, where count is number of each unique 
+#' value in rdd.
+#' @rdname countByValue
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, c(1,2,3,2,1))
+#' countByValue(rdd) # (1,2), (2,2), (3,1)
+#'}
+setGeneric("countByValue", function(rdd) { standardGeneric("countByValue") })
+
+#' @rdname countByValue
+#' @aliases countByValue,RDD-method
+setMethod("countByValue",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            jrdd <- getJRDD(rdd)
+            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
+            numPartitions <- .jcall(partitions, "I", "size")
+            ones <- lapply(rdd, function(item) { list(item, 1L) })
+            collect(reduceByKey(ones, `+`, numPartitions))
+          })
 
 #' Apply a function to all elements
 #'
