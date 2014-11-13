@@ -22,6 +22,7 @@ import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
+import java.io.{File, FilenameFilter}
 
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
@@ -223,6 +224,29 @@ private[spark] trait ClientBase extends Logging {
         }
       }
     }
+
+    /**
+     * Do the same for datanucleus jars, if they exist in spark home. Find all datanucleus-* jars,
+     * copy them to the remote fs, and add them to the class path.
+     */
+    val sparkHomeOpt = sparkConf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME"))
+    for (sparkHome <- sparkHomeOpt) {
+      val libs = sparkHome + Path.SEPARATOR + "lib"
+      val jars = new File(libs).listFiles(new FilenameFilter() {
+        override def accept(dir: File, name: String) = name.startsWith("datanucleus-")
+      })
+      // copy to remote and add to classpath
+      jars.foreach { jar =>
+        val localURI = new URI(jar.getAbsolutePath)
+        val destName = jar.getName
+        val src = getQualifiedLocalPath(localURI)
+        val destPath = copyFileToRemote(dst, src, replication)
+        distCacheMgr.addResource(fs, hadoopConf,
+          destPath, localResources, LocalResourceType.FILE, destName, statCache)
+        cachedSecondaryJarLinks += destName
+      }
+    }
+
     if (cachedSecondaryJarLinks.nonEmpty) {
       sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
     }
