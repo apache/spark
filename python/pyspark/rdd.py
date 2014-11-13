@@ -38,7 +38,7 @@ from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
+from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
@@ -337,7 +337,7 @@ class RDD(object):
             cweights.append(cweights[-1] + w / s)
         if seed is None:
             seed = random.randint(0, 2 ** 32 - 1)
-        return [self.mapPartitionsWithIndex(RDDSampler(False, ub, seed, lb).func, True)
+        return [self.mapPartitionsWithIndex(RDDRangeSampler(lb, ub, seed).func, True)
                 for lb, ub in zip(cweights, cweights[1:])]
 
     # this is ported from scala/spark/RDD.scala

@@ -96,10 +96,9 @@ class RDDSamplerBase(object):
 
 class RDDSampler(RDDSamplerBase):
 
-    def __init__(self, withReplacement, fraction, seed=None, lowbound=0.0):
+    def __init__(self, withReplacement, fraction, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fraction = fraction
-        self._lowbound = lowbound
 
     def func(self, split, iterator):
         if self._withReplacement:
@@ -112,8 +111,21 @@ class RDDSampler(RDDSamplerBase):
                     yield obj
         else:
             for obj in iterator:
-                if self._lowbound <= self.getUniformSample(split) < self._fraction:
+                if self.getUniformSample(split) <= self._fraction:
                     yield obj
+
+
+class RDDRangeSampler(RDDSamplerBase):
+
+    def __init__(self, lowerBound, upperBound, seed=None):
+        RDDSamplerBase.__init__(self, False, seed)
+        self._lowerBound = lowerBound
+        self._upperBound = upperBound
+
+    def func(self, split, iterator):
+        for obj in iterator:
+            if self._lowerBound <= self.getUniformSample(split) < self._upperBound:
+                yield obj
 
 
 class RDDStratifiedSampler(RDDSamplerBase):
