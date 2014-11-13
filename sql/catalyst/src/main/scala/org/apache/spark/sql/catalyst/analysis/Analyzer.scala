@@ -59,6 +59,7 @@ class Analyzer(catalog: Catalog,
       ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       ImplicitGenerate ::
+      SubQueryExpressions ::      
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
@@ -420,6 +421,64 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(Seq(Alias(g: Generator, _)), child) =>
         Generate(g, join = false, outer = false, None, child)
+    }
+  }
+
+  /**
+   * Transforms the query which has subquery expressions in where clause to left semi join.
+   * select T1.x from T1 where T1.x in (select T2.y from T2) transformed to
+   * select T1.x from T1 left semi join T2 on T1.x = T2.y.
+   */
+  object SubQueryExpressions extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case filter @ Filter(conditions, child) =>
+        val subqueryExprs = new scala.collection.mutable.ArrayBuffer[SubqueryExpression]()
+        val nonSubQueryConds = new scala.collection.mutable.ArrayBuffer[Expression]()
+        val transformedConds = conditions.transform{
+          // Replace with dummy
+          case s @ SubqueryExpression(exp,subquery) =>
+            subqueryExprs += s
+            Literal(true)
+        }
+        if(subqueryExprs.size > 0) {
+          val subqueryExpr = subqueryExprs.remove(0)
+          val firstJoin = createLeftSemiJoin(
+                child, subqueryExpr.exp, subqueryExpr.child, transformedConds)
+          subqueryExprs.foldLeft(firstJoin){case(fj, sq) =>
+            createLeftSemiJoin(fj, sq.exp, sq.child)}
+        } else {
+          filter
+        }
+    }
+
+    def createLeftSemiJoin(left: LogicalPlan,
+        expression: Expression, subquery: LogicalPlan,
+        parentConds: Expression = null) : LogicalPlan = {
+      val (transformedPlan, subqueryConds) = transformAndGetConditions(
+          expression, subquery)
+      // Unify the parent query conditions and subquery conditions and add these as j0in conditions
+      val unifyConds = if (parentConds != null) And(parentConds, subqueryConds) else subqueryConds
+      Join(left, transformedPlan, LeftSemi, Some(unifyConds))
+    }
+
+    def transformAndGetConditions(expression: Expression,
+          plan: LogicalPlan): (LogicalPlan, Expression) = {
+      val expr = new scala.collection.mutable.ArrayBuffer[Expression]()
+      val transformedPlan = plan transform {
+      case project @ Project(projectList, f @ Filter(condition, child)) =>
+         expr += EqualTo(expression, projectList(0).asInstanceOf[Expression])
+         expr += condition
+         val resolvedChild = ResolveRelations(child)
+         // Add the expressions to the projections which are used as filters in subquery
+         val toBeAddedExprs = f.references.filter(
+             a=>resolvedChild.resolve(a.name, resolver) != None && !projectList.contains(a))
+         Project(projectList ++ toBeAddedExprs, child)
+      case project @ Project(projectList, child) =>
+         expr += EqualTo(expression, projectList(0).asInstanceOf[Expression])
+         project
+      }
+      (transformedPlan, expr.reduce(And(_, _)))
     }
   }
 }

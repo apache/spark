@@ -247,6 +247,9 @@ class SqlParser extends AbstractSparkSQLParser {
     | termExpression ~ (REGEXP ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (LIKE   ~> termExpression) ^^ { case e1 ~ e2 => Like(e1, e2) }
     | termExpression ~ (NOT ~ LIKE ~> termExpression) ^^ { case e1 ~ e2 => Not(Like(e1, e2)) }
+    | termExpression ~ (IN ~ "(" ~> start <~ ")") ^^ {
+        case e1 ~ e2 => SubqueryExpression(e1, e2)
+      }
     | termExpression ~ (IN ~ "(" ~> rep1sep(termExpression, ",")) <~ ")" ^^ {
         case e1 ~ e2 => In(e1, e2)
       }

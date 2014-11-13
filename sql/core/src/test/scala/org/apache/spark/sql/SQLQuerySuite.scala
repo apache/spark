@@ -1049,4 +1049,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
+
+  test("SPARK-4226 Add support for subqueries in predicates") {
+    checkAnswer(
+        sql(
+          """SELECT a.key FROM testData a 
+            |WHERE a.key in
+            |(SELECT b.key FROM testData b WHERE b.key in (1))""".stripMargin), 1)
+  }
 }
