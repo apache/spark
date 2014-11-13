@@ -25,37 +25,36 @@ import org.apache.spark.mllib.linalg.Vector
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel (val clusterCenters: Array[Vector]) extends Serializable {
 
-  /** Total number of clusters. */
-  def k: Int = clusterCenters.length
+class KMeansModel(specific: GeneralizedKMeansModel[_, _]) {
+
+  val k: Int = specific.k
 
   /** Returns the cluster index that a given point belongs to. */
-  def predict(point: Vector): Int = {
-    KMeans.findClosest(clusterCentersWithNorm, new BreezeVectorWithNorm(point))._1
-  }
-
-  /** Maps given points to their cluster indices. */
-  def predict(points: RDD[Vector]): RDD[Int] = {
-    val centersWithNorm = clusterCentersWithNorm
-    val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
-    points.map(p => KMeans.findClosest(bcCentersWithNorm.value, new BreezeVectorWithNorm(p))._1)
-  }
-
-  /** Maps given points to their cluster indices. */
-  def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
-    predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
+  def predict(point: Vector): Int = specific.predict(point)
 
   /**
-   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
-   * model on the given data.
+   * Maps given points to their cluster indices.
    */
-  def computeCost(data: RDD[Vector]): Double = {
-    val centersWithNorm = clusterCentersWithNorm
-    val bcCentersWithNorm = data.context.broadcast(centersWithNorm)
-    data.map(p => KMeans.pointCost(bcCentersWithNorm.value, new BreezeVectorWithNorm(p))).sum()
-  }
+  def predict(points: RDD[Vector]): RDD[Int] = specific.predict(points)
 
-  private def clusterCentersWithNorm: Iterable[BreezeVectorWithNorm] =
-    clusterCenters.map(new BreezeVectorWithNorm(_))
+  /**
+   * Maps given points to their cluster indices.
+   * @param points input points
+   * @return the predicted cluster index for each input point
+   */
+  def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] = specific.predict(points)
+
+  /**
+   * Get the K-means cost for this model on the given data.
+   * @param data data for which cost is to be computed
+   * @return  the K-means cost for this model on the given data
+   */
+  def computeCost(data: RDD[Vector]): Double = specific.computeCost(data)
+
+  /**
+   * Get the array of cluster centers
+   * @return  the array of cluster centers
+   */
+  def clusterCenters: Array[Vector] = specific.clusterCenters
 }
