@@ -102,7 +102,7 @@ make_binary_release() {
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
   
   cd spark-$RELEASE_VERSION-bin-$NAME
-  ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee binary-release-$NAME.log
+  ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee ../binary-release-$NAME.log
   cd ..
   cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
   rm -rf spark-$RELEASE_VERSION-bin-$NAME

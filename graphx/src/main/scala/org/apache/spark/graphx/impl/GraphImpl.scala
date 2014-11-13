@@ -218,30 +218,30 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
           case Some(EdgeDirection.Both) =>
             if (activeFraction < 0.8) {
               edgePartition.aggregateMessagesIndexScan(sendMsg, mergeMsg, tripletFields,
-                true, true, false)
+                EdgeActiveness.Both)
             } else {
               edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-                true, true, false)
+                EdgeActiveness.Both)
             }
           case Some(EdgeDirection.Either) =>
             // TODO: Because we only have a clustered index on the source vertex ID, we can't filter
             // the index here. Instead we have to scan all edges and then do the filter.
             edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-              true, true, true)
+              EdgeActiveness.Either)
           case Some(EdgeDirection.Out) =>
             if (activeFraction < 0.8) {
               edgePartition.aggregateMessagesIndexScan(sendMsg, mergeMsg, tripletFields,
-                true, false, false)
+                EdgeActiveness.SrcOnly)
             } else {
               edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-                true, false, false)
+                EdgeActiveness.SrcOnly)
             }
           case Some(EdgeDirection.In) =>
             edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-              false, true, false)
+              EdgeActiveness.DstOnly)
           case _ => // None
             edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-              false, false, false)
+              EdgeActiveness.Neither)
         }
     }).setName("GraphImpl.aggregateMessages - preAgg")
 

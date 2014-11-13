@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, TestUtils}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
@@ -467,24 +467,25 @@ class SparkSubmitSuite extends FunSuite with Matchers {
   }
 }
 
-object JarCreationTest {
+object JarCreationTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
-      var foundClasses = false
+      var exception: String = null
       try {
         Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
         Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
-        foundClasses = true
       } catch {
-        case _: Throwable => // catch all
+        case t: Throwable =>
+          exception = t + "\n" + t.getStackTraceString
+          exception = exception.replaceAll("\n", "\n\t")
       }
-      Seq(foundClasses).iterator
+      Option(exception).toSeq.iterator
     }.collect()
-    if (result.contains(false)) {
-      throw new Exception("Could not load user defined classes inside of executors")
+    if (result.nonEmpty) {
+      throw new Exception("Could not load user class from jar:\n" + result(0))
     }
   }
 }
