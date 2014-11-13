@@ -18,8 +18,11 @@
 """
 Python package for feature in MLlib.
 """
+from __future__ import absolute_import
+
 import sys
 import warnings
+import random
 
 from py4j.protocol import Py4JJavaError
 
@@ -341,8 +344,6 @@ class Word2Vec(object):
         """
         Construct Word2Vec instance
         """
-        import random  # this can't be on the top because of mllib.random
-
         self.vectorSize = 100
         self.learningRate = 0.025
         self.numPartitions = 1
@@ -411,8 +412,5 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
-    # remove current path from list of search paths to avoid importing mllib.random
-    # for C{import random}, which is done in an external dependency of pyspark during doctests.
-    import sys
     sys.path.pop(0)
     _test()
