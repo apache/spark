@@ -227,8 +227,9 @@ class ReliableKafkaReceiver[
 
         ZkUtils.updatePersistentPath(zkClient, zkPath, offset.toString)
       } catch {
-        case e: Exception => logWarning(s"Exception during commit offset $offset for topic" +
-          s"${topicAndPart.topic}, partition ${topicAndPart.partition}", t)
+        case e: Exception =>
+          logWarning(s"Exception during commit offset $offset for topic" +
+            s"${topicAndPart.topic}, partition ${topicAndPart.partition}", e)
       }
 
       logInfo(s"Committed offset $offset for topic ${topicAndPart.topic}, " +
