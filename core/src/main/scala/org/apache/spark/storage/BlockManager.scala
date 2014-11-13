@@ -73,7 +73,8 @@ private[spark] class BlockManager(
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
     blockTransferService: BlockTransferService,
-    securityManager: SecurityManager)
+    securityManager: SecurityManager,
+    numUsableCores: Int)
   extends BlockDataManager with Logging {
 
   val diskBlockManager = new DiskBlockManager(this, conf)
@@ -121,8 +122,8 @@ private[spark] class BlockManager(
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTranserService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
-    new ExternalShuffleClient(SparkTransportConf.fromSparkConf(conf), securityManager,
-      securityManager.isAuthenticationEnabled())
+    val transConf = SparkTransportConf.fromSparkConf(conf, numUsableCores)
+    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled())
   } else {
     blockTransferService
   }
@@ -174,9 +175,10 @@ private[spark] class BlockManager(
       mapOutputTracker: MapOutputTracker,
       shuffleManager: ShuffleManager,
       blockTransferService: BlockTransferService,
-      securityManager: SecurityManager) = {
+      securityManager: SecurityManager,
+      numUsableCores: Int) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager)
+      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager, numUsableCores)
   }
 
   /**

@@ -35,13 +35,13 @@ import org.apache.spark.util.Utils
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
  */
-class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManager)
+class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManager, numCores: Int)
   extends BlockTransferService {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
-  private val transportConf = SparkTransportConf.fromSparkConf(conf)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf, numCores)
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
