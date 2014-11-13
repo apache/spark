@@ -68,9 +68,6 @@ abstract class BlockMatrixPartitioner(
     val colPerBlock: Int) extends Partitioner {
   val name: String
 
-  override def getPartition(key: Any): Int = {
-    Utils.nonNegativeMod(key.asInstanceOf[Int], numPartitions)
-  }
 }
 
 /**
@@ -91,6 +88,17 @@ class GridPartitioner(
   override val name = "grid"
 
   override val numPartitions = numRowBlocks * numColBlocks
+
+  override def getPartition(key: Any): Int = {
+    key match {
+      case ind: Int =>
+        Utils.nonNegativeMod(key.asInstanceOf[Int], numPartitions)
+      case indices: (Int, Int, Int) =>
+        Utils.nonNegativeMod(indices._1 + indices._3 * numRowBlocks, numPartitions)
+      case _ =>
+        throw new IllegalArgumentException("Unrecognized key")
+    }
+  }
 
   override def equals(obj: Any): Boolean = {
     obj match {
@@ -119,6 +127,10 @@ class RowBasedPartitioner(
 
   override val name = "row"
 
+  override def getPartition(key: Any): Int = {
+    Utils.nonNegativeMod(key.asInstanceOf[Int], numPartitions)
+  }
+
   override def equals(obj: Any): Boolean = {
     obj match {
       case r: RowBasedPartitioner =>
@@ -145,6 +157,10 @@ class ColumnBasedPartitioner(
   extends BlockMatrixPartitioner(numPartitions, rowPerBlock, colPerBlock) {
 
   override val name = "column"
+
+  override def getPartition(key: Any): Int = {
+    Utils.nonNegativeMod(key.asInstanceOf[Int], numPartitions)
+  }
 
   override def equals(obj: Any): Boolean = {
     obj match {
@@ -347,21 +363,52 @@ class BlockMatrix(
     other match {
       case otherBlocked: BlockMatrix =>
         if (checkPartitioning(otherBlocked, OperationNames.multiply)){
-
+          val otherPartitioner = otherBlocked.partitioner
           val resultPartitioner = new GridPartitioner(numRowBlocks, otherBlocked.numColBlocks,
             partitioner.rowPerBlock, otherBlocked.partitioner.colPerBlock)
 
-          val multiplyBlocks = matrixRDD.join(otherBlocked.matrixRDD, partitioner).
-            map { case (key, (mat1, mat2)) =>
-            val C = mat1.mat multiply mat2.mat
-            (mat1.blockIdRow + numRowBlocks * mat2.blockIdCol, C.toBreeze)
-          }.reduceByKey(resultPartitioner, (a, b) => a + b)
+          val newBlocks =
+            if (partitioner.name == "column" && otherPartitioner.name == "row" &&
+              partitioner.numPartitions == otherPartitioner.numPartitions) {
 
-          val newBlocks = multiplyBlocks.map{ case (index, mat) =>
-            val colId = index / numRowBlocks
-            val rowId = index - colId * numRowBlocks
-            new BlockPartition(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
-          }
+              val multiplyBlocks = matrixRDD.join(otherBlocked.matrixRDD, partitioner).
+                  map { case (key, (mat1, mat2)) =>
+                  val C = mat1.mat multiply mat2.mat
+                  (mat1.blockIdRow + numRowBlocks * mat2.blockIdCol, C.toBreeze)
+                }.reduceByKey(resultPartitioner, (a, b) => a + b)
+
+              multiplyBlocks.map{ case (index, mat) =>
+                val colId = index / numRowBlocks
+                val rowId = index - colId * numRowBlocks
+                new BlockPartition(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
+              }
+            } else {
+              val flatA = matrixRDD.flatMap{ case (index, block) =>
+                val colId = block.blockIdCol
+                val rowId = block.blockIdRow
+
+                for (j <- 0 until otherBlocked.numColBlocks) yield ((rowId, colId, j), block)
+              }
+
+              val flatB = otherBlocked.matrixRDD.flatMap{ case (index, block) =>
+                val colId = block.blockIdCol
+                val rowId = block.blockIdRow
+
+                for (i <- 0 until numRowBlocks) yield ((i, rowId, colId), block)
+              }
+
+              val multiplyBlocks = flatA.join(flatB, resultPartitioner).
+                map { case ((rowId, j, colId), (mat1, mat2)) =>
+                  val C = mat1.mat multiply mat2.mat
+                  (rowId + numRowBlocks * colId, C.toBreeze)
+              }.reduceByKey(resultPartitioner, (a, b) => a + b)
+
+              multiplyBlocks.map{ case (index, mat) =>
+                val colId = index / numRowBlocks
+                val rowId = index - colId * numRowBlocks
+                new BlockPartition(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
+              }
+            }
           new BlockMatrix(numRowBlocks, otherBlocked.numColBlocks, newBlocks, resultPartitioner)
         } else {
           throw new SparkException(
@@ -378,9 +425,7 @@ class BlockMatrix(
       case OperationNames.add =>
         partitioner.equals(otherPartitioner)
       case OperationNames.multiply =>
-        partitioner.name == "column" && otherPartitioner.name == "row" &&
-          partitioner.numPartitions == otherPartitioner.numPartitions &&
-          partitioner.colPerBlock == otherPartitioner.rowPerBlock &&
+        partitioner.colPerBlock == otherPartitioner.rowPerBlock &&
           numColBlocks == other.numRowBlocks
       case _ =>
         throw new IllegalArgumentException("Unsupported operation")
@@ -398,5 +443,4 @@ private object OperationNames {
   val add: Int = 1
   val multiply: Int = 2
 
-}
 }
