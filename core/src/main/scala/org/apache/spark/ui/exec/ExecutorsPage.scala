@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -139,8 +140,9 @@ private[ui] class ExecutorsPage(
       </td>
       {
         if (threadDumpEnabled) {
+          val encodedId = URLEncoder.encode(info.id, "UTF-8")
           <td>
-            <a href={s"threadDump/?executorId=${info.id}"}>Thread Dump</a>
+            <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
           </td>
         } else {
           Seq.empty
