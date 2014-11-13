@@ -29,6 +29,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.Records
+import java.util.concurrent.LinkedBlockingQueue
 
 /**
  * Acquires resources for executors from a ResourceManager and launches executors in new containers.
@@ -43,8 +44,18 @@ private[yarn] class YarnAllocationHandler(
     securityMgr: SecurityManager)
   extends YarnAllocator(conf, sparkConf, appAttemptId, args, preferredNodes, securityMgr) {
 
+
+  // ContainerRequests which have been added to AMRMClient.
+  private val containerRequestList = new LinkedBlockingQueue[ContainerRequest]()
+
   override protected def releaseContainer(container: Container) = {
     amClient.releaseAssignedContainer(container.getId())
+  }
+
+  override protected def removeContainerRequest() = {
+    if(!containerRequestList.isEmpty()){
+      amClient.removeContainerRequest(containerRequestList.take())
+    }
   }
 
   // pending isn't used on stable as the AMRMClient handles incremental asks
@@ -133,6 +144,7 @@ private[yarn] class YarnAllocationHandler(
       }
 
     for (request <- containerRequests) {
+      containerRequestList.put(request)
       amClient.addContainerRequest(request)
     }
 

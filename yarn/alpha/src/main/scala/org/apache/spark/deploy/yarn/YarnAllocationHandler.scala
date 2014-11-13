@@ -125,6 +125,9 @@ private[yarn] class YarnAllocationHandler(
     releaseList.add(container.getId())
   }
 
+  override protected def removeContainerRequest() = {
+  }
+
   private def createRackResourceRequests(hostContainers: List[ResourceRequest]):
     List[ResourceRequest] = {
     // First generate modified racks and new set of hosts under it : then issue requests
