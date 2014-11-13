@@ -21,10 +21,10 @@ import org.scalatest.FunSuite
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.linalg.Vectors
 
-class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
+class CoordinateMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   val m = 5
   val n = 4

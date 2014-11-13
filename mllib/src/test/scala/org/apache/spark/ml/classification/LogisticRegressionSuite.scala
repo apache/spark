@@ -20,10 +20,10 @@ package org.apache.spark.ml.classification
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
-class LogisticRegressionSuite extends FunSuite with LocalSparkContext {
+class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
   @transient var dataset: SchemaRDD = _

@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext}
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
+trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
   @transient var sc: SparkContext = _
 
   override def beforeAll() {

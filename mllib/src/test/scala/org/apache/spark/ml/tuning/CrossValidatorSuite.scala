@@ -22,10 +22,10 @@ import org.scalatest.FunSuite
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
-class CrossValidatorSuite extends FunSuite with LocalSparkContext {
+class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var dataset: SchemaRDD = _
 
