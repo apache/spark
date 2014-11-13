@@ -2,15 +2,20 @@ package com.shopify.metrics.reporting;
 
 import com.codahale.metrics.*;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.apache.log4j.Level;
 import org.apache.log4j.RollingFileAppender;
 import org.apache.log4j.PatternLayout;
 
 import java.io.*;
+import java.util.regex.Pattern;
 import java.nio.charset.Charset;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
 
@@ -19,9 +24,10 @@ import java.util.concurrent.TimeUnit;
  */
 
 public class LogReporter extends ScheduledReporter {
-  
+
   private static final Logger LOGGER = Logger.getLogger(LogReporter.class);
-  
+  private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
+
   public static Builder forRegistry(MetricRegistry registry) {
     return new Builder(registry);
   }
@@ -206,9 +212,51 @@ public class LogReporter extends ScheduledReporter {
   private void reportCounter(long timestamp, String name, Counter counter) {
     report(timestamp, name,"count=%d", counter.getCount());
   }
-  
+
+  private String sanitizeString(String s) {
+    return WHITESPACE.matcher(s).replaceAll("-");
+  }
+
+  private String parseName(String name) {
+    name = sanitizeString(name);
+    String tags = null;
+    List<String> parts = new ArrayList<String>(Arrays.asList(name.split("\\.")));
+    String prefix = parts.remove(0);
+    String source = parts.remove(0);
+    if (source.equals("executor")) { // "spark.executor.0.filesystem.file.largeRead_ops" (ExecutorSource)
+      String executorId = parts.remove(0);
+      tags = String.format("executor=%s", executorId);
+      while (parts.size() > 3) {
+        parts.remove(parts.size() -1);
+      }
+      name = String.format("%s.%s.%s", prefix, source, StringUtils.join(parts, "_"));
+    } else if (source.equals("application")) { // "spark.application.Apriori.1394489355680.runtime_ms" (ApplicationSource)
+      String applicationName = parts.remove(0);
+      String applicationId = parts.remove(0);
+      String currentTime = parts.remove(0);
+      String metricName = parts.remove(0);
+      tags = String.format("application=%s applicationId=%s", applicationName, applicationId);
+      name = String.format("%s.%s.", prefix, source) + metricName;
+    } else {
+      String realSource = parts.remove(0);
+      // "spark.OrdersModel.DAGScheduler.stage.failedStages" (DAGSchedulerSource)
+      // "spark.OrdersModel.BlockManager.memory.maxMem_MB" (BlockManagerSource)
+      if (realSource.equals("DAGScheduler") || realSource.equals("BlockManager")) {
+        tags = String.format("application=%s", source);
+        name = String.format("%s.application.%s.", prefix, realSource) + String.format("%s_%s", parts.toArray());
+      }
+    }
+    
+    if(tags != null){
+      return  String.format("%s %s", name, tags);
+    }else {
+      return name;
+    }
+  }
+
   private void report(long timestamp, String name, String line, Object... values) {
     String metrics = String.format(line, values);
-    this.logger.info(String.format(locale, "event_at=%d metric=%s %s", timestamp, name,metrics));
+    name = parseName(name);
+    this.logger.info(String.format(locale, "event_at=%d %s %s", timestamp, name, metrics));
   }
 }
