@@ -279,6 +279,7 @@ object SparkSubmit {
       sysProps.getOrElseUpdate(k, v)
     }
 
+    // Ignore invalid spark.driver.host in cluster modes.
     if (deployMode == CLUSTER) {
       sysProps -= ("spark.driver.host")
     }
