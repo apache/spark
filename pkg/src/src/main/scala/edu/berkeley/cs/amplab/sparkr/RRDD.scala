@@ -250,14 +250,16 @@ object RRDD {
       numPartitions: Int,
       splitIndex: Int) : File = {
 
+    val env = SparkEnv.get
+    val conf = env.conf
     val tempDir =
-      System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
+      Option(System.getenv("SPARK_LOCAL_DIRS")).getOrElse(
+              conf.get("spark.local.dir", System.getProperty("java.io.tmpdir"))).split(',')(0)
     val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
     val tempFileIn = File.createTempFile("rSpark", "in", new File(tempDir))
 
     val tempFileName = tempFile.getAbsolutePath()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-    val env = SparkEnv.get
 
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for R") {
