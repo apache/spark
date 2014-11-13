@@ -28,6 +28,7 @@ class TwitterStreamSuite extends TestSuiteBase {
   test("twitter input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val filters = Seq("filter1", "filter2")
+    val locations: Seq[Seq[Double]] = Seq(Seq(-180, -90), Seq(180, 90))
     val authorization: Authorization = NullAuthorization.getInstance()
 
     // tests the API, does not actually test data receiving
@@ -35,14 +36,33 @@ class TwitterStreamSuite extends TestSuiteBase {
     val test2: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, None, filters)
     val test3: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_AND_DISK_SER_2)
+      TwitterUtils.createStream(ssc, None, locations)
     val test4: ReceiverInputDStream[Status] =
-      TwitterUtils.createStream(ssc, Some(authorization))
+      TwitterUtils.createStream(ssc, None, filters, locations)
+ 
     val test5: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test6: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test7: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, None, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+ 
+    val test8: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, Some(authorization))
+    val test9: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), filters)
-    val test6: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+    val test10: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, Some(authorization), locations)
+    val test11: ReceiverInputDStream[Status] =
+      TwitterUtils.createStream(ssc, Some(authorization), filters, locations)
+ 
+    val test12: ReceiverInputDStream[Status] = TwitterUtils.createStream(
       ssc, Some(authorization), filters, StorageLevel.MEMORY_AND_DISK_SER_2)
-
+    val test13: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test14: ReceiverInputDStream[Status] = TwitterUtils.createStream(
+      ssc, Some(authorization), filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2)
+ 
     // Note that actually testing the data receiving is hard as authentication keys are
     // necessary for accessing Twitter live stream
     ssc.stop()
