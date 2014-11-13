@@ -71,8 +71,8 @@ public class LogReporter extends ScheduledReporter {
       return this;
     }
 
-    public LogReporter build(String directory) {
-      return new LogReporter(registry, directory, locale, rateUnit, durationUnit, clock, filter);
+    public LogReporter build(String directory, String maxFileSize, int maxBackupIndex) {
+      return new LogReporter(registry, directory, maxFileSize, maxBackupIndex, locale, rateUnit, durationUnit, clock, filter);
     }
   } 
 
@@ -82,6 +82,8 @@ public class LogReporter extends ScheduledReporter {
 
   private LogReporter(MetricRegistry registry,
       String directory,
+      String maxFileSize,
+      int maxBackupIndex,
       Locale locale,
       TimeUnit rateUnit,
       TimeUnit durationUnit,
@@ -93,14 +95,12 @@ public class LogReporter extends ScheduledReporter {
     String file = String.format("%s/spark.metrics.log", directory);
 
     try {
-      // TODO:: simplify
       PatternLayout layout = new PatternLayout("%d{ISO8601} %c %m%n");
       RollingFileAppender logfile = new RollingFileAppender(layout, file);
 
       LOGGER.info(String.format("Creating metrics output file: %s", file));
-      // TODO:: these should be configurable
-      logfile.setMaxFileSize("50MB");
-      logfile.setMaxBackupIndex(10);
+      logfile.setMaxFileSize(maxFileSize);
+      logfile.setMaxBackupIndex(maxBackupIndex);
 
       this.logger.setLevel(Level.INFO);
       this.logger.addAppender(logfile);
