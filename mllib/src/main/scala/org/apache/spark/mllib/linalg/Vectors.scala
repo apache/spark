@@ -76,6 +76,22 @@ sealed trait Vector extends Serializable {
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
+
+  /**
+   * It will return the iterator for the active elements of dense and sparse vector as
+   * (index, value) pair. Note that foreach method can be overridden for better performance
+   * in different vector implementation.
+   *
+   * @param skippingZeros Skipping zero elements explicitly if true. It will be useful when we
+   *                      iterator through dense vector having lots of zero elements which
+   *                      we want to skip. Default is false.
+   * @return Iterator[(Int, Double)] where the first element in the tuple is the index,
+   *         and the second element is the corresponding value.
+   */
+  private[spark] def activeIterator(skippingZeros: Boolean): Iterator[(Int, Double)]
+
+  private[spark] def activeIterator: Iterator[(Int, Double)] = activeIterator(false)
+
 }
 
 /**
@@ -273,6 +289,47 @@ class DenseVector(val values: Array[Double]) extends Vector {
   override def copy: DenseVector = {
     new DenseVector(values.clone())
   }
+
+  private[spark] override def activeIterator(skippingZeros: Boolean) = new Iterator[(Int, Double)] {
+    private var i = 0
+    private val valuesSize = values.size
+
+    // If zeros are asked to be explicitly skipped, the parent `size` method is called to count
+    // the number of nonzero elements using `hasNext` and `next` methods.
+    override lazy val size: Int = if (skippingZeros) super.size else valuesSize
+
+    override def hasNext = {
+      if (skippingZeros) {
+        var found = false
+        while (!found && i < valuesSize) if (values(i) != 0.0) found = true else i += 1
+      }
+      i < valuesSize
+    }
+
+    override def next = {
+      val result = (i, values(i))
+      i += 1
+      result
+    }
+
+    override def foreach[@specialized(Unit) U](f: ((Int, Double)) => U) {
+      var i = 0
+      if (skippingZeros) {
+        while (i < valuesSize) {
+          if (values(i) != 0.0) {
+            f(i, values(i))
+          }
+          i += 1
+        }
+      } else {
+        while (i < valuesSize) {
+          f(i, values(i))
+          i += 1
+        }
+      }
+    }
+  }
+
 }
 
 /**
@@ -309,4 +366,45 @@ class SparseVector(
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  private[spark] override def activeIterator(skippingZeros: Boolean) = new Iterator[(Int, Double)] {
+    private var i = 0
+    private val valuesSize = values.size
+
+    // If zeros are asked to be explicitly skipped, the parent `size` method is called to count
+    // the number of nonzero elements using `hasNext` and `next` methods.
+    override lazy val size: Int = if (skippingZeros) super.size else valuesSize
+
+    def hasNext = {
+      if (skippingZeros) {
+        var found = false
+        while (!found && i < valuesSize) if (values(i) != 0.0) found = true else i += 1
+      }
+      i < valuesSize
+    }
+
+    def next = {
+      val result = (indices(i), values(i))
+      i += 1
+      result
+    }
+
+    override def foreach[@specialized(Unit) U](f: ((Int, Double)) => U) {
+      var i = 0
+      if (skippingZeros) {
+        while (i < valuesSize) {
+          if (values(i) != 0.0) {
+            f(indices(i), values(i))
+          }
+          i += 1
+        }
+      } else {
+        while (i < valuesSize) {
+          f(indices(i), values(i))
+          i += 1
+        }
+      }
+    }
+  }
+
 }

@@ -173,4 +173,80 @@ class VectorsSuite extends FunSuite {
     val v = Vectors.fromBreeze(x(::, 0))
     assert(v.size === x.rows)
   }
+
+  test("activeIterator") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    // Testing if the size of iterator is correct when the zeros are explicitly skipped.
+    // The default setting will not skip any zero explicitly.
+    assert(dv.activeIterator.size === 4)
+    assert(dv.activeIterator(false).size === 4)
+    assert(dv.activeIterator(true).size === 2)
+
+    assert(sv.activeIterator.size === 3)
+    assert(sv.activeIterator(false).size === 3)
+    assert(sv.activeIterator(true).size === 2)
+
+    // Testing `hasNext` and `next`
+    val dvIter1 = dv.activeIterator(false)
+    assert(dvIter1.hasNext === true && dvIter1.next === (0, 0.0))
+    assert(dvIter1.hasNext === true && dvIter1.next === (1, 1.2))
+    assert(dvIter1.hasNext === true && dvIter1.next === (2, 3.1))
+    assert(dvIter1.hasNext === true && dvIter1.next === (3, 0.0))
+    assert(dvIter1.hasNext === false)
+
+    val dvIter2 = dv.activeIterator(true)
+    assert(dvIter2.hasNext === true && dvIter2.next === (1, 1.2))
+    assert(dvIter2.hasNext === true && dvIter2.next === (2, 3.1))
+    assert(dvIter2.hasNext === false)
+
+    val svIter1 = sv.activeIterator(false)
+    assert(svIter1.hasNext === true && svIter1.next === (1, 1.2))
+    assert(svIter1.hasNext === true && svIter1.next === (2, 3.1))
+    assert(svIter1.hasNext === true && svIter1.next === (3, 0.0))
+    assert(svIter1.hasNext === false)
+
+    val svIter2 = sv.activeIterator(true)
+    assert(svIter2.hasNext === true && svIter2.next === (1, 1.2))
+    assert(svIter2.hasNext === true && svIter2.next === (2, 3.1))
+    assert(svIter2.hasNext === false)
+
+    // Testing `foreach`
+    val dvMap1 = scala.collection.mutable.Map[Int, Double]()
+    dvIter1.foreach{
+      case (index, value) => dvMap1.put(index, value)
+    }
+    assert(dvMap1.size === 4)
+    assert(dvMap1.get(0) === Some(0.0))
+    assert(dvMap1.get(1) === Some(1.2))
+    assert(dvMap1.get(2) === Some(3.1))
+    assert(dvMap1.get(3) === Some(0.0))
+
+    val dvMap2 = scala.collection.mutable.Map[Int, Double]()
+    dvIter2.foreach{
+      case (index, value) => dvMap2.put(index, value)
+    }
+    assert(dvMap2.size === 2)
+    assert(dvMap2.get(1) === Some(1.2))
+    assert(dvMap2.get(2) === Some(3.1))
+
+    val svMap1 = scala.collection.mutable.Map[Int, Double]()
+    dvIter1.foreach{
+      case (index, value) => svMap1.put(index, value)
+    }
+    assert(svMap1.size === 4)
+    assert(svMap1.get(1) === Some(1.2))
+    assert(svMap1.get(2) === Some(3.1))
+    assert(svMap1.get(3) === Some(0.0))
+
+    val svMap2 = scala.collection.mutable.Map[Int, Double]()
+    svIter2.foreach{
+      case (index, value) => svMap2.put(index, value)
+    }
+    assert(svMap2.size === 2)
+    assert(svMap2.get(1) === Some(1.2))
+    assert(svMap2.get(2) === Some(3.1))
+
+  }
 }

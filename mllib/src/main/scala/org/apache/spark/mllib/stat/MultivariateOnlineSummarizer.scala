@@ -53,23 +53,21 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    * Adds input value to position i.
    */
   private[this] def add(i: Int, value: Double) = {
-    if (value != 0.0) {
-      if (currMax(i) < value) {
-        currMax(i) = value
-      }
-      if (currMin(i) > value) {
-        currMin(i) = value
-      }
-
-      val prevMean = currMean(i)
-      val diff = value - prevMean
-      currMean(i) = prevMean + diff / (nnz(i) + 1.0)
-      currM2n(i) += (value - currMean(i)) * diff
-      currM2(i) += value * value
-      currL1(i) += math.abs(value)
-
-      nnz(i) += 1.0
+    if (currMax(i) < value) {
+      currMax(i) = value
     }
+    if (currMin(i) > value) {
+      currMin(i) = value
+    }
+
+    val prevMean = currMean(i)
+    val diff = value - prevMean
+    currMean(i) = prevMean + diff / (nnz(i) + 1.0)
+    currM2n(i) += (value - currMean(i)) * diff
+    currM2(i) += value * value
+    currL1(i) += math.abs(value)
+
+    nnz(i) += 1.0
   }
 
   /**
@@ -95,21 +93,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
-    sample match {
-      case dv: DenseVector => {
-        var j = 0
-        while (j < dv.size) {
-          add(j, dv.values(j))
-          j += 1
-        }
-      }
-      case sv: SparseVector =>
-        var j = 0
-        while (j < sv.indices.size) {
-          add(sv.indices(j), sv.values(j))
-          j += 1
-        }
-      case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    sample.activeIterator(true).foreach {
+      case (index, value) => add(index, value)
     }
 
     totalCnt += 1
