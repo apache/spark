@@ -325,11 +325,11 @@ class RDD(object):
         :return: split RDDs in a list
 
         >>> rdd = sc.parallelize(range(5), 1)
-        >>> rdd1, rdd2 = rdd.randomSplit([2, 3], 101)
+        >>> rdd1, rdd2 = rdd.randomSplit([2, 3], 17)
         >>> rdd1.collect()
-        [2, 3]
+        [1, 3]
         >>> rdd2.collect()
-        [0, 1, 4]
+        [0, 2, 4]
         """
         s = float(sum(weights))
         cweights = [0.0]
