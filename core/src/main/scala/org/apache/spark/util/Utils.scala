@@ -983,18 +983,28 @@ private[spark] object Utils extends Logging {
   /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
    */
-  def memoryStringToMb(str: String): Int = {
+  def memoryStringToMb(str: String): Int = memoryStringToMb(str, 'b')
+  def memoryStringToMb(str: String, defaultScale: Char): Int = {
     val lower = str.toLowerCase
-    if (lower.endsWith("k")) {
+    val lastChar = lower(lower.length - 1)
+    val scale =
+      if (lastChar.isDigit)
+        defaultScale
+      else
+        lastChar
+
+    if (scale == 'k') {
       (lower.substring(0, lower.length-1).toLong / 1024).toInt
-    } else if (lower.endsWith("m")) {
+    } else if (scale == 'm') {
       lower.substring(0, lower.length-1).toInt
-    } else if (lower.endsWith("g")) {
+    } else if (scale == 'g') {
       lower.substring(0, lower.length-1).toInt * 1024
-    } else if (lower.endsWith("t")) {
+    } else if (scale == 't') {
       lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else {// no suffix, so it's just a number in bytes
+    } else if (scale == 'b') {// no suffix, so it's just a number in bytes
       (lower.toLong / 1024 / 1024).toInt
+    } else {
+      throw new IllegalArgumentException("Invalid memory string: %s".format(str))
     }
   }
 
