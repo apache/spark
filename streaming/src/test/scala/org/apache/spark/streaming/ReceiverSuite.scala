@@ -138,7 +138,7 @@ class ReceiverSuite extends FunSuite with Timeouts {
     blockGenerator.start()
     var count = 0
     while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator addData count
+      blockGenerator.addData(count)
       generatedData += count
       count += 1
       Thread.sleep(10)
@@ -168,7 +168,7 @@ class ReceiverSuite extends FunSuite with Timeouts {
     blockGenerator.start()
     var count = 0
     while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator addData count
+      blockGenerator.addData(count)
       generatedData += count
       count += 1
       Thread.sleep(1)
