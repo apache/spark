@@ -24,7 +24,7 @@ Same as countByValue in Spark.
 \dontrun{
 sc <- sparkR.init()
 rdd <- parallelize(sc, c(1,2,3,2,1))
-countByValue(rdd) # (1,2), (2,2), (3,1)
+countByValue(rdd) # (1,2L), (2,2L), (3,1L)
 }
 }
 

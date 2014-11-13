@@ -22,8 +22,8 @@ Same as countByKey in Spark.
 \examples{
 \dontrun{
 sc <- sparkR.init()
-rdd <- parallelize(sc, list(list("a", 1), list("b", 1), list("a", 1)))
-countByKey(rdd) # ("a", 2), ("b", 1)
+rdd <- parallelize(sc, list(c("a", 1), c("b", 1), c("a", 1)))
+countByKey(rdd) # ("a", 2L), ("b", 1L)
 }
 }
 

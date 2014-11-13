@@ -373,7 +373,7 @@ setMethod("length",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, c(1,2,3,2,1))
-#' countByValue(rdd) # (1,2), (2,2), (3,1)
+#' countByValue(rdd) # (1,2L), (2,2L), (3,1L)
 #'}
 setGeneric("countByValue", function(rdd) { standardGeneric("countByValue") })
 
@@ -401,8 +401,8 @@ setMethod("countByValue",
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, list(list("a", 1), list("b", 1), list("a", 1)))
-#' countByKey(rdd) # ("a", 2), ("b", 1)
+#' rdd <- parallelize(sc, list(c("a", 1), c("b", 1), c("a", 1)))
+#' countByKey(rdd) # ("a", 2L), ("b", 1L)
 #'}
 setGeneric("countByKey", function(rdd) { standardGeneric("countByKey") })
 
