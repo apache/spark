@@ -140,8 +140,8 @@ private[streaming] class BlockGenerator(
     } catch {
       case ie: InterruptedException =>
         logInfo("Block updating timer thread was interrupted")
-      case t: Throwable =>
-        reportError("Error in block updating thread", t)
+      case e: Exception =>
+        reportError("Error in block updating thread", e)
     }
   }
 
@@ -168,7 +168,7 @@ private[streaming] class BlockGenerator(
       case ie: InterruptedException =>
         logInfo("Block pushing thread was interrupted")
       case e: Exception =>
-        reportError("Error in block updating thread", e)
+        reportError("Error in block pushing thread", e)
     }
   }
 
