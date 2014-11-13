@@ -25,12 +25,12 @@ import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.loss.{SquaredError, LogLoss}
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
  * Test suite for [[GradientBoosting]].
  */
-class GradientBoostingSuite extends FunSuite with LocalSparkContext {
+class GradientBoostingSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Regression with continuous features: SquaredError") {
     GradientBoostingSuite.testCombinations.foreach {

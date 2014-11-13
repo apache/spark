@@ -60,9 +60,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def receiveWithLogging = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
-      // Make this host instead of hostPort ?
       val (hostname, _) = Utils.parseHostPort(hostPort)
-      executor = new Executor(executorId, hostname, sparkProperties, userClassPath,
+      executor = new Executor(executorId, hostname, sparkProperties, cores, userClassPath,
         isLocal = false, actorSystem)
 
     case RegisterExecutorFailed(message) =>
