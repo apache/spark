@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Random;
 
 import scala.Predef;
 import scala.Tuple2;
@@ -42,25 +43,23 @@ import org.junit.Test;
 import org.junit.After;
 import org.junit.Before;
 
-public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements Serializable {
-  private transient KafkaStreamSuite testSuite = new KafkaStreamSuite();
+public class JavaKafkaStreamSuite extends KafkaStreamSuiteBase implements Serializable {
+    private transient JavaStreamingContext ssc = null;
+    private Random random = new Random();
 
   @Before
-  @Override
   public void setUp() {
-    testSuite.beforeFunction();
+    beforeFunction();
     System.clearProperty("spark.driver.port");
-    //System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
-    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    ssc = new JavaStreamingContext(sparkConf(), batchDuration());
   }
 
   @After
-  @Override
   public void tearDown() {
     ssc.stop();
     ssc = null;
     System.clearProperty("spark.driver.port");
-    testSuite.afterFunction();
+    afterFunction();
   }
 
   @Test
@@ -74,15 +73,15 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     sent.put("b", 3);
     sent.put("c", 10);
 
-    testSuite.createTopic(topic);
+    createTopic(topic);
     HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    testSuite.produceAndSendMessage(topic,
+    produceAndSendMessage(topic,
       JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
         Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("zookeeper.connect", testSuite.zkHost() + ":" + testSuite.zkPort());
-    kafkaParams.put("group.id", "test-consumer-" + KafkaTestUtils.random().nextInt(10000));
+    kafkaParams.put("zookeeper.connect", zkAddress());
+    kafkaParams.put("group.id", "test-consumer-" + random.nextInt(10000));
     kafkaParams.put("auto.offset.reset", "smallest");
 
     JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
