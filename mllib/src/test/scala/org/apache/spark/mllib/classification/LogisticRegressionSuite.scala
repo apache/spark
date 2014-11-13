@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
 object LogisticRegressionSuite {
@@ -57,7 +57,7 @@ object LogisticRegressionSuite {
   }
 }
 
-class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Matchers {
+class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],

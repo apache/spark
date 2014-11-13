@@ -19,10 +19,10 @@ package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
+class BinaryClassificationMetricsSuite extends FunSuite with MLlibTestSparkContext {
 
   def cond1(x: (Double, Double)): Boolean = x._1 ~= (x._2) absTol 1E-5
 

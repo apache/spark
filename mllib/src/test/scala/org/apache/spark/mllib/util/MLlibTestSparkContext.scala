@@ -17,17 +17,26 @@
 
 package org.apache.spark.mllib.util
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalatest.Suite
+import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient val sc = new SparkContext("local", "test")
-  @transient lazy val sqlContext = new SQLContext(sc)
+trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
+  @transient var sc: SparkContext = _
+
+  override def beforeAll() {
+    super.beforeAll()
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("MLlibUnitTest")
+    sc = new SparkContext(conf)
+  }
 
   override def afterAll() {
-    sc.stop()
+    if (sc != null) {
+      sc.stop()
+    }
     super.afterAll()
   }
 }

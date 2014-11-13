@@ -24,7 +24,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDDPartition, RandomRDD}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 
@@ -34,7 +34,7 @@ import org.apache.spark.util.StatCounter
  *
  * TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
  */
-class RandomRDDsSuite extends FunSuite with LocalSparkContext with Serializable {
+class RandomRDDsSuite extends FunSuite with MLlibTestSparkContext with Serializable {
 
   def testGeneratedRDD(rdd: RDD[Double],
       expectedSize: Long,
