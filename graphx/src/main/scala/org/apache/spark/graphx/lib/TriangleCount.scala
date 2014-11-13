@@ -28,31 +28,46 @@ import org.apache.spark.graphx.PartitionStrategy.EdgePartition2D
  * The algorithm is relatively straightforward and can be computed in three steps:
  *
  * <ul>
- * <li>Compute the set of neighbors for each vertex
- * <li>For each edge compute the intersection of the sets and send the count to both vertices.
+ * <li> Compute the set of neighbors for each vertex
+ * <li> For each edge compute the intersection of the sets and send the count to both vertices.
  * <li> Compute the sum at each vertex and divide by two since each triangle is counted twice.
  * </ul>
  *
- * Note that the input graph should have its edges in canonical direction
- * (i.e. the `sourceId` less than `destId`). Also the graph must have been partitioned
- * using [[org.apache.spark.graphx.Graph#partitionBy]].
+ * There are two implementations.  The default `TriangleCount.run` implementation first removes
+ * self cycles and canonicalizes the graph to ensure that the following conditions hold:
+ * <ul>
+ * <li> There are no self edges
+ * <li> All edges are oriented src > dst
+ * <li> There are no duplicate edges
+ * </ul>
+ * However, the canonicalization procedure is costly as it requires repartitioning the graph.
+ * If the input data is already in "canonical form" with self cycles removed then the
+ * `TriangleCount.runPreCanonicalized` should be used instead.
+ *
+ * {{{
+ * val canonicalGraph = graph.mapEdges(e => 1).removeSelfEdges().canonicalizeEdges()
+ * val counts = TriangleCount.runPreCanonicalized(canonicalGraph).vertices
+ * }}}
+ *
  */
 object TriangleCount {
 
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
-
-    // Remove self edges and orient remaining edges from low id to high id
-    val canonicalEdges = graph.edges.filter(e => e.srcId != e.dstId).map { e =>
-      if (e.srcId < e.dstId) (e.srcId, e.dstId) else (e.dstId, e.srcId)
+    // Transform the edge data something cheap to shuffle and then canonicalize
+    val canonicalGraph = graph.mapEdges(e => true).removeSelfEdges().canonicalizeEdges()
+    // Get the triangle counts
+    val counters = runPreCanonicalized(canonicalGraph).vertices
+    // Join them bath with the original graph
+    graph.outerJoinVertices(counters) { (vid, _, optCounter: Option[Int]) =>
+      optCounter.getOrElse(0)
     }
+  }
 
-    // Automatically group duplicate edges
-    val reducedGraph = Graph.fromEdgeTuples(canonicalEdges, defaultValue = true,
-      uniqueEdges = Some(EdgePartition2D)).cache()
 
+  def runPreCanonicalized[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
     // Construct set representations of the neighborhoods
     val nbrSets: VertexRDD[VertexSet] =
-      reducedGraph.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
+      graph.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
         val set = new VertexSet(nbrs.length)
         var i = 0
         while (i < nbrs.size) {
@@ -66,7 +81,7 @@ object TriangleCount {
       }
 
     // join the sets with the graph
-    val setGraph: Graph[VertexSet, Int] = reducedGraph.outerJoinVertices(nbrSets) {
+    val setGraph: Graph[VertexSet, ED] = graph.outerJoinVertices(nbrSets) {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
 
