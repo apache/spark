@@ -39,15 +39,16 @@
     <!-- Core dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_2.10</artifactId>
+      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
     </dependency>
 
     <!-- Provided dependencies -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
@@ -58,7 +59,7 @@
     <!-- Test dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_2.10</artifactId>
+      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

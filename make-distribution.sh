@@ -59,7 +59,7 @@ while (( "$#" )); do
       exit_with_usage
       ;;
     --with-hive)
-      echo "Error: '--with-hive' is no longer supported, use Maven option -Phive"
+      echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
       ;;
     --skip-java-test)
@@ -181,6 +181,7 @@ echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DI
 # Copy jars
 cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
+cp "$FWDIR"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/"
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
