@@ -60,7 +60,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      TrimAliases ::
+      TrimGroupingAliases ::
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
@@ -69,6 +69,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
+
+  private def trimAliases(e: Expression) = e.transform { case Alias(c, _) => c }
 
   /**
    * Makes sure all attributes and logical plans have been resolved.
@@ -93,17 +95,10 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   /**
    * Removes no-op Alias expressions from the plan.
    */
-  object TrimAliases extends Rule[LogicalPlan] {
+  object TrimGroupingAliases extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Aggregate(groups, aggs, child) =>
-        Aggregate(
-          groups.map {
-            _ transform {
-              case Alias(c, _) => c
-            }
-          },
-          aggs,
-          child)
+        Aggregate(groups.map(trimAliases), aggs, child)
     }
   }
 
@@ -122,10 +117,10 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case e => e.children.forall(isValidAggregateExpression)
           }
 
-          aggregateExprs.foreach { e =>
-            if (!isValidAggregateExpression(e)) {
-              throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
-            }
+          aggregateExprs.find { e =>
+            !isValidAggregateExpression(trimAliases(e))
+          }.foreach { e =>
+            throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
           }
 
           aggregatePlan
@@ -328,4 +323,3 @@ object EliminateAnalysisOperators extends Rule[LogicalPlan] {
     case Subquery(_, child) => child
   }
 }
-

@@ -146,6 +146,8 @@ object PartialAggregation {
           case other => (other, Alias(other, "PartialGroup")())
         }.toMap
 
+        def trimAliases(e: Expression) = e.transform { case Alias(c, _) => c }
+
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
         val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
@@ -153,6 +155,8 @@ object PartialAggregation {
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
           case e: Expression if namedGroupingExpressions.contains(e) =>
             namedGroupingExpressions(e).toAttribute
+          case e: Expression if namedGroupingExpressions.contains(trimAliases(e)) =>
+            namedGroupingExpressions(trimAliases(e)).toAttribute
         }).asInstanceOf[Seq[NamedExpression]]
 
         val partialComputation =
@@ -188,7 +192,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) = 
+      val (joinPredicates, otherPredicates) =
         condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
           case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
             (canEvaluate(l, right) && canEvaluate(r, left)) => true
@@ -203,7 +207,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       val rightKeys = joinKeys.map(_._2)
 
       if (joinKeys.nonEmpty) {
-        logDebug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
+        logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {
         None
