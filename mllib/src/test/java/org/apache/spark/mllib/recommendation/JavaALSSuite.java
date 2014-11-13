@@ -65,6 +65,7 @@ public class JavaALSSuite implements Serializable {
     }
     JavaPairRDD<Integer, Integer> usersProducts = sc.parallelizePairs(localUsersProducts);
     List<Rating> predictedRatings = model.predict(usersProducts).collect();
+    Assert.assertEquals(users * products, predictedRatings.size());
     if (!implicitPrefs) {
       for (Rating r: predictedRatings) {
         double prediction = r.rating();
