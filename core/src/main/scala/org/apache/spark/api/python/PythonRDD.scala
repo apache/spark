@@ -758,13 +758,6 @@ private[spark] object PythonRDD extends Logging {
       converted.saveAsHadoopDataset(new JobConf(conf))
     }
   }
-
-  /**
-   * A helper to convert java.util.List[Double] into Array[Double]
-   */
-  def listToArrayDouble(list: JList[Double]): Array[Double] = {
-    list.asScala.toArray
-  }
 }
 
 private

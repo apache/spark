@@ -28,7 +28,7 @@ from threading import Thread
 import warnings
 import heapq
 import bisect
-from random import Random
+import random
 from math import sqrt, log, isinf, isnan
 
 from pyspark.accumulators import PStatsParam
@@ -324,25 +324,21 @@ class RDD(object):
         :param seed: random seed
         :return: split RDDs in a list
 
-        >>> rdd = sc.parallelize(range(10), 1)
-        >>> rdd1, rdd2, rdd3 = rdd.randomSplit([0.4, 0.6, 1.0], 11)
+        >>> rdd = sc.parallelize(range(5), 1)
+        >>> rdd1, rdd2 = rdd.randomSplit([2.0, 3.0], 101)
         >>> rdd1.collect()
-        [3, 6]
+        [2, 3]
         >>> rdd2.collect()
-        [0, 5, 7]
-        >>> rdd3.collect()
-        [1, 2, 4, 8, 9]
+        [0, 1, 4]
         """
-        ser = BatchedSerializer(PickleSerializer(), 1)
-        rdd = self._reserialize(ser)
-        jweights = ListConverter().convert([float(w) for w in weights],
-                                           self.ctx._gateway._gateway_client)
-        jweights = self.ctx._jvm.PythonRDD.listToArrayDouble(jweights)
+        s = sum(weights)
+        cweights = [0.0]
+        for w in weights:
+            cweights.append(cweights[-1] + w / s)
         if seed is None:
-            jrdds = rdd._jrdd.randomSplit(jweights)
-        else:
-            jrdds = rdd._jrdd.randomSplit(jweights, seed)
-        return [RDD(jrdd, self.ctx, ser) for jrdd in jrdds]
+            seed = random.randint(0, 2 ** 32 - 1)
+        return [self.mapPartitionsWithIndex(RDDSampler(False, ub, seed, lb).func, True)
+                for lb, ub in zip(cweights, cweights[1:])]
 
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed=None):
@@ -369,7 +365,7 @@ class RDD(object):
         if initialCount == 0:
             return []
 
-        rand = Random(seed)
+        rand = random.Random(seed)
 
         if (not withReplacement) and num >= initialCount:
             # shuffle current RDD and return
