@@ -20,6 +20,10 @@ test_that("count by values and keys", {
   actual <- countByValue(mods)
   expected <- list(list(0, 3L), list(1, 4L), list(2, 3L))
   expect_equal(actual, expected)
+  
+  actual <- countByKey(intRdd)
+  expected <- list(list(2L, 2L), list(1L, 2L))
+  expect_equal(actual, expected)
 })
 
 test_that("lapply on RDD", {

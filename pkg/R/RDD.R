@@ -389,6 +389,32 @@ setMethod("countByValue",
             collect(reduceByKey(ones, `+`, numPartitions))
           })
 
+#' Count the number of elements for each key, and return the result to the
+#' master as lists of (key, count) pairs.
+#' 
+#' Same as countByKey in Spark.
+#'
+#' @param rdd The RDD to count keys.
+#' @return list of (key, count) pairs, where count is number of each key in rdd.
+#' @rdname countByKey
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(list("a", 1), list("b", 1), list("a", 1)))
+#' countByKey(rdd) # ("a", 2), ("b", 1)
+#'}
+setGeneric("countByKey", function(rdd) { standardGeneric("countByKey") })
+
+#' @rdname countByKey
+#' @aliases countByKey,RDD-method
+setMethod("countByKey",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            keys <- lapply(rdd, function(item) { item[[1]] })
+            countByValue(keys)
+          })
+
 #' Apply a function to all elements
 #'
 #' This function creates a new RDD by applying the given transformation to all
