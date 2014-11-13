@@ -24,7 +24,6 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 import org.apache.spark.input.PortableDataStream
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
 
