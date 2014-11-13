@@ -166,11 +166,11 @@ class LinearRegressionWithSGD(object):
                                   are activated or not).
         """
         def train(rdd, i):
-            return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, iterations, step,
-                                 miniBatchFraction, i, regParam, regType, intercept)
+            return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
+                                 float(step), float(miniBatchFraction), i, float(regParam),
+                                 regType, bool(intercept))
 
-        return _regression_train_wrapper(train, LinearRegressionModel,
-                                         data, initialWeights)
+        return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
 
 class LassoModel(LinearRegressionModelBase):
@@ -209,12 +209,13 @@ class LassoModel(LinearRegressionModelBase):
 class LassoWithSGD(object):
 
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
+    def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None):
         """Train a Lasso regression model on the given data."""
         def train(rdd, i):
-            return callMLlibFunc("trainLassoModelWithSGD", rdd, iterations, step, regParam,
-                                 miniBatchFraction, i)
+            return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
+                                 float(regParam), float(miniBatchFraction), i)
+
         return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
 
@@ -254,15 +255,14 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 class RidgeRegressionWithSGD(object):
 
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
+    def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None):
         """Train a ridge regression model on the given data."""
         def train(rdd, i):
-            return callMLlibFunc("trainRidgeModelWithSGD", rdd, iterations, step, regParam,
-                                 miniBatchFraction, i)
+            return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
+                                 float(regParam), float(miniBatchFraction), i)
 
-        return _regression_train_wrapper(train, RidgeRegressionModel,
-                                         data, initialWeights)
+        return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
 
 
 def _test():

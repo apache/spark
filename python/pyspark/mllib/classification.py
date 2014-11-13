@@ -104,8 +104,9 @@ class LogisticRegressionWithSGD(object):
                                   are activated or not).
         """
         def train(rdd, i):
-            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, iterations, step,
-                                 miniBatchFraction, i, regParam, regType, intercept)
+            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
+                                 float(step), float(miniBatchFraction), i, float(regParam), regType,
+                                 bool(intercept))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -174,8 +175,9 @@ class SVMWithSGD(object):
                                   are activated or not).
         """
         def train(rdd, i):
-            return callMLlibFunc("trainSVMModelWithSGD", rdd, iterations, step, regParam,
-                                 miniBatchFraction, i, regType, intercept)
+            return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
+                                 float(regParam), float(miniBatchFraction), i, regType,
+                                 bool(intercept))
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
