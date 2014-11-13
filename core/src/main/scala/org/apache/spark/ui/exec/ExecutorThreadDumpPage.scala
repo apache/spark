@@ -17,9 +17,9 @@
 
 package org.apache.spark.ui.exec
 
+import java.net.URLDecoder
 import javax.servlet.http.HttpServletRequest
 
-import scala.util.Try
 import scala.xml.{Text, Node}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -29,7 +29,9 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
   private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val executorId = Option(request.getParameter("executorId")).getOrElse {
+    val executorId = Option(request.getParameter("executorId")).map { encoded =>
+      URLDecoder.decode(encoded, "utf-8")
+    }.getOrElse {
       return Text(s"Missing executorId parameter")
     }
     val time = System.currentTimeMillis()
