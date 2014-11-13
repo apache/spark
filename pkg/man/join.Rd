@@ -14,6 +14,8 @@ join(rdd1, rdd2, numPartitions)
 \item{rdd1}{An RDD.}
 
 \item{rdd2}{An RDD.}
+
+\item{numPartitions}{Number of partitions to create.}
 }
 \value{
 a new RDD containing all pairs of elements with matching keys in

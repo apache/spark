@@ -1306,6 +1306,7 @@ setMethod("unionRDD",
 #'
 #' @param rdd1 An RDD.
 #' @param rdd2 An RDD.
+#' @param numPartitions Number of partitions to create.
 #' @return a new RDD containing all pairs of elements with matching keys in
 #'         two input RDDs.
 #' @rdname join
