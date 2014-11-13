@@ -22,6 +22,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.streaming.Duration;
 import scala.Predef;
 import scala.Tuple2;
 import scala.collection.JavaConverters;
@@ -43,15 +45,17 @@ import org.junit.Before;
 
 public class JavaKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
-  private Random random = new Random();
+  private transient Random random = new Random();
   private transient KafkaStreamSuiteBase suiteBase = null;
 
   @Before
   public void setUp() {
     suiteBase = new KafkaStreamSuiteBase() { };
-    suiteBase.beforeFunction();
+    suiteBase.setupKafka();
     System.clearProperty("spark.driver.port");
-    ssc = new JavaStreamingContext(suiteBase.sparkConf(), suiteBase.batchDuration());
+    SparkConf sparkConf = new SparkConf()
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+    ssc = new JavaStreamingContext(sparkConf, new Duration(500));
   }
 
   @After
@@ -59,7 +63,7 @@ public class JavaKafkaStreamSuite implements Serializable {
     ssc.stop();
     ssc = null;
     System.clearProperty("spark.driver.port");
-    suiteBase.afterFunction();
+    suiteBase.tearDownKafka();
   }
 
   @Test
@@ -76,8 +80,8 @@ public class JavaKafkaStreamSuite implements Serializable {
     suiteBase.createTopic(topic);
     HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
     suiteBase.produceAndSendMessage(topic,
-      JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
-        Predef.<Tuple2<String, Object>>conforms()));
+            JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
+                    Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("zookeeper.connect", suiteBase.zkAddress());

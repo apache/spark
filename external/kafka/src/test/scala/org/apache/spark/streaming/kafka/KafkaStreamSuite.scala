@@ -42,15 +42,13 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
+/**
+ * This is an abstract base class for Kafka testsuites. This has the functionality to set up
+ * and tear down local Kafka servers, and to push data using Kafka producers.
+ */
 abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
   import KafkaTestUtils._
 
-  val sparkConf = new SparkConf()
-    .setMaster("local[4]")
-    .setAppName(this.getClass.getSimpleName)
-  val batchDuration = Milliseconds(500)
-  var ssc: StreamingContext = _
-  
   var zkAddress: String = _
   var zkClient: ZkClient = _
 
@@ -64,7 +62,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
   private var server: KafkaServer = _
   private var producer: Producer[String, String] = _
 
-  def beforeFunction() {
+  def setupKafka() {
     // Zookeeper server startup
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
@@ -100,12 +98,7 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
     logInfo("==================== 4 ====================")
   }
 
-  def afterFunction() {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
-
+  def tearDownKafka() {
     if (producer != null) {
       producer.close()
       producer = null
@@ -146,21 +139,31 @@ abstract class KafkaStreamSuiteBase extends FunSuite with Logging {
 
   def produceAndSendMessage(topic: String, sent: Map[String, Int]) {
     val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
-    if (producer == null) {
-      producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
-    }
+    producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
     producer.send(createTestMessage(topic, sent): _*)
+    producer.close()
     logInfo("==================== 6 ====================")
   }
 }
 
 class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter with Eventually {
+  var ssc: StreamingContext = _
 
-  before { beforeFunction() }
-  after { afterFunction() }
+  before {
+    setupKafka()
+  }
+
+  after {
+    if (ssc != null) {
+      ssc.stop()
+      ssc = null
+    }
+    tearDownKafka()
+  }
 
   test("Kafka input stream") {
-    ssc = new StreamingContext(sparkConf, batchDuration)
+    val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
+    ssc = new StreamingContext(sparkConf, Milliseconds(500))
     val topic = "topic1"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     createTopic(topic)
