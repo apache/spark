@@ -90,10 +90,10 @@ private[streaming] class BlockGenerator(
   }
 
   /** Change the buffer to which single records are added to. */
-  private def updateCurrentBuffer(time: Long): Unit = synchronized {
+  private def updateCurrentBuffer(time: Long): Unit =  {
     try {
       val newBlockBuffer = currentBuffer
-      currentBuffer = new ArrayBuffer[Any]
+      synchronized { currentBuffer = new ArrayBuffer[Any] }
       if (newBlockBuffer.size > 0) {
         val blockId = StreamBlockId(receiverId, time - blockInterval)
         val newBlock = new Block(blockId, newBlockBuffer)

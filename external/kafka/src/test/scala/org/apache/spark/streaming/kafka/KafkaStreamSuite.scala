@@ -19,51 +19,60 @@ package org.apache.spark.streaming.kafka
 
 import java.io.File
 import java.net.InetSocketAddress
-import java.util.{Properties, Random}
+import java.util.Properties
 
 import scala.collection.mutable
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.util.Random
 
 import kafka.admin.CreateTopicCommand
 import kafka.common.{KafkaException, TopicAndPartition}
-import kafka.producer.{KeyedMessage, ProducerConfig, Producer}
-import kafka.utils.ZKStringSerializer
+import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.{StringDecoder, StringEncoder}
 import kafka.server.{KafkaConfig, KafkaServer}
-
+import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient.ZkClient
+import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.concurrent.Eventually
 
-import org.apache.zookeeper.server.ZooKeeperServer
-import org.apache.zookeeper.server.NIOServerCnxnFactory
-
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
-class KafkaStreamSuite extends TestSuiteBase {
+abstract class KafkaStreamSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   import KafkaTestUtils._
 
-  val zkHost = "localhost"
-  var zkPort: Int = 0
-  val zkConnectionTimeout = 6000
-  val zkSessionTimeout = 6000
+  val sparkConf = new SparkConf()
+    .setMaster("local[4]")
+    .setAppName(this.getClass.getSimpleName)
+  val batchDuration = Milliseconds(500)
+  var ssc: StreamingContext = _
+  
+  var zkAddress: String = _
+  var zkClient: ZkClient = _
 
-  protected var brokerPort = 9092
-  protected var brokerConf: KafkaConfig = _
-  protected var zookeeper: EmbeddedZookeeper = _
-  protected var zkClient: ZkClient = _
-  protected var server: KafkaServer = _
-  protected var producer: Producer[String, String] = _
+  private val zkHost = "localhost"
+  private val zkConnectionTimeout = 6000
+  private val zkSessionTimeout = 6000
+  private var zookeeper: EmbeddedZookeeper = _
+  private var zkPort: Int = 0
+  private var brokerPort = 9092
+  private var brokerConf: KafkaConfig = _
+  private var server: KafkaServer = _
+  private var producer: Producer[String, String] = _
 
-  override def useManualClock = false
-
-  override def beforeFunction() {
+  def beforeFunction() {
     // Zookeeper server startup
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
+    zkAddress = s"$zkHost:$zkPort"
     logInfo("==================== 0 ====================")
 
-    zkClient = new ZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout,
+    zkClient = new ZkClient(zkAddress, zkSessionTimeout, zkConnectionTimeout,
       ZKStringSerializer)
     logInfo("==================== 1 ====================")
 
@@ -71,7 +80,7 @@ class KafkaStreamSuite extends TestSuiteBase {
     var bindSuccess: Boolean = false
     while(!bindSuccess) {
       try {
-        val brokerProps = getBrokerConfig(brokerPort, s"$zkHost:$zkPort")
+        val brokerProps = getBrokerConfig(brokerPort, zkAddress)
         brokerConf = new KafkaConfig(brokerProps)
         server = new KafkaServer(brokerConf)
         logInfo("==================== 2 ====================")
@@ -89,10 +98,14 @@ class KafkaStreamSuite extends TestSuiteBase {
 
     Thread.sleep(2000)
     logInfo("==================== 4 ====================")
-    super.beforeFunction()
   }
 
-  override def afterFunction() {
+  def afterFunction() {
+    if (ssc != null) {
+      ssc.stop()
+      ssc = null
+    }
+
     if (producer != null) {
       producer.close()
       producer = null
@@ -114,43 +127,6 @@ class KafkaStreamSuite extends TestSuiteBase {
       zookeeper.shutdown()
       zookeeper = null
     }
-
-    super.afterFunction()
-  }
-
-  test("Kafka input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    val topic = "topic1"
-    val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
-    createTopic(topic)
-    produceAndSendMessage(topic, sent)
-
-    val kafkaParams = Map("zookeeper.connect" -> s"$zkHost:$zkPort",
-      "group.id" -> s"test-consumer-${random.nextInt(10000)}",
-      "auto.offset.reset" -> "smallest")
-
-    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc,
-      kafkaParams,
-      Map(topic -> 1),
-      StorageLevel.MEMORY_ONLY)
-    val result = new mutable.HashMap[String, Long]()
-    stream.map { case (k, v) => v }
-      .countByValue()
-      .foreachRDD { r =>
-        val ret = r.collect()
-        ret.toMap.foreach { kv =>
-          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-          result.put(kv._1, count)
-        }
-      }
-    ssc.start()
-    ssc.awaitTermination(3000)
-
-    assert(sent.size === result.size)
-    sent.keys.foreach { k => assert(sent(k) === result(k).toInt) }
-
-    ssc.stop()
   }
 
   private def createTestMessage(topic: String, sent: Map[String, Int])
@@ -178,8 +154,49 @@ class KafkaStreamSuite extends TestSuiteBase {
   }
 }
 
+class KafkaStreamSuite extends KafkaStreamSuiteBase with Eventually {
+
+  before { beforeFunction() }
+  after { afterFunction() }
+
+  test("Kafka input stream") {
+    ssc = new StreamingContext(sparkConf, batchDuration)
+    val topic = "topic1"
+    val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
+    createTopic(topic)
+    produceAndSendMessage(topic, sent)
+
+    val kafkaParams = Map("zookeeper.connect" -> zkAddress,
+      "group.id" -> s"test-consumer-${Random.nextInt(10000)}",
+      "auto.offset.reset" -> "smallest")
+
+    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
+      ssc,
+      kafkaParams,
+      Map(topic -> 1),
+      StorageLevel.MEMORY_ONLY)
+    val result = new mutable.HashMap[String, Long]()
+    stream.map { case (k, v) => v }
+      .countByValue()
+      .foreachRDD { r =>
+        val ret = r.collect()
+        ret.toMap.foreach { kv =>
+          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
+          result.put(kv._1, count)
+        }
+      }
+    ssc.start()
+    eventually(timeout(3000 milliseconds), interval(100 milliseconds)) {
+      assert(sent.size === result.size)
+      sent.keys.foreach { k => assert(sent(k) === result(k).toInt) }
+    }
+
+    ssc.stop()
+  }
+}
+
+
 object KafkaTestUtils {
-  val random = new Random()
 
   def getBrokerConfig(port: Int, zkConnect: String): Properties = {
     val props = new Properties()
