@@ -95,6 +95,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     testRDD.registerTempTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
       .registerTempTable("testfiltersource")
+
+    setConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED, "true")
   }
 
   override def afterAll() {
