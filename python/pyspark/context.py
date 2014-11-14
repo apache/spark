@@ -20,7 +20,6 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
-import atexit
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -812,16 +811,6 @@ class SparkContext(object):
         mappedRDD = rdd.mapPartitions(partitionFunc)
         it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
         return list(mappedRDD._collect_iterator_through_file(it))
-
-    def _add_profiler(self, id, profiler):
-        if not self._profile_stats:
-            dump_path = self._conf.get("spark.python.profile.dump")
-            if dump_path:
-                atexit.register(self.dump_profiles, dump_path)
-            else:
-                atexit.register(self.show_profiles)
-
-        self._profile_stats.append([id, profiler, False])
 
     def show_profiles(self):
         self.profiler_collector.show_profiles()
