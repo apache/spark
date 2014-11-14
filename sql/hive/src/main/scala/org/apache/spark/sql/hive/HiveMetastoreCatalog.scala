@@ -20,17 +20,15 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
-import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.fs.Path
 
 import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
-import org.apache.hadoop.hive.ql.plan.{TableDesc, CreateTableDesc}
+import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -67,20 +65,26 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = synchronized {
-    val (databaseName, tblName) = processDatabaseAndTableName(
-                                    db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
+    val (databaseName, tblName) =
+      processDatabaseAndTableName(db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
     val table = client.getTable(databaseName, tblName)
-    val partitions: Seq[Partition] =
-      if (table.isPartitioned) {
-        HiveShim.getAllPartitionsOf(client, table).toSeq
-      } else {
-        Nil
-      }
+    if (table.isView) {
+      // if the unresolved relation is from hive view
+      // parse the text into logic node.
+      HiveQl.createPlanForView(table, alias)
+    } else {
+      val partitions: Seq[Partition] =
+        if (table.isPartitioned) {
+          HiveShim.getAllPartitionsOf(client, table).toSeq
+        } else {
+          Nil
+        }
 
-    // Since HiveQL is case insensitive for table names we make them all lowercase.
-    MetastoreRelation(
-      databaseName, tblName, alias)(
-      table.getTTable, partitions.map(part => part.getTPartition))(hive)
+      // Since HiveQL is case insensitive for table names we make them all lowercase.
+      MetastoreRelation(
+        databaseName, tblName, alias)(
+          table.getTTable, partitions.map(part => part.getTPartition))(hive)
+    }
   }
 
   /**
