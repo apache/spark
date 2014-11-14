@@ -43,7 +43,8 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils, CallSite}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
+  SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -375,7 +376,8 @@ abstract class RDD[T: ClassTag](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), true, seed)
+      new PartitionwiseSampledRDD[T, T](
+        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
     }.toArray
   }
 
@@ -927,32 +929,15 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
-   * combine step happens locally on the master, equivalent to running a single reduce task.
+   * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
+   *
+   * Note that this method should only be used if the resulting map is expected to be small, as
+   * the whole thing is loaded into the driver's memory.
+   * To handle very large results, consider using rdd.map(x => (x, 1L)).reduceByKey(_ + _), which
+   * returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
-    if (elementClassTag.runtimeClass.isArray) {
-      throw new SparkException("countByValue() does not support arrays")
-    }
-    // TODO: This should perhaps be distributed by default.
-    val countPartition = (iter: Iterator[T]) => {
-      val map = new OpenHashMap[T,Long]
-      iter.foreach {
-        t => map.changeValue(t, 1L, _ + 1L)
-      }
-      Iterator(map)
-    }: Iterator[OpenHashMap[T,Long]]
-    val mergeMaps = (m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]) => {
-      m2.foreach { case (key, value) =>
-        m1.changeValue(key, value, _ + value)
-      }
-      m1
-    }: OpenHashMap[T,Long]
-    val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    // Convert to a Scala mutable map
-    val mutableResult = scala.collection.mutable.Map[T,Long]()
-    myResult.foreach { case (k, v) => mutableResult.put(k, v) }
-    mutableResult
+    map(value => (value, null)).countByKey()
   }
 
   /**
@@ -1111,7 +1096,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Returns the top K (largest) elements from this RDD as defined by the specified
+   * Returns the top k (largest) elements from this RDD as defined by the specified
    * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
    * {{{
    *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
@@ -1121,14 +1106,14 @@ abstract class RDD[T: ClassTag](
    *   // returns Array(6, 5)
    * }}}
    *
-   * @param num the number of top elements to return
+   * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
   def top(num: Int)(implicit ord: Ordering[T]): Array[T] = takeOrdered(num)(ord.reverse)
 
   /**
-   * Returns the first K (smallest) elements from this RDD as defined by the specified
+   * Returns the first k (smallest) elements from this RDD as defined by the specified
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
    * {{{
@@ -1139,7 +1124,7 @@ abstract class RDD[T: ClassTag](
    *   // returns Array(2, 3)
    * }}}
    *
-   * @param num the number of top elements to return
+   * @param num k, the number of elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */

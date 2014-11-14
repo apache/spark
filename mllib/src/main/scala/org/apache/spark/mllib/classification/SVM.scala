@@ -72,7 +72,8 @@ class SVMModel (
 }
 
 /**
- * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
+ * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent. By default L2
+ * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
  * NOTE: Labels used in SVM should be {0, 1}.
  */
 class SVMWithSGD private (
@@ -92,9 +93,10 @@ class SVMWithSGD private (
   override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
-   * Construct a SVM object with default parameters
+   * Construct a SVM object with default parameters: {stepSize: 1.0, numIterations: 100,
+   * regParm: 0.01, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 1.0, 1.0)
+  def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new SVMModel(weights, intercept)
@@ -185,6 +187,6 @@ object SVMWithSGD {
    * @return a SVMModel which has the weights and offset from training.
    */
   def train(input: RDD[LabeledPoint], numIterations: Int): SVMModel = {
-    train(input, numIterations, 1.0, 1.0, 1.0)
+    train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }

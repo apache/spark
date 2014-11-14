@@ -58,11 +58,6 @@ create table nzhang_ctas6 (key string, `to` string);
 insert overwrite table nzhang_ctas6 select key, value from src limit 10;
 create table nzhang_ctas7 as select key, `to` from nzhang_ctas6;
 
-
-
-
-
-
-
-
-
+create table nzhang_ctas8 as select 3.14BD from nzhang_ctas6 limit 1;
+desc nzhang_ctas8;
+drop table nzhang_ctas8;

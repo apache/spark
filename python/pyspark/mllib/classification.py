@@ -20,8 +20,8 @@ from math import exp
 import numpy
 from numpy import array
 
-from pyspark import SparkContext, PickleSerializer
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, _to_java_object_rdd
+from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
 
@@ -62,6 +62,7 @@ class LogisticRegressionModel(LinearModel):
     """
 
     def predict(self, x):
+        x = _convert_to_vector(x)
         margin = self.weights.dot(x) + self._intercept
         if margin > 0:
             prob = 1 / (1 + exp(-margin))
@@ -75,41 +76,39 @@ class LogisticRegressionWithSGD(object):
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
-              initialWeights=None, regParam=1.0, regType="none", intercept=False):
+              initialWeights=None, regParam=0.01, regType="l2", intercept=False):
         """
         Train a logistic regression model on the given data.
 
-        :param data:              The training data.
+        :param data:              The training data, an RDD of LabeledPoint.
         :param iterations:        The number of iterations (default: 100).
         :param step:              The step parameter used in SGD
                                   (default: 1.0).
         :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
         :param initialWeights:    The initial weights (default: None).
-        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regParam:          The regularizer parameter (default: 0.01).
         :param regType:           The type of regularizer used for training
                                   our model.
 
                                   :Allowed values:
-                                     - "l1" for using L1Updater
-                                     - "l2" for using SquaredL2Updater
-                                     - "none" for no regularizer
+                                     - "l1" for using L1 regularization
+                                     - "l2" for using L2 regularization
+                                     - None for no regularization
 
-                                     (default: "none")
+                                     (default: "l2")
 
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
         """
-        sc = data.context
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
+                                 float(step), float(miniBatchFraction), i, float(regParam), regType,
+                                 bool(intercept))
 
-        def train(jdata, i):
-            return sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
-                jdata, iterations, step, miniBatchFraction, i, regParam, regType, intercept)
-
-        return _regression_train_wrapper(sc, train, LogisticRegressionModel, data,
-                                         initialWeights)
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
 class SVMModel(LinearModel):
@@ -139,6 +138,7 @@ class SVMModel(LinearModel):
     """
 
     def predict(self, x):
+        x = _convert_to_vector(x)
         margin = self.weights.dot(x) + self.intercept
         return 1 if margin >= 0 else 0
 
@@ -146,16 +146,16 @@ class SVMModel(LinearModel):
 class SVMWithSGD(object):
 
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
-              miniBatchFraction=1.0, initialWeights=None, regType="none", intercept=False):
+    def train(cls, data, iterations=100, step=1.0, regParam=0.01,
+              miniBatchFraction=1.0, initialWeights=None, regType="l2", intercept=False):
         """
         Train a support vector machine on the given data.
 
-        :param data:              The training data.
+        :param data:              The training data, an RDD of LabeledPoint.
         :param iterations:        The number of iterations (default: 100).
         :param step:              The step parameter used in SGD
                                   (default: 1.0).
-        :param regParam:          The regularizer parameter (default: 1.0).
+        :param regParam:          The regularizer parameter (default: 0.01).
         :param miniBatchFraction: Fraction of data to be used for each SGD
                                   iteration.
         :param initialWeights:    The initial weights (default: None).
@@ -163,24 +163,23 @@ class SVMWithSGD(object):
                                   our model.
 
                                   :Allowed values:
-                                     - "l1" for using L1Updater
-                                     - "l2" for using SquaredL2Updater,
-                                     - "none" for no regularizer.
+                                     - "l1" for using L1 regularization
+                                     - "l2" for using L2 regularization
+                                     - None for no regularization
 
-                                     (default: "none")
+                                     (default: "l2")
 
         @param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
         """
-        sc = data.context
+        def train(rdd, i):
+            return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
+                                 float(regParam), float(miniBatchFraction), i, regType,
+                                 bool(intercept))
 
-        def train(jrdd, i):
-            return sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
-                jrdd, iterations, step, regParam, miniBatchFraction, i, regType, intercept)
-
-        return _regression_train_wrapper(sc, train, SVMModel, data, initialWeights)
+        return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
 
 class NaiveBayesModel(object):
@@ -238,19 +237,19 @@ class NaiveBayes(object):
         classification.  By making every vector a 0-1 vector, it can also be
         used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
 
-        :param data: RDD of NumPy vectors, one per element, where the first
-               coordinate is the label and the rest is the feature vector
-               (e.g. a count vector).
+        :param data: RDD of LabeledPoint.
         :param lambda_: The smoothing parameter
         """
-        sc = data.context
-        jlist = sc._jvm.PythonMLLibAPI().trainNaiveBayes(_to_java_object_rdd(data), lambda_)
-        labels, pi, theta = PickleSerializer().loads(str(sc._jvm.SerDe.dumps(jlist)))
+        first = data.first()
+        if not isinstance(first, LabeledPoint):
+            raise ValueError("`data` should be an RDD of LabeledPoint")
+        labels, pi, theta = callMLlibFunc("trainNaiveBayes", data, lambda_)
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 
 def _test():
     import doctest
+    from pyspark import SparkContext
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)

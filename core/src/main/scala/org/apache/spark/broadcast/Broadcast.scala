@@ -20,6 +20,8 @@ package org.apache.spark.broadcast
 import java.io.Serializable
 
 import org.apache.spark.SparkException
+import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 import scala.reflect.ClassTag
 
@@ -52,13 +54,15 @@ import scala.reflect.ClassTag
  * @param id A unique identifier for the broadcast variable.
  * @tparam T Type of the data contained in the broadcast variable.
  */
-abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable {
+abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Logging {
 
   /**
    * Flag signifying whether the broadcast variable is valid
    * (that is, not already destroyed) or not.
    */
   @volatile private var _isValid = true
+
+  private var _destroySite = ""
 
   /** Get the broadcasted value. */
   def value: T = {
@@ -84,13 +88,26 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable {
     doUnpersist(blocking)
   }
 
+
   /**
    * Destroy all data and metadata related to this broadcast variable. Use this with caution;
    * once a broadcast variable has been destroyed, it cannot be used again.
+   * This method blocks until destroy has completed
+   */
+  def destroy() {
+    destroy(blocking = true)
+  }
+
+  /**
+   * Destroy all data and metadata related to this broadcast variable. Use this with caution;
+   * once a broadcast variable has been destroyed, it cannot be used again.
+   * @param blocking Whether to block until destroy has completed
    */
   private[spark] def destroy(blocking: Boolean) {
     assertValid()
     _isValid = false
+    _destroySite = Utils.getCallSite().shortForm
+    logInfo("Destroying %s (from %s)".format(toString, _destroySite))
     doDestroy(blocking)
   }
 
@@ -124,7 +141,8 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable {
   /** Check if this broadcast is valid. If not valid, exception is thrown. */
   protected def assertValid() {
     if (!_isValid) {
-      throw new SparkException("Attempted to use %s after it has been destroyed!".format(toString))
+      throw new SparkException(
+        "Attempted to use %s after it was destroyed (%s) ".format(toString, _destroySite))
     }
   }
 

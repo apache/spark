@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * :: Experimental ::
  * Normalizes samples individually to unit L^p^ norm
  *
- * For any 1 <= p < Double.PositiveInfinity, normalizes samples using
+ * For any 1 &lt;= p &lt; Double.PositiveInfinity, normalizes samples using
  * sum(abs(vector).^p^)^(1/p)^ as norm.
  *
  * For p = Double.PositiveInfinity, max(abs(vector)) will be used as norm for normalization.

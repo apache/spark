@@ -142,7 +142,7 @@ private[spark] object EventLoggingListener extends Logging {
   val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
-  val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8).toShort)
+  val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]

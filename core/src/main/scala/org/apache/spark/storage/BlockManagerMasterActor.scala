@@ -86,6 +86,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetPeers(blockManagerId) =>
       sender ! getPeers(blockManagerId)
 
+    case GetActorSystemHostPortForExecutor(executorId) =>
+      sender ! getActorSystemHostPortForExecutor(executorId)
+
     case GetMemoryStatus =>
       sender ! memoryStatus
 
@@ -203,6 +206,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
+    logInfo(s"Removing block manager $blockManagerId")
   }
 
   private def expireDeadHosts() {
@@ -327,20 +331,20 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
-        case Some(manager) =>
-          // A block manager of the same executor already exists.
-          // This should never happen. Let's just quit.
-          logError("Got two different block manager registrations on " + id.executorId)
-          System.exit(1)
+        case Some(oldId) =>
+          // A block manager of the same executor already exists, so remove it (assumed dead)
+          logError("Got two different block manager registrations on same executor - " 
+              + s" will replace old one $oldId with new one $id")
+          removeExecutor(id.executorId)  
         case None =>
-          blockManagerIdByExecutor(id.executorId) = id
       }
-
-      logInfo("Registering block manager %s with %s RAM".format(
-        id.hostPort, Utils.bytesToString(maxMemSize)))
-
-      blockManagerInfo(id) =
-        new BlockManagerInfo(id, time, maxMemSize, slaveActor)
+      logInfo("Registering block manager %s with %s RAM, %s".format(
+        id.hostPort, Utils.bytesToString(maxMemSize), id))
+      
+      blockManagerIdByExecutor(id.executorId) = id
+      
+      blockManagerInfo(id) = new BlockManagerInfo(
+        id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
@@ -409,6 +413,21 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
     } else {
       Seq.empty
+    }
+  }
+
+  /**
+   * Returns the hostname and port of an executor's actor system, based on the Akka address of its
+   * BlockManagerSlaveActor.
+   */
+  private def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    for (
+      blockManagerId <- blockManagerIdByExecutor.get(executorId);
+      info <- blockManagerInfo.get(blockManagerId);
+      host <- info.slaveActor.path.address.host;
+      port <- info.slaveActor.path.address.port
+    ) yield {
+      (host, port)
     }
   }
 }

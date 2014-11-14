@@ -24,7 +24,7 @@ import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
 object GradientDescentSuite {
@@ -61,7 +61,7 @@ object GradientDescentSuite {
   }
 }
 
-class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers {
+class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000

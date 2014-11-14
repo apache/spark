@@ -76,6 +76,17 @@ private[tree] class DecisionTreeMetadata(
     numBins(featureIndex) - 1
   }
 
+
+  /**
+   * Set number of splits for a continuous feature.
+   * For a continuous feature, number of bins is number of splits plus 1.
+   */
+  def setNumSplits(featureIndex: Int, numSplits: Int) {
+    require(isContinuous(featureIndex),
+      s"Only number of bin for a continuous feature can be set.")
+    numBins(featureIndex) = numSplits + 1
+  }
+
   /**
    * Indicates if feature subsampling is being used.
    */
