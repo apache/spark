@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.util.collection.ExternalSorter
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
@@ -189,6 +191,7 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 
 /**
  * :: DeveloperApi ::
+ * Performs a sort on-heap.
  */
 @DeveloperApi
 case class Sort(
@@ -199,12 +202,35 @@ case class Sort(
   override def requiredChildDistribution =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  override def execute() = attachTree(this, "sort") {
+    child.execute().mapPartitions( { iterator =>
+      val ordering = newOrdering(sortOrder, child.output)
+      iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    }, preservesPartitioning = true)
+  }
+
+  override def output = child.output
+}
+
+/**
+ * :: DeveloperApi ::
+ * Performs a sort, spilling to disk as needed.
+ */
+@DeveloperApi
+case class ExternalSort(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan)
+  extends UnaryNode {
+  override def requiredChildDistribution =
+    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   override def execute() = attachTree(this, "sort") {
-    child.execute()
-      .mapPartitions( { iterator =>
-        val ordering = newOrdering(sortOrder, child.output)
-        iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    child.execute().mapPartitions( { iterator =>
+      val ordering = newOrdering(sortOrder, child.output)
+      val sorter = new ExternalSorter[Row, Null, Row](ordering = Some(ordering))
+      sorter.insertAll(iterator.map(r => (r, null)))
+      sorter.iterator.map(_._1)
     }, preservesPartitioning = true)
   }
 
