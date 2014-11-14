@@ -21,6 +21,7 @@ import java.sql.Date
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.lib.Node
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 
@@ -106,7 +107,6 @@ private[hive] object HiveQl {
     "TOK_DROPINDEX",
     "TOK_MSCK",
 
-    // TODO(marmbrus): Figure out how view are expanded by hive, as we might need to handle this.
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
@@ -257,6 +257,14 @@ private[hive] object HiveQl {
           |${e.getStackTrace.head}
         """.stripMargin)
     }
+  }
+
+  /** Creates LogicalPlan for a given VIEW */
+  def createPlanForView(view: Table, alias: Option[String]) = alias match {
+    // because hive use things like `_c0` to build the expanded text
+    // currently we cannot support view from "create view v1(c1) as ..."
+    case None => Subquery(view.getTableName, createPlan(view.getViewExpandedText))
+    case Some(aliasText) => Subquery(aliasText, createPlan(view.getViewExpandedText))
   }
 
   def parseDdl(ddl: String): Seq[Attribute] = {
