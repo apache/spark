@@ -918,10 +918,10 @@ private[nio] class ConnectionManager(
       }
     }
 
-    val timoutTaskHandle = ackTimeoutMonitor.newTimeout(timeoutTask, ackTimeout, TimeUnit.SECONDS)
+    val timeoutTaskHandle = ackTimeoutMonitor.newTimeout(timeoutTask, ackTimeout, TimeUnit.SECONDS)
 
     val status = new MessageStatus(message, connectionManagerId, s => {
-      timoutTaskHandle.cancel()
+      timeoutTaskHandle.cancel()
       s match {
         case scala.util.Failure(e) =>
           // Indicates a failure where we either never sent or never got ACK'd
