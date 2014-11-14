@@ -85,6 +85,10 @@ object MimaExcludes {
               "org.apache.hadoop.mapred.SparkHadoopMapRedUtil"),
             ProblemFilters.exclude[MissingTypesProblem](
               "org.apache.spark.rdd.PairRDDFunctions")
+          ) ++ Seq(
+            // SPARK-4062
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.kafka.KafkaReceiver#MessageHandler.this")
           )
 
         case v if v.startsWith("1.1") =>
