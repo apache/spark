@@ -22,6 +22,7 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark._
 import org.apache.spark.mllib.linalg.{Matrices, DenseMatrix}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -343,7 +344,7 @@ class BlockMatrix(
         if (checkPartitioning(otherBlocked, OperationNames.add)){
           val addedBlocks = rdd.zip(otherBlocked.rdd).map{ case (a, b) =>
             val result = a.mat.toBreeze + b.mat.toBreeze
-            new SubMatrix(a.blockIdRow, a.blockIdCol,
+            new SubMatrix(a.blockRowIndex, a.blockColIndex,
               Matrices.fromBreeze(result).asInstanceOf[DenseMatrix])
           }
           new BlockMatrix(numRowBlocks, numColBlocks, addedBlocks, partitioner)
@@ -367,13 +368,13 @@ class BlockMatrix(
           val multiplyBlocks = matrixRDD.join(otherBlocked.matrixRDD, partitioner).
             map { case (key, (mat1, mat2)) =>
             val C = mat1.mat multiply mat2.mat
-            (mat1.blockIdRow + numRowBlocks * mat2.blockIdCol, C.toBreeze)
+            (mat1.blockRowIndex + numRowBlocks * mat2.blockColIndex, C.toBreeze)
           }.reduceByKey(resultPartitioner, (a, b) => a + b)
 
           val newBlocks = multiplyBlocks.map{ case (index, mat) =>
             val colId = index / numRowBlocks
             val rowId = index - colId * numRowBlocks
-            new BlockPartition(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
+            new SubMatrix(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
           }
           new BlockMatrix(numRowBlocks, otherBlocked.numColBlocks, newBlocks, resultPartitioner)
         } else {
@@ -411,5 +412,4 @@ private object OperationNames {
   val add: Int = 1
   val multiply: Int = 2
 
-}
 }
