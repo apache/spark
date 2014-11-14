@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkEnv
-import org.apache.spark.util.Utils
 
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
@@ -107,6 +106,6 @@ private[spark] trait Spillable[C] {
   @inline private def logSpillage(size: Long) {
     val threadId = Thread.currentThread().getId
     logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
-        .format(threadId, Utils.bytesToString(size), _spillCount, if (_spillCount > 1) "s" else ""))
+        .format(threadId, org.apache.spark.util.Utils.bytesToString(size), _spillCount, if (_spillCount > 1) "s" else ""))
   }
 }
