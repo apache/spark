@@ -23,6 +23,16 @@ __all__ = ['MatrixFactorizationModel', 'ALS']
 
 
 class Rating(object):
+
+    """Represents a (user, product, rating) tuple.
+
+    >>> r = Rating(1, 2, 5.0)
+    >>> (r.user, r.product, r.rating)
+    (1, 2, 5.0)
+    >>> (r[0], r[1], r[2])
+    (1, 2, 5.0)
+    """
+
     def __init__(self, user, product, rating):
         self.user = int(user)
         self.product = int(product)
@@ -33,6 +43,18 @@ class Rating(object):
 
     def __repr__(self):
         return "Rating(%d, %d, %s)" % (self.user, self.product, self.rating)
+
+    def __getitem__(self, idx):
+        if idx == 0:
+            return self.user
+        elif idx == 1:
+            return self.product
+        elif idx == 2:
+            return self.rating
+        elif isinstance(idx, int):
+            raise IndexError("Rating index out of range: %d" % idx)
+        else:
+            raise TypeError("Rating indices must be integers, not %s" % type(idx).__name__)
 
 
 class MatrixFactorizationModel(JavaModelWrapper):
