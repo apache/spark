@@ -870,7 +870,7 @@ class DAGScheduler(
 
       // In the case of parallel collection partitions, need to serialize a partition
       // that is non-empty in values. In the case of parallel collection partitions, some
-      // partitions may be serializable (the empty ones) while others aren't (malformed non-empty ones).
+      // partitions may be serializable (the empty ones) while others aren't (non-empty ones).
       //
       // If other partition types can run into this issue as well, that is, some
       // partitions are serializable while others aren't in the same task set, then
