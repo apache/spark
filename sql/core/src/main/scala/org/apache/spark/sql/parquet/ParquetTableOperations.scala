@@ -23,6 +23,8 @@ import java.text.SimpleDateFormat
 import java.util.concurrent.{Callable, TimeUnit}
 import java.util.{ArrayList, Collections, Date, List => JList}
 
+import org.apache.spark.annotation.DeveloperApi
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Try
@@ -52,6 +54,7 @@ import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
+ * :: DeveloperApi ::
  * Parquet table scan operator. Imports the file that backs the given
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
@@ -108,15 +111,11 @@ case class ParquetTableScan(
     // Note 1: the input format ignores all predicates that cannot be expressed
     // as simple column predicate filters in Parquet. Here we just record
     // the whole pruning predicate.
-    // Note 2: you can disable filter predicate pushdown by setting
-    // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
-    if (columnPruningPred.length > 0 &&
-      sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-      
+    if (columnPruningPred.length > 0) {
       // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
       val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
       if (filter != null){
-        val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
+        val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate
         ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
       }
     }
@@ -193,6 +192,7 @@ case class ParquetTableScan(
 }
 
 /**
+ * :: DeveloperApi ::
  * Operator that acts as a sink for queries on RDDs and can be used to
  * store the output inside a directory of Parquet files. This operator
  * is similar to Hive's INSERT INTO TABLE operation in the sense that
@@ -208,6 +208,7 @@ case class ParquetTableScan(
  * cause unpredicted behaviour and therefore results in a RuntimeException
  * (only detected via filename pattern so will not catch all cases).
  */
+@DeveloperApi
 case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
