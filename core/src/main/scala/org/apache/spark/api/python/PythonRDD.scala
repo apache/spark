@@ -435,7 +435,7 @@ private[spark] object PythonRDD extends Logging {
 
   def esRDD(sc: JavaSparkContext, resource: String, query: String) = {
     val rdd = JavaEsSpark.esRDD(sc, resource, query).rdd
-    JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(rdd))
+    JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(rdd.asInstanceOf[RDD[(Any, Any)]], 0))
   }
 
   /**

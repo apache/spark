@@ -216,19 +216,6 @@ private[spark] object SerDeUtil extends Logging {
     }
   }
 
-  def pairRDDToPython(rdd: RDD[(String, java.util.Map[String,Object])]): RDD[Array[Byte]] = {
-    val (keyFailed, valueFailed) = checkPickle(rdd.first())
-
-    rdd.mapPartitions { iter =>
-      val cleaned = iter.map { case (k, v) =>
-        val key = if (keyFailed) k.toString else k
-        val value = if (valueFailed) v.toString else v
-        Array[Any](key, value)
-      }
-      new AutoBatchedPickler(cleaned)
-    }
-  }
-
   /**
    * Convert an RDD of serialized Python tuple (K, V) to RDD[(K, V)].
    */
