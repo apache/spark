@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
@@ -55,7 +56,12 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
 
   override protected lazy val sideEffectResult: Seq[Row] = {
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
+    try {
+      hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
+    } catch {
+      case ne: NoSuchObjectException => //ignore
+      case e: Exception => throw e
+    }
     hiveContext.catalog.unregisterTable(None, tableName)
     Seq.empty[Row]
   }
