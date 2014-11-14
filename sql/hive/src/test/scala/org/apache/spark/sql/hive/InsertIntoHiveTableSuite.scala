@@ -121,4 +121,54 @@ class InsertIntoHiveTableSuite extends QueryTest {
     sql("DROP TABLE table_with_partition")
     sql("DROP TABLE tmp_table")
   }
+
+  test("Insert ArrayType.containsNull == false") {
+    val schema = StructType(Seq(
+      StructField("a", ArrayType(StringType, containsNull = false))))
+    val rowRDD = TestHive.sparkContext.parallelize((1 to 100).map(i => Row(Seq(s"value$i"))))
+    val schemaRDD = applySchema(rowRDD, schema)
+    schemaRDD.registerTempTable("tableWithArrayValue")
+    sql("CREATE TABLE hiveTableWithArrayValue(a Array <STRING>)")
+    sql("INSERT OVERWRITE TABLE hiveTableWithArrayValue SELECT a FROM tableWithArrayValue")
+
+    checkAnswer(
+      sql("SELECT * FROM hiveTableWithArrayValue"),
+      rowRDD.collect().toSeq)
+
+    sql("DROP TABLE hiveTableWithArrayValue")
+  }
+
+  test("Insert MapType.valueContainsNull == false") {
+    val schema = StructType(Seq(
+      StructField("m", MapType(StringType, StringType, valueContainsNull = false))))
+    val rowRDD = TestHive.sparkContext.parallelize(
+      (1 to 100).map(i => Row(Map(s"key$i" -> s"value$i"))))
+    val schemaRDD = applySchema(rowRDD, schema)
+    schemaRDD.registerTempTable("tableWithMapValue")
+    sql("CREATE TABLE hiveTableWithMapValue(m Map <STRING, STRING>)")
+    sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
+
+    checkAnswer(
+      sql("SELECT * FROM hiveTableWithMapValue"),
+      rowRDD.collect().toSeq)
+
+    sql("DROP TABLE hiveTableWithMapValue")
+  }
+
+  test("Insert StructType.fields.exists(_.nullable == false)") {
+    val schema = StructType(Seq(
+      StructField("s", StructType(Seq(StructField("f", StringType, nullable = false))))))
+    val rowRDD = TestHive.sparkContext.parallelize(
+      (1 to 100).map(i => Row(Row(s"value$i"))))
+    val schemaRDD = applySchema(rowRDD, schema)
+    schemaRDD.registerTempTable("tableWithStructValue")
+    sql("CREATE TABLE hiveTableWithStructValue(s Struct <f: STRING>)")
+    sql("INSERT OVERWRITE TABLE hiveTableWithStructValue SELECT s FROM tableWithStructValue")
+
+    checkAnswer(
+      sql("SELECT * FROM hiveTableWithStructValue"),
+      rowRDD.collect().toSeq)
+
+    sql("DROP TABLE hiveTableWithStructValue")
+  }
 }
