@@ -289,8 +289,8 @@ class SparkContext(object):
 
     def parallelize(self, c, numSlices=None):
         """
-        Distribute a local Python collection to form an RDD. Use xrange if
-        the input represents a range for performance.
+        Distribute a local Python collection to form an RDD. Using xrange
+        is recommended if the input represents a range for performance.
 
         >>> sc.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
         [[0], [2], [3], [4], [6]]
@@ -303,15 +303,13 @@ class SparkContext(object):
             if size == 0:
                 return self.parallelize([], numSlices)
             step = c[1] - c[0] if size > 1 else 1
-            c1 = xrange(c[0], c[0] + (size + 1) * step, step)
+            start0 = c[0]
 
-            def getStartIndex(split):
-                return split * size / numSlices
+            def getStart(split):
+                return start0 + (split * size / numSlices) * step
 
             def f(split, iterator):
-                startIndex = getStartIndex(split)
-                endIndex = getStartIndex(split + 1)
-                return xrange(c1[startIndex], c1[endIndex], step)
+                return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
         # Calling the Java parallelize() method with an ArrayList is too slow,
