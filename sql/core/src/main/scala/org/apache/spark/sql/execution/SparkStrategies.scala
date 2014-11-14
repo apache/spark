@@ -208,7 +208,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
         val prunePushedDownFilters =
-          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
+          if (sqlContext.parquetFilterPushDown) {
             (filters: Seq[Expression]) => {
               filters.filter { filter =>
                 // Note: filters cannot be pushed down to Parquet if they contain more complex
@@ -234,7 +234,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           prunePushedDownFilters,
-          ParquetTableScan(_, relation, filters)) :: Nil
+          ParquetTableScan(
+            _,
+            relation,
+            if (sqlContext.parquetFilterPushDown) filters else Nil)) :: Nil
 
       case _ => Nil
     }
