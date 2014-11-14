@@ -22,6 +22,9 @@ import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.util.ShutdownHookManager
+
 /**
  * This scheduler launches executors through Yarn - by calling into Client to launch the Spark AM.
  */
@@ -32,4 +35,24 @@ private[spark] class YarnClientClusterScheduler(sc: SparkContext) extends TaskSc
     val host = Utils.parseHostPort(hostPort)._1
     Option(YarnSparkHadoopUtil.lookupRack(sc.hadoopConfiguration, host))
   }
+
+  override def postStartHook() {
+    // Use higher priority than FileSystem.
+    assert(YarnClientClusterScheduler.SHUTDOWN_HOOK_PRIORITY > FileSystem.SHUTDOWN_HOOK_PRIORITY)
+    ShutdownHookManager.get.addShutdownHook(new Thread with Logging {
+      logInfo(s"Adding shutdown hook for context ${sc}.")
+
+      override def run() {
+        logInfo("Invoing sc.stop from shutdown hook.")
+        sc.stop()
+      }
+    }, YarnClientClusterScheduler.SHUTDOWN_HOOK_PRIORITY)
+
+    super.postStartHook()
+    logInfo("YarnClientClusterScheduler.postStartHook done.")
+  }
+}
+
+private[spark] object YarnClientClusterScheduler {
+  val SHUTDOWN_HOOK_PRIORITY: Int = 30
 }
