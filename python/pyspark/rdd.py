@@ -313,8 +313,6 @@ class RDD(object):
         Return a sampled subset of this RDD.
 
         >>> rdd = sc.parallelize(range(100), 4)
-        >>> rdd.sample(True, 0.1, 27).count()
-        10
         >>> rdd.sample(False, 0.1, 81).count()
         10
         """
