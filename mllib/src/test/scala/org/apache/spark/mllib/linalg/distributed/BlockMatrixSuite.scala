@@ -38,13 +38,13 @@ class BlockMatrixSuite extends FunSuite with LocalSparkContext {
 
   override def beforeAll() {
     super.beforeAll()
-    val entries: Seq[BlockPartition] = Seq(
-      new BlockPartition(0, 0, new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
-      new BlockPartition(0, 1, new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
-      new BlockPartition(1, 0, new DenseMatrix(2, 2, Array(3.0, 0.0, 1.5, 0.0))),
-      new BlockPartition(1, 1, new DenseMatrix(2, 2, Array(1.0, 4.0, 0.0, 1.0))),
-      new BlockPartition(2, 0, new DenseMatrix(1, 2, Array(1.0, 0.0))),
-      new BlockPartition(2, 1, new DenseMatrix(1, 2, Array(1.0, 5.0))))
+    val entries: Seq[SubMatrix] = Seq(
+      new SubMatrix(0, 0, new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
+      new SubMatrix(0, 1, new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
+      new SubMatrix(1, 0, new DenseMatrix(2, 2, Array(3.0, 0.0, 1.5, 0.0))),
+      new SubMatrix(1, 1, new DenseMatrix(2, 2, Array(1.0, 4.0, 0.0, 1.0))),
+      new SubMatrix(2, 0, new DenseMatrix(1, 2, Array(1.0, 0.0))),
+      new SubMatrix(2, 1, new DenseMatrix(1, 2, Array(1.0, 5.0))))
 
     val colPart = new ColumnBasedPartitioner(numColBlocks, rowPerPart, colPerPart)
     val rowPart = new RowBasedPartitioner(numRowBlocks, rowPerPart, colPerPart)

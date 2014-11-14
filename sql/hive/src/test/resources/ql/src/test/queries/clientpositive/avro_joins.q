@@ -37,7 +37,7 @@ TBLPROPERTIES ('avro.schema.literal'='{
 
 DESCRIBE doctors4;
 
-LOAD DATA LOCAL INPATH '../data/files/doctors.avro' INTO TABLE doctors4;
+LOAD DATA LOCAL INPATH '../../data/files/doctors.avro' INTO TABLE doctors4;
 
 CREATE TABLE episodes
 ROW FORMAT
@@ -70,7 +70,7 @@ TBLPROPERTIES ('avro.schema.literal'='{
 
 DESCRIBE episodes;
 
-LOAD DATA LOCAL INPATH '../data/files/episodes.avro' INTO TABLE episodes;
+LOAD DATA LOCAL INPATH '../../data/files/episodes.avro' INTO TABLE episodes;
 
 SELECT e.title, e.air_date, d.first_name, d.last_name, d.extra_field, e.air_date
 FROM doctors4 d JOIN episodes e ON (d.number=e.doctor)

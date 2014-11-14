@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -280,7 +280,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val nPartitions = if (data.isEmpty) 1 else numPartitions
         PhysicalRDD(
           output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions),
+            StructType.fromAttributes(output))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
@@ -304,6 +305,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case r: RunnableCommand => ExecutedCommand(r) :: Nil
       case logical.SetCommand(kv) =>
         Seq(execution.SetCommand(kv, plan.output)(context))
       case logical.ExplainCommand(logicalPlan, extended) =>
