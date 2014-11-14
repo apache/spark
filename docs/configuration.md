@@ -52,7 +52,7 @@ Then, you can supply configuration values at runtime:
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar 
 {% endhighlight %}
 
-The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
+The Spark shell and [`spark-submit`](submitting-applications.html)
 tool support two ways to load configurations dynamically. The first are command line options,
 such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
 flag, but uses special flags for properties that play a part in launching the Spark application.
@@ -562,6 +562,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.default.parallelism</code></td>
   <td>
+    For distributed shuffle operations like <code>reduceByKey</code> and <code>join</code>, the
+    largest number of partitions in a parent RDD.  For operations like <code>parallelize</code>
+    with no parent RDDs, it depends on the cluster manager:
     <ul>
       <li>Local mode: number of cores on the local machine</li>
       <li>Mesos fine grained mode: 8</li>
@@ -569,8 +572,8 @@ Apart from these, the following properties are also available, and may be useful
     </ul>
   </td>
   <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations
-    (<code>groupByKey</code>, <code>reduceByKey</code>, etc) when not set by user.
+    Default number of partitions in RDDs returned by transformations like <code>join</code>,
+    <code>reduceByKey</code>, and <code>parallelize</code> when not set by user.
   </td>
 </tr>
 <tr>

@@ -20,11 +20,22 @@ package org.apache.spark.network.netty
 import org.apache.spark.SparkConf
 import org.apache.spark.network.util.{TransportConf, ConfigProvider}
 
-/**
- * Utility for creating a [[TransportConf]] from a [[SparkConf]].
- */
 object SparkTransportConf {
-  def fromSparkConf(conf: SparkConf): TransportConf = {
+  /**
+   * Utility for creating a [[TransportConf]] from a [[SparkConf]].
+   * @param numUsableCores if nonzero, this will restrict the server and client threads to only
+   *                       use the given number of cores, rather than all of the machine's cores.
+   *                       This restriction will only occur if these properties are not already set.
+   */
+  def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0): TransportConf = {
+    val conf = _conf.clone
+    if (numUsableCores > 0) {
+      // Only set if serverThreads/clientThreads not already set.
+      conf.set("spark.shuffle.io.serverThreads",
+        conf.get("spark.shuffle.io.serverThreads", numUsableCores.toString))
+      conf.set("spark.shuffle.io.clientThreads",
+        conf.get("spark.shuffle.io.clientThreads", numUsableCores.toString))
+    }
     new TransportConf(new ConfigProvider {
       override def get(name: String): String = conf.get(name)
     })
