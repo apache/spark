@@ -73,4 +73,9 @@ public final class NettyManagedBuffer extends ManagedBuffer {
       .add("buf", buf)
       .toString();
   }
+
+  @Override
+  public boolean isDirect() {
+    return buf.isDirect();
+  }
 }

@@ -58,9 +58,6 @@ private[spark] class SortShuffleReader[K, C](
   require(endPartition == startPartition + 1,
     "Sort shuffle currently only supports fetching one partition")
 
-  /** Shuffle block fetcher iterator */
-  private var shuffleRawBlockFetcherItr: ShuffleRawBlockFetcherIterator = _
-
   private val dep = handle.dependency
   private val conf = SparkEnv.get.conf
   private val blockManager = SparkEnv.get.blockManager
@@ -69,15 +66,8 @@ private[spark] class SortShuffleReader[K, C](
 
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
 
-  /** Number of bytes spilled in memory and on disk */
-  private var _memoryBytesSpilled: Long = 0L
-  private var _diskBytesSpilled: Long = 0L
-
   /** Queue to store in-memory shuffle blocks */
   private val inMemoryBlocks = new Queue[MemoryShuffleBlock]()
-
-  /** number of bytes left to fetch */
-  private var unfetchedBytes: Long = 0L
 
   /**
    * Maintain the relation between shuffle block and its size. The reason we should maintain this
@@ -99,6 +89,16 @@ private[spark] class SortShuffleReader[K, C](
 
   /** A merge thread to merge on-disk blocks */
   private val tieredMerger = new TieredDiskMerger(conf, dep, keyComparator, context)
+
+  /** Shuffle block fetcher iterator */
+  private var shuffleRawBlockFetcherItr: ShuffleRawBlockFetcherIterator = _
+
+  /** Number of bytes spilled in memory and on disk */
+  private var _memoryBytesSpilled: Long = 0L
+  private var _diskBytesSpilled: Long = 0L
+
+  /** number of bytes left to fetch */
+  private var unfetchedBytes: Long = 0L
 
   def memoryBytesSpilled: Long = _memoryBytesSpilled
 
@@ -153,19 +153,23 @@ private[spark] class SortShuffleReader[K, C](
     val mergedItr =
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
-    // Update the spilled info.
+    // Update the spilled info and do cleanup work when task is finished.
     context.taskMetrics().memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics().diskBytesSpilled += diskBytesSpilled
 
+    def releaseFinalShuffleMemory(): Unit = {
+      inMemoryBlocks.foreach { block =>
+        block.blockData.release()
+        shuffleMemoryManager.release(block.blockData.size)
+      }
+      inMemoryBlocks.clear()
+    }
+
+    context.addTaskCompletionListener(_ => releaseFinalShuffleMemory())
+
     // Release the in-memory block when iteration is completed.
     val completionItr = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
-      mergedItr, {
-        inMemoryBlocks.foreach { block =>
-          block.blockData.release()
-          shuffleMemoryManager.release(block.blockData.size)
-        }
-        inMemoryBlocks.clear()
-      })
+      mergedItr, releaseFinalShuffleMemory())
 
     new InterruptibleIterator(context, completionItr.map(p => (p._1, p._2)))
   }
@@ -173,6 +177,15 @@ private[spark] class SortShuffleReader[K, C](
   private def spillInMemoryBlocks(tippingBlock: MemoryShuffleBlock): Unit = {
     // Write merged blocks to disk
     val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
+
+    def releaseTempShuffleMemory(blocks: ArrayBuffer[MemoryShuffleBlock]): Unit = {
+      for (block <- blocks) {
+        block.blockData.release()
+        if (block != tippingBlock) {
+          shuffleMemoryManager.release(block.blockData.size)
+        }
+      }
+    }
 
     // If the remaining unfetched data would fit inside our current allocation, we don't want to
     // waste time spilling blocks beyond the space needed for it.
@@ -216,6 +229,7 @@ private[spark] class SortShuffleReader[K, C](
           writer.commitAndClose()
           writer = null
         }
+        releaseTempShuffleMemory(blocksToSpill)
       }
       _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
 
@@ -242,19 +256,13 @@ private[spark] class SortShuffleReader[K, C](
         } else {
           _diskBytesSpilled = file.length()
         }
+        releaseTempShuffleMemory(blocksToSpill)
       }
     }
 
     tieredMerger.registerOnDiskBlock(tmpBlockId, file)
 
     logInfo(s"Merged ${blocksToSpill.size} in-memory blocks into file ${file.getName}")
-
-    for (block <- blocksToSpill) {
-      block.blockData.release()
-      if (block != tippingBlock) {
-        shuffleMemoryManager.release(block.blockData.size)
-      }
-    }
   }
 
   private def inMemoryBlocksToIterators(blocks: Seq[MemoryShuffleBlock])

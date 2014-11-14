@@ -151,4 +151,9 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
       .add("length", length)
       .toString();
   }
+
+  @Override
+  public boolean isDirect() {
+    return length >= MIN_MEMORY_MAP_BYTES;
+  }
 }

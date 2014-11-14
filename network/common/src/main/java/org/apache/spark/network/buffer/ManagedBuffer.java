@@ -68,4 +68,10 @@ public abstract class ManagedBuffer {
    * Convert the buffer into an Netty object, used to write the data out.
    */
   public abstract Object convertToNetty() throws IOException;
+
+    /**
+     * Tell whether to not this byte buffer is direct
+     * @return
+     */
+  public abstract boolean isDirect();
 }

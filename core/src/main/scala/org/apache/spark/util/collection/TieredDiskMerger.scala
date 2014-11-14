@@ -216,9 +216,9 @@ private[spark] class TieredDiskMerger[K, C](
               writer.commitAndClose()
               writer = null
             }
+            releaseShuffleBlocks(blocksToMerge.toArray)
           }
           _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
-          releaseShuffleBlocks(blocksToMerge.toArray)
 
           logInfo(s"Merged ${blocksToMerge.size} on-disk blocks into file ${file.getName}")
 
