@@ -29,7 +29,8 @@ import org.apache.spark.scheduler._
  * persists for another M seconds, then more executors are added and so on. The number added
  * in each round increases exponentially from the previous round until an upper bound on the
  * number of executors has been reached. The upper bound is based both on a configured property
- * and on the number of tasks pending.
+ * and on the number of tasks pending: the policy will never increase the number of executor
+ * requests past the number needed to handle all pending tasks.
  *
  * The rationale for the exponential increase is twofold: (1) Executors should be added slowly
  * in the beginning in case the number of extra executors needed turns out to be small. Otherwise,
@@ -117,7 +118,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
 
-  private var listener: ExecutorAllocationListener = _
+  // Listener for Spark events that impact the allocation policy
+  private val listener = new ExecutorAllocationListener(this)
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -166,7 +168,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * Register for scheduler callbacks to decide when to add and remove executors.
    */
   def start(): Unit = {
-    listener = new ExecutorAllocationListener(this)
     sc.addSparkListener(listener)
     startPolling()
   }
@@ -229,10 +230,11 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       numExecutorsToAdd = 1
       return 0
     }
-    val maxExecutorsPending = maxExecutorsNeededForTasks(listener.totalPendingTasks())
-    if (numExecutorsPending >= maxExecutorsPending) {
+    val maxNumExecutorsPending =
+      (listener.totalPendingTasks() + tasksPerExecutor - 1) / tasksPerExecutor
+    if (numExecutorsPending >= maxNumExecutorsPending) {
       logDebug(s"Not adding executors because there are already $numExecutorsPending " +
-        s"pending and pending tasks could only fill $maxExecutorsPending")
+        s"pending and pending tasks could only fill $maxNumExecutorsPending")
       numExecutorsToAdd = 1
       return 0
     }
@@ -240,12 +242,12 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     // It's never useful to request more executors than could satisfy all the pending tasks, so
     // cap request at that amount.
     // Also cap request with respect to the configured upper bound.
-    val maxExecutorsToAdd = math.min(
-      maxExecutorsPending - numExecutorsPending,
+    val maxNumExecutorsToAdd = math.min(
+      maxNumExecutorsPending - numExecutorsPending,
       maxNumExecutors - numExistingExecutors)
-    assert(maxExecutorsToAdd > 0)
+    assert(maxNumExecutorsToAdd > 0)
 
-    val actualNumExecutorsToAdd = math.min(numExecutorsToAdd, maxExecutorsToAdd)
+    val actualNumExecutorsToAdd = math.min(numExecutorsToAdd, maxNumExecutorsToAdd)
 
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
     val addRequestAcknowledged = testing || sc.requestExecutors(actualNumExecutorsToAdd)
@@ -382,10 +384,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     removeTimes.remove(executorId)
   }
 
-  private def maxExecutorsNeededForTasks(numPendingTasks: Int): Int = {
-    (numPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
-  }
-
   /**
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
@@ -477,7 +475,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
      * not account for tasks which may have failed and been resubmitted.
      */
     def totalPendingTasks(): Int = {
-      stageIdToNumTasks.map{ case (stageId, numTasks) =>
+      stageIdToNumTasks.map { case (stageId, numTasks) =>
         numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
       }.sum
     }
