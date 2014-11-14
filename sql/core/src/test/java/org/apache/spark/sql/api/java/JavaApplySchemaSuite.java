@@ -118,7 +118,7 @@ public class JavaApplySchemaSuite implements Serializable {
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
         "\"boolean\":false, \"null\":null}"));
     List<StructField> fields = new ArrayList<StructField>(7);
-    fields.add(DataType.createStructField("bigInteger", DataType.DecimalType, true));
+    fields.add(DataType.createStructField("bigInteger", new DecimalType(), true));
     fields.add(DataType.createStructField("boolean", DataType.BooleanType, true));
     fields.add(DataType.createStructField("double", DataType.DoubleType, true));
     fields.add(DataType.createStructField("integer", DataType.IntegerType, true));
@@ -156,7 +156,7 @@ public class JavaApplySchemaSuite implements Serializable {
     JavaSchemaRDD schemaRDD2 = javaSqlCtx.jsonRDD(jsonRDD, expectedSchema);
     StructType actualSchema2 = schemaRDD2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
-    schemaRDD1.registerTempTable("jsonTable2");
+    schemaRDD2.registerTempTable("jsonTable2");
     List<Row> actual2 = javaSqlCtx.sql("select * from jsonTable2").collect();
     Assert.assertEquals(expectedResult, actual2);
   }

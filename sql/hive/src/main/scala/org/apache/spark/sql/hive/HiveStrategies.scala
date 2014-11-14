@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.ql.parse.ASTNode
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,7 +31,7 @@ import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
 
@@ -160,17 +162,14 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-
-      case logical.CreateTableAsSelect(database, tableName, child) =>
-        val query = planLater(child)
+      case logical.CreateTableAsSelect(
+             Some(database), tableName, child, allowExisting, Some(extra: ASTNode)) =>
         CreateTableAsSelect(
-          database.get,
+          database,
           tableName,
-          query,
-          InsertIntoHiveTable(_: MetastoreRelation,
-            Map(),
-            query,
-            overwrite = true)(hiveContext)) :: Nil
+          child,
+          allowExisting,
+          extra) :: Nil
       case _ => Nil
     }
   }
@@ -206,6 +205,8 @@ private[hive] trait HiveStrategies {
       case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
       case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
+      case hive.AddFile(path) => execution.AddFile(path) :: Nil
 
       case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 

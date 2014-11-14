@@ -25,10 +25,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.test.ChiSqTest
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class HypothesisTestSuite extends FunSuite with LocalSparkContext {
+class HypothesisTestSuite extends FunSuite with MLlibTestSparkContext {
 
   test("chi squared pearson goodness of fit") {
 

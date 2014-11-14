@@ -23,10 +23,10 @@ import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
+class LBFGSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
   val nPoints = 10000
   val A = 2.0

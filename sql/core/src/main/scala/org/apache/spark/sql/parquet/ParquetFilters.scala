@@ -18,32 +18,40 @@
 package org.apache.spark.sql.parquet
 
 import java.nio.ByteBuffer
+import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.conf.Configuration
 
-import parquet.filter._
-import parquet.filter.ColumnPredicates._
+import parquet.common.schema.ColumnPath
+import parquet.filter2.compat.FilterCompat
+import parquet.filter2.compat.FilterCompat._
+import parquet.filter2.predicate.Operators.{Column, SupportsLtGt}
+import parquet.filter2.predicate.{FilterApi, FilterPredicate}
+import parquet.filter2.predicate.FilterApi._
+import parquet.io.api.Binary
 import parquet.column.ColumnReader
 
 import com.google.common.io.BaseEncoding
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.expressions.{Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.parquet.ParquetColumns._
 
 private[sql] object ParquetFilters {
   val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
   // set this to false if pushdown should be disabled
   val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.hints.parquetFilterPushdown"
 
-  def createRecordFilter(filterExpressions: Seq[Expression]): UnboundRecordFilter = {
+  def createRecordFilter(filterExpressions: Seq[Expression]): Filter = {
     val filters: Seq[CatalystFilter] = filterExpressions.collect {
       case (expression: Expression) if createFilter(expression).isDefined =>
         createFilter(expression).get
     }
-    if (filters.length > 0) filters.reduce(AndRecordFilter.and) else null
+    if (filters.length > 0) FilterCompat.get(filters.reduce(FilterApi.and)) else null
   }
 
   def createFilter(expression: Expression): Option[CatalystFilter] = {
@@ -52,78 +60,188 @@ private[sql] object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case BooleanType =>
-        ComparisonFilter.createBooleanFilter(name, literal.value.asInstanceOf[Boolean], predicate)
-      case IntegerType =>
-        ComparisonFilter.createIntFilter(
+        ComparisonFilter.createBooleanEqualityFilter(
+          name, 
+          literal.value.asInstanceOf[Boolean],
+          predicate)
+      case ByteType =>
+        new ComparisonFilter(
           name,
-          (x: Int) => x == literal.value.asInstanceOf[Int],
+          FilterApi.eq(byteColumn(name), literal.value.asInstanceOf[java.lang.Byte]),
+          predicate)
+      case ShortType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.eq(shortColumn(name), literal.value.asInstanceOf[java.lang.Short]),
+          predicate)
+      case IntegerType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.eq(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x == literal.value.asInstanceOf[Long],
+          FilterApi.eq(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x == literal.value.asInstanceOf[Double],
+          FilterApi.eq(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x == literal.value.asInstanceOf[Float],
+          FilterApi.eq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
           predicate)
       case StringType =>
-        ComparisonFilter.createStringFilter(name, literal.value.asInstanceOf[String], predicate)
+        ComparisonFilter.createStringEqualityFilter(
+          name, 
+          literal.value.asInstanceOf[String], 
+          predicate)
+      case BinaryType =>
+        ComparisonFilter.createBinaryEqualityFilter(
+          name,
+          literal.value.asInstanceOf[Array[Byte]],
+          predicate)
+      case DateType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.eq(dateColumn(name), new WrappedDate(literal.value.asInstanceOf[Date])),
+          predicate)
+      case TimestampType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.eq(timestampColumn(name),
+            new WrappedTimestamp(literal.value.asInstanceOf[Timestamp])),
+          predicate)
+      case DecimalType.Unlimited =>
+        new ComparisonFilter(
+          name,
+          FilterApi.eq(decimalColumn(name), literal.value.asInstanceOf[Decimal]),
+          predicate)
     }
+
     def createLessThanFilter(
         name: String,
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
-      case IntegerType =>
-        ComparisonFilter.createIntFilter(
+      case ByteType =>
+        new ComparisonFilter(
           name,
-          (x: Int) => x < literal.value.asInstanceOf[Int],
+          FilterApi.lt(byteColumn(name), literal.value.asInstanceOf[java.lang.Byte]),
+          predicate)
+      case ShortType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.lt(shortColumn(name), literal.value.asInstanceOf[java.lang.Short]),
+          predicate)
+      case IntegerType =>
+        new ComparisonFilter(
+          name, 
+          FilterApi.lt(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x < literal.value.asInstanceOf[Long],
+          FilterApi.lt(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x < literal.value.asInstanceOf[Double],
+          FilterApi.lt(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x < literal.value.asInstanceOf[Float],
+          FilterApi.lt(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
+          predicate)
+      case StringType =>
+        ComparisonFilter.createStringLessThanFilter(
+          name,
+          literal.value.asInstanceOf[String],
+          predicate)
+      case BinaryType =>
+        ComparisonFilter.createBinaryLessThanFilter(
+          name,
+          literal.value.asInstanceOf[Array[Byte]],
+          predicate)
+      case DateType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.lt(dateColumn(name), new WrappedDate(literal.value.asInstanceOf[Date])),
+          predicate)
+      case TimestampType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.lt(timestampColumn(name),
+            new WrappedTimestamp(literal.value.asInstanceOf[Timestamp])),
+          predicate)
+      case DecimalType.Unlimited =>
+        new ComparisonFilter(
+          name,
+          FilterApi.lt(decimalColumn(name), literal.value.asInstanceOf[Decimal]),
           predicate)
     }
     def createLessThanOrEqualFilter(
         name: String,
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
-      case IntegerType =>
-        ComparisonFilter.createIntFilter(
+      case ByteType =>
+        new ComparisonFilter(
           name,
-          (x: Int) => x <= literal.value.asInstanceOf[Int],
+          FilterApi.ltEq(byteColumn(name), literal.value.asInstanceOf[java.lang.Byte]),
+          predicate)
+      case ShortType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.ltEq(shortColumn(name), literal.value.asInstanceOf[java.lang.Short]),
+          predicate)
+      case IntegerType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.ltEq(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x <= literal.value.asInstanceOf[Long],
+          FilterApi.ltEq(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x <= literal.value.asInstanceOf[Double],
+          FilterApi.ltEq(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x <= literal.value.asInstanceOf[Float],
+          FilterApi.ltEq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
+          predicate)
+      case StringType =>
+        ComparisonFilter.createStringLessThanOrEqualFilter(
+          name,
+          literal.value.asInstanceOf[String],
+          predicate)
+      case BinaryType =>
+        ComparisonFilter.createBinaryLessThanOrEqualFilter(
+          name,
+          literal.value.asInstanceOf[Array[Byte]],
+          predicate)
+      case DateType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.ltEq(dateColumn(name), new WrappedDate(literal.value.asInstanceOf[Date])),
+          predicate)
+      case TimestampType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.ltEq(timestampColumn(name),
+            new WrappedTimestamp(literal.value.asInstanceOf[Timestamp])),
+          predicate)
+      case DecimalType.Unlimited =>
+        new ComparisonFilter(
+          name,
+          FilterApi.ltEq(decimalColumn(name), literal.value.asInstanceOf[Decimal]),
           predicate)
     }
     // TODO: combine these two types somehow?
@@ -131,49 +249,122 @@ private[sql] object ParquetFilters {
         name: String,
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
-      case IntegerType =>
-        ComparisonFilter.createIntFilter(
+      case ByteType =>
+        new ComparisonFilter(
           name,
-          (x: Int) => x > literal.value.asInstanceOf[Int],
+          FilterApi.gt(byteColumn(name), literal.value.asInstanceOf[java.lang.Byte]),
+          predicate)
+      case ShortType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gt(shortColumn(name), literal.value.asInstanceOf[java.lang.Short]),
+          predicate)
+      case IntegerType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gt(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x > literal.value.asInstanceOf[Long],
+          FilterApi.gt(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x > literal.value.asInstanceOf[Double],
+          FilterApi.gt(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x > literal.value.asInstanceOf[Float],
+          FilterApi.gt(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
+          predicate)
+      case StringType =>
+        ComparisonFilter.createStringGreaterThanFilter(
+          name,
+          literal.value.asInstanceOf[String],
+          predicate)
+      case BinaryType =>
+        ComparisonFilter.createBinaryGreaterThanFilter(
+          name,
+          literal.value.asInstanceOf[Array[Byte]],
+          predicate)
+      case DateType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gt(dateColumn(name), new WrappedDate(literal.value.asInstanceOf[Date])),
+          predicate)
+      case TimestampType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gt(timestampColumn(name),
+            new WrappedTimestamp(literal.value.asInstanceOf[Timestamp])),
+          predicate)
+      case DecimalType.Unlimited =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gt(decimalColumn(name), literal.value.asInstanceOf[Decimal]),
           predicate)
     }
     def createGreaterThanOrEqualFilter(
         name: String,
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
+      case ByteType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(byteColumn(name), literal.value.asInstanceOf[java.lang.Byte]),
+          predicate)
+      case ShortType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(shortColumn(name), literal.value.asInstanceOf[java.lang.Short]),
+          predicate)
       case IntegerType =>
-        ComparisonFilter.createIntFilter(
-          name, (x: Int) => x >= literal.value.asInstanceOf[Int],
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(intColumn(name), literal.value.asInstanceOf[Integer]),
           predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(
+        new ComparisonFilter(
           name,
-          (x: Long) => x >= literal.value.asInstanceOf[Long],
+          FilterApi.gtEq(longColumn(name), literal.value.asInstanceOf[java.lang.Long]),
           predicate)
       case DoubleType =>
-        ComparisonFilter.createDoubleFilter(
+        new ComparisonFilter(
           name,
-          (x: Double) => x >= literal.value.asInstanceOf[Double],
+          FilterApi.gtEq(doubleColumn(name), literal.value.asInstanceOf[java.lang.Double]),
           predicate)
       case FloatType =>
-        ComparisonFilter.createFloatFilter(
+        new ComparisonFilter(
           name,
-          (x: Float) => x >= literal.value.asInstanceOf[Float],
+          FilterApi.gtEq(floatColumn(name), literal.value.asInstanceOf[java.lang.Float]),
+          predicate)
+      case StringType =>
+        ComparisonFilter.createStringGreaterThanOrEqualFilter(
+          name,
+          literal.value.asInstanceOf[String],
+          predicate)
+      case BinaryType =>
+        ComparisonFilter.createBinaryGreaterThanOrEqualFilter(
+          name,
+          literal.value.asInstanceOf[Array[Byte]],
+          predicate)
+      case DateType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(dateColumn(name), new WrappedDate(literal.value.asInstanceOf[Date])),
+          predicate)
+      case TimestampType =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(timestampColumn(name),
+            new WrappedTimestamp(literal.value.asInstanceOf[Timestamp])),
+          predicate)
+      case DecimalType.Unlimited =>
+        new ComparisonFilter(
+          name,
+          FilterApi.gtEq(decimalColumn(name), literal.value.asInstanceOf[Decimal]),
           predicate)
     }
 
@@ -209,25 +400,25 @@ private[sql] object ParquetFilters {
           case _ => None
         }
       }
-      case p @ EqualTo(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ EqualTo(left: Literal, right: NamedExpression) if left.dataType != NullType =>
         Some(createEqualityFilter(right.name, left, p))
-      case p @ EqualTo(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ EqualTo(left: NamedExpression, right: Literal) if right.dataType != NullType =>
         Some(createEqualityFilter(left.name, right, p))
-      case p @ LessThan(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ LessThan(left: Literal, right: NamedExpression) =>
         Some(createLessThanFilter(right.name, left, p))
-      case p @ LessThan(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ LessThan(left: NamedExpression, right: Literal) =>
         Some(createLessThanFilter(left.name, right, p))
-      case p @ LessThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ LessThanOrEqual(left: Literal, right: NamedExpression) =>
         Some(createLessThanOrEqualFilter(right.name, left, p))
-      case p @ LessThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ LessThanOrEqual(left: NamedExpression, right: Literal) =>
         Some(createLessThanOrEqualFilter(left.name, right, p))
-      case p @ GreaterThan(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ GreaterThan(left: Literal, right: NamedExpression) =>
         Some(createGreaterThanFilter(right.name, left, p))
-      case p @ GreaterThan(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ GreaterThan(left: NamedExpression, right: Literal) =>
         Some(createGreaterThanFilter(left.name, right, p))
-      case p @ GreaterThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ GreaterThanOrEqual(left: Literal, right: NamedExpression) =>
         Some(createGreaterThanOrEqualFilter(right.name, left, p))
-      case p @ GreaterThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ GreaterThanOrEqual(left: NamedExpression, right: Literal) =>
         Some(createGreaterThanOrEqualFilter(left.name, right, p))
       case _ => None
     }
@@ -300,142 +491,206 @@ private[sql] object ParquetFilters {
 }
 
 abstract private[parquet] class CatalystFilter(
-    @transient val predicate: CatalystPredicate) extends UnboundRecordFilter
+    @transient val predicate: CatalystPredicate) extends FilterPredicate
 
 private[parquet] case class ComparisonFilter(
     val columnName: String,
-    private var filter: UnboundRecordFilter,
+    private var filter: FilterPredicate,
     @transient override val predicate: CatalystPredicate)
   extends CatalystFilter(predicate) {
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
+  override def accept[R](visitor: FilterPredicate.Visitor[R]): R = {
+    filter.accept(visitor)
   }
 }
 
 private[parquet] case class OrFilter(
-    private var filter: UnboundRecordFilter,
+    private var filter: FilterPredicate,
     @transient val left: CatalystFilter,
     @transient val right: CatalystFilter,
     @transient override val predicate: Or)
   extends CatalystFilter(predicate) {
   def this(l: CatalystFilter, r: CatalystFilter) =
     this(
-      OrRecordFilter.or(l, r),
+      FilterApi.or(l, r),
       l,
       r,
       Or(l.predicate, r.predicate))
 
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
+  override def accept[R](visitor: FilterPredicate.Visitor[R]): R  = {
+    filter.accept(visitor);
   }
+
 }
 
 private[parquet] case class AndFilter(
-    private var filter: UnboundRecordFilter,
+    private var filter: FilterPredicate,
     @transient val left: CatalystFilter,
     @transient val right: CatalystFilter,
     @transient override val predicate: And)
   extends CatalystFilter(predicate) {
   def this(l: CatalystFilter, r: CatalystFilter) =
     this(
-      AndRecordFilter.and(l, r),
+      FilterApi.and(l, r),
       l,
       r,
       And(l.predicate, r.predicate))
 
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
+  override def accept[R](visitor: FilterPredicate.Visitor[R]): R = {
+    filter.accept(visitor);
   }
+
 }
 
 private[parquet] object ComparisonFilter {
-  def createBooleanFilter(
+  def createBooleanEqualityFilter(
       columnName: String,
       value: Boolean,
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToBoolean(
-          new BooleanPredicateFunction {
-            def functionToApply(input: Boolean): Boolean = input == value
-          }
-      )),
+      FilterApi.eq(booleanColumn(columnName), value.asInstanceOf[java.lang.Boolean]),
       predicate)
 
-  def createStringFilter(
+  def createStringEqualityFilter(
       columnName: String,
       value: String,
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToString (
-          new ColumnPredicates.PredicateFunction[String]  {
-            def functionToApply(input: String): Boolean = input == value
-          }
-      )),
+      FilterApi.eq(binaryColumn(columnName), Binary.fromString(value)),
       predicate)
 
-  def createIntFilter(
+  def createStringLessThanFilter(
       columnName: String,
-      func: Int => Boolean,
+      value: String,
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToInteger(
-          new IntegerPredicateFunction {
-            def functionToApply(input: Int) = func(input)
-          }
-      )),
+      FilterApi.lt(binaryColumn(columnName), Binary.fromString(value)),
       predicate)
 
-  def createLongFilter(
+  def createStringLessThanOrEqualFilter(
       columnName: String,
-      func: Long => Boolean,
+      value: String,
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToLong(
-          new LongPredicateFunction {
-            def functionToApply(input: Long) = func(input)
-          }
-      )),
+      FilterApi.ltEq(binaryColumn(columnName), Binary.fromString(value)),
       predicate)
 
-  def createDoubleFilter(
+  def createStringGreaterThanFilter(
       columnName: String,
-      func: Double => Boolean,
+      value: String,
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToDouble(
-          new DoublePredicateFunction {
-            def functionToApply(input: Double) = func(input)
-          }
-      )),
+      FilterApi.gt(binaryColumn(columnName), Binary.fromString(value)),
       predicate)
 
-  def createFloatFilter(
+  def createStringGreaterThanOrEqualFilter(
       columnName: String,
-      func: Float => Boolean,
+      value: String,
       predicate: CatalystPredicate): CatalystFilter =
     new ComparisonFilter(
       columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToFloat(
-          new FloatPredicateFunction {
-            def functionToApply(input: Float) = func(input)
-          }
-      )),
+      FilterApi.gtEq(binaryColumn(columnName), Binary.fromString(value)),
       predicate)
+
+  def createBinaryEqualityFilter(
+      columnName: String,
+      value: Array[Byte],
+      predicate: CatalystPredicate): CatalystFilter =
+    new ComparisonFilter(
+      columnName,
+      FilterApi.eq(binaryColumn(columnName), Binary.fromByteArray(value)),
+      predicate)
+
+  def createBinaryLessThanFilter(
+      columnName: String,
+      value: Array[Byte],
+      predicate: CatalystPredicate): CatalystFilter =
+    new ComparisonFilter(
+      columnName,
+      FilterApi.lt(binaryColumn(columnName), Binary.fromByteArray(value)),
+      predicate)
+
+  def createBinaryLessThanOrEqualFilter(
+      columnName: String,
+      value: Array[Byte],
+      predicate: CatalystPredicate): CatalystFilter =
+    new ComparisonFilter(
+      columnName,
+      FilterApi.ltEq(binaryColumn(columnName), Binary.fromByteArray(value)),
+      predicate)
+
+  def createBinaryGreaterThanFilter(
+      columnName: String,
+      value: Array[Byte],
+      predicate: CatalystPredicate): CatalystFilter =
+    new ComparisonFilter(
+      columnName,
+      FilterApi.gt(binaryColumn(columnName), Binary.fromByteArray(value)),
+      predicate)
+
+  def createBinaryGreaterThanOrEqualFilter(
+      columnName: String,
+      value: Array[Byte],
+      predicate: CatalystPredicate): CatalystFilter =
+    new ComparisonFilter(
+      columnName,
+      FilterApi.gtEq(binaryColumn(columnName), Binary.fromByteArray(value)),
+      predicate)
+}
+
+private[spark] object ParquetColumns {
+
+  def byteColumn(columnPath: String): ByteColumn = {
+    new ByteColumn(ColumnPath.fromDotString(columnPath))
+  }
+
+  final class ByteColumn(columnPath: ColumnPath)
+    extends Column[java.lang.Byte](columnPath, classOf[java.lang.Byte]) with SupportsLtGt
+
+  def shortColumn(columnPath: String): ShortColumn = {
+    new ShortColumn(ColumnPath.fromDotString(columnPath))
+  }
+
+  final class ShortColumn(columnPath: ColumnPath)
+    extends Column[java.lang.Short](columnPath, classOf[java.lang.Short]) with SupportsLtGt
+
+
+  def dateColumn(columnPath: String): DateColumn = {
+    new DateColumn(ColumnPath.fromDotString(columnPath))
+  }
+
+  final class DateColumn(columnPath: ColumnPath)
+    extends Column[WrappedDate](columnPath, classOf[WrappedDate]) with SupportsLtGt
+
+  def timestampColumn(columnPath: String): TimestampColumn = {
+    new TimestampColumn(ColumnPath.fromDotString(columnPath))
+  }
+
+  final class TimestampColumn(columnPath: ColumnPath)
+    extends Column[WrappedTimestamp](columnPath, classOf[WrappedTimestamp]) with SupportsLtGt
+
+  def decimalColumn(columnPath: String): DecimalColumn = {
+    new DecimalColumn(ColumnPath.fromDotString(columnPath))
+  }
+
+  final class DecimalColumn(columnPath: ColumnPath)
+    extends Column[Decimal](columnPath, classOf[Decimal]) with SupportsLtGt
+
+  final class WrappedDate(val date: Date) extends Comparable[WrappedDate] {
+
+    override def compareTo(other: WrappedDate): Int = {
+      date.compareTo(other.date)
+    }
+  }
+
+  final class WrappedTimestamp(val timestamp: Timestamp) extends Comparable[WrappedTimestamp] {
+
+    override def compareTo(other: WrappedTimestamp): Int = {
+      timestamp.compareTo(other.timestamp)
+    }
+  }
 }

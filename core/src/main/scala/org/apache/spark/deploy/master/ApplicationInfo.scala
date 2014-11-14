@@ -24,7 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.util.Utils
 
 private[spark] class ApplicationInfo(
     val startTime: Long,
@@ -46,7 +48,7 @@ private[spark] class ApplicationInfo(
 
   init()
 
-  private def readObject(in: java.io.ObjectInputStream): Unit = {
+  private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()
   }
