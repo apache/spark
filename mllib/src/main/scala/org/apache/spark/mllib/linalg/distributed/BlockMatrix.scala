@@ -28,18 +28,18 @@ import org.apache.spark.util.Utils
 /**
  * Represents a local matrix that makes up one block of a distributed BlockMatrix
  *
- * @param blockIdRow The row index of this block
- * @param blockIdCol The column index of this block
+ * @param blockRowIndex The row index of this block
+ * @param blockColIndex The column index of this block
  * @param mat The underlying local matrix
  */
-case class SubMatrix(blockIdRow: Int, blockIdCol: Int, mat: DenseMatrix) extends Serializable
+case class SubMatrix(blockRowIndex: Int, blockColIndex: Int, mat: DenseMatrix) extends Serializable
 
 /**
  * Information of the submatrices of the BlockMatrix maintained on the driver
  *
  * @param partitionId The id of the partition the block is found in
- * @param blockIdRow The row index of this block
- * @param blockIdCol The column index of this block
+ * @param blockRowIndex The row index of this block
+ * @param blockColIndex The column index of this block
  * @param startRow The starting row index with respect to the distributed BlockMatrix
  * @param numRows The number of rows in this block
  * @param startCol The starting column index with respect to the distributed BlockMatrix
@@ -47,8 +47,8 @@ case class SubMatrix(blockIdRow: Int, blockIdCol: Int, mat: DenseMatrix) extends
  */
 case class SubMatrixInfo(
     partitionId: Int,
-    blockIdRow: Int,
-    blockIdCol: Int,
+    blockRowIndex: Int,
+    blockColIndex: Int,
     startRow: Long,
     numRows: Int,
     startCol: Long,
@@ -228,7 +228,7 @@ class BlockMatrix(
     // collect may cause akka frameSize errors
     val blockStartRowColsParts = matrixRDD.mapPartitionsWithIndex { case (partId, iter) =>
       iter.map { case (id, block) =>
-        ((block.blockIdRow, block.blockIdCol), (partId, block.mat.numRows, block.mat.numCols))
+        ((block.blockRowIndex, block.blockColIndex), (partId, block.mat.numRows, block.mat.numCols))
       }
     }.collect()
     val blockStartRowCols = blockStartRowColsParts.sortBy(_._1)
@@ -283,9 +283,9 @@ class BlockMatrix(
   private def keyBy(part: BlockMatrixPartitioner = partitioner): RDD[(Int, SubMatrix)] = {
     rdd.map { block =>
       part match {
-        case r: RowBasedPartitioner => (block.blockIdRow, block)
-        case c: ColumnBasedPartitioner => (block.blockIdCol, block)
-        case g: GridPartitioner => (block.blockIdRow + numRowBlocks * block.blockIdCol, block)
+        case r: RowBasedPartitioner => (block.blockRowIndex, block)
+        case c: ColumnBasedPartitioner => (block.blockColIndex, block)
+        case g: GridPartitioner => (block.blockRowIndex + numRowBlocks * block.blockColIndex, block)
         case _ => throw new IllegalArgumentException("Unrecognized partitioner")
       }
     }
@@ -304,7 +304,7 @@ class BlockMatrix(
 
   /** Collect the distributed matrix on the driver. */
   def collect(): DenseMatrix = {
-    val parts = rdd.map(x => ((x.blockIdRow, x.blockIdCol), x.mat)).
+    val parts = rdd.map(x => ((x.blockRowIndex, x.blockColIndex), x.mat)).
       collect().sortBy(x => (x._1._2, x._1._1))
     val nRows = numRows().toInt
     val nCols = numCols().toInt
