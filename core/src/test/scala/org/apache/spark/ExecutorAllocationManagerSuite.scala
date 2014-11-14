@@ -707,5 +707,4 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {
     manager invokePrivate _onExecutorBusy(id)
   }
-
 }
