@@ -329,6 +329,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val strategies: Seq[Strategy] =
       extraStrategies ++ (
+      MultiWayBroadcastJoin ::
       CommandStrategy(self) ::
       DataSourceStrategy ::
       TakeOrdered ::

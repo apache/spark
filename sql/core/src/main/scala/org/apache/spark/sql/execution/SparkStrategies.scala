@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.joins.{GenerateInnerJoin, HashedRelation, UniqueIntKeyHashedRelation}
+import org.apache.spark.sql.execution.joins.SingleHashJoin
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -42,6 +44,72 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Join(left, right, LeftSemi, condition) =>
         joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
+    }
+  }
+
+  object MultiWayBroadcastJoin extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      val joinedTables = findMultiWayJoin(JoinedTables(), plan)
+      if (sqlContext.getConf("multiWayJoin", "true").toBoolean &&
+          joinedTables.tables.nonEmpty &&
+          joinedTables.tables.count(t => AttributeSet(t.buildKeys).subsetOf(t.table.outputSet)) == joinedTables.tables.size &&
+          joinedTables.tables.count(t => AttributeSet(t.streamKeys).subsetOf(joinedTables.streamedTable.outputSet)) == joinedTables.tables.size) {
+        val hashTables = joinedTables.tables.map { t =>
+          val broadcast = sqlContext.getBroadcast(t.buildKeys, t.table)
+          SingleHashJoin(t.table, t.streamKeys, t.buildKeys, t.table.output, broadcast)
+        }
+
+        val uniqueIntHashTables = hashTables.map(_.hashTable.value).collect {
+          case u: UniqueIntKeyHashedRelation => u
+        }
+
+        val streamProjection = AttributeSet(joinedTables.tables.flatMap(_.streamKeys) ++ plan.output.filter(joinedTables.streamedTable.outputSet.contains(_)))
+        val streamedTable = logical.Project(streamProjection.toSeq, joinedTables.streamedTable)
+
+        if (sqlContext.getConf("turbo", "true").toBoolean &&
+          hashTables.size == uniqueIntHashTables.size) {
+          logWarning("Turbo mode activated.")
+          joins.OptimizedMultiWayBroadcastInnerHashJoin(
+            plan.output,
+            hashTables,
+            planLater(streamedTable)) :: Nil
+        } else {
+          Project(plan.output,
+            joins.MultiWayBroadcastInnerHashJoin(
+              plan.output,
+              hashTables,
+              planLater(streamedTable))) :: Nil
+        }
+      } else {
+        Nil
+      }
+    }
+
+    case class JoinedTables(
+      projection: Option[Seq[NamedExpression]] = None,
+      tables: Seq[InnerJoin] = Nil,
+      streamedTable: LogicalPlan = null)
+
+    case class InnerJoin(table: LogicalPlan, buildKeys: Seq[Expression], streamKeys: Seq[Expression])
+
+    def findMultiWayJoin(current: JoinedTables, plan: LogicalPlan): JoinedTables = plan match {
+      case logical.Project(projectList, child) if current.tables.isEmpty =>
+        findMultiWayJoin(current.copy(projection = Some(projectList)), child)
+
+      // Ignore internal projections as we'll do one global projection at the end.
+      case logical.Project(_, child) => findMultiWayJoin(current, child)
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+          if right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold ||
+             left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+
+        if (right.statistics.sizeInBytes < left.statistics.sizeInBytes) {
+          findMultiWayJoin(current.copy(tables = current.tables :+ InnerJoin(right, rightKeys, leftKeys)), left)
+        } else {
+          findMultiWayJoin(current.copy(tables = current.tables :+ InnerJoin(left, leftKeys, rightKeys)), right)
+        }
+
+      case other => current.copy(streamedTable = other)
     }
   }
 
