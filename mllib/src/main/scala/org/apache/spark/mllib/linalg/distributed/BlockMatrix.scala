@@ -343,7 +343,7 @@ class BlockMatrix(
         if (checkPartitioning(otherBlocked, OperationNames.add)){
           val addedBlocks = rdd.zip(otherBlocked.rdd).map{ case (a, b) =>
             val result = a.mat.toBreeze + b.mat.toBreeze
-            new BlockPartition(a.blockIdRow, a.blockIdCol,
+            new SubMatrix(a.blockIdRow, a.blockIdCol,
               Matrices.fromBreeze(result).asInstanceOf[DenseMatrix])
           }
           new BlockMatrix(numRowBlocks, numColBlocks, addedBlocks, partitioner)
