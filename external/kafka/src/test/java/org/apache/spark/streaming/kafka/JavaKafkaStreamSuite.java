@@ -20,7 +20,10 @@ package org.apache.spark.streaming.kafka;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Random;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.streaming.Duration;
 import scala.Predef;
 import scala.Tuple2;
 import scala.collection.JavaConverters;
@@ -32,8 +35,6 @@ import kafka.serializer.StringDecoder;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.storage.StorageLevel;
-import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -42,25 +43,27 @@ import org.junit.Test;
 import org.junit.After;
 import org.junit.Before;
 
-public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements Serializable {
-  private transient KafkaStreamSuite testSuite = new KafkaStreamSuite();
+public class JavaKafkaStreamSuite implements Serializable {
+  private transient JavaStreamingContext ssc = null;
+  private transient Random random = new Random();
+  private transient KafkaStreamSuiteBase suiteBase = null;
 
   @Before
-  @Override
   public void setUp() {
-    testSuite.beforeFunction();
+    suiteBase = new KafkaStreamSuiteBase() { };
+    suiteBase.setupKafka();
     System.clearProperty("spark.driver.port");
-    //System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
-    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    SparkConf sparkConf = new SparkConf()
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+    ssc = new JavaStreamingContext(sparkConf, new Duration(500));
   }
 
   @After
-  @Override
   public void tearDown() {
     ssc.stop();
     ssc = null;
     System.clearProperty("spark.driver.port");
-    testSuite.afterFunction();
+    suiteBase.tearDownKafka();
   }
 
   @Test
@@ -74,15 +77,15 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     sent.put("b", 3);
     sent.put("c", 10);
 
-    testSuite.createTopic(topic);
+    suiteBase.createTopic(topic);
     HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    testSuite.produceAndSendMessage(topic,
-      JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
-        Predef.<Tuple2<String, Object>>conforms()));
+    suiteBase.produceAndSendMessage(topic,
+        JavaConverters.mapAsScalaMapConverter(tmp).asScala().toMap(
+            Predef.<Tuple2<String, Object>>conforms()));
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("zookeeper.connect", testSuite.zkHost() + ":" + testSuite.zkPort());
-    kafkaParams.put("group.id", "test-consumer-" + KafkaTestUtils.random().nextInt(10000));
+    kafkaParams.put("zookeeper.connect", suiteBase.zkAddress());
+    kafkaParams.put("group.id", "test-consumer-" + random.nextInt(10000));
     kafkaParams.put("auto.offset.reset", "smallest");
 
     JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
@@ -124,11 +127,16 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     );
 
     ssc.start();
-    ssc.awaitTermination(3000);
-
+    long startTime = System.currentTimeMillis();
+    boolean sizeMatches = false;
+    while (!sizeMatches && System.currentTimeMillis() - startTime < 20000) {
+      sizeMatches = sent.size() == result.size();
+      Thread.sleep(200);
+    }
     Assert.assertEquals(sent.size(), result.size());
     for (String k : sent.keySet()) {
       Assert.assertEquals(sent.get(k).intValue(), result.get(k).intValue());
     }
+    ssc.stop();
   }
 }
