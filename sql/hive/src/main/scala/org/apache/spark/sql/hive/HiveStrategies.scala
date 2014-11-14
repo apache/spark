@@ -58,12 +58,18 @@ private[hive] trait HiveStrategies {
       def lowerCase =
         new SchemaRDD(s.sqlContext, s.logicalPlan)
 
-      def addPartitioningAttributes(attrs: Seq[Attribute]) =
-        new SchemaRDD(
-          s.sqlContext,
-          s.logicalPlan transform {
-            case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
-          })
+      def addPartitioningAttributes(attrs: Seq[Attribute]) = {
+        // Don't add the partitioning key if its already present in the data.
+        if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
+          s
+        } else {
+          new SchemaRDD(
+            s.sqlContext,
+            s.logicalPlan transform {
+              case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
+            })
+        }
+      }
     }
 
     implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
