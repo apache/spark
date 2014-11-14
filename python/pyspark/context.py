@@ -826,10 +826,17 @@ class SparkContext(object):
         self._profile_stats.append([id, profiler, False])
 
     def show_profiles(self):
-        self.profiler.show_profiles(self._profile_stats)
+        """ Print the profile stats to stdout """
+        for i, (id, profiler, showed) in enumerate(self._profile_stats):
+            if not showed and profiler:
+                profiler.show(id)
+                # mark it as showed
+                self._profile_stats[i][2] = True
+
 
     def dump_profiles(self, path):
-        self.profiler.dump_profiles(path, self._profile_stats)
+        for id, profiler, _ in self._profile_stats:
+            profiler.dump(id, path)
         self._profile_stats = []
 
 

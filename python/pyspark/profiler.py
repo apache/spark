@@ -15,25 +15,6 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.context import SparkContext
->>> from pyspark.conf import SparkConf
->>> from pyspark.profiler import BasicProfiler
->>> class MyCustomProfiler(BasicProfiler):
-...     @staticmethod
-...     def show_profiles(profilers):
-...             print "My custom profiles"
-...
->>> conf = SparkConf().set("spark.python.profile", "true")
->>> sc = SparkContext('local', 'test', conf=conf, profiler=MyCustomProfiler)
->>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
-[0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
->>> sc.show_profiles()
-My custom profiles
->>> sc.stop()
-"""
-
-
 import cProfile
 import pstats
 import os
@@ -59,11 +40,29 @@ class BasicProfiler(object):
             profiles of partitions on a per stage basis
         add - adds a profile to the existing accumulated profile
 
-    The profiler class is chosen when creating L{SparkContext}:
+    The profiler class is chosen when creating a SparkContext
+
+    >>> from pyspark.context import SparkContext
+    >>> from pyspark.conf import SparkConf
+    >>> from pyspark.profiler import BasicProfiler
+    >>> class MyCustomProfiler(BasicProfiler):
+    ...     def show(self, id):
+    ...         print "My custom profiles for RDD:%s" % id
+    ...
+    >>> conf = SparkConf().set("spark.python.profile", "true")
+    >>> sc = SparkContext('local', 'test', conf=conf, profiler=MyCustomProfiler)
+    >>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
+    [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+    >>> sc.show_profiles()
+    My custom profiles for RDD:1
+    My custom profiles for RDD:2
+    >>> sc.stop()
     """
 
-    @staticmethod
-    def profile(to_profile):
+    def __init__(self, ctx):
+        self._new_profile_accumulator(ctx)
+
+    def profile(self, to_profile):
         """ Runs and profiles the method to_profile passed in. A profile object is returned. """
         pr = cProfile.Profile()
         pr.runcall(to_profile)
@@ -72,31 +71,25 @@ class BasicProfiler(object):
         st.strip_dirs()
         return st
 
-    @staticmethod
-    def show_profiles(profilers):
-        """ Print the profile stats to stdout """
-        for i, (id, profiler, showed) in enumerate(profilers):
-            stats = profiler._accumulator.value
-            if not showed and stats:
-                print "=" * 60
-                print "Profile of RDD<id=%d>" % id
-                print "=" * 60
-                stats.sort_stats("time", "cumulative").print_stats()
-                # mark it as showed
-                profilers[i][2] = True
+    def show(self, id):
+        """ Print the profile stats to stdout, id is the RDD id """
+        stats = self._accumulator.value
+        if stats:
+            print "=" * 60
+            print "Profile of RDD<id=%d>" % id
+            print "=" * 60
+            stats.sort_stats("time", "cumulative").print_stats()
 
-    @staticmethod
-    def dump_profiles(path, profilers):
-        """ Dump the profilers stats into directory `path` """
+    def dump(self, id, path):
+        """ Dump the profile into path, id is the RDD id """
         if not os.path.exists(path):
             os.makedirs(path)
-        for id, profiler, _ in profilers:
-            stats = profiler._accumulator.value
-            if stats:
-                p = os.path.join(path, "rdd_%d.pstats" % id)
-                stats.dump_stats(p)
+        stats = self._accumulator.value
+        if stats:
+            p = os.path.join(path, "rdd_%d.pstats" % id)
+            stats.dump_stats(p)
 
-    def new_profile_accumulator(self, ctx):
+    def _new_profile_accumulator(self, ctx):
         """
         Creates a new accumulator for combining the profiles of different
         partitions of a stage

@@ -2073,8 +2073,7 @@ class PipelinedRDD(RDD):
             self._jrdd_deserializer = NoOpSerializer()
 
         if self.ctx.profiler:
-            profiler = self.ctx.profiler()
-            profiler.new_profile_accumulator(self.ctx)
+            profiler = self.ctx.profiler(self.ctx)
         else:
             profiler = None
 
