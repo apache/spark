@@ -52,7 +52,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, External
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
 from pyspark import shuffle
-from pyspark.pyprofiler import BasicProfiler
+from pyspark.profiler import BasicProfiler
 
 _have_scipy = False
 _have_numpy = False
@@ -671,12 +671,14 @@ class RDDTests(ReusedPySparkTestCase):
 
 class ProfilerTests(PySparkTestCase):
 
-    def test_profiler(self):
+    def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile", "true")
         self.sc = SparkContext('local[4]', class_name, conf=conf)
 
+
+    def test_profiler(self):
         self.do_computation()
 
         profilers = self.sc._profile_stats
@@ -698,11 +700,7 @@ class ProfilerTests(PySparkTestCase):
             def show_profiles(self, profilers):
                 return "Custom formatting"
 
-
-        self._old_sys_path = list(sys.path)
-        class_name = self.__class__.__name__
-        conf = SparkConf().set("spark.python.profile", "true")
-        self.sc = SparkContext('local[4]', class_name, conf=conf, profiler=TestCustomProfiler)
+        self.sc.profiler = TestCustomProfiler
 
         self.do_computation()
 
@@ -713,14 +711,13 @@ class ProfilerTests(PySparkTestCase):
 
         self.assertEqual("Custom formatting", self.sc.show_profiles())
 
+    def do_computation(self):
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
 
-        def do_computation(self):
-            def heavy_foo(x):
-                for i in range(1 << 20):
-                    x = 1
-
-            rdd = self.sc.parallelize(range(100))
-            rdd.foreach(heavy_foo)
+        rdd = self.sc.parallelize(range(100))
+        rdd.foreach(heavy_foo)
 
 
 class ExamplePointUDT(UserDefinedType):

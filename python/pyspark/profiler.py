@@ -16,20 +16,21 @@
 #
 
 """
-PySpark supports custom profilers, this is to allow for different profilers to
-be used as well as outputting to different formats than what is provided in the
-BasicProfiler.
-
-The profiler class is chosen when creating L{SparkContext}:
-NOTE: This has no effect if `spark.python.profile` is not set.
 >>> from pyspark.context import SparkContext
->>> from pyspark.serializers import MarshalSerializer
->>> sc = SparkContext('local', 'test', profiler=MyCustomProfiler)
+>>> from pyspark.conf import SparkConf
+>>> from pyspark.profiler import BasicProfiler
+>>> class MyCustomProfiler(BasicProfiler):
+...     @staticmethod
+...     def show_profiles(profilers):
+...             print "My custom profiles"
+...
+>>> conf = SparkConf().set("spark.python.profile", "true")
+>>> sc = SparkContext('local', 'test', conf=conf, profiler=MyCustomProfiler)
 >>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
 [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
 >>> sc.show_profiles()
+My custom profiles
 >>> sc.stop()
-
 """
 
 
@@ -40,9 +41,30 @@ from pyspark.accumulators import PStatsParam
 
 
 class BasicProfiler(object):
+    """
+
+    :: DeveloperApi ::
+
+    PySpark supports custom profilers, this is to allow for different profilers to
+    be used as well as outputting to different formats than what is provided in the
+    BasicProfiler.
+
+    A custom profiler has to define the following static methods:
+        profile - will produce a system profile of some sort.
+        show_profiles - shows all collected profiles in a readable format
+        dump_profiles - dumps the provided profiles to a path
+
+    and the following instance methods:
+        new_profile_accumulator - produces a new accumulator that can be used to combine the
+            profiles of partitions on a per stage basis
+        add - adds a profile to the existing accumulated profile
+
+    The profiler class is chosen when creating L{SparkContext}:
+    """
 
     @staticmethod
     def profile(to_profile):
+        """ Runs and profiles the method to_profile passed in. A profile object is returned. """
         pr = cProfile.Profile()
         pr.runcall(to_profile)
         st = pstats.Stats(pr)
@@ -75,7 +97,12 @@ class BasicProfiler(object):
                 stats.dump_stats(p)
 
     def new_profile_accumulator(self, ctx):
+        """
+        Creates a new accumulator for combining the profiles of different
+        partitions of a stage
+        """
         self._accumulator = ctx.accumulator(None, PStatsParam)
 
     def add(self, accum_value):
+        """ Adds a new profile to the existing accumulated value """
         self._accumulator.add(accum_value)

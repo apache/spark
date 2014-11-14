@@ -33,7 +33,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
-from pyspark.pyprofiler import BasicProfiler
+from pyspark.profiler import BasicProfiler
 
 from py4j.java_collections import ListConverter
 
