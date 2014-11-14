@@ -158,13 +158,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     val nl = Literal(null)
     val s = Seq(one, two)
     val nullS = Seq(one, two, null)
-    checkEvaluation(InSet(one, hS, one +: s), true)
-    checkEvaluation(InSet(two, hS, two +: s), true)
-    checkEvaluation(InSet(two, nS, two +: nullS), true)
-    checkEvaluation(InSet(nl, nS, nl +: nullS), true)
-    checkEvaluation(InSet(three, hS, three +: s), false)
-    checkEvaluation(InSet(three, nS, three +: nullS), false)
-    checkEvaluation(InSet(one, hS, one +: s) && InSet(two, hS, two +: s), true)
+    checkEvaluation(InSet(one, hS), true)
+    checkEvaluation(InSet(two, hS), true)
+    checkEvaluation(InSet(two, nS), true)
+    checkEvaluation(InSet(nl, nS), true)
+    checkEvaluation(InSet(three, hS), false)
+    checkEvaluation(InSet(three, nS), false)
+    checkEvaluation(InSet(one, hS) && InSet(two, hS), true)
   }
 
   test("MaxOf") {
