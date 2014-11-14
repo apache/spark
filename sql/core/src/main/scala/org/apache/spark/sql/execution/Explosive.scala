@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partit
 
 @DeveloperApi
 case class Explosive(
-    projections: Seq[Seq[Expression]],
+    projections: Seq[GroupExpression],
     output: Seq[Attribute],
     child: SparkPlan)(@transient sqlContext: SQLContext)
   extends UnaryNode {
@@ -37,7 +37,7 @@ case class Explosive(
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       // TODO InterpretProjection is not Serializable
-      val projs = projections.map(ee => newProjection(ee, output)).toArray
+      val projs = projections.map(ee => newProjection(ee.children, output)).toArray
 
       new Iterator[Row] {
         private[this] var result: Row = _

@@ -144,7 +144,7 @@ case class Aggregate(
 }
 
 case class Explosive(
-    projections: Seq[Seq[Expression]],
+    projections: Seq[GroupExpression],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 }

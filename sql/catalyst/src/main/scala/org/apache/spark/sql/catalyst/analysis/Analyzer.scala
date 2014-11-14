@@ -155,10 +155,9 @@ class Analyzer(catalog: Catalog,
      * Create an array of Projections for the child projection, and replace the projections'
      * expressions which equal GroupBy expressions with Literal(null), if those expressions
      * are not set for this grouping set (according to the bit mask).
-     * TODO Seq[Seq[Expression]] should be something like GroupExpression
      */
-    private[this] def expand(g: GroupingSet): Seq[Seq[Expression]] = {
-      val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
+    private[this] def expand(g: GroupingSet): Seq[GroupExpression] = {
+      val result = new scala.collection.mutable.ArrayBuffer[GroupExpression]
 
       g.bitmasks.foreach { bitmask =>
         // get the invalid grouping attributes according to the bit mask
@@ -174,7 +173,7 @@ class Analyzer(catalog: Catalog,
             Literal(bitmask, IntegerType)
         })
 
-        result += substitution
+        result += GroupExpression(substitution)
       }
 
       result.toSeq
