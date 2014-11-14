@@ -30,14 +30,10 @@ class BasicProfiler(object):
     be used as well as outputting to different formats than what is provided in the
     BasicProfiler.
 
-    A custom profiler has to define the following static methods:
+    A custom profiler has to define or inherit the following methods:
         profile - will produce a system profile of some sort.
-        show_profiles - shows all collected profiles in a readable format
-        dump_profiles - dumps the provided profiles to a path
-
-    and the following instance methods:
-        new_profile_accumulator - produces a new accumulator that can be used to combine the
-            profiles of partitions on a per stage basis
+        show - shows collected profiles for this profiler in a readable format
+        dump - dumps the profiles to a path
         add - adds a profile to the existing accumulated profile
 
     The profiler class is chosen when creating a SparkContext
