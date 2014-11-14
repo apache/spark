@@ -22,19 +22,23 @@ import java.net.InetSocketAddress
 import java.util.{Properties, Random}
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
+import kafka.consumer._
+import kafka.message.MessageAndMetadata
 import kafka.admin.CreateTopicCommand
 import kafka.common.{KafkaException, TopicAndPartition}
 import kafka.producer.{KeyedMessage, ProducerConfig, Producer}
 import kafka.utils.ZKStringSerializer
 import kafka.serializer.{StringDecoder, StringEncoder}
 import kafka.server.{KafkaConfig, KafkaServer}
-
-import org.I0Itec.zkclient.ZkClient
-
 import org.apache.zookeeper.server.ZooKeeperServer
 import org.apache.zookeeper.server.NIOServerCnxnFactory
+import org.I0Itec.zkclient.ZkClient
+import org.slf4j.{LoggerFactory, Logger}
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.kafka.KafkaWriter._
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -138,6 +142,42 @@ class KafkaStreamSuite extends TestSuiteBase {
     ssc.stop()
   }
 
+  test("Test writing back to Kafka") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    val toBe = new mutable.Queue[RDD[String]]()
+    var j = 0
+    while (j < 9) {
+      toBe.enqueue(ssc.sc.makeRDD(Seq(j.toString, (j + 1).toString, (j + 2).toString)))
+      j += 3
+    }
+    val instream = ssc.queueStream(toBe)
+    val producerConf = new Properties()
+    producerConf.put("serializer.class", "kafka.serializer.DefaultEncoder")
+    producerConf.put("key.serializer.class", "kafka.serializer.StringEncoder")
+    producerConf.put("metadata.broker.list", s"localhost:$brokerPort")
+    producerConf.put("request.required.acks", "1")
+    instream.writeToKafka(producerConf,
+      (x: String) => new KeyedMessage[String, Array[Byte]]("topic1", null,x.getBytes))
+    ssc.start()
+    var i = 0
+    val expectedResults = (0 to 8).map(_.toString).toSeq
+    val actualResults = new ArrayBuffer[String]()
+    val kafkaParams = Map("zookeeper.connect" -> s"$zkHost:$zkPort",
+      "group.id" -> s"test-consumer-${random.nextInt(10000)}",
+      "auto.offset.reset" -> "smallest", "topic" -> "topic1")
+    val consumer = new KafkaConsumer(kafkaParams)
+    consumer.initTopicList(List("topic1"))
+    while (i < 9) {
+      val fetchedMsg = new String(consumer.getNextMessage("topic1").message
+        .asInstanceOf[Array[Byte]])
+      actualResults += fetchedMsg
+      i += 1
+    }
+    val actualResultSorted = actualResults.sorted
+    assert(expectedResults.toSeq === actualResultSorted.toSeq)
+    ssc.stop()
+  }
+
   private def createTestMessage(topic: String, sent: Map[String, Int])
     : Seq[KeyedMessage[String, String]] = {
     val messages = for ((s, freq) <- sent; i <- 0 until freq) yield {
@@ -159,6 +199,7 @@ class KafkaStreamSuite extends TestSuiteBase {
     producer.send(createTestMessage(topic, sent): _*)
     logInfo("==================== 6 ====================")
   }
+
 }
 
 object KafkaTestUtils {
@@ -224,6 +265,51 @@ object KafkaTestUtils {
       factory.shutdown()
       Utils.deleteRecursively(snapshotDir)
       Utils.deleteRecursively(logDir)
+    }
+  }
+
+  class KafkaConsumer(config: Map[String, String]) {
+    val props = new Properties()
+    for ((k,v) <- config) {
+      props.put(k, v)
+    }
+    val consumer: ConsumerConnector = kafka.consumer.Consumer.create(new ConsumerConfig(props))
+    private var consumerMap: scala.collection.Map[String, List[KafkaStream[Array[Byte],
+      Array[Byte]]]] = null
+
+    private final val logger: Logger = LoggerFactory.getLogger(classOf[KafkaConsumer])
+
+    def initTopicList(topics: List[String]) {
+      val topicCountMap = new mutable.HashMap[String, Int]
+      for (topic <- topics) {
+        topicCountMap(topic) = 1
+      }
+      consumerMap = consumer.createMessageStreams(topicCountMap.asInstanceOf[collection
+      .Map[String, Int]])
+    }
+
+    def getNextMessage(topic: String): MessageAndMetadata[_, _] = {
+      val streams: scala.List[KafkaStream[Array[Byte], Array[Byte]]] = consumerMap(topic)
+      val stream: KafkaStream[Array[Byte], Array[Byte]] = streams(0)
+      val it: ConsumerIterator[Array[Byte], Array[Byte]] = stream.iterator()
+      try {
+        if (it.hasNext()) {
+          it.next()
+        }
+        else {
+          null
+        }
+      }
+      catch {
+        case e: ConsumerTimeoutException => {
+          logger.error("0 messages available to fetch for the topic " + topic)
+          null
+        }
+      }
+    }
+
+    def shutdown(): Unit = {
+      consumer.shutdown()
     }
   }
 }
