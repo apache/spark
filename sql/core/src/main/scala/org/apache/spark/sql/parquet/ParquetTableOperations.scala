@@ -111,14 +111,11 @@ case class ParquetTableScan(
     // Note 1: the input format ignores all predicates that cannot be expressed
     // as simple column predicate filters in Parquet. Here we just record
     // the whole pruning predicate.
-    // Note 2: you can disable filter predicate pushdown by setting
-    // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
     if (columnPruningPred.length > 0) {
-      
       // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
       val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
       if (filter != null){
-        val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
+        val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate
         ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
       }
     }
