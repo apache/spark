@@ -39,7 +39,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   } else {
     val childTypes = children.map(c => s"$c: ${c.dataType}").mkString(", ")
     throw new UnresolvedException(
-      this, "Coalesce cannot have children of different types. $childTypes")
+      this, s"Coalesce cannot have children of different types. $childTypes")
   }
 
   override def eval(input: Row): Any = {
