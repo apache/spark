@@ -230,6 +230,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       numExecutorsToAdd = 1
       return 0
     }
+    // The number of executors needed to satisfy all pending tasks is the number of tasks pending
+    // divided by the number of tasks each executor can fit, rounded up.
     val maxNumExecutorsPending =
       (listener.totalPendingTasks() + tasksPerExecutor - 1) / tasksPerExecutor
     if (numExecutorsPending >= maxNumExecutorsPending) {
