@@ -212,6 +212,7 @@ class BlockMatrix(
     val rdd: RDD[SubMatrix],
     val partitioner: BlockMatrixPartitioner) extends DistributedMatrix with Logging {
 
+
   // A key-value pair RDD is required to partition properly
   private var matrixRDD: RDD[(Int, SubMatrix)] = keyBy()
 
