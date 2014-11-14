@@ -1427,46 +1427,56 @@ object SparkContext extends Logging {
 
   private[spark] val DRIVER_IDENTIFIER = "<driver>"
 
-  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
 
-  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
 
-  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  object LongAccumulatorParam extends AccumulatorParam[Long] {
     def addInPlace(t1: Long, t2: Long) = t1 + t2
     def zero(initialValue: Long) = 0L
   }
 
-  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  object FloatAccumulatorParam extends AccumulatorParam[Float] {
     def addInPlace(t1: Float, t2: Float) = t1 + t2
     def zero(initialValue: Float) = 0f
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)
   }
 
-  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
-  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
-  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     new OrderedRDDFunctions[K, V, (K, V)](rdd)
 
-  implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
 
-  implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
