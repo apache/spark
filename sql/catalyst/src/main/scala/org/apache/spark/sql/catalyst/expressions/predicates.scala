@@ -99,10 +99,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(value: Expression, hset: HashSet[Any], child: Seq[Expression]) 
+case class InSet(value: Expression, hset: Set[Any])
   extends Predicate {
 
-  def children = child
+  def children = value :: Nil
 
   def nullable = true // TODO: Figure out correct nullability semantics of IN.
   override def toString = s"$value INSET ${hset.mkString("(", ",", ")")}"
