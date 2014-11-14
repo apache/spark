@@ -35,34 +35,34 @@ import org.json4s.jackson.JsonMethods._
 sealed class Metadata private[util] (private[util] val map: Map[String, Any]) extends Serializable {
 
   /** Gets a Long. */
-  def getLong(key: String): Long = get(key)
+  def getLong(key: String): Option[Long] = get(key)
 
   /** Gets a Double. */
-  def getDouble(key: String): Double = get(key)
+  def getDouble(key: String): Option[Double] = get(key)
 
   /** Gets a Boolean. */
-  def getBoolean(key: String): Boolean = get(key)
+  def getBoolean(key: String): Option[Boolean] = get(key)
 
   /** Gets a String. */
-  def getString(key: String): String = get(key)
+  def getString(key: String): Option[String] = get(key)
 
   /** Gets a Metadata. */
-  def getMetadata(key: String): Metadata = get(key)
+  def getMetadata(key: String): Option[Metadata] = get(key)
 
   /** Gets a Long array. */
-  def getLongArray(key: String): Array[Long] = get(key)
+  def getLongArray(key: String): Option[Array[Long]] = get(key)
 
   /** Gets a Double array. */
-  def getDoubleArray(key: String): Array[Double] = get(key)
+  def getDoubleArray(key: String): Option[Array[Double]] = get(key)
 
   /** Gets a Boolean array. */
-  def getBooleanArray(key: String): Array[Boolean] = get(key)
+  def getBooleanArray(key: String): Option[Array[Boolean]] = get(key)
 
   /** Gets a String array. */
-  def getStringArray(key: String): Array[String] = get(key)
+  def getStringArray(key: String): Option[Array[String]] = get(key)
 
   /** Gets a Metadata array. */
-  def getMetadataArray(key: String): Array[Metadata] = get(key)
+  def getMetadataArray(key: String): Option[Array[Metadata]] = get(key)
 
   /** Converts to its JSON representation. */
   def json: String = compact(render(jsonValue))
@@ -91,8 +91,8 @@ sealed class Metadata private[util] (private[util] val map: Map[String, Any]) ex
 
   override def hashCode: Int = Metadata.hash(this)
 
-  private def get[T](key: String): T = {
-    map(key).asInstanceOf[T]
+  private def get[T](key: String): Option[T] = {
+    map.get(key).map(_.asInstanceOf[T])
   }
 
   private[sql] def jsonValue: JValue = Metadata.toJsonValue(this)
