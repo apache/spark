@@ -289,7 +289,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsDown {
       case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
           val hSet = list.map(e => e.eval(null))
-          InSet(v, HashSet() ++ hSet, v +: list)
+          InSet(v, HashSet() ++ hSet)
     }
   }
 }
