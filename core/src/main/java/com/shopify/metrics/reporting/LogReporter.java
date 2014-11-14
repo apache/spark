@@ -32,9 +32,6 @@ public class LogReporter extends ScheduledReporter {
     return new Builder(registry);
   }
 
-  /*
-   * should save some code and reuse the CSVReporter Builder but override the build method
-   */
   public static class Builder {
     private final MetricRegistry registry;
     private Locale locale;
@@ -77,8 +74,8 @@ public class LogReporter extends ScheduledReporter {
       return this;
     }
 
-    public LogReporter build(String directory, String maxFileSize, int maxBackupIndex) {
-      return new LogReporter(registry, directory, maxFileSize, maxBackupIndex, locale, rateUnit, durationUnit, clock, filter);
+    public LogReporter build(String file, String maxFileSize, int maxBackupIndex) {
+      return new LogReporter(registry, file, maxFileSize, maxBackupIndex, locale, rateUnit, durationUnit, clock, filter);
     }
   } 
 
@@ -87,7 +84,7 @@ public class LogReporter extends ScheduledReporter {
   private final Logger logger;
 
   private LogReporter(MetricRegistry registry,
-      String directory,
+      String file,
       String maxFileSize,
       int maxBackupIndex,
       Locale locale,
@@ -98,7 +95,6 @@ public class LogReporter extends ScheduledReporter {
 
     super(registry, "log-reporter", filter, rateUnit, durationUnit);
     this.logger = Logger.getLogger("com.shopify.metrics");
-    String file = String.format("%s/spark.metrics.log", directory);
 
     try {
       PatternLayout layout = new PatternLayout("%d{ISO8601} %c %m%n");
