@@ -899,10 +899,14 @@ private[nio] class ConnectionManager(
       : Future[Message] = {
     val promise = Promise[Message]()
 
+    // It's important that the TimerTask doesn't capture a reference to `message`, which can cause
+    // memory leaks since cancelled TimerTasks won't necessarily be garbage collected until they are
+    // scheduled to run.  Therefore, extract the message id from outside of the task:
+    val messageId = message.id
     val timeoutTask = new TimerTask {
       override def run(): Unit = {
         messageStatuses.synchronized {
-          messageStatuses.remove(message.id).foreach ( s => {
+          messageStatuses.remove(messageId).foreach ( s => {
             val e = new IOException("sendMessageReliably failed because ack " +
               s"was not received within $ackTimeout sec")
             if (!promise.tryFailure(e)) {
