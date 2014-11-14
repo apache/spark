@@ -40,6 +40,8 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
+import org.elasticsearch.spark.rdd.api.java.JavaEsSpark
+
 private[spark] class PythonRDD(
     @transient parent: RDD[_],
     command: Array[Byte],
@@ -429,6 +431,11 @@ private[spark] object PythonRDD extends Logging {
           throw new SparkException("Unexpected element type " + first.getClass)
       }
     }
+  }
+
+  def esRDD(sc: JavaSparkContext, resource: String, query: String) = {
+    val rdd = JavaEsSpark.esRDD(sc, resource, query).rdd
+    JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(rdd))
   }
 
   /**
