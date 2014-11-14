@@ -56,11 +56,9 @@ object RoutingTablePartition {
     // Determine which positions each vertex id appears in using a map where the low 2 bits
     // represent src and dst
     val map = new GraphXPrimitiveKeyOpenHashMap[VertexId, Byte]
-    edgePartition.srcIds.iterator.foreach { srcId =>
-      map.changeValue(srcId, 0x1, (b: Byte) => (b | 0x1).toByte)
-    }
-    edgePartition.dstIds.iterator.foreach { dstId =>
-      map.changeValue(dstId, 0x2, (b: Byte) => (b | 0x2).toByte)
+    edgePartition.iterator.foreach { e =>
+      map.changeValue(e.srcId, 0x1, (b: Byte) => (b | 0x1).toByte)
+      map.changeValue(e.dstId, 0x2, (b: Byte) => (b | 0x2).toByte)
     }
     map.iterator.map { vidAndPosition =>
       val vid = vidAndPosition._1

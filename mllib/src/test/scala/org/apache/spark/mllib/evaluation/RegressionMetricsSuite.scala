@@ -19,10 +19,10 @@ package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class RegressionMetricsSuite extends FunSuite with LocalSparkContext {
+class RegressionMetricsSuite extends FunSuite with MLlibTestSparkContext {
 
   test("regression metrics") {
     val predictionAndObservations = sc.parallelize(

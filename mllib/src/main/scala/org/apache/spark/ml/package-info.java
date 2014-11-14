@@ -15,23 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx.impl
+/**
+ * Spark ML is an ALPHA component that adds a new set of machine learning APIs to let users quickly
+ * assemble and configure practical machine learning pipelines.
+ */
+@AlphaComponent
+package org.apache.spark.ml;
 
-import scala.reflect.ClassTag
-import scala.util.Random
-
-import org.scalatest.FunSuite
-
-import org.apache.spark.graphx._
-
-class EdgeTripletIteratorSuite extends FunSuite {
-  test("iterator.toList") {
-    val builder = new EdgePartitionBuilder[Int, Int]
-    builder.add(1, 2, 0)
-    builder.add(1, 3, 0)
-    builder.add(1, 4, 0)
-    val iter = new EdgeTripletIterator[Int, Int](builder.toEdgePartition, true, true)
-    val result = iter.toList.map(et => (et.srcId, et.dstId))
-    assert(result === Seq((1, 2), (1, 3), (1, 4)))
-  }
-}
+import org.apache.spark.annotation.AlphaComponent;

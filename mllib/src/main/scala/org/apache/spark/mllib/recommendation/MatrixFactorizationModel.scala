@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.recommendation
 
+import java.lang.{Integer => JavaInteger}
+
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.api.python.SerDe
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.rdd.RDD
 
 /**
  * Model representing the result of matrix factorization.
@@ -63,6 +63,13 @@ class MatrixFactorizationModel private[mllib] (
         val productVector = new DoubleMatrix(pFeatures)
         Rating(user, product, userVector.dot(productVector))
     }
+  }
+
+  /**
+   * Java-friendly version of [[MatrixFactorizationModel.predict]].
+   */
+  def predict(usersProducts: JavaPairRDD[JavaInteger, JavaInteger]): JavaRDD[Rating] = {
+    predict(usersProducts.rdd.asInstanceOf[RDD[(Int, Int)]]).toJavaRDD()
   }
 
   /**

@@ -492,6 +492,25 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.updateStateByKey(convertUpdateStateFunction(updateFunc), partitioner)
   }
 
+  /**
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of the key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream.
+   * @param initialRDD initial state value of each key.
+   * @tparam S State type
+   */
+  def updateStateByKey[S](
+      updateFunc: JFunction2[JList[V], Optional[S], Optional[S]],
+      partitioner: Partitioner,
+      initialRDD: JavaPairRDD[K, S]
+  ): JavaPairDStream[K, S] = {
+    implicit val cm: ClassTag[S] = fakeClassTag
+    dstream.updateStateByKey(convertUpdateStateFunction(updateFunc), partitioner, initialRDD)
+  }
 
   /**
    * Return a new DStream by applying a map function to the value of each key-value pairs in

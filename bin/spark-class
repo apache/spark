@@ -24,8 +24,6 @@ case "`uname`" in
     CYGWIN*) cygwin=true;;
 esac
 
-SCALA_VERSION=2.10
-
 # Figure out where Spark is installed
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
@@ -128,9 +126,9 @@ fi
 
 TOOLS_DIR="$FWDIR"/tools
 SPARK_TOOLS_JAR=""
-if [ -e "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar ]; then
+if [ -e "$TOOLS_DIR"/target/scala-$SPARK_SCALA_VERSION/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the SBT build
-  export SPARK_TOOLS_JAR="`ls "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar`"
+  export SPARK_TOOLS_JAR="`ls "$TOOLS_DIR"/target/scala-$SPARK_SCALA_VERSION/spark-tools*[0-9Tg].jar`"
 fi
 if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the Maven build
@@ -149,7 +147,7 @@ fi
 
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   if test -z "$SPARK_TOOLS_JAR"; then
-    echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SCALA_VERSION/" 1>&2
+    echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SPARK_SCALA_VERSION/" 1>&2
     echo "You need to build Spark before running $1." 1>&2
     exit 1
   fi
