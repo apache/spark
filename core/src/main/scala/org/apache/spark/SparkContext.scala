@@ -175,7 +175,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
     logInfo("Spark configuration:\n" + conf.toDebugString)
   }
 
-  // Set Spark driver host and port system properties.
+  // Set Spark driver host and port system properties
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
