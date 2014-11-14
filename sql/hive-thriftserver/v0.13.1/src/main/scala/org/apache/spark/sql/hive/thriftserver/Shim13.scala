@@ -133,7 +133,11 @@ private[hive] class SparkExecuteStatementOperation(
       case TimestampType =>
         to +=  from.getAs[Timestamp](ordinal)
       case StringType | BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        to += from.getAs[String](ordinal)
+        val hiveString = result
+          .queryExecution
+          .asInstanceOf[HiveContext#QueryExecution]
+          .toHiveString(from.get(ordinal) -> dataTypes(ordinal))
+        to += hiveString
     }
   }
 
@@ -141,9 +145,9 @@ private[hive] class SparkExecuteStatementOperation(
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
-    val reultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
     if (!iter.hasNext) {
-      reultRowSet
+      resultRowSet
     } else {
       // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
       val maxRows = maxRowsL.toInt
@@ -160,10 +164,10 @@ private[hive] class SparkExecuteStatementOperation(
           }
           curCol += 1
         }
-        reultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
+        resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
       }
-      reultRowSet
+      resultRowSet
     }
   }
 

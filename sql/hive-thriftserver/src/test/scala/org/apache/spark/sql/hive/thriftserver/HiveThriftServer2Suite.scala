@@ -22,6 +22,7 @@ import java.net.ServerSocket
 import java.sql.{Date, DriverManager, Statement}
 import java.util.concurrent.TimeoutException
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
@@ -275,9 +276,8 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
       queries.foreach(statement.execute)
 
-      val resultSet = statement.executeQuery("SELECT key FROM test_4292")
-
       Seq(238, 86, 311, 27, 165).foreach { key =>
+        val resultSet = statement.executeQuery("SELECT key FROM test_4292")
         resultSet.next()
         assert(resultSet.getInt(1) === key)
       }
@@ -295,12 +295,35 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
       queries.foreach(statement.execute)
 
-      val resultSet = statement.executeQuery(
-        "SELECT CAST('2011-01-01' as date) FROM test_date LIMIT 1")
-
       assertResult(Date.valueOf("2011-01-01")) {
+        val resultSet = statement.executeQuery(
+          "SELECT CAST('2011-01-01' as date) FROM test_date LIMIT 1")
         resultSet.next()
         resultSet.getDate(1)
+      }
+    }
+  }
+
+  test("SPARK-4407 regression: Complex type support") {
+    withJdbcStatement() { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_map",
+        "CREATE TABLE test_map(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
+
+      queries.foreach(statement.execute)
+
+      assertResult("""{238:"val_238"}""") {
+        val resultSet = statement.executeQuery("SELECT MAP(key, value) FROM test_map LIMIT 1")
+        resultSet.next()
+        resultSet.getString(1)
+      }
+
+      assertResult("""["238","val_238"]""") {
+        val resultSet = statement.executeQuery(
+          "SELECT ARRAY(CAST(key AS STRING), value) FROM test_map LIMIT 1")
+        resultSet.next()
+        resultSet.getString(1)
       }
     }
   }
