@@ -491,10 +491,6 @@ private[spark] class TaskSchedulerImpl(
 
   override def applicationId(): String = backend.applicationId()
 
-  def numPendingTasks(): Int = synchronized {
-    activeTaskSets.values.map(_.allPendingTasks.size).sum
-  }
-
 }
 
 

@@ -28,7 +28,8 @@ import org.apache.spark.scheduler._
  * the scheduler queue is not drained in N seconds, then new executors are added. If the queue
  * persists for another M seconds, then more executors are added and so on. The number added
  * in each round increases exponentially from the previous round until an upper bound on the
- * number of executors has been reached.
+ * number of executors has been reached. The upper bound is based both on a configured property
+ * and on the number of tasks pending.
  *
  * The rationale for the exponential increase is twofold: (1) Executors should be added slowly
  * in the beginning in case the number of extra executors needed turns out to be small. Otherwise,
@@ -82,6 +83,12 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
 
+  // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
+  // allocation is only supported for YARN and the default number of cores per executor in YARN is
+  // 1, but it might need to be attained differently for different cluster managers
+  private val tasksPerExecutor =
+    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+
   validateSettings()
 
   // Number of executors to add in the next round
@@ -110,11 +117,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
 
-  // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
-  // allocation is only supported for YARN and the default number of cores per executor in YARN is
-  // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutor =
-    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+  private var listener: ExecutorAllocationListener = _
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -147,6 +150,9 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
+    if (tasksPerExecutor == 0) {
+      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.cores")
+    }
   }
 
   /**
@@ -160,7 +166,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * Register for scheduler callbacks to decide when to add and remove executors.
    */
   def start(): Unit = {
-    val listener = new ExecutorAllocationListener(this)
+    listener = new ExecutorAllocationListener(this)
     sc.addSparkListener(listener)
     startPolling()
   }
@@ -223,7 +229,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       numExecutorsToAdd = 1
       return 0
     }
-    val maxExecutorsPending = maxPendingExecutors(sc.taskScheduler.numPendingTasks)
+    val maxExecutorsPending = maxExecutorsNeededForTasks(listener.totalPendingTasks())
     if (numExecutorsPending >= maxExecutorsPending) {
       logDebug(s"Not adding executors because there are already $numExecutorsPending " +
         s"pending and pending tasks could only fill $maxExecutorsPending")
@@ -376,7 +382,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     removeTimes.remove(executorId)
   }
 
-  private def maxPendingExecutors(numPendingTasks: Int): Int = {
+  private def maxExecutorsNeededForTasks(numPendingTasks: Int): Int = {
     (numPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
   }
 
@@ -466,7 +472,15 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
     }
 
-    def totalPendingTasks(): Int = stageIdToNumTasks.values.sum
+    /**
+     * An estimate of the total number of pending tasks remaining for currently running stages. Does
+     * not account for tasks which may have failed and been resubmitted.
+     */
+    def totalPendingTasks(): Int = {
+      stageIdToNumTasks.map{ case (stageId, numTasks) =>
+        numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
+      }.sum
+    }
   }
 
 }

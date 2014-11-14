@@ -74,6 +74,4 @@ private[spark] trait TaskScheduler {
    */
   def applicationId(): String = appId
 
-  def numPendingTasks(): Int
-
 }
