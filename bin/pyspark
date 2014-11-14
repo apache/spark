@@ -132,7 +132,5 @@ if [[ "$1" =~ \.py$ ]]; then
   gatherSparkSubmitOpts "$@"
   exec "$FWDIR"/bin/spark-submit "${SUBMISSION_OPTS[@]}" "$primary" "${APPLICATION_OPTS[@]}"
 else
-  # PySpark shell requires special handling downstream
-  export PYSPARK_SHELL=1
   exec "$PYSPARK_DRIVER_PYTHON" $PYSPARK_DRIVER_PYTHON_OPTS
 fi

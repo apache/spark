@@ -139,7 +139,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
     // subprocess there already reads directly from our stdin, so we should avoid spawning a
     // thread that contends with the subprocess in reading from System.in.
     val isWindows = Utils.isWindows
-    val isPySparkShell = sys.env.contains("PYSPARK_SHELL")
+    val isPySparkShell = sys.env.contains("PYSPARK_INSIDE_PYTHON")
     if (!isWindows) {
       val stdinThread = new RedirectThread(System.in, process.getOutputStream, "redirect stdin")
       stdinThread.start()
