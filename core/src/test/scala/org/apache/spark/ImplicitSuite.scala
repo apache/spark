@@ -26,7 +26,6 @@ package org.apache.spark
  */
 class ImplicitSuite {
 
-
   // We only want to test if `implict` works well with the compiler, so we don't need a real
   // SparkContext.
   def mockSparkContext[T]: org.apache.spark.SparkContext = null
@@ -36,7 +35,7 @@ class ImplicitSuite {
 
   def testRddToPairRDDFunctions(): Unit = {
     val rdd: org.apache.spark.rdd.RDD[(Int, Int)] = mockRDD
-    rdd.groupByKey
+    rdd.groupByKey()
   }
 
   def testRddToAsyncRDDActions(): Unit = {
@@ -61,7 +60,6 @@ class ImplicitSuite {
     val rdd: org.apache.spark.rdd.RDD[Double] = mockRDD
     rdd.stats()
   }
-
 
   def testNumericRDDToDoubleRDDFunctions(): Unit = {
     val rdd: org.apache.spark.rdd.RDD[Int] = mockRDD
