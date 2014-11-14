@@ -85,4 +85,44 @@ class ImplicitSuite {
     val sc = mockSparkContext
     sc.accumulator(123F)
   }
+
+  def testIntWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[Int, Int]("/a/test/path")
+  }
+
+  def testLongWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[Long, Long]("/a/test/path")
+  }
+
+  def testDoubleWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[Double, Double]("/a/test/path")
+  }
+
+  def testFloatWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[Float, Float]("/a/test/path")
+  }
+
+  def testBooleanWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[Boolean, Boolean]("/a/test/path")
+  }
+
+  def testBytesWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[Array[Byte], Array[Byte]]("/a/test/path")
+  }
+
+  def testStringWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[String, String]("/a/test/path")
+  }
+
+  def testWritableWritableConverter(): Unit = {
+    val sc = mockSparkContext
+    sc.sequenceFile[org.apache.hadoop.io.Text, org.apache.hadoop.io.Text]("/a/test/path")
+  }
 }

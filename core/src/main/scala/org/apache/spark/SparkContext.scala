@@ -1510,32 +1510,40 @@ object SparkContext extends Logging {
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
 
-  implicit def intWritableConverter(): WritableConverter[Int] =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def intWritableConverter(): WritableConverter[Int] =
     simpleWritableConverter[Int, IntWritable](_.get)
 
-  implicit def longWritableConverter(): WritableConverter[Long] =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def longWritableConverter(): WritableConverter[Long] =
     simpleWritableConverter[Long, LongWritable](_.get)
 
-  implicit def doubleWritableConverter(): WritableConverter[Double] =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def doubleWritableConverter(): WritableConverter[Double] =
     simpleWritableConverter[Double, DoubleWritable](_.get)
 
-  implicit def floatWritableConverter(): WritableConverter[Float] =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def floatWritableConverter(): WritableConverter[Float] =
     simpleWritableConverter[Float, FloatWritable](_.get)
 
-  implicit def booleanWritableConverter(): WritableConverter[Boolean] =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def booleanWritableConverter(): WritableConverter[Boolean] =
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
     simpleWritableConverter[Array[Byte], BytesWritable](bw =>
       // getBytes method returns array which is longer then data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
     )
   }
 
-  implicit def stringWritableConverter(): WritableConverter[String] =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def stringWritableConverter(): WritableConverter[String] =
     simpleWritableConverter[String, Text](_.toString)
 
-  implicit def writableWritableConverter[T <: Writable]() =
+  @deprecated("An API for backforward compatibility", "1.2.0")
+  def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
 
   /**
@@ -1760,3 +1768,41 @@ private[spark] class WritableConverter[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable
+
+object WritableConverter {
+
+  // Helper objects for converting common types to Writable
+  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
+  : WritableConverter[T] = {
+    val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
+    new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
+  }
+
+  implicit def intWritableConverter(): WritableConverter[Int] =
+    simpleWritableConverter[Int, IntWritable](_.get)
+
+  implicit def longWritableConverter(): WritableConverter[Long] =
+    simpleWritableConverter[Long, LongWritable](_.get)
+
+  implicit def doubleWritableConverter(): WritableConverter[Double] =
+    simpleWritableConverter[Double, DoubleWritable](_.get)
+
+  implicit def floatWritableConverter(): WritableConverter[Float] =
+    simpleWritableConverter[Float, FloatWritable](_.get)
+
+  implicit def booleanWritableConverter(): WritableConverter[Boolean] =
+    simpleWritableConverter[Boolean, BooleanWritable](_.get)
+
+  implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
+    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+      // getBytes method returns array which is longer then data to be returned
+      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
+    )
+  }
+
+  implicit def stringWritableConverter(): WritableConverter[String] =
+    simpleWritableConverter[String, Text](_.toString)
+
+  implicit def writableWritableConverter[T <: Writable]() =
+    new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+}
