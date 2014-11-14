@@ -389,11 +389,11 @@
       </properties>
     </profile>
     <profile>
-      <!-- We add source directories specific to Scala 2.10 and 2.11 since some examples
-           work only in one and not the other -->
+      <!-- We add a source directory specific to Scala 2.10 since Kafka and Algebird
+           only work with it -->
       <id>scala-2.10</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property><name>!scala-2.11</name></property>
       </activation>
       <dependencies>
         <dependency>
@@ -424,65 +424,6 @@
                     <source>src/main/scala</source>
                     <source>scala-2.10/src/main/scala</source>
                     <source>scala-2.10/src/main/java</source>
-                  </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-scala-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/test/scala</source>
-                    <source>scala-2.10/src/test/scala</source>
-                    <source>scala-2.10/src/test/java</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>scala-2.11</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <dependencies>
-        <!-- Streaming Kafka and zeromq modules are disabled for now. -->
-      </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>add-scala-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/main/scala</source>
-                    <source>scala-2.11/src/main/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-scala-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/test/scala</source>
-                    <source>scala-2.11/src/test/scala</source>
                   </sources>
                 </configuration>
               </execution>

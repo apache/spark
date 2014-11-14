@@ -100,8 +100,11 @@ object SparkBuild extends PomBuild {
           "conjunction with environment variable.")
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+
     if (profiles.exists(_.contains("scala-"))) {
       profiles
+    } else if (System.getProperty("scala-2.11") != null) {
+      profiles ++ Seq("scala-2.11")
     } else {
       println("Enabled default scala profile")
       profiles ++ Seq("scala-2.10")
