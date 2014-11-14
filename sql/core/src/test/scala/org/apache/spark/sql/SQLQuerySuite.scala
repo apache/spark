@@ -72,6 +72,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       2.5)
   }
 
+  test("aggregation with codegen") {
+    val originalValue = codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sql("SELECT key FROM testData GROUP BY key").collect()
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
       sql("SELECT LAST(n) FROM lowerCaseData"),
