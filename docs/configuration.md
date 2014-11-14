@@ -52,7 +52,7 @@ Then, you can supply configuration values at runtime:
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar 
 {% endhighlight %}
 
-The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
+The Spark shell and [`spark-submit`](submitting-applications.html)
 tool support two ways to load configurations dynamically. The first are command line options,
 such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
 flag, but uses special flags for properties that play a part in launching the Spark application.
