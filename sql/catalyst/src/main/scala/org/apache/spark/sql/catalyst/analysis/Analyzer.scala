@@ -70,8 +70,6 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       EliminateAnalysisOperators)
   )
 
-  private def trimAliases(e: Expression) = e.transform { case Alias(c, _) => c }
-
   /**
    * Makes sure all attributes and logical plans have been resolved.
    */
@@ -98,7 +96,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   object TrimGroupingAliases extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Aggregate(groups, aggs, child) =>
-        Aggregate(groups.map(trimAliases), aggs, child)
+        Aggregate(groups.map(_.transform { case Alias(c, _) => c }), aggs, child)
     }
   }
 
@@ -118,7 +116,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
           }
 
           aggregateExprs.find { e =>
-            !isValidAggregateExpression(trimAliases(e))
+            !isValidAggregateExpression(e.transform {
+              // Should trim aliases around `GetField`s. These aliases are introduced while
+              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+              // (Should we just turn `GetField` into a `NamedExpression`?)
+              case Alias(g: GetField, _) => g
+            })
           }.foreach { e =>
             throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
           }

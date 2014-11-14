@@ -146,17 +146,23 @@ object PartialAggregation {
           case other => (other, Alias(other, "PartialGroup")())
         }.toMap
 
-        def trimAliases(e: Expression) = e.transform { case Alias(c, _) => c }
+        def trimGetFieldAliases(e: Expression) = e.transform { case Alias(g: GetField, _) => g }
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
         val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
           case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
-          case e: Expression if namedGroupingExpressions.contains(e) =>
-            namedGroupingExpressions(e).toAttribute
-          case e: Expression if namedGroupingExpressions.contains(trimAliases(e)) =>
-            namedGroupingExpressions(trimAliases(e)).toAttribute
+
+          case e: Expression =>
+            // Should trim aliases around `GetField`s. These aliases are introduced while
+            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+            // (Should we just turn `GetField` into a `NamedExpression`?)
+            namedGroupingExpressions
+              .get(e)
+              .orElse(namedGroupingExpressions.get(trimGetFieldAliases(e)))
+              .map(_.toAttribute)
+              .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
         val partialComputation =
