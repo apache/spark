@@ -286,6 +286,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       if (childOutputDataTypes == tableOutputDataTypes) {
         p
+      } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
+        childOutputDataTypes.zip(tableOutputDataTypes)
+          .forall { case (left, right) => DataType.equalsIgnoreNullability(left, right) }) {
+        // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
+        // use InsertIntoHiveTable instead of InsertIntoTable.
+        InsertIntoHiveTable(p.table, p.partition, p.child, p.overwrite)
       } else {
         // Only do the casting when child output data types differ from table output data types.
         val castedChildOutput = child.output.zip(table.output).map {
@@ -314,6 +320,27 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       databaseName: Option[String], tableName: String): Unit = ???
 
   override def unregisterAllTables() = {}
+}
+
+/**
+ * A logical plan representing insertion into Hive table.
+ * This plan ignores nullability of ArrayType, MapType, StructType unlike InsertIntoTable
+ * because Hive table doesn't have nullability for ARRAY, MAP, STRUCT types.
+ */
+private[hive] case class InsertIntoHiveTable(
+    table: LogicalPlan,
+    partition: Map[String, Option[String]],
+    child: LogicalPlan,
+    overwrite: Boolean)
+  extends LogicalPlan {
+
+  override def children = child :: Nil
+  override def output = child.output
+
+  override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
+    case (childAttr, tableAttr) =>
+      DataType.equalsIgnoreNullability(childAttr.dataType, tableAttr.dataType)
+  }
 }
 
 /**
