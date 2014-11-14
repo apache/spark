@@ -35,6 +35,8 @@
     <sbt.project.name>repl</sbt.project.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
+    <extra.source.dir>scala-2.10/src/main/scala</extra.source.dir>
+    <extra.testsource.dir>scala-2.10/src/test/scala</extra.testsource.dir>
   </properties>
 
   <dependencies>
@@ -122,86 +124,51 @@
           </environmentVariables>
         </configuration>
       </plugin>
+      <!-- Include a source dir depending on the Scala version -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-scala-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/main/scala</source>
+                <source>${extra.source.dir}</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>add-scala-test-sources</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/test/scala</source>
+                <source>${extra.testsource.dir}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
   <profiles>
     <profile>
-      <id>scala-2.10</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>add-scala-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/main/scala</source>
-                    <source>scala-2.10/src/main/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-scala-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/test/scala</source>
-                    <source>scala-2.10/src/test/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
       <id>scala-2.11</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>add-scala-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/main/scala</source>
-                    <source>scala-2.11/src/main/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-scala-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/test/scala</source>
-                    <source>scala-2.11/src/test/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
+      <activation>
+        <property><name>scala-2.11</name></property>
+      </activation>
+      <properties>
+        <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>
+        <extra.testsource.dir>scala-2.11/src/test/scala</extra.testsource.dir>
+      </properties>
     </profile>
   </profiles>
 </project>
