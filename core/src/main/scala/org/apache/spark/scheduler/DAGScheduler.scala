@@ -788,19 +788,18 @@ class DAGScheduler(
     }
   }
 
-  private def tryOrAbortStageFromUnserializableTask[T](stage: Stage, block: => Unit) = {
+  private def tryOrAbortStageFromUnserializableTask[T](stage: Stage, block: => T): Option[T] = {
     try {
-      block
-      true
+      Some(block)
     } catch {
       case e: NotSerializableException =>
         abortStage(stage, "Task not serializable: " + e.toString)
         runningStages -= stage
-        false
+        None
       case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
         abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
-        false
+        None
     }
   }
 
@@ -841,8 +840,7 @@ class DAGScheduler(
     // task gets a different copy of the RDD. This provides stronger isolation between tasks that
     // might modify state of objects referenced in their closures. This is necessary in Hadoop
     // where the JobConf/Configuration object is not thread-safe.
-    var taskBinary: Broadcast[Array[Byte]] = null
-    if (!tryOrAbortStageFromUnserializableTask(stage, {
+    val taskBinaryOption = tryOrAbortStageFromUnserializableTask(stage, {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] =
@@ -851,54 +849,17 @@ class DAGScheduler(
         } else {
           closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func): AnyRef).array()
         }
-      taskBinary = sc.broadcast(taskBinaryBytes)
-    })) {
-      return
+      sc.broadcast(taskBinaryBytes)
+    })
+
+    var taskBinary : Broadcast[Array[Byte]] = null
+    taskBinaryOption match {
+      case Some(value) => taskBinary = value
+      case None => return
     }
 
-    var tasks: Seq[Task[_]] = null
-    var isSerializationChecked = false
-    if (!tryOrAbortStageFromUnserializableTask(stage, {
-      // In the case of parallel collection partitions, need to serialize a partition
-      // that is non-empty in values. The check below may check if the first task can
-      // be serialized but this is misleading if the first task contains a partition
-      // with no values.
-      //
-      // If other partition types can run into this issue as well, that is, some
-      // partitions are serializable while others aren't in the same task set, then
-      // a more rigorous but expensive serialization of all tasks may be necessary.
-      def verifyParallelCollectionPartition(part: Partition) {
-        if (!isSerializationChecked && part.isInstanceOf[ParallelCollectionPartition[_]]) {
-          val parallelCollectionPart = part.asInstanceOf[ParallelCollectionPartition[_]]
-          if (!parallelCollectionPart.values.isEmpty) {
-            closureSerializer.serialize(parallelCollectionPart)
-            isSerializationChecked = true
-          }
-        }
-      }
-
-      tasks = if (stage.isShuffleMap) {
-        partitionsToCompute.map { id =>
-          val locs = getPreferredLocs(stage.rdd, id)
-          val part = stage.rdd.partitions(id)
-          verifyParallelCollectionPartition(part)
-          new ShuffleMapTask(stage.id, taskBinary, part, locs)
-        }
-      } else {
-        val job = stage.resultOfJob.get
-        partitionsToCompute.map { id =>
-          val p: Int = job.partitions(id)
-          val part = stage.rdd.partitions(p)
-          verifyParallelCollectionPartition(part)
-          val locs = getPreferredLocs(stage.rdd, p)
-          new ResultTask(stage.id, taskBinary, part, locs, id)
-        }
-      }
-    })) {
-      return
-    }
-
-    if (tasks.size > 0) {
+    val tasksOption = tryOrAbortStageFromUnserializableTask(stage, {
+      var isSerializationChecked = false
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
       // exception here because it would be fairly hard to catch the non-serializable exception
       // down the road, where we have several different implementations for local scheduler and
@@ -906,12 +867,54 @@ class DAGScheduler(
       //
       // We've already serialized RDDs and closures in taskBinary, but here we check for all other
       // objects such as Partition.
-      if (!tryOrAbortStageFromUnserializableTask(stage, {
-        closureSerializer.serialize(tasks.head)
-      })) {
-        return
+
+      // In the case of parallel collection partitions, need to serialize a partition
+      // that is non-empty in values. In the case of parallel collection partitions, some
+      // partitions may be serializable (the empty ones) while others aren't (malformed non-empty ones).
+      //
+      // If other partition types can run into this issue as well, that is, some
+      // partitions are serializable while others aren't in the same task set, then
+      // a more rigorous but expensive serialization of all tasks may be necessary.
+      def shouldVerifyTask(part: Partition): Boolean = {
+        !isSerializationChecked &&
+          (!part.isInstanceOf[ParallelCollectionPartition[_]]
+            || !part.asInstanceOf[ParallelCollectionPartition[_]].values.isEmpty)
+      }
+      def verifyTask(task : Task[_], part : Partition) {
+        if (shouldVerifyTask(part)) {
+            closureSerializer.serialize(task)
+            isSerializationChecked = true
+        }
       }
 
+      if (stage.isShuffleMap) {
+        partitionsToCompute.map { id =>
+          val locs = getPreferredLocs(stage.rdd, id)
+          val part = stage.rdd.partitions(id)
+          val task = new ShuffleMapTask(stage.id, taskBinary, part, locs)
+          verifyTask(task, part)
+          task
+        }
+      } else {
+        val job = stage.resultOfJob.get
+        partitionsToCompute.map { id =>
+          val p: Int = job.partitions(id)
+          val part = stage.rdd.partitions(p)
+          val locs = getPreferredLocs(stage.rdd, p)
+          val task = new ResultTask(stage.id, taskBinary, part, locs, id)
+          verifyTask(task, part)
+          task
+        }
+      }
+    })
+
+    var tasks : Seq[Task[_]] = null
+    tasksOption match {
+      case Some(value) => tasks = value
+      case None => return
+    }
+
+    if (tasks.size > 0) {
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingTasks ++= tasks
       logDebug("New pending tasks: " + stage.pendingTasks)
