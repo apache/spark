@@ -32,13 +32,13 @@ private[spark] class LogSink(val property: Properties, val registry: MetricRegis
   
     val LOG_KEY_PERIOD = "period"
     val LOG_KEY_UNIT = "unit"
-    val LOG_KEY_DIR  = "directory"
+    val LOG_KEY_FILE  = "file"
     val LOG_KEY_MAX_FILE_SIZE = "maxFileSize"
     val LOG_KEY_MAX_BACKUP_INDEX = "maxFileIndex"
     
     val LOG_DEFAULT_PERIOD = 10
     val LOG_DEFAULT_UNIT = "SECONDS"
-    val LOG_DEFAULT_DIR = "/tmp"
+    val LOG_DEFAULT_FILE = "/tmp/metrics"
     val LOG_DEFAULT_MAX_FILE_SIZE = "50mb"
     val LOG_DEFAULT_BACKUP_INDEX = 10
 
@@ -54,13 +54,13 @@ private[spark] class LogSink(val property: Properties, val registry: MetricRegis
 
     MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-    val pollDir = Option(property.getProperty(LOG_KEY_DIR)) match {
+    val pollFile = Option(property.getProperty(LOG_KEY_FILE)) match {
       case Some(s) => s
-      case None => LOG_DEFAULT_DIR
+      case None => LOG_DEFAULT_FILE
     }
     
     val maxFileSize = Option(property.getProperty(LOG_KEY_MAX_FILE_SIZE)) match {
-      case Some(s) => s
+      case Some(s) => s.toString
       case None => LOG_DEFAULT_MAX_FILE_SIZE
     }
     
@@ -73,7 +73,7 @@ private[spark] class LogSink(val property: Properties, val registry: MetricRegis
         .formatFor(Locale.US)
         .convertDurationsTo(TimeUnit.MILLISECONDS)
         .convertRatesTo(TimeUnit.SECONDS)
-        .build(pollDir, maxFileSize, maxBackupIndex)
+        .build(pollFile, maxFileSize, maxBackupIndex)
 
     override def start() {
       reporter.start(pollPeriod, pollUnit)
