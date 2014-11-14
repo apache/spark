@@ -234,6 +234,30 @@ setMethod("checkpoint",
             rdd
           })
 
+#' Gets the number of partitions of an RDD
+#'
+#' @param rdd A RDD.
+#' @return the number of partitions of rdd as an integer.
+#' @rdname numPartitions
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' numParititions(rdd)  # 2L
+#'}
+setGeneric("numPartitions", function(rdd) { standardGeneric("numPartitions") })
+
+#' @rdname numPartitions
+#' @aliases numPartitions,RDD-method
+setMethod("numPartitions",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            jrdd <- getJRDD(rdd)
+            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
+            .jcall(partitions, "I", "size")
+          })
+
 #' Collect elements of an RDD
 #'
 #' @description
@@ -382,11 +406,8 @@ setGeneric("countByValue", function(rdd) { standardGeneric("countByValue") })
 setMethod("countByValue",
           signature(rdd = "RDD"),
           function(rdd) {
-            jrdd <- getJRDD(rdd)
-            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
-            numPartitions <- .jcall(partitions, "I", "size")
             ones <- lapply(rdd, function(item) { list(item, 1L) })
-            collect(reduceByKey(ones, `+`, numPartitions))
+            collect(reduceByKey(ones, `+`, numPartitions(rdd)))
           })
 
 #' Count the number of elements for each key, and return the result to the
@@ -714,8 +735,8 @@ setMethod("take",
             resList <- list()
             index <- -1
             jrdd <- getJRDD(rdd)
-            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
-            numPartitions <- .jcall(partitions, "I", "size")
+            numPartitions <- numPartitions(rdd)
+            
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
             while (TRUE) {
@@ -762,9 +783,7 @@ setMethod("distinct",
           signature(rdd = "RDD", numPartitions = "missingOrInteger"),
           function(rdd, numPartitions) {
             if (missing(numPartitions)) {
-              jrdd <- getJRDD(rdd)
-              partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
-              numPartitions <- .jcall(partitions, "I", "size")
+              numPartitions <- SparkR::numPartitions(rdd)
             }
             identical.mapped <- lapply(rdd, function(x) { list(x, NULL) })
             reduced <- reduceByKey(identical.mapped, 

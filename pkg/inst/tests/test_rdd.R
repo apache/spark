@@ -10,6 +10,11 @@ rdd <- parallelize(sc, nums, 2L)
 intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
 intRdd <- parallelize(sc, intPairs, 2L)
 
+test_that("get number of partitions in RDD", {
+  expect_equal(numPartitions(rdd), 2)
+  expect_equal(numPartitions(intRdd), 2)
+})
+
 test_that("count and length on RDD", {
    expect_equal(count(rdd), 10)
    expect_equal(length(rdd), 10)
