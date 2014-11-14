@@ -18,7 +18,46 @@
 import cProfile
 import pstats
 import os
+import atexit
 from pyspark.accumulators import PStatsParam
+
+
+class ProfilerCollector(object):
+    """
+    This class keeps track of different profilers on a per
+    stage basis. Also this is used to create new profilers for
+    the different stages.
+    """
+
+    def __init__(self, profiler):
+        self.profilers = []
+        self.profile_dump_path = None
+        self.profiler = profiler if profiler else BasicProfiler
+
+    def add_profiler(self, id, profiler):
+        if not self.profilers:
+            if self.profile_dump_path:
+                atexit.register(self.dump_profiles)
+            else:
+                atexit.register(self.show_profiles)
+
+        self.profilers.append([id, profiler, False])
+
+    def dump_profiles(self):
+        for id, profiler, _ in self.profilers:
+            profiler.dump(id, self.profile_dump_path)
+        self.profilers = []
+
+    def show_profiles(self):
+        """ Print the profile stats to stdout """
+        for i, (id, profiler, showed) in enumerate(self.profilers):
+            if not showed and profiler:
+                profiler.show(id)
+                # mark it as showed
+                self.profilers[i][2] = True
+
+    def new_profiler(self, ctx):
+        return self.profiler(ctx)
 
 
 class BasicProfiler(object):

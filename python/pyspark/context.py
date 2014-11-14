@@ -33,7 +33,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
-from pyspark.profiler import BasicProfiler
+from pyspark.profiler import ProfilerCollector
 
 from py4j.java_collections import ListConverter
 
@@ -192,14 +192,12 @@ class SparkContext(object):
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
-
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
-            self.profiler = profiler if profiler else BasicProfiler
+            self.profiler_collector = ProfilerCollector(profiler)
+            self.profiler_collector.profiles_dump_path = self._conf.get("spark.python.profile.dump", None)
         else:
-            self.profiler = None
-
-        self._profile_stats = []
+            self.profiler_collector = None
 
     def _initialize_context(self, jconf):
         """
@@ -826,18 +824,10 @@ class SparkContext(object):
         self._profile_stats.append([id, profiler, False])
 
     def show_profiles(self):
-        """ Print the profile stats to stdout """
-        for i, (id, profiler, showed) in enumerate(self._profile_stats):
-            if not showed and profiler:
-                profiler.show(id)
-                # mark it as showed
-                self._profile_stats[i][2] = True
+        self.profiler_collector.show_profiles()
 
-
-    def dump_profiles(self, path):
-        for id, profiler, _ in self._profile_stats:
-            profiler.dump(id, path)
-        self._profile_stats = []
+    def dump_profiles(self):
+        self.profiler_collector.dump_profiles()
 
 
 def _test():

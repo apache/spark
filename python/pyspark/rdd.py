@@ -2072,8 +2072,8 @@ class PipelinedRDD(RDD):
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
 
-        if self.ctx.profiler:
-            profiler = self.ctx.profiler(self.ctx)
+        if self.ctx.profiler_collector:
+            profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
         else:
             profiler = None
 
@@ -2102,7 +2102,7 @@ class PipelinedRDD(RDD):
 
         if profiler:
             self._id = self._jrdd_val.id()
-            self.ctx._add_profiler(self._id, profiler)
+            self.ctx.profiler_collector.add_profiler(self._id, profiler)
         return self._jrdd_val
 
     def id(self):

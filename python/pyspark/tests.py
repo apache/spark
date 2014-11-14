@@ -681,7 +681,7 @@ class ProfilerTests(PySparkTestCase):
     def test_profiler(self):
         self.do_computation()
 
-        profilers = self.sc._profile_stats
+        profilers = self.sc.profiler_collector.profilers
         self.assertEqual(1, len(profilers))
         id, acc, _ = profilers[0]
         stats = acc.value
@@ -700,11 +700,11 @@ class ProfilerTests(PySparkTestCase):
             def show_profiles(self, profilers):
                 return "Custom formatting"
 
-        self.sc.profiler = TestCustomProfiler
+        self.sc.profiler_collector.profiler = TestCustomProfiler
 
         self.do_computation()
 
-        profilers = self.sc._profile_stats
+        profilers = self.sc.profiler_collector.profilers
         self.assertEqual(1, len(profilers))
         id, profiler, _ = profilers[0]
         self.assertTrue(isinstance(profiler, TestCustomProfiler))
