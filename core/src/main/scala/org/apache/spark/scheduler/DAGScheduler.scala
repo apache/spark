@@ -832,7 +832,7 @@ class DAGScheduler(
           closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
 
-      //Before serialization print out the RDD and its references
+      // Before serialization print out the RDD and its references
       logDebug(stage.rdd.toDebugString)
 
       taskBinary = sc.broadcast(taskBinaryBytes)
