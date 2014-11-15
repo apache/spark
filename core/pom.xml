@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-core_2.10</artifactId>
+  <artifactId>spark-core_${scala.binary.version}</artifactId>
   <properties>
     <sbt.project.name>core</sbt.project.name>
   </properties>

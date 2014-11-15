@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming_2.10</artifactId>
+  <artifactId>spark-streaming_${scala.binary.version}</artifactId>
   <properties>
     <sbt.project.name>streaming</sbt.project.name>
   </properties>
