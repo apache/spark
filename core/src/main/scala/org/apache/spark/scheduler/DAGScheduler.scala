@@ -845,14 +845,14 @@ class DAGScheduler(
       // For ResultTask, serialize and broadcast (rdd, func).
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
-          closureSerializer.serialize((stage.rdd, stage.shuffleDep.get): AnyRef).array()
+          closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
         } else {
-          closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func): AnyRef).array()
+          closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
       sc.broadcast(taskBinaryBytes)
     })
 
-    var taskBinary : Broadcast[Array[Byte]] = null
+    var taskBinary: Broadcast[Array[Byte]] = null
     taskBinaryOption match {
       case Some(value) => taskBinary = value
       case None => return
@@ -880,7 +880,7 @@ class DAGScheduler(
           (!part.isInstanceOf[ParallelCollectionPartition[_]]
             || !part.asInstanceOf[ParallelCollectionPartition[_]].values.isEmpty)
       }
-      def verifyTask(task : Task[_], part : Partition) {
+      def verifyTask(task: Task[_], part: Partition) {
         if (shouldVerifyTask(part)) {
             closureSerializer.serialize(task)
             isSerializationChecked = true
@@ -908,7 +908,7 @@ class DAGScheduler(
       }
     })
 
-    var tasks : Seq[Task[_]] = null
+    var tasks: Seq[Task[_]] = null
     tasksOption match {
       case Some(value) => tasks = value
       case None => return
