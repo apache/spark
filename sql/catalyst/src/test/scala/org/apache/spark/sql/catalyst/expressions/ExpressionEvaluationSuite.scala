@@ -396,6 +396,16 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(-9.95), DecimalType(1, 0)), null)
     checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(3, 1)), Decimal(-10.0))
     checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(1, 0)), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType.Unlimited), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType(2, 1)), null)
   }
 
   test("timestamp") {
