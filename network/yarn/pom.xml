@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-network-yarn_2.10</artifactId>
+  <artifactId>spark-network-yarn_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN Shuffle Service</name>
   <url>http://spark.apache.org/</url>
