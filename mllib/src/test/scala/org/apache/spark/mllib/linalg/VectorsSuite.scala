@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.scalatest.FunSuite
 import breeze.linalg.{DenseMatrix => BDM}
+import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
 
