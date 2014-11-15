@@ -31,7 +31,7 @@ import java.util.List;
 /**
  * Example of using Spark's status APIs from Java.
  */
-public final class JavaStatusAPIDemo {
+public final class JavaStatusTrackerDemo {
 
   public static final String APP_NAME = "JavaStatusAPIDemo";
 
@@ -58,8 +58,8 @@ public final class JavaStatusAPIDemo {
         continue;
       }
       int currentJobId = jobIds.get(jobIds.size() - 1);
-      SparkJobInfo jobInfo = sc.getJobInfo(currentJobId);
-      SparkStageInfo stageInfo = sc.getStageInfo(jobInfo.stageIds()[0]);
+      SparkJobInfo jobInfo = sc.statusTracker().getJobInfo(currentJobId);
+      SparkStageInfo stageInfo = sc.statusTracker().getStageInfo(jobInfo.stageIds()[0]);
       System.out.println(stageInfo.numTasks() + " tasks total: " + stageInfo.numActiveTasks() +
           " active, " + stageInfo.numCompletedTasks() + " complete");
     }
