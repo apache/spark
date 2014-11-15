@@ -1,9 +1,12 @@
 # Utilities and Helpers
 
-# Given a JList<T>, returns an R list containing the same elements.  Takes care
-# of deserializations and type conversions.
-convertJListToRList <- function(jList, flatten) {
-  size <- .jcall(jList, "I", "size")
+# Given a JList<T>, returns an R list containing the same elements, the number
+# of which is optionally upper bounded by `size` (by default, return all elements).
+# Takes care of deserializations and type conversions.
+convertJListToRList <- function(jList, flatten, size = NULL) {
+  if (is.null(size)) {
+    size <- .jcall(jList, "I", "size")
+  }
   results <- if (size > 0) {
     lapply(0:(size - 1),
            function(index) {
