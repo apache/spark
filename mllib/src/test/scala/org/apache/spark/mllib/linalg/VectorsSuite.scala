@@ -19,6 +19,8 @@ package org.apache.spark.mllib.linalg
 
 import org.scalatest.FunSuite
 
+import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM}
+
 import org.apache.spark.SparkException
 
 class VectorsSuite extends FunSuite {
@@ -165,5 +167,11 @@ class VectorsSuite extends FunSuite {
     for (v <- Seq(dv0, dv1, sv0, sv1)) {
       assert(v === udt.deserialize(udt.serialize(v)))
     }
+  }
+
+  test("fromBreeze") {
+    val x = BDM.zeros[Double](10, 10)
+    val v = Vectors.fromBreeze(x(::, 0))
+    assert(v.size === x.rows)
   }
 }
