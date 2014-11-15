@@ -611,8 +611,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     schemaRDD1.registerTempTable("applySchema1")
     val schemaRDD2 = schemaRDD1.toSchemaRDD
     val result = schemaRDD2.toJSON.collect()
-    assert(result(0) == "{\"f1\":1,\"f3\":true,\"f2\":\"A1\"}")
-    assert(result(3) == "{\"f1\":4,\"f3\":true,\"f2\":\"D4\",\"f4\":2147483644}")
+    assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true}")
+    assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":2147483644}")
   }
 
   test("apply schema") {

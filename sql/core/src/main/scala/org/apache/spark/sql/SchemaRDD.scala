@@ -18,9 +18,12 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList, HashMap => JHMap}
+import java.io.StringWriter
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.storage.StorageLevel
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.core.JsonFactory
+
 import scala.collection.JavaConversions._
 
 import net.razorvine.pickle.Pickler
@@ -133,23 +136,52 @@ class SchemaRDD(
 
   /** Transforms a single Row to JSON using Jackson
     *
-    * @param row The row to convert
+    * @param jf a JsonFactory object to construct a JsonGenerator
     * @param rowSchema the schema object used for conversion
+    * @param row The row to convert
     */
-  private def rowToJSON(row: Row, rowSchema: StructType): String = {
-      val objMapper = new ObjectMapper
-      val rowMap = new JHMap[String,Any]()
-      for (i <- 0 to row.length-1) {
-	  if (!row.isNullAt(i))
-	  {
-	      rowMap.put(rowSchema.fields(i).name,row.get(i))
-	  }
+  private def rowToJSON(rowSchema: StructType, jf: JsonFactory)(row: Row): String = {
+      val writer = new StringWriter()
+      val gen = jf.createGenerator(writer)
+
+      def valWriter: (DataType, Any) => Unit = {
+        case(_, null)  => //do nothing
+        case(StringType, v: String) => gen.writeString(v)
+        case(TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
+        // case(ShortType | LongType | IntegerType | FloatType | DoubleType, v) =>
+          // gen.writeNumber(v)
+        case(IntegerType, v: Int) => gen.writeNumber(v)
+        case(ShortType, v: Short) => gen.writeNumber(v)
+        case(FloatType, v: Float) => gen.writeNumber(v)
+        case(DoubleType, v: Double) => gen.writeNumber(v)
+        case(LongType, v: Long) => gen.writeNumber(v)
+        case(DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
+        case(ByteType, v: Byte) => gen.writeNumber(v.toInt)
+        case(BinaryType, v: Array[Byte]) => gen.writeBinary(v)
+        case(BooleanType, v: Boolean) => gen.writeBoolean(v)
+
+        case(ArrayType(ty, _), v: Seq[_] ) =>
+	         gen.writeStartArray()
+	         v.foreach(valWriter(ty,_))
+	         gen.writeEndArray()
+
+        case(StructType(ty), v: Seq[_]) =>
+	         gen.writeStartObject()
+	         ty.zip(v).foreach {
+	            case(_, null) => //do nothing
+	            case(field, v) =>
+	              gen.writeFieldName(field.name)
+	              valWriter(field.dataType, v)
+	         }
+	         gen.writeEndObject()
+
       }
-      
-      val result = objMapper.writeValueAsString(rowMap)
-      println(result)
-      result
+
+      valWriter(rowSchema, row)
+      gen.close()
+      writer.toString
   }
+
 
 
   /** Returns a new RDD of JSON strings, one string per row
@@ -158,7 +190,11 @@ class SchemaRDD(
   */
   def toJSON: RDD[String] = {
     val rowSchema = this.schema
-    this.map{row => rowToJSON(row, rowSchema)}
+    this.mapPartitions { iter =>
+      val jf = new JsonFactory()
+      iter.map(rowToJSON(rowSchema, jf))
+    }
+
   }
 
 
