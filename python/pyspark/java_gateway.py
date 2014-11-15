@@ -46,7 +46,7 @@ def launch_gateway():
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
             env = dict(os.environ)
-            env["PYSPARK"] = "1"  # tell JVM to exit after python exits
+            env["IS_SUBPROCESS"] = "1"  # tell JVM to exit after python exits
             proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func, env=env)
         else:
             # preexec_fn not supported on Windows
