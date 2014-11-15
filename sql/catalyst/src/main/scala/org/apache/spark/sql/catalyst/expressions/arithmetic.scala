@@ -142,7 +142,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  * A function that calculates bitwise or(|) of two numbers.
  */
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
-  def symbol = "&"
+  def symbol = "|"
 
   override def evalInternal(evalE1: EvaluatedType, evalE2: EvaluatedType): Any = dataType match {
     case ByteType => (evalE1.asInstanceOf[Byte] | evalE2.asInstanceOf[Byte]).toByte
