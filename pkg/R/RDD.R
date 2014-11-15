@@ -754,7 +754,10 @@ setMethod("take",
 
               size <- num - length(resList)
               # elems is capped to have at most `size` elements
-              elems <- convertJListToRList(partition, flatten = TRUE, size = size)
+              elems <- convertJListToRList(partition,
+                                           flatten = TRUE,
+                                           logicalUpperBound = size,
+                                           serialized = rdd@env$serialized)
               # TODO: Check if this append is O(n^2)?
               resList <- append(resList, elems)
             }
