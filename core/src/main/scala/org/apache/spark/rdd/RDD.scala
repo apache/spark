@@ -1196,7 +1196,7 @@ abstract class RDD[T: ClassTag](
   /** A private method to execute checkpointing with the provided f function */
   private[spark] def checkpoint(f: Option[RDD[T] => RDD[T]]) {
     if (context.checkpointDir.isEmpty) {
-      throw new Exception("Checkpoint directory has not been set in the SparkContext")
+      throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new RDDCheckpointData(this, f))
       checkpointData.get.markForCheckpoint()
