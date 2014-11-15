@@ -160,11 +160,11 @@
       during compilation if the dependency is transivite (e.g. "bagel/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
-    <parquet.deps.scope>compile</parquet.deps.scope>
     <flume.deps.scope>compile</flume.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hbase.deps.scope>compile</hbase.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
+    <parquet.deps.scope>compile</parquet.deps.scope>
 
     <!--
       Overridable test home. So that you can call individual pom files directory without
@@ -1550,6 +1550,9 @@
       maven does not complain when they're provided on the command line for a sub-module
       that does not have them.
     -->
+    <profile>
+      <id>flume-provided</id>
+    </profile>
     <profile>
       <id>hadoop-provided</id>
     </profile>
