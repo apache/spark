@@ -753,9 +753,10 @@ setMethod("take",
               partition <- partitionArr[[1]]
 
               size <- num - length(resList)
+              # elems is capped to have at most `size` elements
               elems <- convertJListToRList(partition, flatten = TRUE, size = size)
               # TODO: Check if this append is O(n^2)?
-              resList <- append(resList, head(elems, n = size))
+              resList <- append(resList, elems)
             }
             resList
           })

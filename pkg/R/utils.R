@@ -5,10 +5,8 @@
 # Takes care of deserializations and type conversions.
 convertJListToRList <- function(jList, flatten, size = NULL) {
   arrSize <- .jcall(jList, "I", "size")
-  size <- min(arrSize, size)
-
-  results <- if (size > 0) {
-    lapply(0:(size - 1),
+  results <- if (arrSize > 0) {
+    lapply(0:(arrSize - 1),
            function(index) {
              jElem <- .jcall(jList,
                              "Ljava/lang/Object;",
@@ -19,7 +17,7 @@ convertJListToRList <- function(jList, flatten, size = NULL) {
              obj <- .jsimplify(jElem)
 
              if (inherits(obj, "jobjRef") && .jinstanceof(obj, "[B")) {
-               # RDD[Array[Byte]].
+               # RDD[Array[Byte]]. `obj` is a whole partition.
 
                rRaw <- .jevalArray(.jcastToArray(jElem))
                res <- unserialize(rRaw)
@@ -52,11 +50,20 @@ convertJListToRList <- function(jList, flatten, size = NULL) {
   }
 
   if (flatten) {
-    as.list(unlist(results, recursive = FALSE))
+    r <- as.list(unlist(results, recursive = FALSE))
   } else {
-    as.list(results)
+    r <- as.list(results)
   }
 
+  if (!is.null(size)) {
+    # Invariant: whenever `size` is passed in, it applies to the
+    # logical representation of the data, namely the user doesn't
+    # and shouldn't think about byte arrays and/or serde. Hence we
+    # apply the upper bound directly after the flatten semantics.
+    r <- head(r, n = size)
+  } else {
+    r
+  }
 }
 
 # Given a Java array of byte arrays, deserilize each, returning an R list of

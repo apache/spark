@@ -17,8 +17,11 @@ jsc <- sparkR.init()
 
 test_that("take() gives back the original elements in correct count and order", {
   numVectorRDD <- parallelize(jsc, numVector, 10)
+  # case: number of elements to take is less than the size of the first partition
   expect_equal(take(numVectorRDD, 1), as.list(head(numVector, n = 1)))
-  expect_equal(take(numVectorRDD, 3), as.list(head(numVector, n = 3)))
+  # case: number of elements to take is the same as the size of the first partition
+  expect_equal(take(numVectorRDD, 11), as.list(head(numVector, n = 11)))
+  # case: number of elements to take is greater than all elements
   expect_equal(take(numVectorRDD, length(numVector)), as.list(numVector))
   expect_equal(take(numVectorRDD, length(numVector) + 1), as.list(numVector))
 
