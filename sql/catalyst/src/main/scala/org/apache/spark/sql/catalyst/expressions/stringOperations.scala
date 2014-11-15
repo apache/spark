@@ -257,16 +257,9 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     if ((string == null) || (po == null) || (ln == null)) {
       null
     } else {
-      val start = po match {
-            case k if k.isInstanceOf[Byte] => k.asInstanceOf[Byte]
-            case k if k.isInstanceOf[Short] => k.asInstanceOf[Short]
-            case k => k.asInstanceOf[Int]
-      }
-      val length = ln match {
-            case k if k.isInstanceOf[Byte] => k.asInstanceOf[Byte]
-            case k if k.isInstanceOf[Short] => k.asInstanceOf[Short]
-            case k => k.asInstanceOf[Int]
-      }
+      val start = po.asInstanceOf[Int]
+      val length = ln.asInstanceOf[Int] 
+
       string match {
         case ba: Array[Byte] => slice(ba, start, length)
         case other => slice(other.toString, start, length)

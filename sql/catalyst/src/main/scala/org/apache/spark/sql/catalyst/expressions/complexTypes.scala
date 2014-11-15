@@ -55,11 +55,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
           // TODO: consider using Array[_] for ArrayType child to avoid
           // boxing of primitives
           val baseValue = value.asInstanceOf[Seq[_]]
-          val o = key match {
-            case k if k.isInstanceOf[Byte] => k.asInstanceOf[Byte]
-            case k if k.isInstanceOf[Short] => k.asInstanceOf[Short]
-            case k => k.asInstanceOf[Int]
-          }
+          val o = key.asInstanceOf[Int]
           if (o >= baseValue.size || o < 0) {
             null
           } else {
