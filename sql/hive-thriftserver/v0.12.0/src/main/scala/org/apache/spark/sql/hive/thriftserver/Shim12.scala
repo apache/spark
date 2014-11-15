@@ -137,10 +137,7 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(
           ColumnValue.timestampValue(from.get(ordinal).asInstanceOf[Timestamp]))
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = result
-          .queryExecution
-          .asInstanceOf[HiveContext#QueryExecution]
-          .toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to.addColumnValue(ColumnValue.stringValue(hiveString))
     }
   }

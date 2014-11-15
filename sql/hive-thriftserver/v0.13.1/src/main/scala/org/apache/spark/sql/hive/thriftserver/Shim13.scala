@@ -112,6 +112,8 @@ private[hive] class SparkExecuteStatementOperation(
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any],  ordinal: Int) {
     dataTypes(ordinal) match {
+      case StringType =>
+        to += from.getString(ordinal)
       case IntegerType =>
         to += from.getInt(ordinal)
       case BooleanType =>
@@ -132,11 +134,8 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Date](ordinal)
       case TimestampType =>
         to +=  from.getAs[Timestamp](ordinal)
-      case StringType | BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = result
-          .queryExecution
-          .asInstanceOf[HiveContext#QueryExecution]
-          .toHiveString(from.get(ordinal) -> dataTypes(ordinal))
+      case BinaryType | _: ArrayType | _: StructType | _: MapType =>
+        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
   }

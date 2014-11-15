@@ -200,12 +200,12 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
   test("Test JDBC query execution") {
     withJdbcStatement() { statement =>
-      val queries =
-        s"""SET spark.sql.shuffle.partitions=3;
-           |CREATE TABLE test(key INT, val STRING);
-           |LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test;
-           |CACHE TABLE test;
-         """.stripMargin.split(";").map(_.trim).filter(_.nonEmpty)
+      val queries = Seq(
+        "SET spark.sql.shuffle.partitions=3",
+        "DROP TABLE IF EXISTS test",
+        "CREATE TABLE test(key INT, val STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
+        "CACHE TABLE test")
 
       queries.foreach(statement.execute)
 
@@ -276,8 +276,9 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
       queries.foreach(statement.execute)
 
+      val resultSet = statement.executeQuery("SELECT key FROM test_4292")
+
       Seq(238, 86, 311, 27, 165).foreach { key =>
-        val resultSet = statement.executeQuery("SELECT key FROM test_4292")
         resultSet.next()
         assert(resultSet.getInt(1) === key)
       }
