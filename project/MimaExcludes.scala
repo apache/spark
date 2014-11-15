@@ -33,7 +33,8 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
-        case v if v.startsWith("1.2") =>
+        // TODO: pull 1.3 out of this check when 1.2.0 is finalized.
+        case v if "1\\.[23]\\..+".r.pattern.matcher(v).matches() =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
             MimaBuild.excludeSparkPackage("graphx")
