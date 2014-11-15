@@ -34,6 +34,9 @@ import org.json4s.jackson.JsonMethods._
  */
 sealed class Metadata private[util] (private[util] val map: Map[String, Any]) extends Serializable {
 
+  /** Tests whether this Metadata contains a binding for a key. */
+  def contains(key: String): Boolean = map.contains(key)
+
   /** Gets a Long. */
   def getLong(key: String): Long = get(key)
 
