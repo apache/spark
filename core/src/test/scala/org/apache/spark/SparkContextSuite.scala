@@ -29,7 +29,7 @@ class SparkContextSuite extends FunSuite {
     bytesWritable.set(inputArray, 0, 10)
     bytesWritable.set(inputArray, 0, 5)
 
-    val converter = SparkContext.bytesWritableConverter()
+    val converter = WritableConverter.bytesWritableConverter()
     val byteArray = converter.convert(bytesWritable)
     assert(byteArray.length === 5)
 

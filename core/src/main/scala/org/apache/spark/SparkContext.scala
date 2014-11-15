@@ -52,6 +52,7 @@ import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
+import org.apache.spark.WritableConverter.simpleWritableConverter
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -1503,13 +1504,6 @@ object SparkContext extends Logging {
         arr.map(x => anyToWritable(x)).toArray)
   }
 
-  // Helper objects for converting common types to Writable
-  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
-      : WritableConverter[T] = {
-    val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
-    new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
-  }
-
   @deprecated("An API for backforward compatibility", "1.2.0")
   def intWritableConverter(): WritableConverter[Int] =
     simpleWritableConverter[Int, IntWritable](_.get)
@@ -1769,10 +1763,10 @@ private[spark] class WritableConverter[T](
     val convert: Writable => T)
   extends Serializable
 
-object WritableConverter {
+private[spark] object WritableConverter {
 
   // Helper objects for converting common types to Writable
-  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
+  private[spark] def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
   : WritableConverter[T] = {
     val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
