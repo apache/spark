@@ -27,6 +27,11 @@ import org.apache.hadoop.io.Writable
  */
 package object rdd {
 
+  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit functions.
+
   implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)

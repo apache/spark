@@ -1428,25 +1428,29 @@ object SparkContext extends Logging {
 
   private[spark] val DRIVER_IDENTIFIER = "<driver>"
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   object LongAccumulatorParam extends AccumulatorParam[Long] {
     def addInPlace(t1: Long, t2: Long) = t1 + t2
     def zero(initialValue: Long) = 0L
   }
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   object FloatAccumulatorParam extends AccumulatorParam[Float] {
     def addInPlace(t1: Float, t2: Float) = t1 + t2
     def zero(initialValue: Float) = 0f
@@ -1454,29 +1458,35 @@ object SparkContext extends Logging {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+    "kept here only for backward compatibility.", "1.2.0")
   def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)
   }
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+    "kept here only for backward compatibility.", "1.2.0")
   def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+    "kept here only for backward compatibility.", "1.2.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+    "kept here only for backward compatibility.", "1.2.0")
   def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     new OrderedRDDFunctions[K, V, (K, V)](rdd)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+    "kept here only for backward compatibility.", "1.2.0")
   def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+    "kept here only for backward compatibility.", "1.2.0")
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
 
@@ -1504,27 +1514,33 @@ object SparkContext extends Logging {
         arr.map(x => anyToWritable(x)).toArray)
   }
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def intWritableConverter(): WritableConverter[Int] =
     simpleWritableConverter[Int, IntWritable](_.get)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def longWritableConverter(): WritableConverter[Long] =
     simpleWritableConverter[Long, LongWritable](_.get)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def doubleWritableConverter(): WritableConverter[Double] =
     simpleWritableConverter[Double, DoubleWritable](_.get)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def floatWritableConverter(): WritableConverter[Float] =
     simpleWritableConverter[Float, FloatWritable](_.get)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def booleanWritableConverter(): WritableConverter[Boolean] =
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
     simpleWritableConverter[Array[Byte], BytesWritable](bw =>
       // getBytes method returns array which is longer then data to be returned
@@ -1532,11 +1548,13 @@ object SparkContext extends Logging {
     )
   }
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def stringWritableConverter(): WritableConverter[String] =
     simpleWritableConverter[String, Text](_.toString)
 
-  @deprecated("An API for backforward compatibility", "1.2.0")
+  @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
+    "backward compatibility.", "1.2.0")
   def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
 
@@ -1771,6 +1789,11 @@ private[spark] object WritableConverter {
     val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
+
+  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit functions.
 
   implicit def intWritableConverter(): WritableConverter[Int] =
     simpleWritableConverter[Int, IntWritable](_.get)

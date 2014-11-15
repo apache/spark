@@ -246,6 +246,11 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
 
 object AccumulatorParam {
 
+  // The following implicit objects were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit objects.
+
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
