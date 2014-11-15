@@ -48,15 +48,13 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
     val colPart = new ColumnBasedPartitioner(numColBlocks, rowPerPart, colPerPart)
     val rowPart = new RowBasedPartitioner(numRowBlocks, rowPerPart, colPerPart)
-    val gridPart = new GridPartitioner(numRowBlocks, numColBlocks, rowPerPart, colPerPart)
 
     colBasedMat =
       new BlockMatrix(numRowBlocks, numColBlocks, sc.parallelize(entries, numColBlocks), colPart)
     rowBasedMat =
       new BlockMatrix(numRowBlocks, numColBlocks, sc.parallelize(entries, numRowBlocks), rowPart)
-    gridBasedMat =
-      new BlockMatrix(numRowBlocks, numColBlocks,
-        sc.parallelize(entries, numRowBlocks * numColBlocks), gridPart)
+    gridBasedMat = new BlockMatrix(numRowBlocks, numColBlocks,
+        sc.parallelize(entries, numRowBlocks * numColBlocks))
   }
 
   test("size") {
@@ -83,38 +81,5 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(colBasedMat.collect() === dense)
     assert(rowBasedMat.collect() === dense)
     assert(gridBasedMat.collect() === dense)
-  }
-
-  test("blockInfo") {
-    val colMatInfo = colBasedMat.getBlockInfo
-    val rowMatInfo = rowBasedMat.getBlockInfo
-    val gridMatInfo = gridBasedMat.getBlockInfo
-
-    assert(colMatInfo((0, 1)).numRows === 2)
-    assert(colMatInfo((0, 1)).numCols === 2)
-    assert(colMatInfo((0, 1)).startRow === 0)
-    assert(colMatInfo((0, 1)).startCol === 2)
-    assert(colMatInfo((2, 0)).numRows === 1)
-    assert(colMatInfo((2, 0)).numCols === 2)
-    assert(colMatInfo((2, 0)).startRow === 4)
-    assert(colMatInfo((2, 0)).startCol === 0)
-
-    assert(rowMatInfo((0, 1)).numRows === 2)
-    assert(rowMatInfo((0, 1)).numCols === 2)
-    assert(rowMatInfo((0, 1)).startRow === 0)
-    assert(rowMatInfo((0, 1)).startCol === 2)
-    assert(rowMatInfo((2, 0)).numRows === 1)
-    assert(rowMatInfo((2, 0)).numCols === 2)
-    assert(rowMatInfo((2, 0)).startRow === 4)
-    assert(rowMatInfo((2, 0)).startCol === 0)
-
-    assert(gridMatInfo((0, 1)).numRows === 2)
-    assert(gridMatInfo((0, 1)).numCols === 2)
-    assert(gridMatInfo((0, 1)).startRow === 0)
-    assert(gridMatInfo((0, 1)).startCol === 2)
-    assert(gridMatInfo((2, 0)).numRows === 1)
-    assert(gridMatInfo((2, 0)).numCols === 2)
-    assert(gridMatInfo((2, 0)).startRow === 4)
-    assert(gridMatInfo((2, 0)).startCol === 0)
   }
 }
