@@ -105,6 +105,8 @@ class JavaSparkContext(val sc: SparkContext)
 
   private[spark] val env = sc.env
 
+  def statusTracker = new JavaSparkStatusTracker(sc)
+
   def isLocal: java.lang.Boolean = sc.isLocal
 
   def sparkUser: String = sc.sparkUser
@@ -133,25 +135,6 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
-
-
-  /**
-   * Return a list of all known jobs in a particular job group.  The returned list may contain
-   * running, failed, and completed jobs, and may vary across invocations of this method.  This
-   * method does not guarantee the order of the elements in its result.
-   */
-  def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.getJobIdsForGroup(jobGroup)
-
-  /**
-   * Returns job information, or `null` if the job info could not be found or was garbage collected.
-   */
-  def getJobInfo(jobId: Int): SparkJobInfo = sc.getJobInfo(jobId).orNull
-
-  /**
-   * Returns stage information, or `null` if the stage info could not be found or was
-   * garbage collected.
-   */
-  def getStageInfo(stageId: Int): SparkStageInfo = sc.getStageInfo(stageId).orNull
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
