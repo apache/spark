@@ -218,6 +218,11 @@
       <artifactId>commons-math3</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.twitter</groupId>
+      <artifactId>algebird-core_${scala.binary.version}</artifactId>
+      <version>0.8.1</version>
+    </dependency>
+    <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -389,8 +394,8 @@
       </properties>
     </profile>
     <profile>
-      <!-- We add a source directory specific to Scala 2.10 since Kafka and Algebird
-           only work with it -->
+      <!-- We add a source directory specific to Scala 2.10 since Kafka 
+           only works with it -->
       <id>scala-2.10</id>
       <activation>
         <property><name>!scala-2.11</name></property>
@@ -400,11 +405,6 @@
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>com.twitter</groupId>
-          <artifactId>algebird-core_${scala.binary.version}</artifactId>
-          <version>0.1.11</version>
         </dependency>
       </dependencies>
       <build>
