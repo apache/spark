@@ -383,13 +383,13 @@ setMethod("length",
             count(x)
           })
 
-#' Return the count of each unique value in this RDD as a list of 
+#' Return the count of each unique value in this RDD as a list of
 #' (value, count) pairs.
-#' 
+#'
 #' Same as countByValue in Spark.
 #'
 #' @param rdd The RDD to count
-#' @return list of (value, count) pairs, where count is number of each unique 
+#' @return list of (value, count) pairs, where count is number of each unique
 #' value in rdd.
 #' @rdname countByValue
 #' @export
@@ -412,7 +412,7 @@ setMethod("countByValue",
 
 #' Count the number of elements for each key, and return the result to the
 #' master as lists of (key, count) pairs.
-#' 
+#'
 #' Same as countByKey in Spark.
 #'
 #' @param rdd The RDD to count keys.
@@ -596,8 +596,8 @@ setMethod("mapPartitionsWithIndex",
             lapplyPartitionsWithIndex(X, FUN)
           })
 
-#' This function returns a new RDD containing only the elements that satisfy 
-#' a predicate (i.e. returning TRUE in a given logical function). 
+#' This function returns a new RDD containing only the elements that satisfy
+#' a predicate (i.e. returning TRUE in a given logical function).
 #' The same as `filter()' in Spark.
 #'
 #' @param rdd The RDD to be filtered.
@@ -733,7 +733,7 @@ setMethod("take",
             index <- -1
             jrdd <- getJRDD(rdd)
             numPartitions <- numPartitions(rdd)
-            
+
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
             while (TRUE) {
@@ -748,16 +748,22 @@ setMethod("take",
                                      "collectPartitions",
                                      .jarray(as.integer(index)))
               partition <- partitionArr[[1]]
-              elems <- convertJListToRList(partition, flatten = TRUE)
+
+              size <- num - length(resList)
+              # elems is capped to have at most `size` elements
+              elems <- convertJListToRList(partition,
+                                           flatten = TRUE,
+                                           logicalUpperBound = size,
+                                           serialized = rdd@env$serialized)
               # TODO: Check if this append is O(n^2)?
-              resList <- append(resList, head(elems, n = num - length(resList)))
+              resList <- append(resList, elems)
             }
             resList
           })
 
 #' Removes the duplicates from RDD.
 #'
-#' This function returns a new RDD containing the distinct elements in the 
+#' This function returns a new RDD containing the distinct elements in the
 #' given RDD. The same as `distinct()' in Spark.
 #'
 #' @param rdd The RDD to remove duplicates from.
@@ -770,7 +776,7 @@ setMethod("take",
 #' rdd <- parallelize(sc, c(1,2,2,3,3,3))
 #' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
 #'}
-setGeneric("distinct", 
+setGeneric("distinct",
            function(rdd, numPartitions) { standardGeneric("distinct") })
 
 setClassUnion("missingOrInteger", c("missing", "integer"))
@@ -783,8 +789,8 @@ setMethod("distinct",
               numPartitions <- SparkR::numPartitions(rdd)
             }
             identical.mapped <- lapply(rdd, function(x) { list(x, NULL) })
-            reduced <- reduceByKey(identical.mapped, 
-                                   function(x, y) { x }, 
+            reduced <- reduceByKey(identical.mapped,
+                                   function(x, y) { x },
                                    numPartitions)
             resRDD <- lapply(reduced, function(x) { x[[1]] })
             resRDD
@@ -1008,7 +1014,7 @@ setMethod("mapValues",
 
 #' Pass each value in the key-value pair RDD through a flatMap function without
 #' changing the keys; this also retains the original RDD's partitioning.
-#' 
+#'
 #' The same as 'flatMapValues()' in Spark.
 #'
 #' @param X The RDD to apply the transformation.
@@ -1338,7 +1344,7 @@ setMethod("combineByKey",
 #'
 #' @param x An RDD.
 #' @param y An RDD.
-#' @return a new RDD created by performing the simple union (witout removing 
+#' @return a new RDD created by performing the simple union (witout removing
 #' duplicates) of two input RDDs.
 #' @rdname unionRDD
 #' @export
@@ -1369,6 +1375,6 @@ setMethod("unionRDD",
               jrdd <- .jcall(getJRDD(x), "Lorg/apache/spark/api/java/JavaRDD;",
                              "union", getJRDD(y))
               union.rdd <- RDD(jrdd, TRUE)
-            }  
+            }
             union.rdd
           })
