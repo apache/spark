@@ -129,7 +129,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
 
     val process = builder.start()
 
-    Runtime.getRuntime().addShutdownHook(new Thread("Kill SparkSubmit process") {
+    // If we kill an app while it's running, its sub-process should be killed too.
+    Runtime.getRuntime().addShutdownHook(new Thread() {
       override def run() = {
         if (process != null) {
           process.destroy()
