@@ -103,6 +103,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf5",
     "udf_java_method",
     "create_merge_compressed",
+    "create_view_partitioned",
     "database_location",
     "database_properties",
 
@@ -969,6 +970,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union_script",
     "varchar_2",
     "varchar_join1",
-    "varchar_union1"
+    "varchar_union1",
+    "view",
+    "view_cast",
+    "view_inputs"
   )
 }

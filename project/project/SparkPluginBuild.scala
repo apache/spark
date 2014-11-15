@@ -26,7 +26,7 @@ import sbt.Keys._
 object SparkPluginDef extends Build {
   lazy val root = Project("plugins", file(".")) dependsOn(sparkStyle, sbtPomReader)
   lazy val sparkStyle = Project("spark-style", file("spark-style"), settings = styleSettings)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git")
+  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
 
   // There is actually no need to publish this artifact.
   def styleSettings = Defaults.defaultSettings ++ Seq (

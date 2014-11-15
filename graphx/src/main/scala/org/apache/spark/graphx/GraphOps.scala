@@ -69,11 +69,12 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   private def degreesRDD(edgeDirection: EdgeDirection): VertexRDD[Int] = {
     if (edgeDirection == EdgeDirection.In) {
-      graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _)
+      graph.aggregateMessages(_.sendToDst(1), _ + _, TripletFields.None)
     } else if (edgeDirection == EdgeDirection.Out) {
-      graph.mapReduceTriplets(et => Iterator((et.srcId,1)), _ + _)
+      graph.aggregateMessages(_.sendToSrc(1), _ + _, TripletFields.None)
     } else { // EdgeDirection.Either
-      graph.mapReduceTriplets(et => Iterator((et.srcId,1), (et.dstId,1)), _ + _)
+      graph.aggregateMessages(ctx => { ctx.sendToSrc(1); ctx.sendToDst(1) }, _ + _,
+        TripletFields.None)
     }
   }
 
@@ -88,18 +89,17 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]] = {
     val nbrs =
       if (edgeDirection == EdgeDirection.Either) {
-        graph.mapReduceTriplets[Array[VertexId]](
-          mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
-          reduceFunc = _ ++ _
-        )
+        graph.aggregateMessages[Array[VertexId]](
+          ctx => { ctx.sendToSrc(Array(ctx.dstId)); ctx.sendToDst(Array(ctx.srcId)) },
+          _ ++ _, TripletFields.None)
       } else if (edgeDirection == EdgeDirection.Out) {
-        graph.mapReduceTriplets[Array[VertexId]](
-          mapFunc = et => Iterator((et.srcId, Array(et.dstId))),
-          reduceFunc = _ ++ _)
+        graph.aggregateMessages[Array[VertexId]](
+          ctx => ctx.sendToSrc(Array(ctx.dstId)),
+          _ ++ _, TripletFields.None)
       } else if (edgeDirection == EdgeDirection.In) {
-        graph.mapReduceTriplets[Array[VertexId]](
-          mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
-          reduceFunc = _ ++ _)
+        graph.aggregateMessages[Array[VertexId]](
+          ctx => ctx.sendToDst(Array(ctx.srcId)),
+          _ ++ _, TripletFields.None)
       } else {
         throw new SparkException("It doesn't make sense to collect neighbor ids without a " +
           "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
@@ -122,22 +122,27 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @return the vertex set of neighboring vertex attributes for each vertex
    */
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]] = {
-    val nbrs = graph.mapReduceTriplets[Array[(VertexId,VD)]](
-      edge => {
-        val msgToSrc = (edge.srcId, Array((edge.dstId, edge.dstAttr)))
-        val msgToDst = (edge.dstId, Array((edge.srcId, edge.srcAttr)))
-        edgeDirection match {
-          case EdgeDirection.Either => Iterator(msgToSrc, msgToDst)
-          case EdgeDirection.In => Iterator(msgToDst)
-          case EdgeDirection.Out => Iterator(msgToSrc)
-          case EdgeDirection.Both =>
-            throw new SparkException("collectNeighbors does not support EdgeDirection.Both. Use" +
-              "EdgeDirection.Either instead.")
-        }
-      },
-      (a, b) => a ++ b)
-
-    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
+    val nbrs = edgeDirection match {
+      case EdgeDirection.Either =>
+        graph.aggregateMessages[Array[(VertexId,VD)]](
+          ctx => {
+            ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr)))
+            ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr)))
+          },
+          (a, b) => a ++ b, TripletFields.SrcDstOnly)
+      case EdgeDirection.In =>
+        graph.aggregateMessages[Array[(VertexId,VD)]](
+          ctx => ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr))),
+          (a, b) => a ++ b, TripletFields.SrcOnly)
+      case EdgeDirection.Out =>
+        graph.aggregateMessages[Array[(VertexId,VD)]](
+          ctx => ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr))),
+          (a, b) => a ++ b, TripletFields.DstOnly)
+      case EdgeDirection.Both =>
+        throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
+          "EdgeDirection.Either instead.")
+    }
+    graph.vertices.leftJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[(VertexId, VD)])
     }
   } // end of collectNeighbor
@@ -160,18 +165,20 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def collectEdges(edgeDirection: EdgeDirection): VertexRDD[Array[Edge[ED]]] = {
     edgeDirection match {
       case EdgeDirection.Either =>
-        graph.mapReduceTriplets[Array[Edge[ED]]](
-          edge => Iterator((edge.srcId, Array(new Edge(edge.srcId, edge.dstId, edge.attr))),
-                           (edge.dstId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
-          (a, b) => a ++ b)
+        graph.aggregateMessages[Array[Edge[ED]]](
+          ctx => {
+            ctx.sendToSrc(Array(new Edge(ctx.srcId, ctx.dstId, ctx.attr)))
+            ctx.sendToDst(Array(new Edge(ctx.srcId, ctx.dstId, ctx.attr)))
+          },
+          (a, b) => a ++ b, TripletFields.EdgeOnly)
       case EdgeDirection.In =>
-        graph.mapReduceTriplets[Array[Edge[ED]]](
-          edge => Iterator((edge.dstId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
-          (a, b) => a ++ b)
+        graph.aggregateMessages[Array[Edge[ED]]](
+          ctx => ctx.sendToDst(Array(new Edge(ctx.srcId, ctx.dstId, ctx.attr))),
+          (a, b) => a ++ b, TripletFields.EdgeOnly)
       case EdgeDirection.Out =>
-        graph.mapReduceTriplets[Array[Edge[ED]]](
-          edge => Iterator((edge.srcId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
-          (a, b) => a ++ b)
+        graph.aggregateMessages[Array[Edge[ED]]](
+          ctx => ctx.sendToSrc(Array(new Edge(ctx.srcId, ctx.dstId, ctx.attr))),
+          (a, b) => a ++ b, TripletFields.EdgeOnly)
       case EdgeDirection.Both =>
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")

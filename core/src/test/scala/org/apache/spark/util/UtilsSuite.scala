@@ -22,6 +22,8 @@ import scala.util.Random
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
@@ -103,14 +105,16 @@ class UtilsSuite extends FunSuite {
     val hour = minute * 60
     def str = Utils.msDurationToString(_)
 
+    val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
+
     assert(str(123) === "123 ms")
-    assert(str(second) === "1.0 s")
-    assert(str(second + 462) === "1.5 s")
-    assert(str(hour) === "1.00 h")
-    assert(str(minute) === "1.0 m")
-    assert(str(minute + 4 * second + 34) === "1.1 m")
-    assert(str(10 * hour + minute + 4 * second) === "10.02 h")
-    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11.00 h")
+    assert(str(second) === "1" + sep + "0 s")
+    assert(str(second + 462) === "1" + sep + "5 s")
+    assert(str(hour) === "1" + sep + "00 h")
+    assert(str(minute) === "1" + sep + "0 m")
+    assert(str(minute + 4 * second + 34) === "1" + sep + "1 m")
+    assert(str(10 * hour + minute + 4 * second) === "10" + sep + "02 h")
+    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
   }
 
   test("reading offset bytes of a file") {
@@ -300,12 +304,11 @@ class UtilsSuite extends FunSuite {
     assert(!Utils.isBindCollision(new Exception))
     assert(!Utils.isBindCollision(new Exception(new Exception)))
     assert(!Utils.isBindCollision(new Exception(new BindException)))
-    assert(!Utils.isBindCollision(new Exception(new BindException("Random message"))))
 
     // Positives
-    val be = new BindException("Address already in use")
-    val be1 = new Exception(new BindException("Address already in use"))
-    val be2 = new Exception(new Exception(new BindException("Address already in use")))
+    val be = new BindException("Random Message")
+    val be1 = new Exception(new BindException("Random Message"))
+    val be2 = new Exception(new Exception(new BindException("Random Message")))
     assert(Utils.isBindCollision(be))
     assert(Utils.isBindCollision(be1))
     assert(Utils.isBindCollision(be2))

@@ -72,6 +72,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       2.5)
   }
 
+  test("aggregation with codegen") {
+    val originalValue = codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sql("SELECT key FROM testData GROUP BY key").collect()
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
       sql("SELECT LAST(n) FROM lowerCaseData"),
@@ -281,14 +288,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       3)
   }
 
-  // No support for primitive nulls yet.
-  ignore("null count") {
+  test("null count") {
     checkAnswer(
-      sql("SELECT a, COUNT(b) FROM testData3"),
-      Seq((1,0), (2, 1)))
+      sql("SELECT a, COUNT(b) FROM testData3 GROUP BY a"),
+      Seq((1, 0), (2, 1)))
 
     checkAnswer(
-      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      sql("SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
       (2, 1, 2, 2, 1) :: Nil)
   }
 
@@ -545,7 +551,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
- test("INTERSECT") {
+  test("INTERSECT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       (1, "a") ::
@@ -942,5 +948,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
     checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
         (1 to 99).map(i => Seq(i)))
+  }
+
+  test("SPARK-4322 Grouping field with struct field as sub expression") {
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), 1)
+    dropTempTable("data")
+
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
+    dropTempTable("data")
   }
 }

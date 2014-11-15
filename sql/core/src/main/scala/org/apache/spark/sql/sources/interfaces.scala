@@ -18,7 +18,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext, StructType}
+import org.apache.spark.sql.{SQLConf, Row, SQLContext, StructType}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
 
 /**
@@ -53,6 +53,15 @@ trait RelationProvider {
 abstract class BaseRelation {
   def sqlContext: SQLContext
   def schema: StructType
+
+  /**
+   * Returns an estimated size of this relation in bytes.  This information is used by the planner
+   * to decided when it is safe to broadcast a relation and can be overridden by sources that
+   * know the size ahead of time. By default, the system will assume that tables are too
+   * large to broadcast.  This method will be called multiple times during query planning
+   * and thus should not perform expensive operations for each invocation.
+   */
+  def sizeInBytes = sqlContext.defaultSizeInBytes
 }
 
 /**
