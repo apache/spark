@@ -148,8 +148,6 @@ class SchemaRDD(
         case(_, null)  => //do nothing
         case(StringType, v: String) => gen.writeString(v)
         case(TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
-        // case(ShortType | LongType | IntegerType | FloatType | DoubleType, v) =>
-          // gen.writeNumber(v)
         case(IntegerType, v: Int) => gen.writeNumber(v)
         case(ShortType, v: Short) => gen.writeNumber(v)
         case(FloatType, v: Float) => gen.writeNumber(v)
