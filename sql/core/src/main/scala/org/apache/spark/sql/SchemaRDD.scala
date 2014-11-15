@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.{List => JList}
 
+import org.apache.spark.api.python.SerDeUtil
+
 import scala.collection.JavaConversions._
 
 import net.razorvine.pickle.Pickler
@@ -385,12 +387,8 @@ class SchemaRDD(
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
-    this.mapPartitions { iter =>
-      val pickle = new Pickler
-      iter.map { row =>
-        EvaluatePython.rowToArray(row, fieldTypes)
-      }.grouped(100).map(batched => pickle.dumps(batched.toArray))
-    }
+    val jrdd = this.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
+    SerDeUtil.javaToPython(jrdd)
   }
 
   /**

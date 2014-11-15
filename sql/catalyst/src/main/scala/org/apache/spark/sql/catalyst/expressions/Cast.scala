@@ -281,7 +281,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case BooleanType =>
       buildCast[Boolean](_, b => changePrecision(if (b) Decimal(1) else Decimal(0), target))
     case DateType =>
-      buildCast[Date](_, d => changePrecision(null, target)) // date can't cast to decimal in Hive
+      buildCast[Date](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Timestamp](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
@@ -290,7 +290,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case LongType =>
       b => changePrecision(Decimal(b.asInstanceOf[Long]), target)
     case x: NumericType =>  // All other numeric types can be represented precisely as Doubles
-      b => changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+      b => try {
+        changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+      } catch {
+        case _: NumberFormatException => null
+      }
   }
 
   // DoubleConverter

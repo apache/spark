@@ -71,6 +71,8 @@ object DataType {
 
     case JSortedObject(
         ("class", JString(udtClass)),
+        ("pyClass", _),
+        ("sqlType", _),
         ("type", JString("udt"))) =>
       Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
@@ -167,6 +169,27 @@ object DataType {
       case map: MapType =>
         map.buildFormattedString(prefix, builder)
       case _ =>
+    }
+  }
+
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
+   */
+  def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+    (left, right) match {
+      case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
+        equalsIgnoreNullability(leftElementType, rightElementType)
+      case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
+        equalsIgnoreNullability(leftKeyType, rightKeyType) &&
+        equalsIgnoreNullability(leftValueType, rightValueType)
+      case (StructType(leftFields), StructType(rightFields)) =>
+        leftFields.size == rightFields.size &&
+        leftFields.zip(rightFields)
+          .forall{
+            case (left, right) =>
+              left.name == right.name && equalsIgnoreNullability(left.dataType, right.dataType)
+          }
+      case (left, right) => left == right
     }
   }
 }
@@ -593,6 +616,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Underlying storage type for this UDT */
   def sqlType: DataType
 
+  /** Paired Python UDT class, if exists. */
+  def pyUDT: String = null
+
   /**
    * Convert the user type to a SQL datum
    *
@@ -606,7 +632,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   override private[sql] def jsonValue: JValue = {
     ("type" -> "udt") ~
-      ("class" -> this.getClass.getName)
+      ("class" -> this.getClass.getName) ~
+      ("pyClass" -> pyUDT) ~
+      ("sqlType" -> sqlType.jsonValue)
   }
 
   /**

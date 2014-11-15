@@ -27,10 +27,10 @@ import akka.actor.{Actor, Props}
 import akka.pattern.ask
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.util.WriteAheadLogFileSegment
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
@@ -99,6 +99,10 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
   private val blockGenerator = new BlockGenerator(new BlockGeneratorListener {
+    def onAddData(data: Any, metadata: Any): Unit = { }
+
+    def onGenerateBlock(blockId: StreamBlockId): Unit = { }
+
     def onError(message: String, throwable: Throwable) {
       reportError(message, throwable)
     }
@@ -110,7 +114,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
-    blockGenerator += (data)
+    blockGenerator.addData(data)
   }
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */

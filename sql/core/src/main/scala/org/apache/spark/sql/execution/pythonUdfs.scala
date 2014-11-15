@@ -135,6 +135,8 @@ object EvaluatePython {
       case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
     }.asJava
 
+    case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
+
     case (dec: BigDecimal, dt: DecimalType) => dec.underlying()  // Pyrolite can handle BigDecimal
 
     // Pyrolite can handle Timestamp
@@ -176,6 +178,9 @@ object EvaluatePython {
 
     case (c: java.util.Calendar, TimestampType) =>
       new java.sql.Timestamp(c.getTime().getTime())
+
+    case (_, udt: UserDefinedType[_]) =>
+      fromJava(obj, udt.sqlType)
 
     case (c: Int, ByteType) => c.toByte
     case (c: Long, ByteType) => c.toByte

@@ -29,8 +29,11 @@ import copy_reg
 
 import numpy as np
 
+from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
+    IntegerType, ByteType, Row
 
-__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors']
+
+__all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors', 'DenseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -106,7 +109,54 @@ def _format_float(f, digits=4):
     return s
 
 
+class VectorUDT(UserDefinedType):
+    """
+    SQL user-defined type (UDT) for Vector.
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("type", ByteType(), False),
+            StructField("size", IntegerType(), True),
+            StructField("indices", ArrayType(IntegerType(), False), True),
+            StructField("values", ArrayType(DoubleType(), False), True)])
+
+    @classmethod
+    def module(cls):
+        return "pyspark.mllib.linalg"
+
+    @classmethod
+    def scalaUDT(cls):
+        return "org.apache.spark.mllib.linalg.VectorUDT"
+
+    def serialize(self, obj):
+        if isinstance(obj, SparseVector):
+            indices = [int(i) for i in obj.indices]
+            values = [float(v) for v in obj.values]
+            return (0, obj.size, indices, values)
+        elif isinstance(obj, DenseVector):
+            values = [float(v) for v in obj]
+            return (1, None, None, values)
+        else:
+            raise ValueError("cannot serialize %r of type %r" % (obj, type(obj)))
+
+    def deserialize(self, datum):
+        assert len(datum) == 4, \
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        tpe = datum[0]
+        if tpe == 0:
+            return SparseVector(datum[1], datum[2], datum[3])
+        elif tpe == 1:
+            return DenseVector(datum[3])
+        else:
+            raise ValueError("do not recognize type %r" % tpe)
+
+
 class Vector(object):
+
+    __UDT__ = VectorUDT()
+
     """
     Abstract class for DenseVector and SparseVector
     """
@@ -528,6 +578,8 @@ class DenseMatrix(Matrix):
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
         assert len(values) == numRows * numCols
+        if not isinstance(values, array.array):
+            values = array.array('d', values)
         self.values = values
 
     def __reduce__(self):
@@ -546,6 +598,15 @@ class DenseMatrix(Matrix):
         return np.reshape(self.values, (self.numRows, self.numCols), order='F')
 
 
+class Matrices(object):
+    @staticmethod
+    def dense(numRows, numCols, values):
+        """
+        Create a DenseMatrix
+        """
+        return DenseMatrix(numRows, numCols, values)
+
+
 def _test():
     import doctest
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
@@ -553,8 +614,4 @@ def _test():
         exit(-1)
 
 if __name__ == "__main__":
-    # remove current path from list of search paths to avoid importing mllib.random
-    # for C{import random}, which is done in an external dependency of pyspark during doctests.
-    import sys
-    sys.path.pop(0)
     _test()
