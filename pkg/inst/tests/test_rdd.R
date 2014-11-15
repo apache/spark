@@ -55,8 +55,8 @@ test_that("flatMap() on RDDs", {
   expect_equal(actual, rep(intPairs, each=2))
 })
 
-test_that("Filter on RDD", {
-  filtered.rdd <- Filter(function(x) { x %% 2 == 0 }, rdd)
+test_that("filterRDD on RDD", {
+  filtered.rdd <- filterRDD(rdd, function(x) { x %% 2 == 0 })
   actual <- collect(filtered.rdd)
   expect_equal(actual, list(2, 4, 6, 8, 10))
   
@@ -65,7 +65,7 @@ test_that("Filter on RDD", {
   expect_equal(actual, list(list(1L, -1)))
   
   # Filter out all elements.
-  filtered.rdd <- Filter(function(x) { x > 10 }, rdd)
+  filtered.rdd <- filterRDD(rdd, function(x) { x > 10 })
   actual <- collect(filtered.rdd)
   expect_equal(actual, list())
 })

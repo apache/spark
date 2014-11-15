@@ -13,7 +13,7 @@ exportMethods(
               "countByValue",
               "distinct",
               "Filter",
-              "filter",
+              "filterRDD",
               "flatMap",
               "flatMapValues",
               "groupByKey",
