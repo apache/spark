@@ -600,39 +600,36 @@ setMethod("mapPartitionsWithIndex",
 #' a predicate (i.e. returning TRUE in a given logical function). 
 #' The same as `filter()' in Spark.
 #'
-#' @param f A unary predicate function.
-#' @param x The RDD to be filtered.
-#' @rdname Filter
+#' @param rdd The RDD to be filtered.
+#' @param filterFunc A unary predicate function.
+#' @rdname filterRDD
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' unlist(collect(Filter(function (x) { x < 3 }, rdd))) # c(1, 2)
+#' unlist(collect(filterRDD(rdd, function (x) { x < 3 }))) # c(1, 2)
 #'}
-#setGeneric("Filter", function(f, x) { standardGeneric("Filter") })
+setGeneric("filterRDD", 
+           function(rdd, filterFunc) { standardGeneric("filterRDD") })
 
-#' @rdname Filter
-#' @aliases Filter,function,RDD-method filter,function,RDD-method
+#' @rdname filterRDD
+#' @aliases filterRDD,RDD,function-method
+setMethod("filterRDD",
+          signature(rdd = "RDD", filterFunc = "function"),
+          function(rdd, filterFunc) {
+            filter.func <- function(part) {
+              Filter(filterFunc, part)
+            }
+            lapplyPartition(rdd, filter.func)
+          })
+
+#' @rdname filterRDD
+#' @aliases Filter,function,RDD-method
 setMethod("Filter",
           signature(f = "function", x = "RDD"),
           function(f, x) {
-            filter.func <- function(part) {
-              Filter(f, part)
-            }
-            lapplyPartition(x, filter.func)
-          })
-
-#' @rdname Filter
-#' @export
-setGeneric("filter", function(f, x) { standardGeneric("filter") })
-
-#' @rdname Filter
-#' @aliases filter,function,RDD-method
-setMethod("filter",
-          signature(f = "function", x = "RDD"),
-          function(f, x) {
-            Filter(f, x)
+            filterRDD(x, f)
           })
 
 #' Reduce across elements of an RDD.
