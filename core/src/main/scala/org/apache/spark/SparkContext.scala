@@ -66,14 +66,17 @@ import org.apache.spark.util._
 
 class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
+  // The call site where this SparkContext was constructed.
+  private val creationSite: CallSite = Utils.getCallSite()
+
+  // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
+  private val allowMultipleContexts: Boolean =
+    config.getBoolean("spark.driver.allowMultipleContexts", false)
+
+
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction
-  SparkContext.markPartiallyConstructed(this, config)
-
-  /**
-   * The call site where this SparkContext was constructed.
-   */
-  private val creationSite: CallSite = Utils.getCallSite()
+  SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -1427,7 +1430,7 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having finished construction
-  SparkContext.setActiveContext(this, config)
+  SparkContext.setActiveContext(this, allowMultipleContexts)
 }
 
 /**
@@ -1464,7 +1467,9 @@ object SparkContext extends Logging {
    * prevents us from reliably distinguishing between cases where another context is being
    * constructed and cases where another constructor threw an exception.
    */
-  private def assertNoOtherContextIsRunning(sc: SparkContext, conf: SparkConf): Unit = {
+  private def assertNoOtherContextIsRunning(
+      sc: SparkContext,
+      allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       contextBeingConstructed.foreach { otherContext =>
         if (otherContext ne sc) {  // checks for reference equality
@@ -1479,7 +1484,7 @@ object SparkContext extends Logging {
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
           val exception = new SparkException(errMsg)
-          if (conf.getBoolean("spark.driver.allowMultipleContexts", false)) {
+          if (allowMultipleContexts) {
             logWarning("Multiple running SparkContexts detected in the same JVM!", exception)
           } else {
             throw exception
@@ -1496,9 +1501,11 @@ object SparkContext extends Logging {
    * scheme prevents us from reliably distinguishing between cases where another context is being
    * constructed and cases where another constructor threw an exception.
    */
-  private[spark] def markPartiallyConstructed(sc: SparkContext, conf: SparkConf): Unit = {
+  private[spark] def markPartiallyConstructed(
+      sc: SparkContext,
+      allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      assertNoOtherContextIsRunning(sc, conf)
+      assertNoOtherContextIsRunning(sc, allowMultipleContexts)
       contextBeingConstructed = Some(sc)
     }
   }
@@ -1507,9 +1514,11 @@ object SparkContext extends Logging {
    * Called at the end of the SparkContext constructor to ensure that no other SparkContext has
    * raced with this constructor and started.
    */
-  private[spark] def setActiveContext(sc: SparkContext, conf: SparkConf): Unit = {
+  private[spark] def setActiveContext(
+      sc: SparkContext,
+      allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      assertNoOtherContextIsRunning(sc, conf)
+      assertNoOtherContextIsRunning(sc, allowMultipleContexts)
       contextBeingConstructed = None
       activeContext = Some(sc)
     }
