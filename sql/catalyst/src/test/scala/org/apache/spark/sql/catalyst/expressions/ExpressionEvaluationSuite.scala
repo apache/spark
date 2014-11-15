@@ -347,8 +347,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     // - Because of this, casts to fixed-precision decimals should be nullable
 
     assert(Cast(Literal(123), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === false)
+    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === true)
+    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === true)
     assert(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable === false)
 
     assert(Cast(Literal(123), DecimalType(2, 1)).nullable === true)
