@@ -154,6 +154,8 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def toString() = s"Lower($child)"
 }
 
+case class Concat(child: Expresson) extends BinaryExpression
+
 /** A base trait for functions that compare two strings, returning a boolean. */
 trait StringComparison {
   self: BinaryExpression =>
