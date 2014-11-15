@@ -28,8 +28,10 @@ package org.apache.spark
  * To limit memory usage, these APIs only provide information on recent jobs / stages.  These APIs
  * will provide information for the last `spark.ui.retainedStages` stages and
  * `spark.ui.retainedJobs` jobs.
+ *
+ * NOTE: this class's constructor should be considered private and may be subject to change.
  */
-class SparkStatusAPI private (sc: SparkContext) {
+class SparkStatusTracker private[spark] (sc: SparkContext) {
 
   private val jobProgressListener = sc.jobProgressListener
 
@@ -103,10 +105,3 @@ class SparkStatusAPI private (sc: SparkContext) {
     }
   }
 }
-
-private[spark] object SparkStatusAPI {
-  def apply(sc: SparkContext): SparkStatusAPI = {
-    new SparkStatusAPI(sc)
-  }
-}
-

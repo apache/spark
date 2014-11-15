@@ -30,8 +30,10 @@ import org.apache.spark.{SparkStageInfo, SparkJobInfo, SparkContext}
  * To limit memory usage, these APIs only provide information on recent jobs / stages.  These APIs
  * will provide information for the last `spark.ui.retainedStages` stages and
  * `spark.ui.retainedJobs` jobs.
+ *
+ * NOTE: this class's constructor should be considered private and may be subject to change.
  */
-class JavaSparkStatusAPI private (sc: SparkContext) {
+class JavaSparkStatusTracker private[spark] (sc: SparkContext) {
 
   /**
    * Return a list of all known jobs in a particular job group.  If `jobGroup` is `null`, then
@@ -41,37 +43,30 @@ class JavaSparkStatusAPI private (sc: SparkContext) {
    * invocations of this method.  This method does not guarantee the order of the elements in
    * its result.
    */
-  def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.statusAPI.getJobIdsForGroup(jobGroup)
+  def getJobIdsForGroup(jobGroup: String): Array[Int] = sc.statusTracker.getJobIdsForGroup(jobGroup)
 
   /**
    * Returns an array containing the ids of all active stages.
    *
    * This method does not guarantee the order of the elements in its result.
    */
-  def getActiveStageIds(): Array[Int] = sc.statusAPI.getActiveStageIds()
+  def getActiveStageIds(): Array[Int] = sc.statusTracker.getActiveStageIds()
 
   /**
    * Returns an array containing the ids of all active jobs.
    *
    * This method does not guarantee the order of the elements in its result.
    */
-  def getActiveJobIds(): Array[Int] = sc.statusAPI.getActiveJobIds()
+  def getActiveJobIds(): Array[Int] = sc.statusTracker.getActiveJobIds()
 
   /**
    * Returns job information, or `null` if the job info could not be found or was garbage collected.
    */
-  def getJobInfo(jobId: Int): SparkJobInfo = sc.statusAPI.getJobInfo(jobId).orNull
+  def getJobInfo(jobId: Int): SparkJobInfo = sc.statusTracker.getJobInfo(jobId).orNull
 
   /**
    * Returns stage information, or `null` if the stage info could not be found or was
    * garbage collected.
    */
-  def getStageInfo(stageId: Int): SparkStageInfo = sc.statusAPI.getStageInfo(stageId).orNull
+  def getStageInfo(stageId: Int): SparkStageInfo = sc.statusTracker.getStageInfo(stageId).orNull
 }
-
-private[spark] object JavaSparkStatusAPI {
-  def apply(sc: SparkContext): JavaSparkStatusAPI = {
-    new JavaSparkStatusAPI(sc)
-  }
-}
-

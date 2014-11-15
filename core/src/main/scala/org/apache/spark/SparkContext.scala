@@ -229,7 +229,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val jobProgressListener = new JobProgressListener(conf)
   listenerBus.addListener(jobProgressListener)
 
-  val statusAPI = SparkStatusAPI(this)
+  val statusTracker = new SparkStatusTracker(this)
 
   // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
