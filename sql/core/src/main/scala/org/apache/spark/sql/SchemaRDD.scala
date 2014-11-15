@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList}
+import java.util.{Map => JMap, List => JList, HashMap => JHMap}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.storage.StorageLevel
-
+import com.fasterxml.jackson.databind.ObjectMapper
 import scala.collection.JavaConversions._
 
 import net.razorvine.pickle.Pickler
@@ -131,58 +131,26 @@ class SchemaRDD(
    */
   lazy val schema: StructType = queryExecution.analyzed.schema
 
-
-  /** Transforms a single Row to JSON using StringBuilder
+  /** Transforms a single Row to JSON using Jackson
     *
     * @param row The row to convert
     * @param rowSchema the schema object used for conversion
     */
   private def rowToJSON(row: Row, rowSchema: StructType): String = {
-    val builder = new StringBuilder
-    builder.append{"{"}
-
-    for (i <- 0 to row.length-1) {
-      if (!row.isNullAt(i))
-      {
-        if (i > 0 && !row.isNullAt(i-1)){
-          builder.append(",")
-        }
-
-        builder.append(s"""\"${rowSchema.fields(i).name}\":""")
-        if (rowSchema.fields(i).dataType == StringType) {
-          builder.append(s"""\"${row.getString(i)}\"""")
-        }
-        else if (rowSchema.fields(i).dataType == IntegerType) {
-          builder.append(s"""${row.getInt(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == DoubleType) {
-          builder.append(s"""${row.getDouble(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == LongType) {
-          builder.append(s"""${row.getLong(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == DoubleType) {
-          builder.append(s"""${row.getDouble(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == BooleanType) {
-          builder.append(s"""${row.getBoolean(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == FloatType) {
-          builder.append(s"""${row.getFloat(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == ShortType) {
-          builder.append(s"""${row.getShort(i)}""")
-        }
-        else if (rowSchema.fields(i).dataType == ByteType) {
-          builder.append(s"""${row.getByte(i)}""")
-        }
-
+      val objMapper = new ObjectMapper
+      val rowMap = new JHMap[String,Any]()
+      for (i <- 0 to row.length-1) {
+	  if (!row.isNullAt(i))
+	  {
+	      rowMap.put(rowSchema.fields(i).name,row.get(i))
+	  }
       }
-
-    }
-    builder.append{"}"}
-    builder.toString
+      
+      val result = objMapper.writeValueAsString(rowMap)
+      println(result)
+      result
   }
+
 
   /** Returns a new RDD of JSON strings, one string per row
   *
