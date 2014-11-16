@@ -167,11 +167,11 @@ class SchemaRDD(
 
       case(MapType(kv,vv, _), v: Map[_,_]) =>
         gen.writeStartObject
-        v.foreach {
-          valWriter(kv,v(0))
-          g.writeRaw(":")
-          valWriter(vv,v(1))
-        }
+        v.foreach(p => {
+          gen.writeFieldName(p._1.toString)
+          valWriter(vv,p._2)
+          }
+        )
         gen.writeEndObject
 
       case(StructType(ty), v: Seq[_]) =>

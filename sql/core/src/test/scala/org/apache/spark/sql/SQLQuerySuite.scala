@@ -629,12 +629,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
     }
 
-    rowRDD2.collect().foreach(println)
     val schemaRDD3 = applySchema(rowRDD2, schema2)
     schemaRDD3.registerTempTable("applySchema2")
     val schemaRDD4 = schemaRDD3.toSchemaRDD
     val result2 = schemaRDD4.toJSON.collect()
-    result2.foreach(println)
+
+    assert(result2(1) == "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
+    assert(result2(3) == "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
+
   }
 
   test("apply schema") {
