@@ -36,7 +36,11 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Delay to show up a progress bar, in milli seconds
   val DELAY_SHOW_UP = 500L
   // The width of terminal
-  val TerminalWidth = sys.env.getOrElse("COLUMNS", "80").toInt
+  val TerminalWidth = if (!sys.env.getOrElse("COLUMNS", "").isEmpty) {
+    sys.env.get("COLUMNS").get.toInt
+  } else {
+    80
+  }
 
   @volatile var hasShowed = false
 
