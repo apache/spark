@@ -22,6 +22,9 @@
 export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 ORIG_ARGS=("$@")
 
+# Set COLUMNS for progress bar
+export COLUMNS=`tput cols`
+
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
     SPARK_SUBMIT_DEPLOY_MODE=$2

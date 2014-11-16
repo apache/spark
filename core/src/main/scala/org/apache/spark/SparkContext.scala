@@ -50,7 +50,7 @@ import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkD
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, ConsoleProgressBar}
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
 
@@ -230,6 +230,13 @@ class SparkContext(config: SparkConf) extends Logging {
   listenerBus.addListener(jobProgressListener)
 
   val statusTracker = new SparkStatusTracker(this)
+
+  private[spark] val progressBar: Option[ConsoleProgressBar] =
+    if (conf.getBoolean("spark.ui.showConsoleProgress", true)) {
+      Some(new ConsoleProgressBar(this))
+    } else {
+      None
+    }
 
   // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
@@ -1257,6 +1264,7 @@ class SparkContext(config: SparkConf) extends Logging {
     logInfo("Starting job: " + callSite.shortForm)
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
+    progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
   }
 
