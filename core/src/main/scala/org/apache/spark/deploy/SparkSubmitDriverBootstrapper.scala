@@ -130,14 +130,15 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val process = builder.start()
 
     // If we kill an app while it's running, its sub-process should be killed too.
-    Runtime.getRuntime().addShutdownHook(new Thread() {
+    val shutdownHook = new Thread() {
       override def run() = {
         if (process != null) {
           process.destroy()
           sys.exit(process.waitFor())
         }
       }
-    })
+    }
+    Runtime.getRuntime().addShutdownHook(shutdownHook)
 
     // Redirect stdout and stderr from the child JVM
     val stdoutThread = new RedirectThread(process.getInputStream, System.out, "redirect stdout")
@@ -163,6 +164,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
       }
     }
     val returnCode = process.waitFor()
+    Runtime.getRuntime().removeShutdownHook(shutdownHook)
     sys.exit(returnCode)
   }
 
