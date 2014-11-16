@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList, HashMap => JHMap}
+import java.util.{Map => JMap, List => JList}
 import java.io.StringWriter
-import org.apache.spark.api.python.SerDeUtil
-import org.apache.spark.storage.StorageLevel
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.core.JsonFactory
 
 import scala.collection.JavaConversions._
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.core.JsonFactory
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -145,7 +145,7 @@ class SchemaRDD(
     val gen = jsonFactory.createGenerator(writer)
 
     def valWriter: (DataType, Any) => Unit = {
-      case(_, null)  => //do nothing
+      case(_, null) => gen.writeNull() //writing null could break some parsers
       case(StringType, v: String) => gen.writeString(v)
       case(TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
       case(IntegerType, v: Int) => gen.writeNumber(v)
@@ -157,18 +157,29 @@ class SchemaRDD(
       case(ByteType, v: Byte) => gen.writeNumber(v.toInt)
       case(BinaryType, v: Array[Byte]) => gen.writeBinary(v)
       case(BooleanType, v: Boolean) => gen.writeBoolean(v)
+      case(DateType, v) => gen.writeString(v.toString)
+
 
       case(ArrayType(ty, _), v: Seq[_] ) =>
 	      gen.writeStartArray()
 	      v.foreach(valWriter(ty,_))
 	      gen.writeEndArray()
 
+      case(MapType(kv,vv, _), v: Map[_,_]) =>
+        gen.writeStartObject
+        v.foreach {
+          valWriter(kv,v(0))
+          g.writeRaw(":")
+          valWriter(vv,v(1))
+        }
+        gen.writeEndObject
+
       case(StructType(ty), v: Seq[_]) =>
 	      gen.writeStartObject()
 	      ty.zip(v).foreach {
-	        case(_, null) => //do nothing
+	        case(_, null) =>
 	        case(field, v) =>
-	          gen.writeFieldName(field.name)
+            gen.writeFieldName(field.name)
 	          valWriter(field.dataType, v)
 	      }
 

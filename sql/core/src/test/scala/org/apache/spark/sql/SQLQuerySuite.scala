@@ -597,22 +597,44 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       StructField("f1", IntegerType, false) ::
       StructField("f2", StringType, false) ::
       StructField("f3", BooleanType, false) ::
-      StructField("f4", IntegerType, true) :: Nil)
+      StructField("f4", ArrayType(StringType), nullable = true) ::
+      StructField("f5", IntegerType, true) :: Nil)
 
     val rowRDD1 = unparsedStrings.map { r =>
       val values = r.split(",").map(_.trim)
-      val v4 = try values(3).toInt catch {
+      val v5 = try values(3).toInt catch {
         case _: NumberFormatException => null
       }
-      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
+      Row(values(0).toInt, values(1), values(2).toBoolean, r.split(",").toList, v5)
     }
 
     val schemaRDD1 = applySchema(rowRDD1, schema1)
     schemaRDD1.registerTempTable("applySchema1")
     val schemaRDD2 = schemaRDD1.toSchemaRDD
     val result = schemaRDD2.toJSON.collect()
-    assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true}")
-    assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":2147483644}")
+    assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+    assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
+
+    val schema2 = StructType(
+      StructField("f1", StructType(
+        StructField("f11", IntegerType, false) ::
+        StructField("f12", BooleanType, false) :: Nil), false) ::
+      StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+
+    val rowRDD2 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
+    }
+
+    rowRDD2.collect().foreach(println)
+    val schemaRDD3 = applySchema(rowRDD2, schema2)
+    schemaRDD3.registerTempTable("applySchema2")
+    val schemaRDD4 = schemaRDD3.toSchemaRDD
+    val result2 = schemaRDD4.toJSON.collect()
+    result2.foreach(println)
   }
 
   test("apply schema") {

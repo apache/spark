@@ -126,6 +126,12 @@ class JavaSchemaRDD(
   // Transformations (return a new RDD)
 
   /**
+   * Return a new RDD that is the schema transformed to JSON
+   */
+  def toJSON(): JavaRDD[String] =
+    baseSchemaRDD.toJSON.toJavaRDD
+
+  /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
    */
   def coalesce(numPartitions: Int, shuffle: Boolean = false): JavaSchemaRDD =
