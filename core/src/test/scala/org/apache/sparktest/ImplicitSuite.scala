@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.sparktest
 
 /**
  * A test suite to make sure all `implicit` functions work correctly.
