@@ -136,48 +136,49 @@ class SchemaRDD(
 
   /** Transforms a single Row to JSON using Jackson
     *
-    * @param jf a JsonFactory object to construct a JsonGenerator
+    * @param jsonFactory a JsonFactory object to construct a JsonGenerator
     * @param rowSchema the schema object used for conversion
     * @param row The row to convert
     */
-  private def rowToJSON(rowSchema: StructType, jf: JsonFactory)(row: Row): String = {
-      val writer = new StringWriter()
-      val gen = jf.createGenerator(writer)
+  private def rowToJSON(rowSchema: StructType, jsonFactory: JsonFactory)(row: Row): String = {
+    val writer = new StringWriter()
+    val gen = jsonFactory.createGenerator(writer)
 
-      def valWriter: (DataType, Any) => Unit = {
-        case(_, null)  => //do nothing
-        case(StringType, v: String) => gen.writeString(v)
-        case(TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
-        case(IntegerType, v: Int) => gen.writeNumber(v)
-        case(ShortType, v: Short) => gen.writeNumber(v)
-        case(FloatType, v: Float) => gen.writeNumber(v)
-        case(DoubleType, v: Double) => gen.writeNumber(v)
-        case(LongType, v: Long) => gen.writeNumber(v)
-        case(DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
-        case(ByteType, v: Byte) => gen.writeNumber(v.toInt)
-        case(BinaryType, v: Array[Byte]) => gen.writeBinary(v)
-        case(BooleanType, v: Boolean) => gen.writeBoolean(v)
+    def valWriter: (DataType, Any) => Unit = {
+      case(_, null)  => //do nothing
+      case(StringType, v: String) => gen.writeString(v)
+      case(TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
+      case(IntegerType, v: Int) => gen.writeNumber(v)
+      case(ShortType, v: Short) => gen.writeNumber(v)
+      case(FloatType, v: Float) => gen.writeNumber(v)
+      case(DoubleType, v: Double) => gen.writeNumber(v)
+      case(LongType, v: Long) => gen.writeNumber(v)
+      case(DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
+      case(ByteType, v: Byte) => gen.writeNumber(v.toInt)
+      case(BinaryType, v: Array[Byte]) => gen.writeBinary(v)
+      case(BooleanType, v: Boolean) => gen.writeBoolean(v)
 
-        case(ArrayType(ty, _), v: Seq[_] ) =>
-	         gen.writeStartArray()
-	         v.foreach(valWriter(ty,_))
-	         gen.writeEndArray()
+      case(ArrayType(ty, _), v: Seq[_] ) =>
+	      gen.writeStartArray()
+	      v.foreach(valWriter(ty,_))
+	      gen.writeEndArray()
 
-        case(StructType(ty), v: Seq[_]) =>
-	         gen.writeStartObject()
-	         ty.zip(v).foreach {
-	            case(_, null) => //do nothing
-	            case(field, v) =>
-	              gen.writeFieldName(field.name)
-	              valWriter(field.dataType, v)
-	         }
-	         gen.writeEndObject()
+      case(StructType(ty), v: Seq[_]) =>
+	      gen.writeStartObject()
+	      ty.zip(v).foreach {
+	        case(_, null) => //do nothing
+	        case(field, v) =>
+	          gen.writeFieldName(field.name)
+	          valWriter(field.dataType, v)
+	      }
 
-      }
+        gen.writeEndObject()
 
-      valWriter(rowSchema, row)
-      gen.close()
-      writer.toString
+    }
+
+    valWriter(rowSchema, row)
+    gen.close()
+    writer.toString
   }
 
 
@@ -189,8 +190,8 @@ class SchemaRDD(
   def toJSON: RDD[String] = {
     val rowSchema = this.schema
     this.mapPartitions { iter =>
-      val jf = new JsonFactory()
-      iter.map(rowToJSON(rowSchema, jf))
+      val jsonFactory = new JsonFactory()
+      iter.map(rowToJSON(rowSchema, jsonFactory))
     }
 
   }

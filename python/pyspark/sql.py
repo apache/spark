@@ -1869,8 +1869,8 @@ class SchemaRDD(RDD):
         """
         rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
         return SchemaRDD(rdd, self.sql_ctx)
-    
-    def toJSON(self, use_unicode=True):
+
+    def toJSON(self, use_unicode=False):
         rdd = self._jschema_rdd.baseSchemaRDD().toJSON()
         #return this using unicode
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
