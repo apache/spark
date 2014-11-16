@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList, Map => JMap}
 
 import scala.collection.JavaConversions._
@@ -131,13 +131,14 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.byteValue(from.getByte(ordinal)))
       case ShortType =>
         to.addColumnValue(ColumnValue.shortValue(from.getShort(ordinal)))
-      case DateType =>
-        to.addColumnValue(ColumnValue.dateValue(from(ordinal).asInstanceOf[Date]))
       case TimestampType =>
         to.addColumnValue(
           ColumnValue.timestampValue(from.get(ordinal).asInstanceOf[Timestamp]))
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        val hiveString = result
+          .queryExecution
+          .asInstanceOf[HiveContext#QueryExecution]
+          .toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to.addColumnValue(ColumnValue.stringValue(hiveString))
     }
   }
@@ -162,8 +163,6 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.byteValue(null))
       case ShortType =>
         to.addColumnValue(ColumnValue.shortValue(null))
-      case DateType =>
-        to.addColumnValue(ColumnValue.dateValue(null))
       case TimestampType =>
         to.addColumnValue(ColumnValue.timestampValue(null))
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
