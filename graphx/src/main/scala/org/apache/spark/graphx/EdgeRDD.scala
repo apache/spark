@@ -93,7 +93,7 @@ abstract class EdgeRDD[ED](
   private[graphx] def withTargetStorageLevel(targetStorageLevel: StorageLevel): EdgeRDD[ED]
 }
 
-private[graphx] object EdgeRDD {
+object EdgeRDD {
   /**
    * Creates an EdgeRDD from a set of edges.
    *
@@ -117,7 +117,7 @@ private[graphx] object EdgeRDD {
    * @tparam ED the edge attribute type
    * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
    */
-  def fromEdgePartitions[ED: ClassTag, VD: ClassTag](
+  private[graphx] def fromEdgePartitions[ED: ClassTag, VD: ClassTag](
       edgePartitions: RDD[(Int, EdgePartition[ED, VD])]): EdgeRDDImpl[ED, VD] = {
     new EdgeRDDImpl(edgePartitions)
   }
