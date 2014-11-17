@@ -511,7 +511,7 @@ object ApplicationMaster extends Logging {
     SignalLogger.register(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(amArgs, new YarnRMClientImpl(amArgs))
+      master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
     }
   }
