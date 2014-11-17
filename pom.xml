@@ -1493,8 +1493,7 @@
     </profile>
 
     <profile>
-      <id>hive-0.12.0</id>
-      <!-- TODO: Move this to "hive" profile once 0.13 JDBC is supported -->
+      <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
