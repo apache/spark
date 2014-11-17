@@ -25,9 +25,10 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.api.java.StorageLevels
-import org.apache.spark.{SparkException, SparkConf, SparkContext}
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.shuffle.FetchFailedException
 
 /**
  * Selenium tests for the Spark Web UI.  These tests are not run by default
@@ -145,7 +146,6 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
 
   test("jobs page should not display job group name unless some job was submitted in a job group") {
     withSpark(newSparkContext()) { sc =>
-      val ui = sc.ui.get
       // If no job has been run in a job group, then "(Job Group)" should not appear in the header
       sc.parallelize(Seq(1, 2, 3)).count()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
@@ -160,6 +160,36 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
         tableHeaders should contain ("Job Id (Job Group)")
+      }
+    }
+  }
+
+  test("stage failures / recomputations should not cause stages to be overcounted on job page") {
+    withSpark(newSparkContext()) { sc =>
+      val data = sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity)
+      val shuffleHandle =
+        data.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+      // Simulate fetch failures:
+      val mappedData = data.map { x =>
+        val taskContext = TaskContext.get
+        if (taskContext.attemptId() == 1) {  // Cause this stage to fail on its first attempt.
+          val env = SparkEnv.get
+          val bmAddress = env.blockManager.blockManagerId
+          val shuffleId = shuffleHandle.shuffleId
+          val mapId = 0
+          val reduceId = taskContext.partitionId()
+          val message = "Simulated fetch failure"
+          throw new FetchFailedException(bmAddress, shuffleId, mapId, reduceId, message)
+        } else {
+          x
+        }
+      }
+      mappedData.count()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
+        find(cssSelector(".stage-progress-cell .completed-stages")).get.text should be ("2")
+        find(cssSelector(".stage-progress-cell .total-stages")).get.text should be ("2")
+        find(cssSelector(".stage-progress-cell .failed-stages")).get.text should be ("(1 failed)")
       }
     }
   }
