@@ -67,11 +67,20 @@ if [[ ! "$@" =~ --package-only ]]; then
   git tag $GIT_TAG
 
   rm -rf $SPARK_REPO
-  mvn -DskipTests \
-    -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
+
+  # TODO REMOVE THIS!!!
+  find . -name *.scala | xargs rm
+  find . -name *.java | xargs rm
+
+  mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
-    install
+    clean install
+
+  ./dev/change-version-to-2.11.sh
+  
+  mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
+    -Pscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    clean install
 
   pushd $SPARK_REPO
 
@@ -101,8 +110,9 @@ if [[ ! "$@" =~ --package-only ]]; then
     -e "s/$RELEASE_VERSION/${NEXT_VERSION}-SNAPSHOT/" {}
   git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
 
-  git push origin $GIT_TAG
-  git push origin HEAD:$BRANCH_NAME
+  # TODO: ADD THIS BACK!!!
+  # git push origin $GIT_TAG
+  # git push origin HEAD:$BRANCH_NAME
   popd
   rm -rf spark
 fi
