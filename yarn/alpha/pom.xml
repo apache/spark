@@ -19,8 +19,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>yarn-parent_2.10</artifactId>
-    <version>1.2.0</version>
+    <artifactId>yarn-parent_2.11</artifactId>
+    <version>1.2.1-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
   <properties>
@@ -28,7 +28,7 @@
   </properties>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-yarn-alpha_2.10</artifactId>
+  <artifactId>spark-yarn-alpha_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN Alpha API</name>
 

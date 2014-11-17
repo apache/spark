@@ -22,12 +22,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.1-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-network-shuffle_2.10</artifactId>
+  <artifactId>spark-network-shuffle_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Shuffle Streaming Service</name>
   <url>http://spark.apache.org/</url>
