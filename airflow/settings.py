@@ -11,12 +11,13 @@ AIRFLOW_HOME = os.environ['AIRFLOW_HOME']
 """
 
 BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
+SQL_ALCHEMY_CONN = getconf().get('core', 'SQL_ALCHEMY_CONN')
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 
 Session = sessionmaker()
 #engine = create_engine('mysql://airflow:airflow@localhost/airflow')
-engine = create_engine('sqlite:///' + BASE_FOLDER + '/airflow.db' )
+engine = create_engine(SQL_ALCHEMY_CONN)
 Session.configure(bind=engine)
 
 # can't move this to configuration due to ConfigParser interpolation
