@@ -69,8 +69,7 @@ class LogisticRegressionModel(LinearModel):
         else:
             exp_margin = exp(margin)
             prob = exp_margin / (1 + exp_margin)
-        return 1 if prob  0.5 else 0
-        return 0 if prob < 0.5 else 1
+        return 1 if prob > 0.5 else 0
 
 
 class LogisticRegressionWithSGD(object):

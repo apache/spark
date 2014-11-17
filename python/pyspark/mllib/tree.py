@@ -31,6 +31,8 @@ class DecisionTreeModel(JavaModelWrapper):
 
     """
     A decision tree model for classification or regression.
+
+    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
     """
     def predict(self, x):
         """
@@ -63,8 +65,9 @@ class DecisionTreeModel(JavaModelWrapper):
 class DecisionTree(object):
 
     """
-    Learning algorithm for a decision tree model
-    for classification or regression.
+    Learning algorithm for a decision tree model for classification or regression.
+
+    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
     """
 
     @classmethod
@@ -183,7 +186,9 @@ class DecisionTree(object):
 
 class WeightedEnsembleModel(JavaModelWrapper):
     """
-    A model trained by RandomForest
+    A model trained by :class:`RandomForest`
+
+    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
     """
     def predict(self, x):
         """
@@ -217,6 +222,11 @@ class WeightedEnsembleModel(JavaModelWrapper):
 
 
 class RandomForest(object):
+    """
+    Learning algorithm for a random forest model for classification or regression.
+
+    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    """
 
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
 
