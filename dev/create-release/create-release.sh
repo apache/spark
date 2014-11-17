@@ -32,9 +32,14 @@ GIT_USERNAME=${GIT_USERNAME:-pwendell}
 GIT_PASSWORD=${GIT_PASSWORD:-XXX}
 GPG_PASSPHRASE=${GPG_PASSPHRASE:-XXX}
 GIT_BRANCH=${GIT_BRANCH:-branch-1.0}
-RELEASE_VERSION=${RELEASE_VERSION:-1.0.0}
+RELEASE_VERSION=${RELEASE_VERSION:-1.2.0}
+NEXT_VERSION=${NEXT_VERSION:-1.2.1}
 RC_NAME=${RC_NAME:-rc2}
 USER_NAME=${USER_NAME:-pwendell}
+
+M2_REPO=~/.m2/repository
+SPARK_REPO=$M2_REPO/org/apache/spark
+NEXUS_REPOSITORY=https://repository.apache.org/service/local/staging/deploy/maven2
 
 if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
@@ -47,31 +52,59 @@ set -e
 GIT_TAG=v$RELEASE_VERSION-$RC_NAME
 
 if [[ ! "$@" =~ --package-only ]]; then
-  echo "Creating and publishing release"
+  echo "Creating release commit and publishing to Apache repository"
   # Artifact publishing
-  git clone https://git-wip-us.apache.org/repos/asf/spark.git -b $GIT_BRANCH
-  cd spark
+  git clone https://$GIT_USERNAME:$GIT_PASSWORD@git-wip-us.apache.org/repos/asf/spark.git \
+    -b $GIT_BRANCH
+  pushd spark
   export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
 
-  mvn -Pyarn release:clean
+  echo "Creating tag $GIT_TAG at the head of $BRANCH_NAME"
+  git checkout -f $BRANCH_NAME
+  # TODO: We should update other things in the repo here
+  find . -name pom.xml |grep -v dev | xargs -I {} sed -i \
+    -e "s/${RELEASE_VERSION}-SNAPSHOT/$RELEASE_VERSION/" {}
+  git commit -a -m "Preparing Spark release $GIT_TAG"
+  git tag $GIT_TAG
 
+  rm -rf $SPARK_REPO
   mvn -DskipTests \
-    -Darguments="-DskipTests=true -Dmaven.javadoc.skip=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
-    -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
-    -Dmaven.javadoc.skip=true \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
     -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
-    --batch-mode release:prepare
+    install
 
-  mvn -DskipTests \
-    -Darguments="-DskipTests=true -Dmaven.javadoc.skip=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
-    -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Dmaven.javadoc.skip=true \
-    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
-    release:perform
+  pushd $SPARK_REPO
 
-  cd ..
+  # Remove any extra files generated during install
+  find . -type f |grep -v \.jar |grep -v \.pom | xargs rm
+
+  echo "Creating hash and signature files"
+  for file in $(find . -type f)
+  do
+    echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --output $file.asc --detach-sig --armour $file;
+    gpg --print-md MD5 $file > $file.md5;
+    gpg --print-md SHA1 $file > $file.sha1
+  done
+
+  echo "Uplading files to $NEXUS_REPOSITORY"
+  for file in $(find . -type f)
+  do
+    # strip leading ./
+    file_short=$(echo $file | sed -e "s/\.\///")
+    dest_url="$NEXUS_REPOSITORY/org/apache/spark/$file_short"
+    echo "  Uploading $file_short"
+    curl -u $NEXUS_USERNAME:$NEXUS_PASSWORD --upload-file $file_short $dest_url
+  done
+  popd
+
+  find . -name pom.xml |grep -v dev | xargs -I {} sed -i \
+    -e "s/$RELEASE_VERSION/${NEXT_VERSION}-SNAPSHOT/" {}
+  git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
+
+  git push origin $GIT_TAG
+  git push origin HEAD:$BRANCH_NAME
+  popd
   rm -rf spark
 fi
 
