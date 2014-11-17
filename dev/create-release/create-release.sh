@@ -58,13 +58,22 @@ if [[ ! "$@" =~ --package-only ]]; then
   pushd spark
   export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
 
+  # Create release commits and push them to github
+  # NOTE: This is done "eagerly" i.e. we don't check if we can succesfully build
+  # or before we coin the release commit. This helps avoid races where
+  # other people add commits to this branch while we are in the middle of building.
   find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
     -e "s/${RELEASE_VERSION}-SNAPSHOT/$RELEASE_VERSION/" {}
   git commit -a -m "Preparing Spark release $GIT_TAG"
-
   echo "Creating tag $GIT_TAG at the head of $GIT_BRANCH"
   git tag $GIT_TAG
-
+  find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
+    -e "s/$RELEASE_VERSION/${NEXT_VERSION}-SNAPSHOT/" {}
+  git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
+  git push origin $GIT_TAG
+  git push origin HEAD:$GIT_BRANCH
+  git checkout -f $GIT_TAG 
+ 
   rm -rf $SPARK_REPO
 
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
@@ -103,12 +112,6 @@ if [[ ! "$@" =~ --package-only ]]; then
   done
   popd
 
-  find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
-    -e "s/$RELEASE_VERSION/${NEXT_VERSION}-SNAPSHOT/" {}
-  git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
-
-  git push origin $GIT_TAG
-  git push origin HEAD:$GIT_BRANCH
   popd
   rm -rf spark
 fi
