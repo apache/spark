@@ -144,7 +144,8 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *  can take place.
  */
 
-private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with SecretKeyHolder {
+private[spark] class SecurityManager(
+    val sparkConf: SparkConf) extends Logging with SecretKeyHolder {
 
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
