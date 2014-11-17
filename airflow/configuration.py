@@ -10,7 +10,6 @@ class AirflowConfigParser(ConfigParser):
     if 'AIRFLOW_CONFIG_PATH' in os.environ:
         _config_paths.append(os.environ['AIRFLOW_CONFIG_PATH'])
         logging.info("Config paths is " + str(_config_paths))
-    print("Config paths is " + str(_config_paths))
 
     @classmethod
     def add_config_paths(cls, path):
