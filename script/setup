@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+FWDIR="$(cd `dirname $0`/..; pwd)"
+export SPARK_HADOOP_VERSION="$(cat $FWDIR/SHOPIFY_HADOOP_VERSION)"
+export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+mvn -Dhadoop.version=$SPARK_HADOOP_VERSION -DskipTests clean package
