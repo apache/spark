@@ -352,9 +352,12 @@ object SparseMatrix {
 
   /** Generates a SparseMatrix given an Array[Double] of size numRows * numCols. The number of
     * non-zeros in `raw` is provided for efficiency. */
-  private def genRand(numRows: Int, numCols: Int, raw: Array[Double], nonZero: Int): SparseMatrix = {
+  private def genRand(
+      numRows: Int,
+      numCols: Int,
+      raw: Array[Double],
+      nonZero: Int): SparseMatrix = {
     val sparseA: ArrayBuffer[Double] = new ArrayBuffer(nonZero)
-
     val sCols: ArrayBuffer[Int] = new ArrayBuffer(numCols + 1)
     val sRows: ArrayBuffer[Int] = new ArrayBuffer(nonZero)
 
@@ -393,7 +396,6 @@ object SparseMatrix {
       numCols: Int,
       density: Double,
       seed: Long): SparseMatrix = {
-
     require(density > 0.0 && density < 1.0, "density must be a double in the range " +
       s"0.0 < d < 1.0. Currently, density: $density")
     val rand = new XORShiftRandom(seed)
@@ -434,7 +436,6 @@ object SparseMatrix {
       numCols: Int,
       density: Double,
       seed: Long): SparseMatrix = {
-
     require(density > 0.0 && density < 1.0, "density must be a double in the range " +
       s"0.0 < d < 1.0. Currently, density: $density")
     val rand = new XORShiftRandom(seed)
@@ -465,8 +466,8 @@ object SparseMatrix {
   /**
    * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
-   * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero `values`
-   *         on the diagonal
+   * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
+   *         `values` on the diagonal
    */
   def diag(vector: Vector): SparseMatrix = {
     val n = vector.size
