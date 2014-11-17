@@ -35,13 +35,12 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, CallSite, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
@@ -1211,35 +1210,20 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
+  def isCheckpointed: Boolean = {
+    checkpointData.map(_.isCheckpointed).getOrElse(false)
+  }
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
+  def getCheckpointFile: Option[String] = {
+    checkpointData.flatMap(_.getCheckpointFile)
+  }
 
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
-
-  /**
-   * Broadcasted copy of this RDD, used to dispatch tasks to executors. Note that we broadcast
-   * the serialized copy of the RDD and for each task we will deserialize it, which means each
-   * task gets a different copy of the RDD. This provides stronger isolation between tasks that
-   * might modify state of objects referenced in their closures. This is necessary in Hadoop
-   * where the JobConf/Configuration object is not thread-safe.
-   */
-  @transient private[spark] lazy val broadcasted: Broadcast[Array[Byte]] = {
-    val ser = SparkEnv.get.closureSerializer.newInstance()
-    val bytes = ser.serialize(this).array()
-    val size = Utils.bytesToString(bytes.length)
-    if (bytes.length > (1L << 20)) {
-      logWarning(s"Broadcasting RDD $id ($size), which contains large objects")
-    } else {
-      logDebug(s"Broadcasting RDD $id ($size)")
-    }
-    sc.broadcast(bytes)
-  }
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
