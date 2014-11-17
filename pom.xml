@@ -156,7 +156,7 @@
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>https://repo1.maven.org/maven2</url>
+      <url>http://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -167,7 +167,7 @@
     <repository>
       <id>apache-repo</id>
       <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
+      <url>http://repository.apache.org/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -178,7 +178,7 @@
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
+      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -189,7 +189,7 @@
     <repository>
       <id>mqtt-repo</id>
       <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
+      <url>http://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -200,7 +200,7 @@
     <repository>
       <id>cloudera-repo</id>
       <name>Cloudera Repository</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <url>http://repository.cloudera.com/artifactory/cloudera-repos</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -222,7 +222,7 @@
     <repository>
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
-      <url>https://repo.spring.io/libs-release</url>
+      <url>http://repo.spring.io/libs-release</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -234,7 +234,7 @@
       <!-- This is temporarily included to fix issues with Hive 0.12 -->
       <id>spark-staging</id>
       <name>Spring Staging Repository</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
+      <url>http://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -246,7 +246,7 @@
       <!-- This is temporarily included to fix issues with Hive 0.13 -->
       <id>spark-staging-hive13</id>
       <name>Spring Staging Repository Hive 13</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
+      <url>http://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -258,7 +258,7 @@
   <pluginRepositories>
     <pluginRepository>
       <id>central</id>
-      <url>https://repo1.maven.org/maven2</url>
+      <url>http://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
