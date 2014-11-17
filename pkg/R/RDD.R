@@ -1333,8 +1333,8 @@ setMethod("join",
                 rdd2 <- reserialize(rdd2)
               }
             }  
-            rdd1_tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
-            rdd2_tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
+            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
+            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
               t1 <- Filter(function(x) { x[[1]] == 1L }, v)
@@ -1342,15 +1342,18 @@ setMethod("join",
               t2 <- Filter(function(x) { x[[1]] == 2L }, v)
               t2 <- lapply(t2, function(x) { x[[2]] })
               result <- list()
+              length(result) <- length(t1) * length(t2)
+              index <- 1L
               for (i in t1) {
                 for (j in t2) {
-                  result[[length(result) + 1L]] <- list(i, j)
+                  result[[index]] <- list(i, j)
+                  index <- index + 1L
                 }
               }
               result
             }
             
-            joined <- flatMapValues(groupByKey(unionRDD(rdd1_tagged, rdd2_tagged), numPartitions), doJoin)
+            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
           })
 
 
