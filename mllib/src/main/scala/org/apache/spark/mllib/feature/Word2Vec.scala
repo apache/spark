@@ -461,4 +461,13 @@ class Word2VecModel private[mllib] (
       .tail
       .toArray
   }
+  
+  /**
+   * Returns the strings with it´s raw vectors for further processing
+   * (e.g. clustering)
+   * @return map of string to vector
+   */
+  def getVectors(): Map[String, Array[Float]] = {
+    model
+  }
 }
