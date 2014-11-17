@@ -191,10 +191,12 @@ private[broadcast] object HttpBroadcast extends Logging {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
       uc = newuri.toURL.openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
       uc.setAllowUserInteraction(false)
     } else {
       logDebug("broadcast not using security")
       uc = new URL(url).openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
     }
 
     val in = {

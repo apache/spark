@@ -152,14 +152,15 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
+    val attributesSize = attributes.size
+    if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
+        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
     }
 
     var index = 0
     writer.startMessage()
-    while(index < attributes.size) {
+    while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
       if (record(index) != null) {
         writer.startField(attributes(index).name, index)
@@ -312,14 +313,15 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 // Optimized for non-nested rows
 private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
   override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
+    val attributesSize = attributes.size
+    if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
+        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
     }
 
     var index = 0
     writer.startMessage()
-    while(index < attributes.size) {
+    while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
       if (record(index) != null && record(index) != Nil) {
         writer.startField(attributes(index).name, index)
