@@ -62,13 +62,18 @@ if [[ ! "$@" =~ --package-only ]]; then
   # NOTE: This is done "eagerly" i.e. we don't check if we can succesfully build
   # or before we coin the release commit. This helps avoid races where
   # other people add commits to this branch while we are in the middle of building.
+  old="  <version>${RELEASE_VERSION}-SNAPSHOT<\/version>"
+  new="  <version>${RELEASE_VERSION}<\/version>"
   find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
-    -e "s/${RELEASE_VERSION}-SNAPSHOT/$RELEASE_VERSION/" {}
+    -e "s/$old/$new/" {}
   git commit -a -m "Preparing Spark release $GIT_TAG"
   echo "Creating tag $GIT_TAG at the head of $GIT_BRANCH"
   git tag $GIT_TAG
+
+  old="  <version>${RELEASE_VERSION}<\/version>"
+  new="  <version>${NEXT_VERSION}-SNAPSHOT<\/version>"
   find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
-    -e "s/$RELEASE_VERSION/${NEXT_VERSION}-SNAPSHOT/" {}
+    -e "s/$old/$new/" {}
   git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
   git push origin $GIT_TAG
   git push origin HEAD:$GIT_BRANCH
