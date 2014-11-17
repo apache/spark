@@ -112,4 +112,113 @@ class MatricesSuite extends FunSuite {
     assert(sparseMat(0, 1) === 10.0)
     assert(sparseMat.values(2) === 10.0)
   }
+
+  test("map, update") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val deMat1 = new DenseMatrix(m, n, allValues)
+    val deMat2 = deMat1.map(_ * 2)
+    val spMat2 = spMat1.map(_ * 2)
+    deMat1.update(_ * 2)
+    spMat1.update(_ * 2)
+
+    assert(spMat1.toArray === spMat2.toArray)
+    assert(deMat1.toArray === deMat2.toArray)
+  }
+
+  test("horzCat, vertCat, eye, speye") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val deMat1 = new DenseMatrix(m, n, allValues)
+    val deMat2 = Matrices.eye(3)
+    val spMat2 = Matrices.speye(3)
+    val deMat3 = Matrices.eye(2)
+    val spMat3 = Matrices.speye(2)
+
+    val spHorz = Matrices.horzCat(Seq(spMat1, spMat2))
+    val deHorz1 = Matrices.horzCat(Seq(deMat1, deMat2))
+    val deHorz2 = Matrices.horzCat(Seq(spMat1, deMat2))
+    val deHorz3 = Matrices.horzCat(Seq(deMat1, spMat2))
+
+    assert(deHorz1.numRows === 3)
+    assert(deHorz2.numRows === 3)
+    assert(deHorz3.numRows === 3)
+    assert(spHorz.numRows === 3)
+    assert(deHorz1.numCols === 5)
+    assert(deHorz2.numCols === 5)
+    assert(deHorz3.numCols === 5)
+    assert(spHorz.numCols === 5)
+
+    assert(deHorz1 === deHorz2)
+    assert(deHorz2 === deHorz3)
+    assert(spHorz(0, 0) === 1.0)
+    assert(spHorz(2, 1) === 5.0)
+    assert(spHorz(0, 2) === 1.0)
+    assert(spHorz(1, 2) === 0.0)
+    assert(spHorz(1, 3) === 1.0)
+    assert(spHorz(2, 4) === 1.0)
+    assert(spHorz(1, 4) === 0.0)
+    assert(deHorz1(0, 0) === 1.0)
+    assert(deHorz1(2, 1) === 5.0)
+    assert(deHorz1(0, 2) === 1.0)
+    assert(deHorz1(1, 2) === 0.0)
+    assert(deHorz1(1, 3) === 1.0)
+    assert(deHorz1(2, 4) === 1.0)
+    assert(deHorz1(1, 4) === 0.0)
+
+    intercept[IllegalArgumentException] {
+      Matrices.horzCat(Seq(spMat1, spMat3))
+    }
+
+    intercept[IllegalArgumentException] {
+      Matrices.horzCat(Seq(deMat1, spMat3))
+    }
+
+    val spVert = Matrices.vertCat(Seq(spMat1, spMat3))
+    val deVert1 = Matrices.vertCat(Seq(deMat1, deMat3))
+    val deVert2 = Matrices.vertCat(Seq(spMat1, deMat3))
+    val deVert3 = Matrices.vertCat(Seq(deMat1, spMat3))
+
+    assert(deVert1.numRows === 5)
+    assert(deVert2.numRows === 5)
+    assert(deVert3.numRows === 5)
+    assert(spVert.numRows === 5)
+    assert(deVert1.numCols === 2)
+    assert(deVert2.numCols === 2)
+    assert(deVert3.numCols === 2)
+    assert(spVert.numCols === 2)
+
+    assert(deVert1 === deVert2)
+    assert(deVert2 === deVert3)
+    assert(spVert(0, 0) === 1.0)
+    assert(spVert(2, 1) === 5.0)
+    assert(spVert(3, 0) === 1.0)
+    assert(spVert(3, 1) === 0.0)
+    assert(spVert(4, 1) === 1.0)
+    assert(deVert1(0, 0) === 1.0)
+    assert(deVert1(2, 1) === 5.0)
+    assert(deVert1(3, 0) === 1.0)
+    assert(deVert1(3, 1) === 0.0)
+    assert(deVert1(4, 1) === 1.0)
+
+    intercept[IllegalArgumentException] {
+      Matrices.vertCat(Seq(spMat1, spMat2))
+    }
+
+    intercept[IllegalArgumentException] {
+      Matrices.vertCat(Seq(deMat1, spMat2))
+    }
+  }
 }
