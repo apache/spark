@@ -175,7 +175,9 @@ private[ui] class StageTableBase(
       Seq.empty
     }} ++
     <td>{makeDescription(s)}</td>
-    <td valign="middle">{submissionTime}</td>
+    <td sorttable_customkey={s.submissionTime.getOrElse(0).toString} valign="middle">
+      {submissionTime}
+    </td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
     <td class="progress-cell">
       {makeProgressBar(stageData.numActiveTasks, stageData.completedIndices.size,

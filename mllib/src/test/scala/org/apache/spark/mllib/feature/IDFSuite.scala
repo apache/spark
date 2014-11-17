@@ -21,10 +21,10 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class IDFSuite extends FunSuite with LocalSparkContext {
+class IDFSuite extends FunSuite with MLlibTestSparkContext {
 
   test("idf") {
     val n = 4

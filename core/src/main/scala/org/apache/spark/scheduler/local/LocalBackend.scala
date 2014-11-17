@@ -51,7 +51,7 @@ private[spark] class LocalActor(
   private val localExecutorHostname = "localhost"
 
   val executor = new Executor(
-    localExecutorId, localExecutorHostname, scheduler.conf.getAll, isLocal = true)
+    localExecutorId, localExecutorHostname, scheduler.conf.getAll, totalCores, isLocal = true)
 
   override def receiveWithLogging = {
     case ReviveOffers =>

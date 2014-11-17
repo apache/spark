@@ -112,7 +112,6 @@ class DecimalSuite extends FunSuite with PrivateMethodTester {
   test("hash code") {
     assert(Decimal(123).hashCode() === (123).##)
     assert(Decimal(-123).hashCode() === (-123).##)
-    assert(Decimal(123.312).hashCode() === (123.312).##)
     assert(Decimal(Int.MaxValue).hashCode() === Int.MaxValue.##)
     assert(Decimal(Long.MaxValue).hashCode() === Long.MaxValue.##)
     assert(Decimal(BigDecimal(123)).hashCode() === (123).##)

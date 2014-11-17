@@ -108,5 +108,7 @@ private[sql] object DataSourceStrategy extends Strategy {
 
     case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) => LessThanOrEqual(a.name, v)
     case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) => GreaterThanOrEqual(a.name, v)
+
+    case expressions.InSet(a: Attribute, set) => In(a.name, set.toArray)
   }
 }

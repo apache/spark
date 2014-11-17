@@ -144,9 +144,6 @@
     </profile>
     <profile>
       <id>hive-0.12.0</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <dependencies>
          <dependency>
            <groupId>com.twitter</groupId>
