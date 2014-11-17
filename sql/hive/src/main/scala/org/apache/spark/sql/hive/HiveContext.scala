@@ -138,7 +138,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // countFileSize to count the table size.
         def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDirectory) {
+          val size = if (fileStatus.isDir) {
             fs.listStatus(path).map(status => calculateTableSize(fs, status.getPath)).sum
           } else {
             fileStatus.getLen
