@@ -18,10 +18,8 @@
 package org.apache.spark.ui
 
 import java.util.{Timer, TimerTask}
-import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerStageCompleted, SparkListener}
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
@@ -35,6 +33,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   val UPDATE_PERIOD = 200L
   // Delay to show up a progress bar, in milli seconds
   val DELAY_SHOW_UP = 500L
+
   // The width of terminal
   val TerminalWidth = if (!sys.env.getOrElse("COLUMNS", "").isEmpty) {
     sys.env.get("COLUMNS").get.toInt
@@ -42,88 +41,68 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     80
   }
 
-  @volatile var hasShowed = false
+  var hasShowed = false
+  var lastFinishTime = 0L
 
-  /**
-   * Track the life cycle of stages
-   */
-  val activeStages = new HashMap[Int, Long]()
-
-  private class StageProgressListener extends SparkListener {
-    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = {
-      activeStages.synchronized {
-        activeStages.put(stageSubmitted.stageInfo.stageId, System.currentTimeMillis())
-      }
-    }
-    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = {
-      activeStages.synchronized {
-        activeStages.remove(stageCompleted.stageInfo.stageId)
-        if (activeStages.isEmpty) {
-          clearProgressBar()
-        }
-      }
-    }
-  }
-  sc.listenerBus.addListener(new StageProgressListener)
-
-  // Schedule a update thread to run in every 200ms
-  private val timer = new Timer("show progress", true)
+  // Schedule a refresh thread to run in every 200ms
+  private val timer = new Timer("refresh progress", true)
   timer.schedule(new TimerTask{
     override def run() {
-      var running = 0
-      var finished = 0
-      var tasks = 0
-      var failed = 0
-      val now = System.currentTimeMillis()
-      val stageIds = sc.statusTracker.getActiveStageIds()
-      stageIds.map(sc.statusTracker.getStageInfo).foreach{
-        case Some(stage) =>
-          activeStages.synchronized {
-            // Don't show progress for stage which has only one task (useless),
-            // also don't show progress for stage which had started in 500 ms
-            if (stage.numTasks > 1 && activeStages.contains(stage.stageId)
-              && now - activeStages(stage.stageId) > DELAY_SHOW_UP) {
-              tasks += stage.numTasks
-              running += stage.numActiveTasks
-              finished += stage.numCompletedTasks
-              failed += stage.numFailedTasks
-            }
-          }
-      }
-      if (tasks > 0) {
-        showProgressBar(stageIds, tasks, running, finished, failed)
-      }
+      refresh()
     }
   }, DELAY_SHOW_UP, UPDATE_PERIOD)
 
   /**
-   * Show progress in console (also in title). The progress bar is displayed in the next line
+   * Try to refresh the progress bar in every cycle
+   */
+  private def refresh(): Unit = synchronized {
+    val now = System.currentTimeMillis()
+    if (now - lastFinishTime < DELAY_SHOW_UP) {
+      return
+    }
+    var running = 0
+    var finished = 0
+    var tasks = 0
+    var failed = 0
+    val stageIds = sc.statusTracker.getActiveStageIds()
+    stageIds.map(sc.statusTracker.getStageInfo).flatten.foreach { stage =>
+      // Don't show progress for stage which has only one task (useless),
+      // also don't show progress for stage which had started in 500 ms
+      if (stage.numTasks > 1 && now - stage.submissionTime() > DELAY_SHOW_UP) {
+        tasks += stage.numTasks()
+        running += stage.numActiveTasks()
+        finished += stage.numCompletedTasks()
+        failed += stage.numFailedTasks()
+      }
+    }
+    if (tasks > 0) {
+      show(stageIds, tasks, running, finished, failed)
+      hasShowed = true
+    }
+  }
+
+  /**
+   * Show progress bar in console. The progress bar is displayed in the next line
    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
-  private def showProgressBar(stageIds: Seq[Int], total: Int, running: Int, finished: Int,
+  private def show(stageIds: Seq[Int], total: Int, running: Int, finished: Int,
                               failed: Int): Unit = {
-    // show progress of all stages in one line progress bar
-    val ids = stageIds.mkString("/")
-    if (!log.isInfoEnabled) {
-      if (finished < total) {
-        val header = s"Stage $ids: ["
-        val tailer = s"] $finished + $running / $total"
-        val width = TerminalWidth - header.size - tailer.size
-        val percent = finished * width / total
-        val bar = (0 until width).map { i =>
-          if (i < percent) "=" else if (i == percent) ">" else " "
-        }.mkString("")
-        System.err.printf("\r" + header + bar + tailer)
-      }
-    }
-    hasShowed = true
+    val ids = stageIds.mkString(",")
+    val header = s"Stage $ids: ["
+    val tailer = s"] ($finished + $running) / $total"
+    val width = TerminalWidth - header.size - tailer.size
+    val percent = finished * width / total
+    val bar = (0 until width).map { i =>
+      if (i < percent) "=" else if (i == percent) ">" else " "
+    }.mkString("")
+    System.err.printf("\r" + header + bar + tailer)
   }
 
   /**
    * Clear the progress bar if showed.
    */
-  private def clearProgressBar() = {
+  private def clear() = {
     if (hasShowed) {
       System.err.printf("\r" + " " * TerminalWidth + "\r")
       hasShowed = false
@@ -134,10 +113,8 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * Mark all the stages as finished, clear the progress bar if showed, then the progress will not
    * interwave with output of jobs.
    */
-  def finishAll() = {
-    clearProgressBar()
-    activeStages.synchronized {
-      activeStages.clear()
-    }
+  def finishAll(): Unit = synchronized {
+    clear()
+    lastFinishTime = System.currentTimeMillis()
   }
 }

@@ -96,6 +96,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
         new SparkStageInfoImpl(
           stageId,
           info.attemptId,
+          info.submissionTime.getOrElse(0),
           info.name,
           info.numTasks,
           data.numActiveTasks,

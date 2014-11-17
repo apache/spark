@@ -240,7 +240,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
-    if (conf.getBoolean("spark.ui.enabled", true)) {
+    if (conf.getBoolean("spark.ui.enabled", true) && !log.isInfoEnabled) {
       Some(SparkUI.createLiveUI(this, conf, listenerBus, jobProgressListener,
         env.securityManager,appName))
     } else {
