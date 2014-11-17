@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.util.collection.ExternalSorter
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
@@ -31,6 +29,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
+import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * :: DeveloperApi ::
@@ -192,6 +191,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
 /**
  * :: DeveloperApi ::
  * Performs a sort on-heap.
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
  */
 @DeveloperApi
 case class Sort(
@@ -215,6 +216,8 @@ case class Sort(
 /**
  * :: DeveloperApi ::
  * Performs a sort, spilling to disk as needed.
+ * @param global when true performs a global sort of all partitions by shuffling the data first
+ *               if necessary.
  */
 @DeveloperApi
 case class ExternalSort(
