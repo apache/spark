@@ -365,23 +365,19 @@
       </dependencies>
     </profile>
 
-    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
+    <!-- Profiles that disable inclusion of certain dependencies. -->
     <profile>
       <id>hadoop-provided</id>
       <properties>
         <hadoop.deps.scope>provided</hadoop.deps.scope>
       </properties>
     </profile>
-
-    <!-- Build without Hive dependencies that are included in some runtime environments. -->
     <profile>
       <id>hive-provided</id>
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
       </properties>
     </profile>
-
-    <!-- Build without Parquet dependencies that are included in some runtime environments. -->
     <profile>
       <id>parquet-provided</id>
       <properties>
