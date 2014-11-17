@@ -60,8 +60,7 @@ if [[ ! "$@" =~ --package-only ]]; then
 
   echo "Creating tag $GIT_TAG at the head of $BRANCH_NAME"
   git checkout -f $BRANCH_NAME
-  # TODO: We should update other things in the repo here
-  find . -name pom.xml |grep -v dev | xargs -I {} sed -i \
+  find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
     -e "s/${RELEASE_VERSION}-SNAPSHOT/$RELEASE_VERSION/" {}
   git commit -a -m "Preparing Spark release $GIT_TAG"
   git tag $GIT_TAG
@@ -102,7 +101,7 @@ if [[ ! "$@" =~ --package-only ]]; then
   done
   popd
 
-  find . -name pom.xml |grep -v dev | xargs -I {} sed -i \
+  find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
     -e "s/$RELEASE_VERSION/${NEXT_VERSION}-SNAPSHOT/" {}
   git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
 
