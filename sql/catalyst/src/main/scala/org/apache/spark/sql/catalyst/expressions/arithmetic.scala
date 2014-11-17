@@ -56,8 +56,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
 
   override lazy val resolved =
     left.resolved && right.resolved &&
-    left.dataType == right.dataType &&
-    !DecimalType.isFixed(left.dataType)
+    left.dataType == right.dataType
 
   def dataType = {
     if (!resolved) {
