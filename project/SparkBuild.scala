@@ -210,7 +210,7 @@ object OldDeps {
 
   def versionArtifact(id: String): Option[sbt.ModuleID] = {
     val fullId = id + "_2.10"
-    Some("org.apache.spark" % fullId % "1.1.0")
+    Some("org.apache.spark" % fullId % "1.2.0")
   }
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
@@ -384,7 +384,7 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     // This places test scope jars on the classpath of executors during tests.
-    javaOptions in Test += 
+    javaOptions in Test +=
       "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
       map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",
