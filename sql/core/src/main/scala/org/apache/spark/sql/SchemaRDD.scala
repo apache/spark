@@ -22,7 +22,6 @@ import java.io.StringWriter
 
 import scala.collection.JavaConversions._
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.core.JsonFactory
 
 import net.razorvine.pickle.Pickler
@@ -39,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.UserDefinedType
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.storage.StorageLevel
 
@@ -141,6 +141,7 @@ class SchemaRDD(
     * @param rowSchema the schema object used for conversion
     * @param row The row to convert
     */
+      /**
   private def rowToJSON(rowSchema: StructType, jsonFactory: JsonFactory)(row: Row): String = {
     val writer = new StringWriter()
     val gen = jsonFactory.createGenerator(writer)
@@ -190,7 +191,7 @@ class SchemaRDD(
     writer.toString
   }
 
-
+      **/
 
   /** Returns a new RDD of JSON strings, one string per row
   *
@@ -200,7 +201,7 @@ class SchemaRDD(
     val rowSchema = this.schema
     this.mapPartitions { iter =>
       val jsonFactory = new JsonFactory()
-      iter.map(rowToJSON(rowSchema, jsonFactory))
+      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
     }
 
   }
