@@ -101,14 +101,10 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
-    if (profiles.exists(_.contains("scala-"))) {
-      profiles
-    } else if (System.getProperty("scala-2.11") != null) {
-      profiles ++ Seq("scala-2.11")
-    } else {
-      println("Enabled default scala profile")
-      profiles ++ Seq("scala-2.10")
+    if (System.getProperty("scala-2.11") != null && System.getProperty("scala-2.11") == "") {
+      System.setProperty("scala-2.11", "true")
     }
+    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
