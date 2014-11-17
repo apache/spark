@@ -107,6 +107,7 @@
         <version>${hbase.version}</version>
         <exclusions>
           <exclusion>
+            <!-- SPARK-4455 -->
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-annotations</artifactId>
           </exclusion>
@@ -127,6 +128,7 @@
         <version>${hbase.version}</version>
         <exclusions>
           <exclusion>
+            <!-- SPARK-4455 -->
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-annotations</artifactId>
           </exclusion>
@@ -138,6 +140,7 @@
         <version>${hbase.version}</version>
         <exclusions>
           <exclusion>
+            <!-- SPARK-4455 -->
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-annotations</artifactId>
           </exclusion>
@@ -173,6 +176,7 @@
             <artifactId>hadoop-auth</artifactId>
           </exclusion>
           <exclusion>
+            <!-- SPARK-4455 -->
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-annotations</artifactId>
           </exclusion>
