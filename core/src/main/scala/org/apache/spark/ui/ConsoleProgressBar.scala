@@ -23,16 +23,18 @@ import org.apache.spark._
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
- * status of active stages from `sc.statusTracker` in every 200ms, the progress bar will be showed
+ * status of active stages from `sc.statusTracker` periodically, the progress bar will be showed
  * up after the stage has ran at least 500ms. If multiple stages run in the same time, the status
  * of them will be combined together, showed in one line.
  */
 private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
 
-  // Update period of progress bar, in milli seconds
+  // Carrige return
+  val CR = '\r'
+  // Update period of progress bar, in milliseconds
   val UPDATE_PERIOD = 200L
-  // Delay to show up a progress bar, in milli seconds
-  val DELAY_SHOW_UP = 500L
+  // Delay to show up a progress bar, in milliseconds
+  val FIRST_DELAY = 500L
 
   // The width of terminal
   val TerminalWidth = if (!sys.env.getOrElse("COLUMNS", "").isEmpty) {
@@ -41,31 +43,31 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     80
   }
 
-  var hasShowed = false
   var lastFinishTime = 0L
+  var lastUpdateTime = 0L
+  var lastProgressBar = ""
 
-  // Schedule a refresh thread to run in every 200ms
+  // Schedule a refresh thread to run periodically
   private val timer = new Timer("refresh progress", true)
   timer.schedule(new TimerTask{
     override def run() {
       refresh()
     }
-  }, DELAY_SHOW_UP, UPDATE_PERIOD)
+  }, FIRST_DELAY, UPDATE_PERIOD)
 
   /**
    * Try to refresh the progress bar in every cycle
    */
   private def refresh(): Unit = synchronized {
     val now = System.currentTimeMillis()
-    if (now - lastFinishTime < DELAY_SHOW_UP) {
+    if (now - lastFinishTime < FIRST_DELAY) {
       return
     }
     val stageIds = sc.statusTracker.getActiveStageIds()
     val stages = stageIds.map(sc.statusTracker.getStageInfo).flatten.filter(_.numTasks() > 1)
-      .filter(now - _.submissionTime() > DELAY_SHOW_UP).sortBy(_.stageId())
+      .filter(now - _.submissionTime() > FIRST_DELAY).sortBy(_.stageId())
     if (stages.size > 0) {
-      show(stages.take(3))  // display at most 3 stages in same time
-      hasShowed = true
+      show(now, stages.take(3))  // display at most 3 stages in same time
     }
   }
 
@@ -74,10 +76,9 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
-  private def show(stages: Seq[SparkStageInfo]) {
-    System.err.print("\r")
+  private def show(now: Long, stages: Seq[SparkStageInfo]) {
     val width = TerminalWidth / stages.size
-    stages.foreach { s =>
+    val bar = stages.map { s =>
       val total = s.numTasks()
       val header = s"[Stage ${s.stageId()}:"
       val tailer = s"(${s.numCompletedTasks()} + ${s.numActiveTasks()}) / $total]"
@@ -90,23 +91,31 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
       } else {
         ""
       }
-      System.err.print(header + bar + tailer)
+      header + bar + tailer
+    }.mkString("")
+
+    // only refresh if it's changed of after 1 minute (or the ssh connection will be closed
+    // after idle some time)
+    if (bar != lastProgressBar || now - lastUpdateTime > 60 * 1000L) {
+      System.err.print(CR + bar)
+      lastUpdateTime = now
     }
+    lastProgressBar = bar
   }
 
   /**
    * Clear the progress bar if showed.
    */
-  private def clear() = {
-    if (hasShowed) {
-      System.err.printf("\r" + " " * TerminalWidth + "\r")
-      hasShowed = false
+  private def clear() {
+    if (!lastProgressBar.isEmpty) {
+      System.err.printf(CR + " " * TerminalWidth + CR)
+      lastProgressBar = ""
     }
   }
 
   /**
    * Mark all the stages as finished, clear the progress bar if showed, then the progress will not
-   * interwave with output of jobs.
+   * interweave with output of jobs.
    */
   def finishAll(): Unit = synchronized {
     clear()
