@@ -59,7 +59,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * along with their vertex data.
    *
    */
-  @transient val edges: EdgeRDD[ED, VD]
+  @transient val edges: EdgeRDD[ED]
 
   /**
    * An RDD containing the edge triplets, which are edges along with the vertex data associated with
