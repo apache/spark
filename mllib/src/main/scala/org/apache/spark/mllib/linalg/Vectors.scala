@@ -237,7 +237,7 @@ object Vectors {
   private[mllib] def fromBreeze(breezeVector: BV[Double]): Vector = {
     breezeVector match {
       case v: BDV[Double] =>
-        if (v.offset == 0 && v.stride == 1) {
+        if (v.offset == 0 && v.stride == 1 && v.length == v.data.length) {
           new DenseVector(v.data)
         } else {
           new DenseVector(v.toArray)  // Can't use underlying array directly, so make a new one

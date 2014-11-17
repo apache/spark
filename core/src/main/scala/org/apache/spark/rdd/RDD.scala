@@ -1309,7 +1309,7 @@ abstract class RDD[T: ClassTag](
     def debugSelf (rdd: RDD[_]): Seq[String] = {
       import Utils.bytesToString
 
-      val persistence = storageLevel.description
+      val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize),
