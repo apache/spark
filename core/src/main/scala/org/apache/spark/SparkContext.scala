@@ -232,7 +232,7 @@ class SparkContext(config: SparkConf) extends Logging {
   val statusTracker = new SparkStatusTracker(this)
 
   private[spark] val progressBar: Option[ConsoleProgressBar] =
-    if (conf.getBoolean("spark.ui.showConsoleProgress", true)) {
+    if (conf.getBoolean("spark.ui.showConsoleProgress", true) && !log.isInfoEnabled) {
       Some(new ConsoleProgressBar(this))
     } else {
       None
@@ -240,7 +240,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Initialize the Spark UI
   private[spark] val ui: Option[SparkUI] =
-    if (conf.getBoolean("spark.ui.enabled", true) && !log.isInfoEnabled) {
+    if (conf.getBoolean("spark.ui.enabled", true)) {
       Some(SparkUI.createLiveUI(this, conf, listenerBus, jobProgressListener,
         env.securityManager,appName))
     } else {

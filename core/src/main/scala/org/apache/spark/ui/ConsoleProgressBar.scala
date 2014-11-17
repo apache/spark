@@ -60,23 +60,11 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     if (now - lastFinishTime < DELAY_SHOW_UP) {
       return
     }
-    var running = 0
-    var finished = 0
-    var tasks = 0
-    var failed = 0
     val stageIds = sc.statusTracker.getActiveStageIds()
-    stageIds.map(sc.statusTracker.getStageInfo).flatten.foreach { stage =>
-      // Don't show progress for stage which has only one task (useless),
-      // also don't show progress for stage which had started in 500 ms
-      if (stage.numTasks > 1 && now - stage.submissionTime() > DELAY_SHOW_UP) {
-        tasks += stage.numTasks()
-        running += stage.numActiveTasks()
-        finished += stage.numCompletedTasks()
-        failed += stage.numFailedTasks()
-      }
-    }
-    if (tasks > 0) {
-      show(stageIds, tasks, running, finished, failed)
+    val stages = stageIds.map(sc.statusTracker.getStageInfo).flatten.filter(_.numTasks() > 1)
+      .filter(now - _.submissionTime() > DELAY_SHOW_UP).sortBy(_.stageId())
+    if (stages.size > 0) {
+      show(stages.take(3))  // display at most 3 stages in same time
       hasShowed = true
     }
   }
@@ -86,17 +74,24 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
-  private def show(stageIds: Seq[Int], total: Int, running: Int, finished: Int,
-                              failed: Int): Unit = {
-    val ids = stageIds.mkString(",")
-    val header = s"Stage $ids: ["
-    val tailer = s"] ($finished + $running) / $total"
-    val width = TerminalWidth - header.size - tailer.size
-    val percent = finished * width / total
-    val bar = (0 until width).map { i =>
-      if (i < percent) "=" else if (i == percent) ">" else " "
-    }.mkString("")
-    System.err.printf("\r" + header + bar + tailer)
+  private def show(stages: Seq[SparkStageInfo]) {
+    System.err.print("\r")
+    val width = TerminalWidth / stages.size
+    stages.foreach { s =>
+      val total = s.numTasks()
+      val header = s"[Stage ${s.stageId()}:"
+      val tailer = s"(${s.numCompletedTasks()} + ${s.numActiveTasks()}) / $total]"
+      val w = width - header.size - tailer.size
+      val bar = if (w > 0) {
+        val percent = w * s.numCompletedTasks() / total
+        (0 until w).map { i =>
+          if (i < percent) "=" else if (i == percent) ">" else " "
+        }.mkString("")
+      } else {
+        ""
+      }
+      System.err.print(header + bar + tailer)
+    }
   }
 
   /**
