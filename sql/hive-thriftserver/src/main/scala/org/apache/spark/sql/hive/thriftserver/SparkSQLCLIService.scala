@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.jar.Attributes.Name
-
-import scala.collection.JavaConversions._
-
 import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
+import scala.collection.JavaConversions._
+
 import org.apache.commons.logging.Log
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.ShimLoader
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
@@ -50,7 +48,7 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
 
-    if (ShimLoader.getHadoopShims().isSecurityEnabled()) {
+    if (ShimLoader.getHadoopShims.isSecurityEnabled) {
       try {
         HiveAuthFactory.loginFromKeytab(hiveConf)
         sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
@@ -68,7 +66,7 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
     getInfoType match {
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(Utils.sparkVersion)
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(hiveContext.sparkContext.version)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }

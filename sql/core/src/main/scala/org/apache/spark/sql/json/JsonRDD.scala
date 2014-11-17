@@ -18,6 +18,7 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.util.DataTypeConversions
 
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
@@ -378,7 +379,7 @@ private[sql] object JsonRDD extends Logging {
   private def toDate(value: Any): Date = {
     value match {
       // only support string as date
-      case value: java.lang.String => Date.valueOf(value)
+      case value: java.lang.String => new Date(DataTypeConversions.stringToTime(value).getTime)
     }
   }
 
@@ -386,7 +387,7 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => new Timestamp(value.asInstanceOf[Int].toLong)
       case value: java.lang.Long => new Timestamp(value)
-      case value: java.lang.String => Timestamp.valueOf(value)
+      case value: java.lang.String => toTimestamp(DataTypeConversions.stringToTime(value).getTime)
     }
   }
 

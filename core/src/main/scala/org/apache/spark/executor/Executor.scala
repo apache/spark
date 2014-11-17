@@ -43,6 +43,7 @@ private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
     properties: Seq[(String, String)],
+    numCores: Int,
     isLocal: Boolean = false,
     actorSystem: ActorSystem = null)
   extends Logging
@@ -83,7 +84,7 @@ private[spark] class Executor(
     if (!isLocal) {
       val port = conf.getInt("spark.executor.port", 0)
       val _env = SparkEnv.createExecutorEnv(
-        conf, executorId, slaveHostname, port, isLocal, actorSystem)
+        conf, executorId, slaveHostname, port, numCores, isLocal, actorSystem)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
       _env.blockManager.initialize(conf.getAppId)
@@ -263,7 +264,7 @@ private[spark] class Executor(
             m.executorRunTime = serviceTime
             m.jvmGCTime = gcTime - startGCTime
           }
-          val reason = ExceptionFailure(t.getClass.getName, t.getMessage, t.getStackTrace, metrics)
+          val reason = new ExceptionFailure(t, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid

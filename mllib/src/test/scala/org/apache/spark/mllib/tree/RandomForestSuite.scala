@@ -28,12 +28,12 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
 import org.apache.spark.mllib.tree.model.Node
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
  * Test suite for [[RandomForest]].
  */
-class RandomForestSuite extends FunSuite with LocalSparkContext {
+class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
   def binaryClassificationTestWithContinuousFeatures(strategy: Strategy) {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
