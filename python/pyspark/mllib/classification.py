@@ -139,9 +139,6 @@ class LogisticRegressionWithLBFGS(object):
         1
         >>> lrm.predict([0.0, 1.0])
         0
-        # TODO: enable it after merge #3305
-        # >>> lrm.predict(sc.parallelize([[1.0, 0.0], [0.0, 1.0]])).collect()
-        # [1, 0]
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
