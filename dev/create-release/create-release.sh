@@ -77,6 +77,8 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
+  ./dev/change-version-to-2.10.sh
+
   pushd $SPARK_REPO
 
   # Remove any extra files generated during install
@@ -155,7 +157,6 @@ make_binary_release() {
 }
 
 
-make_binary_release "hadoop2.4-scala-2.11" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11" &
 make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
 make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
 make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" &
