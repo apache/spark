@@ -95,6 +95,9 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 # Apache Hadoop 2.4.X
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
 
+# Apache Hadoop 2.5.0 and greater
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=YOUR_VERSION -DskipTests clean package
+
 # Different versions of HDFS and YARN.
 mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
