@@ -154,6 +154,8 @@ make_binary_release() {
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
 }
 
+
+make_binary_release "hadoop2.4-scala-2.11" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn -Dscala-2.11" &
 make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
 make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
 make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" &
