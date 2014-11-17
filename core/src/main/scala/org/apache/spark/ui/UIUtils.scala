@@ -26,7 +26,8 @@ import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS = "table table-bordered table-striped-custom table-condensed sortable"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed sortable"
+  val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -248,12 +249,10 @@ private[spark] object UIUtils extends Logging {
       data: Iterable[T],
       fixedWidth: Boolean = false,
       id: Option[String] = None,
-      headerClasses: Seq[String] = Seq.empty): Seq[Node] = {
+      headerClasses: Seq[String] = Seq.empty,
+      stripeRowsWithCss: Boolean = true): Seq[Node] = {
 
-    var listingTableClass = TABLE_CLASS
-    if (fixedWidth) {
-      listingTableClass += " table-fixed"
-    }
+    val listingTableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
 

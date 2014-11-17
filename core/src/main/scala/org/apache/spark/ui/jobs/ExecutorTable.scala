@@ -36,7 +36,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
 
   /** Special table which merges two header cells. */
   private def executorTable[T](): Seq[Node] = {
-    <table class={UIUtils.TABLE_CLASS}>
+    <table class={UIUtils.TABLE_CLASS_STRIPED}>
       <thead>
         <th>Executor ID</th>
         <th>Address</th>
