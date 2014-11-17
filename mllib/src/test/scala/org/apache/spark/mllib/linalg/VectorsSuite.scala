@@ -232,10 +232,10 @@ class VectorsSuite extends FunSuite {
     assert(dvMap2.get(2) === Some(3.1))
 
     val svMap1 = scala.collection.mutable.Map[Int, Double]()
-    dvIter1.foreach{
+    svIter1.foreach{
       case (index, value) => svMap1.put(index, value)
     }
-    assert(svMap1.size === 4)
+    assert(svMap1.size === 3)
     assert(svMap1.get(1) === Some(1.2))
     assert(svMap1.get(2) === Some(3.1))
     assert(svMap1.get(3) === Some(0.0))
