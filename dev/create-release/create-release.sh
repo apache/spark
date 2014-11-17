@@ -140,6 +140,12 @@ make_binary_release() {
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
   
   cd spark-$RELEASE_VERSION-bin-$NAME
+
+  # TODO There should probably be a flag to make-distribution to allow 2.11 support
+  if [[ $FLAGS == *scala-2.11* ]]; then
+    ./dev/change-version-to-2.11.sh
+  fi
+
   ./make-distribution.sh --name $NAME --tgz $FLAGS 2>&1 | tee ../binary-release-$NAME.log
   cd ..
   cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
@@ -158,10 +164,10 @@ make_binary_release() {
 
 
 make_binary_release "hadoop1" "-Phive -Phive-thriftserver -Dhadoop.version=1.0.4" &
+make_binary_release "hadoop1-scala2.11" "-Phive -Phive-thriftserver -Dscala-2.11" &
 make_binary_release "cdh4" "-Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" &
 make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" &
 make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" &
-make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
 make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" &
 make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive -Phive-thriftserver" &
 wait
