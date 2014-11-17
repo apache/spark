@@ -156,7 +156,7 @@
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>https://repo1.maven.org/maven2</url>
+      <url>http://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -167,7 +167,7 @@
     <repository>
       <id>apache-repo</id>
       <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
+      <url>http://repository.apache.org/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -178,7 +178,7 @@
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
+      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -189,7 +189,7 @@
     <repository>
       <id>mqtt-repo</id>
       <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
+      <url>http://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -200,7 +200,7 @@
     <repository>
       <id>cloudera-repo</id>
       <name>Cloudera Repository</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <url>http://repository.cloudera.com/artifactory/cloudera-repos</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -222,7 +222,7 @@
     <repository>
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
-      <url>https://repo.spring.io/libs-release</url>
+      <url>http://repo.spring.io/libs-release</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -234,7 +234,7 @@
       <!-- This is temporarily included to fix issues with Hive 0.12 -->
       <id>spark-staging</id>
       <name>Spring Staging Repository</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
+      <url>http://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -246,7 +246,7 @@
       <!-- This is temporarily included to fix issues with Hive 0.13 -->
       <id>spark-staging-hive13</id>
       <name>Spring Staging Repository Hive 13</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
+      <url>http://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -258,7 +258,7 @@
   <pluginRepositories>
     <pluginRepository>
       <id>central</id>
-      <url>https://repo1.maven.org/maven2</url>
+      <url>http://repo1.maven.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -413,7 +413,7 @@
       <dependency>
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
-        <version>1.1.1.3</version>
+        <version>1.1.1.6</version>
       </dependency>
       <dependency>
         <groupId>net.jpountz.lz4</groupId>
@@ -1296,9 +1296,6 @@
 
     <profile>
       <id>mapr3</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
         <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
@@ -1309,9 +1306,6 @@
 
     <profile>
       <id>mapr4</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hadoop.version>2.3.0-mapr-4.0.0-FCS</hadoop.version>
         <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
@@ -1341,9 +1335,6 @@
     <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -1390,18 +1381,12 @@
     </profile>
     <profile>
       <id>hive-thriftserver</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
     <profile>
       <id>hive-0.12.0</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hive.version>0.12.0-protobuf-2.5</hive.version>
         <hive.version.short>0.12.0</hive.version.short>
@@ -1410,9 +1395,6 @@
     </profile>
     <profile>
       <id>hive-0.13.1</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hive.version>0.13.1a</hive.version>
         <hive.version.short>0.13.1</hive.version.short>
@@ -1423,7 +1405,7 @@
     <profile>
       <id>scala-2.10</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property><name>!scala-2.11</name></property>
       </activation>
       <properties>
         <scala.version>2.10.4</scala.version>
@@ -1439,7 +1421,7 @@
     <profile>
       <id>scala-2.11</id>
       <activation>
-        <activeByDefault>false</activeByDefault>
+        <property><name>scala-2.11</name></property>
       </activation>
       <properties>
         <scala.version>2.11.2</scala.version>
