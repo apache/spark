@@ -29,12 +29,6 @@ class ClientSuite extends FunSuite with Matchers {
     ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo") should be (false)
     ClientArguments.isValidJarUrl("/missing/a/protocol/jarfile.jar") should be (false)
     ClientArguments.isValidJarUrl("not-even-a-path.jar") should be (false)
-
-    // No authority
-    ClientArguments.isValidJarUrl("hdfs:someHost:1234/jarfile.jar") should be (false)
-
-    // Invalid syntax
-    ClientArguments.isValidJarUrl("hdfs:") should be (false)
   }
 
 }
