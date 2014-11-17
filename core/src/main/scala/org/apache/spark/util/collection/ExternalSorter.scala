@@ -233,10 +233,12 @@ private[spark] class ExternalSorter[K, V, C](
     if (usingMap) {
       if (maybeSpill(map, map.estimateSize())) {
         map = new SizeTrackingAppendOnlyMap[(Int, K), C]
+        elementsRead = 0L
       }
     } else {
       if (maybeSpill(buffer, buffer.estimateSize())) {
         buffer = new SizeTrackingPairBuffer[(Int, K), C]
+        elementsRead = 0L
       }
     }
   }
