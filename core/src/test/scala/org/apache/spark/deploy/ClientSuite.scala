@@ -24,6 +24,7 @@ class ClientSuite extends FunSuite with Matchers {
   test("correctly validates driver jar URL's") {
     ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
     ClientArguments.isValidJarUrl("file://some/path/to/a/jarFile.jar") should be (true)
+    ClientArguments.isValidJarUrl("file:///some/path/to/a/jarFile.jar") should be (true)
     ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo.jar") should be (true)
 
     ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo") should be (false)
