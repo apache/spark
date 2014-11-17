@@ -99,19 +99,25 @@ private[hive] trait HiveInspectors {
         poi.getWritableConstantValue.getHiveDecimal)
     case poi: WritableConstantTimestampObjectInspector =>
       poi.getWritableConstantValue.getTimestamp.clone()
-    case poi: WritableConstantIntObjectInspector => poi.get(data)
-    case poi: WritableConstantDoubleObjectInspector => poi.get(data)
-    case poi: WritableConstantBooleanObjectInspector => poi.get(data)
-    case poi: WritableConstantLongObjectInspector => poi.get(data)
-    case poi: WritableConstantFloatObjectInspector => poi.get(data)
-    case poi: WritableConstantShortObjectInspector => poi.get(data)
-    case poi: WritableConstantByteObjectInspector => poi.get(data)
-    case poi: WritableConstantBinaryObjectInspector => {
+    case poi: WritableConstantIntObjectInspector => 
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantDoubleObjectInspector => 
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantBooleanObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantLongObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantFloatObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantShortObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantByteObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantBinaryObjectInspector =>
       val writable = poi.getWritableConstantValue
       val temp = new Array[Byte](writable.getLength)
       System.arraycopy(writable.getBytes, 0, temp, 0, temp.length)
       temp
-    }
     case poi: WritableConstantDateObjectInspector => poi.getWritableConstantValue.get()
     case hvoi: HiveVarcharObjectInspector => hvoi.getPrimitiveJavaObject(data).getValue
     case hdoi: HiveDecimalObjectInspector => HiveShim.toCatalystDecimal(hdoi, data)
