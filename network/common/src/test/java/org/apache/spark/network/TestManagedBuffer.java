@@ -101,4 +101,9 @@ public class TestManagedBuffer extends ManagedBuffer {
     }
     return false;
   }
+
+  @Override
+  public boolean isDirect() {
+    return underlying.isDirect();
+  }
 }

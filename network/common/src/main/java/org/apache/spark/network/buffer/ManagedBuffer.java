@@ -69,9 +69,9 @@ public abstract class ManagedBuffer {
    */
   public abstract Object convertToNetty() throws IOException;
 
-    /**
-     * Tell whether to not this byte buffer is direct
-     * @return
-     */
+  /**
+   * Tell whether to not this byte buffer is direct
+   * @return
+   */
   public abstract boolean isDirect();
 }

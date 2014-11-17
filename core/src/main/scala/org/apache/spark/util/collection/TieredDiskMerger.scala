@@ -61,9 +61,6 @@ private[spark] class TieredDiskMerger[K, C](
   private val blockManager = SparkEnv.get.blockManager
   private val ser = Serializer.getSerializer(dep.serializer)
 
-  /** Number of bytes spilled on disk */
-  private var _diskBytesSpilled: Long = 0L
-
   /** PriorityQueue to store the on-disk merging blocks, blocks are merged by size ordering */
   private val onDiskBlocks = new PriorityBlockingQueue[DiskShuffleBlock]()
 
@@ -77,6 +74,11 @@ private[spark] class TieredDiskMerger[K, C](
 
   @volatile private var doneRegistering = false
 
+ /** Number of bytes spilled on disk */
+  private var _diskBytesSpilled: Long = 0L
+
+  def diskBytesSpilled: Long = _diskBytesSpilled
+
   def registerOnDiskBlock(blockId: BlockId, file: File): Unit = {
     assert(!doneRegistering)
     onDiskBlocks.put(new DiskShuffleBlock(blockId, file, file.length()))
@@ -87,8 +89,6 @@ private[spark] class TieredDiskMerger[K, C](
       }
     }
   }
-
-  def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**
    * Notify the merger that no more on disk blocks will be registered.
@@ -184,9 +184,10 @@ private[spark] class TieredDiskMerger[K, C](
           val blocksToMerge = new ArrayBuffer[DiskShuffleBlock]()
           // Try to pick the smallest merge width that will result in the next merge being the final
           // merge.
-          val mergeFactor = math.min(onDiskBlocks.size - maxMergeFactor + 1, maxMergeFactor)
-          (0 until mergeFactor).foreach {
+          var mergeFactor = math.min(onDiskBlocks.size - maxMergeFactor + 1, maxMergeFactor)
+          while (mergeFactor > 0) {
             blocksToMerge += onDiskBlocks.take()
+            mergeFactor -= 1
           }
 
           // Merge the blocks
@@ -201,7 +202,7 @@ private[spark] class TieredDiskMerger[K, C](
           var success = false
 
           try {
-            partialMergedItr.foreach(p => writer.write(p))
+            partialMergedItr.foreach(writer.write)
             success = true
           } finally {
             if (!success) {

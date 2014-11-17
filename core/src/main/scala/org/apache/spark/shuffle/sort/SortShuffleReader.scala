@@ -18,15 +18,15 @@
 package org.apache.spark.shuffle.sort
 
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 import java.util.Comparator
-
-import org.apache.spark.executor.ShuffleWriteMetrics
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark._
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, FetchFailedException, ShuffleReader}
 import org.apache.spark.storage._
@@ -129,15 +129,24 @@ private[spark] class SortShuffleReader[K, C](
       // Try to fit block in memory. If this fails, merge in-memory blocks to disk.
       val blockSize = blockData.size
       val granted = shuffleMemoryManager.tryToAcquire(blockSize)
-      val block = MemoryShuffleBlock(blockId, blockData)
       if (granted >= blockSize) {
-        inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
+        if (blockData.isDirect) {
+          // If the memory shuffle block is allocated on direct buffer, copy it on heap,
+          // otherwise off heap memory will be increased out of control.
+          val onHeapBuffer = ByteBuffer.allocate(blockSize.toInt)
+          onHeapBuffer.put(blockData.nioByteBuffer)
+
+          inMemoryBlocks += MemoryShuffleBlock(blockId, new NioManagedBuffer(onHeapBuffer))
+          blockData.release()
+        } else {
+          inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
+        }
       } else {
-        logInfo(s"Granted $granted memory is not enough to store shuffle block id $blockId, " +
+        logDebug(s"Granted $granted memory is not enough to store shuffle block id $blockId, " +
           s"block size $blockSize, spilling in-memory blocks to release the memory")
 
         shuffleMemoryManager.release(granted)
-        spillInMemoryBlocks(block)
+        spillInMemoryBlocks(MemoryShuffleBlock(blockId, blockData))
       }
 
       unfetchedBytes -= shuffleBlockMap(blockId.asInstanceOf[ShuffleBlockId])._2
@@ -164,7 +173,6 @@ private[spark] class SortShuffleReader[K, C](
       }
       inMemoryBlocks.clear()
     }
-
     context.addTaskCompletionListener(_ => releaseFinalShuffleMemory())
 
     // Release the in-memory block when iteration is completed.
@@ -214,7 +222,7 @@ private[spark] class SortShuffleReader[K, C](
       var success = false
 
       try {
-        partialMergedItr.foreach(p => writer.write(p))
+        partialMergedItr.foreach(writer.write)
         success = true
       } finally {
         if (!success) {
