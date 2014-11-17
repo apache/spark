@@ -322,6 +322,27 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
     Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
+	
+	@Test
+  public void groupByOnPairRDD() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
+    Function<scala.Tuple2<Integer, Integer>, Boolean> areOdd = new Function<scala.Tuple2<Integer, Integer>, Boolean>() {
+      @Override
+      public Boolean call(scala.Tuple2<Integer, Integer> x) {
+        return x._1 % 2 == 0 && x._2 % 2 == 0;
+      }
+    };
+		JavaPairRDD<Integer, Integer> pairrdd = rdd.zip(rdd);
+    JavaPairRDD<Boolean, Iterable<scala.Tuple2<Integer, Integer>>> oddsAndEvens = pairrdd.groupBy(areOdd);
+    Assert.assertEquals(2, oddsAndEvens.count());
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+
+    oddsAndEvens = pairrdd.groupBy(areOdd, 1);
+    Assert.assertEquals(2, oddsAndEvens.count());
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+  }
 
   @SuppressWarnings("unchecked")
   @Test
