@@ -52,7 +52,7 @@ private[spark] class MetadataCleaner(
     logDebug(
       "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds " +
       "and period of " + periodSeconds + " secs")
-    timer.schedule(task, periodSeconds * 1000, periodSeconds * 1000)
+    timer.schedule(task, delaySeconds * 1000, periodSeconds * 1000)
   }
 
   def cancel() {
