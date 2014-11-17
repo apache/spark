@@ -1428,6 +1428,11 @@ object SparkContext extends Logging {
 
   private[spark] val DRIVER_IDENTIFIER = "<driver>"
 
+  // The following deprecated objects have already been copied to `object AccumulatorParam` to
+  // make the compiler find them automatically. They are duplicate codes only for backward
+  // compatibility, please update `object AccumulatorParam` accordingly if you plan to modify the
+  // following ones.
+
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   object DoubleAccumulatorParam extends AccumulatorParam[Double] {
@@ -1456,7 +1461,10 @@ object SparkContext extends Logging {
     def zero(initialValue: Float) = 0f
   }
 
-  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+  // The following deprecated functions have already been copied to `org.apache.spark.rdd` package
+  // object to make the compiler find them automatically. They are duplicate codes only for backward
+  // compatibility, please update `org.apache.spark.rdd` package object accordingly if you plan to
+  // modify the following ones.
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
@@ -1513,6 +1521,11 @@ object SparkContext extends Logging {
     new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
         arr.map(x => anyToWritable(x)).toArray)
   }
+
+  // The following deprecated functions have already been copied to `object WritableConverter` to
+  // make the compiler find them automatically. They are duplicate codes only for backward
+  // compatibility, please update `object WritableConverter` accordingly if you plan to modify the
+  // following ones.
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")

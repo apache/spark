@@ -270,6 +270,8 @@ object AccumulatorParam {
     def addInPlace(t1: Float, t2: Float) = t1 + t2
     def zero(initialValue: Float) = 0f
   }
+
+  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
