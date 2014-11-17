@@ -170,10 +170,10 @@ case $option in
         echo stopping $command
         kill $TARGET_PID
         sleep $SPARK_STOP_TIMEOUT
-          if kill -0 $TARGET_PID > /dev/null 2>&1; then
-            echo "$command did not stop gracefully after $SPARK_STOP_TIMEOUT seconds: killing with kill -9"
-            kill -9 $TARGET_PID
-          fi
+        if kill -0 $TARGET_PID > /dev/null 2>&1; then
+          echo "$command did not stop gracefully after $SPARK_STOP_TIMEOUT seconds: killing with kill -9"
+          kill -9 $TARGET_PID
+        fi
       else
         echo no $command to stop
       fi
