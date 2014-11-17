@@ -74,6 +74,10 @@ if [[ ! "$@" =~ --package-only ]]; then
   git push origin HEAD:$GIT_BRANCH
   git checkout -f $GIT_TAG 
  
+  # TODO: Programatically create and close Maven repo:
+  #curl -X POST -d @file.xml -u USER:PASS -H "Content-Type:application/xml" -v https://repository.apache.org/service/local/staging/profiles/d63f592e7eac0/start
+  # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
+
   rm -rf $SPARK_REPO
 
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
