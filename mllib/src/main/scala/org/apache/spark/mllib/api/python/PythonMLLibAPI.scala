@@ -230,6 +230,30 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib LogisticRegressionWithLBFGS.train()
+   */
+  def trainLogisticRegressionModelWithLBFGS(
+     data: JavaRDD[LabeledPoint],
+     numIterations: Int,
+     initialWeights: Vector,
+     corrections: Int,
+     tolerance: Double,
+     regParam: Double,
+     intercept: Boolean): JList[Object] = {
+    val LogRegAlg = new LogisticRegressionWithLBFGS()
+    LogRegAlg.setIntercept(intercept)
+    LogRegAlg.optimizer
+      .setNumIterations(numIterations)
+      .setNumCorrections(corrections)
+      .setConvergenceTol(tolerance)
+      .setRegParam(regParam)
+    trainRegressionModel(
+      LogRegAlg,
+      data,
+      initialWeights)
+  }
+
+  /**
    * Java stub for NaiveBayes.train()
    */
   def trainNaiveBayes(

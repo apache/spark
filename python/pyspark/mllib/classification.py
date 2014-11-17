@@ -98,7 +98,7 @@ class LogisticRegressionWithSGD(object):
 
                                      (default: "l2")
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
@@ -106,6 +106,46 @@ class LogisticRegressionWithSGD(object):
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
+                                 bool(intercept))
+
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
+
+
+class LogisticRegressionWithLBFGS(object):
+
+    @classmethod
+    def train(cls, data, iterations=100, initialWeights=None, corrections=10, tolerance=1e-4,
+              regParam=0.01, intercept=False):
+        """
+        Train a logistic regression model on the given data.
+
+        :param data:           The training data, an RDD of LabeledPoint.
+        :param iterations:     The number of iterations (default: 100).
+        :param initialWeights: The initial weights (default: None).
+        :param corrections:    The number of corrections used in the LBFGS update (default: 10).
+        :param tolerance:      The convergence tolerance of iterations for L-BFGS (default: 1e-4).
+        :param regParam:       The regularizer parameter (default: 0.01).
+        :param intercept:      Boolean parameter which indicates the use
+                               or not of the augmented representation for
+                               training data (i.e. whether bias features
+                               are activated or not).
+
+        >>> data = [
+        ...     LabeledPoint(0.0, [0.0, 1.0]),
+        ...     LabeledPoint(1.0, [1.0, 0.0]),
+        ... ]
+        >>> lrm = LogisticRegressionWithLBFGS.train(sc.parallelize(data))
+        >>> lrm.predict([1.0, 0.0])
+        1
+        >>> lrm.predict([0.0, 1.0])
+        0
+        # TODO: enable it after merge #3305
+        # >>> lrm.predict(sc.parallelize([[1.0, 0.0], [0.0, 1.0]])).collect()
+        # [1, 0]
+        """
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
+                                 int(corrections), float(tolerance), float(regParam),
                                  bool(intercept))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
@@ -169,7 +209,7 @@ class SVMWithSGD(object):
 
                                      (default: "l2")
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
