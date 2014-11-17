@@ -52,7 +52,6 @@ import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
-import org.apache.spark.WritableConverter.simpleWritableConverter
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -1461,42 +1460,41 @@ object SparkContext extends Logging {
     def zero(initialValue: Float) = 0f
   }
 
-  // The following deprecated functions have already been copied to `org.apache.spark.rdd` package
-  // object to make the compiler find them automatically. They are duplicate codes only for backward
-  // compatibility, please update `org.apache.spark.rdd` package object accordingly if you plan to
-  // modify the following ones.
+  // The following deprecated functions have already been moved to `object RDD` to
+  // make the compiler find them automatically. They are still kept here for backward compatibility
+  // and just call the corresponding functions in `object RDD`.
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
-    new PairRDDFunctions(rdd)
+    RDD.rddToPairRDDFunctions(rdd)
   }
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
-  def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
+  def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = RDD.rddToAsyncRDDActions(rdd)
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
-    new SequenceFileRDDFunctions(rdd)
+    RDD.rddToSequenceFileRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions[K, V, (K, V)](rdd)
+    RDD.rddToOrderedRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
-  def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
+  def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = RDD.doubleRDDToDoubleRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
-    new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
+    RDD.numericRDDToDoubleRDDFunctions(rdd)
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 
@@ -1522,54 +1520,49 @@ object SparkContext extends Logging {
         arr.map(x => anyToWritable(x)).toArray)
   }
 
-  // The following deprecated functions have already been copied to `object WritableConverter` to
-  // make the compiler find them automatically. They are duplicate codes only for backward
-  // compatibility, please update `object WritableConverter` accordingly if you plan to modify the
-  // following ones.
+  // The following deprecated functions have already been moved to `object WritableConverter` to
+  // make the compiler find them automatically. They are still kept here for backward compatibility
+  // and just call the corresponding functions in `object WritableConverter`.
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def intWritableConverter(): WritableConverter[Int] =
-    simpleWritableConverter[Int, IntWritable](_.get)
+    WritableConverter.intWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def longWritableConverter(): WritableConverter[Long] =
-    simpleWritableConverter[Long, LongWritable](_.get)
+    WritableConverter.longWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def doubleWritableConverter(): WritableConverter[Double] =
-    simpleWritableConverter[Double, DoubleWritable](_.get)
+    WritableConverter.doubleWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def floatWritableConverter(): WritableConverter[Float] =
-    simpleWritableConverter[Float, FloatWritable](_.get)
+    WritableConverter.floatWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def booleanWritableConverter(): WritableConverter[Boolean] =
-    simpleWritableConverter[Boolean, BooleanWritable](_.get)
+    WritableConverter.booleanWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
-  def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
-      // getBytes method returns array which is longer then data to be returned
-      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
-    )
-  }
+  def bytesWritableConverter(): WritableConverter[Array[Byte]] =
+    WritableConverter.bytesWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def stringWritableConverter(): WritableConverter[String] =
-    simpleWritableConverter[String, Text](_.toString)
+    WritableConverter.stringWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.2.0")
   def writableWritableConverter[T <: Writable]() =
-    new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+    WritableConverter.writableWritableConverter()
 
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
@@ -1805,8 +1798,8 @@ object WritableConverter {
 
   // The following implicit functions were in SparkContext before 1.2 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
-  // them automatically. However, as there are duplicate codes in SparkContext for backward
-  // compatibility, please update them accordingly if you modify the following implicit functions.
+  // them automatically. However, we still keep the old functions in SparkContext for backward
+  // compatibility and forward to the following functions directly.
 
   implicit def intWritableConverter(): WritableConverter[Int] =
     simpleWritableConverter[Int, IntWritable](_.get)

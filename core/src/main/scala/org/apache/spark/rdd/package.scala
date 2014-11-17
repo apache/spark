@@ -17,39 +17,7 @@
 
 package org.apache.spark
 
-import scala.language.implicitConversions
-import scala.reflect.ClassTag
-
-import org.apache.hadoop.io.Writable
-
 /**
  * Provides several RDD implementations. See [[org.apache.spark.rdd.RDD]].
  */
-package object rdd {
-
-  // The following implicit functions were in SparkContext before 1.2 and users had to
-  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
-  // them automatically. However, as there are duplicate codes in SparkContext for backward
-  // compatibility, please update them accordingly if you modify the following implicit functions.
-
-  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
-    new PairRDDFunctions(rdd)
-  }
-
-  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
-
-  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]) =
-    new SequenceFileRDDFunctions(rdd)
-
-  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
-      rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions[K, V, (K, V)](rdd)
-
-  implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
-
-  implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
-    new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
-
-}
+package object rdd
