@@ -30,15 +30,14 @@ __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'SVMModel',
            'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
 
 
-class ClassificationModel(LinearModel):
+class LinearBinaryClassificationModel(LinearModel):
     """
-    :: Experimental ::
-
-    Represents a classification model that predicts to which of a set of categories an example
-    belongs. The categories are represented by double values: 0.0, 1.0, 2.0, etc.
+    Represents a linear binary classification model that predicts to which
+    of a set of categories an example belongs. The categories are represented
+    by double values: 0.0, 1.0, 2.0, etc.
     """
     def __init__(self, weights, intercept):
-        super(ClassificationModel, self).__init__(weights, intercept)
+        super(LinearBinaryClassificationModel, self).__init__(weights, intercept)
         self._threshold = 0.5
 
     def setThreshold(self, value):
@@ -66,7 +65,7 @@ class ClassificationModel(LinearModel):
         raise NotImplementedError
 
 
-class LogisticRegressionModel(ClassificationModel):
+class LogisticRegressionModel(LinearBinaryClassificationModel):
 
     """A linear binary classification model derived from logistic regression.
 
@@ -161,7 +160,7 @@ class LogisticRegressionWithSGD(object):
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
-class SVMModel(ClassificationModel):
+class SVMModel(LinearBinaryClassificationModel):
 
     """A support vector machine.
 
