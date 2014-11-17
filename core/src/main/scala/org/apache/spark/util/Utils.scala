@@ -29,7 +29,7 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Try, Failure}
 import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files}
@@ -759,18 +759,9 @@ private[spark] object Utils extends Logging {
     if (file != null) {
       try {
         if (file.isDirectory && !isSymlink(file)) {
-          var savedIOException: IOException = null
-          for (child <- listFilesSafely(file)) {
-            try {
-              deleteRecursively(child)
-            } catch {
-              // In case of multiple exceptions, only last one will be thrown
-              case ioe: IOException => savedIOException = ioe
-            }
-          }
-          if (savedIOException != null) {
-            throw savedIOException
-          }
+          listFilesSafely(file).map(child => Try(deleteRecursively(child))).
+                               collectFirst{case Failure(e) => throw e}
+
           shutdownDeletePaths.synchronized {
             shutdownDeletePaths.remove(file.getAbsolutePath)
           }
