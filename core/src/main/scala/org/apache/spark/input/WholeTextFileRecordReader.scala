@@ -87,9 +87,8 @@ private[spark] class WholeTextFileRecordReader(
 
 
 /**
- * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole text file
- * out in a key-value pair, where the key is the file path and the value is the entire content of
- * the file.
+ * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader CombineFileRecordReader]]
+ * that could pass Hadoop configuration to WholeTextFileRecordReader.
  */
 private[spark] class WholeCombineFileRecordReader(
     split: InputSplit,
