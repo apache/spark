@@ -100,6 +100,9 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
     >>> lrm.predict(SparseVector(2, {0: 1.0}))
     0
     """
+    def __init__(self, weights, intercept):
+        super(LogisticRegressionModel, self).__init__(weights, intercept)
+        self._threshold = 0.5
 
     def predict(self, x):
         """
@@ -122,9 +125,6 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
 
 
 class LogisticRegressionWithSGD(object):
-    def __init__(self, weights, intercept):
-        super(LogisticRegressionWithSGD, self).__init__(weights, intercept)
-        self._threshold = 0.5
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
