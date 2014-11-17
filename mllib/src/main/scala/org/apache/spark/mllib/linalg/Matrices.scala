@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.util.Arrays
-
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
-import org.apache.spark.util.Utils
 
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.util.Utils
 
+import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 
 /**
