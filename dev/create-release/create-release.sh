@@ -28,14 +28,13 @@
 #  - Send output to stderr and have useful logging in stdout
 
 # Note: The following variables must be set before use!
-GIT_USERNAME=${GIT_USERNAME:-pwendell}
-GIT_PASSWORD=${GIT_PASSWORD:-XXX}
+ASF_USERNAME=${ASF_USERNAME:-pwendell}
+ASF_PASSWORD=${ASF_PASSWORD:-XXX}
 GPG_PASSPHRASE=${GPG_PASSPHRASE:-XXX}
 GIT_BRANCH=${GIT_BRANCH:-branch-1.0}
 RELEASE_VERSION=${RELEASE_VERSION:-1.2.0}
 NEXT_VERSION=${NEXT_VERSION:-1.2.1}
 RC_NAME=${RC_NAME:-rc2}
-USER_NAME=${USER_NAME:-pwendell}
 
 M2_REPO=~/.m2/repository
 SPARK_REPO=$M2_REPO/org/apache/spark
@@ -54,7 +53,7 @@ GIT_TAG=v$RELEASE_VERSION-$RC_NAME
 if [[ ! "$@" =~ --package-only ]]; then
   echo "Creating release commit and publishing to Apache repository"
   # Artifact publishing
-  git clone https://$GIT_USERNAME:$GIT_PASSWORD@git-wip-us.apache.org/repos/asf/spark.git \
+  git clone https://$ASF_USERNAME:$ASF_PASSWORD@git-wip-us.apache.org/repos/asf/spark.git \
     -b $GIT_BRANCH
   pushd spark
   export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
@@ -94,7 +93,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     file_short=$(echo $file | sed -e "s/\.\///")
     dest_url="$NEXUS_REPOSITORY/org/apache/spark/$file_short"
     echo "  Uploading $file_short"
-    curl -u $NEXUS_USERNAME:$NEXUS_PASSWORD --upload-file $file_short $dest_url
+    curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
   done
   popd
 
@@ -163,10 +162,10 @@ wait
 # Copy data
 echo "Copying release tarballs"
 rc_folder=spark-$RELEASE_VERSION-$RC_NAME
-ssh $USER_NAME@people.apache.org \
-  mkdir /home/$USER_NAME/public_html/$rc_folder
+ssh $ASF_USERNAME@people.apache.org \
+  mkdir /home/$ASF_USERNAME/public_html/$rc_folder
 scp spark-* \
-  $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_folder/
+  $ASF_USERNAME@people.apache.org:/home/$ASF_USERNAME/public_html/$rc_folder/
 
 # Docs
 cd spark
@@ -176,12 +175,12 @@ cd docs
 JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
-ssh $USER_NAME@people.apache.org \
-  mkdir /home/$USER_NAME/public_html/$rc_docs_folder
-rsync -r _site/* $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_docs_folder
+ssh $ASF_USERNAME@people.apache.org \
+  mkdir /home/$ASF_USERNAME/public_html/$rc_docs_folder
+rsync -r _site/* $ASF_USERNAME@people.apache.org:/home/$ASF_USERNAME/public_html/$rc_docs_folder
 
 echo "Release $RELEASE_VERSION completed:"
 echo "Git tag:\t $GIT_TAG"
 echo "Release commit:\t $release_hash"
-echo "Binary location:\t http://people.apache.org/~$USER_NAME/$rc_folder"
-echo "Doc location:\t http://people.apache.org/~$USER_NAME/$rc_docs_folder"
+echo "Binary location:\t http://people.apache.org/~$ASF_USERNAME/$rc_folder"
+echo "Doc location:\t http://people.apache.org/~$ASF_USERNAME/$rc_docs_folder"
