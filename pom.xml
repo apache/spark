@@ -978,6 +978,7 @@
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
+              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
           </configuration>
           <executions>
