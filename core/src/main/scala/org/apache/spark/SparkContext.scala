@@ -58,12 +58,11 @@ import org.apache.spark.util._
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
  * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
- * creating a new one.  This limitation will eventually be removed; see SPARK-2243 for more details.
+ * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
-
 class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
 
   // The call site where this SparkContext was constructed.
@@ -73,9 +72,9 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   private val allowMultipleContexts: Boolean =
     config.getBoolean("spark.driver.allowMultipleContexts", false)
 
-
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
-  // context as having started construction
+  // context as having started construction.
+  // NOTE: this must be placed at the beginning of the SparkContext constructor.
   SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
@@ -1429,7 +1428,8 @@ class SparkContext(config: SparkConf) extends SparkStatusAPI with Logging {
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
-  // context as having finished construction
+  // context as having finished construction.
+  // NOTE: this must be placed at the end of the SparkContext constructor.
   SparkContext.setActiveContext(this, allowMultipleContexts)
 }
 
@@ -1473,9 +1473,14 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       contextBeingConstructed.foreach { otherContext =>
         if (otherContext ne sc) {  // checks for reference equality
+          // Since otherContext might point to a partially-constructed context, guard against
+          // its creationSite field being null:
+          val otherContextCreationSite =
+            Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
           val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
             " constructor).  This may indicate an error, since only one SparkContext may be" +
-            " running in this JVM (see SPARK-2243)."
+            " running in this JVM (see SPARK-2243)." +
+            s" The other SparkContext was created at:\n$otherContextCreationSite"
           logWarning(warnMsg)
         }
 
