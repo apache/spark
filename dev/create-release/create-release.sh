@@ -58,11 +58,11 @@ if [[ ! "$@" =~ --package-only ]]; then
   pushd spark
   export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
 
-  echo "Creating tag $GIT_TAG at the head of $BRANCH_NAME"
-  git checkout -f $BRANCH_NAME
   find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
     -e "s/${RELEASE_VERSION}-SNAPSHOT/$RELEASE_VERSION/" {}
   git commit -a -m "Preparing Spark release $GIT_TAG"
+
+  echo "Creating tag $GIT_TAG at the head of $GIT_BRANCH"
   git tag $GIT_TAG
 
   rm -rf $SPARK_REPO
@@ -106,7 +106,7 @@ if [[ ! "$@" =~ --package-only ]]; then
   git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
 
   git push origin $GIT_TAG
-  git push origin HEAD:$BRANCH_NAME
+  git push origin HEAD:$GIT_BRANCH
   popd
   rm -rf spark
 fi
