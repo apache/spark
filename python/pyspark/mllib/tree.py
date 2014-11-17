@@ -15,21 +15,22 @@
 # limitations under the License.
 #
 
+from __future__ import absolute_import
+
+import random
+
 from pyspark import SparkContext, RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
-__all__ = ['DecisionTreeModel', 'DecisionTree']
+__all__ = ['DecisionTreeModel', 'DecisionTree', 'WeightedEnsembleModel', 'RandomForest']
 
 
 class DecisionTreeModel(JavaModelWrapper):
 
     """
     A decision tree model for classification or regression.
-
-    EXPERIMENTAL: This is an experimental API.
-                  It will probably be modified in future.
     """
     def predict(self, x):
         """
@@ -51,11 +52,11 @@ class DecisionTreeModel(JavaModelWrapper):
         return self._java_model.depth()
 
     def __repr__(self):
-        """ Print summary of model. """
+        """ summary of model. """
         return self._java_model.toString()
 
     def toDebugString(self):
-        """ Print full model. """
+        """ full model. """
         return self._java_model.toDebugString()
 
 
@@ -64,14 +65,10 @@ class DecisionTree(object):
     """
     Learning algorithm for a decision tree model
     for classification or regression.
-
-    EXPERIMENTAL: This is an experimental API.
-                  It will probably be modified for Spark v1.2.
-
     """
 
-    @staticmethod
-    def _train(data, type, numClasses, features, impurity="gini", maxDepth=5, maxBins=32,
+    @classmethod
+    def _train(cls, data, type, numClasses, features, impurity="gini", maxDepth=5, maxBins=32,
                minInstancesPerNode=1, minInfoGain=0.0):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
@@ -79,8 +76,8 @@ class DecisionTree(object):
                               impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
         return DecisionTreeModel(model)
 
-    @staticmethod
-    def trainClassifier(data, numClasses, categoricalFeaturesInfo,
+    @classmethod
+    def trainClassifier(cls, data, numClasses, categoricalFeaturesInfo,
                         impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
                         minInfoGain=0.0):
         """
@@ -132,11 +129,11 @@ class DecisionTree(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return DecisionTree._train(data, "classification", numClasses, categoricalFeaturesInfo,
-                                   impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        return cls._train(data, "classification", numClasses, categoricalFeaturesInfo,
+                          impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
 
-    @staticmethod
-    def trainRegressor(data, categoricalFeaturesInfo,
+    @classmethod
+    def trainRegressor(cls, data, categoricalFeaturesInfo,
                        impurity="variance", maxDepth=5, maxBins=32, minInstancesPerNode=1,
                        minInfoGain=0.0):
         """
@@ -160,7 +157,6 @@ class DecisionTree(object):
 
         Example usage:
 
-        >>> from numpy import array
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import DecisionTree
         >>> from pyspark.mllib.linalg import SparseVector
@@ -181,8 +177,184 @@ class DecisionTree(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return DecisionTree._train(data, "regression", 0, categoricalFeaturesInfo,
-                                   impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        return cls._train(data, "regression", 0, categoricalFeaturesInfo,
+                          impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+
+
+class WeightedEnsembleModel(JavaModelWrapper):
+    """
+    A model trained by RandomForest
+    """
+    def predict(self, x):
+        """
+        Predict values for a single data point or an RDD of points using the model trained.
+        """
+        if isinstance(x, RDD):
+            return self.call("predict", x.map(_convert_to_vector))
+
+        else:
+            return self.call("predict", _convert_to_vector(x))
+
+    def numWeakHypotheses(self):
+        """
+        Get number of trees in forest.
+        """
+        return self.call("numWeakHypotheses")
+
+    def totalNumNodes(self):
+        """
+        Get total number of nodes, summed over all trees in the forest.
+        """
+        return self.call("totalNumNodes")
+
+    def __repr__(self):
+        """ Summary of model """
+        return self._java_model.toString()
+
+    def toDebugString(self):
+        """Full model """
+        return self._java_model.toDebugString()
+
+
+class RandomForest(object):
+
+    supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
+
+    @classmethod
+    def _train(cls, data, type, numClasses, features, impurity, maxDepth, maxBins,
+               numTrees, featureSubsetStrategy, seed):
+        first = data.first()
+        assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
+        if featureSubsetStrategy not in cls.supportedFeatureSubsetStrategies:
+            raise ValueError("unsupported featureSubsetStrategy: %s" % featureSubsetStrategy)
+        if seed is None:
+            seed = random.randint(0, 1 << 30)
+        model = callMLlibFunc("trainRandomForestModel", data, type, numClasses, features,
+                              impurity, maxDepth, maxBins, numTrees, featureSubsetStrategy, seed)
+        return WeightedEnsembleModel(model)
+
+    @classmethod
+    def trainClassifier(cls, data, numClassesForClassification, categoricalFeaturesInfo, numTrees,
+                        featureSubsetStrategy="auto", impurity="gini", maxDepth=4, maxBins=32,
+                        seed=None):
+        """
+        Method to train a decision tree model for binary or multiclass classification.
+
+        :param data: Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+                     Labels should take values {0, 1, ..., numClasses-1}.
+        :param numClassesForClassification: number of classes for classification.
+        :param categoricalFeaturesInfo: Map storing arity of categorical features.
+                                    E.g., an entry (n -> k) indicates that feature n is categorical
+                                    with k categories indexed from 0: {0, 1, ..., k-1}.
+        :param numTrees: Number of trees in the random forest.
+        :param featureSubsetStrategy: Number of features to consider for splits at each node.
+                                  Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+                                  If "auto" is set, this parameter is set based on numTrees:
+                                    if numTrees == 1, set to "all";
+                                    if numTrees > 1 (forest) set to "sqrt" for classification and
+                                      to "onethird" for regression.
+        :param impurity: Criterion used for information gain calculation.
+                     Supported values: "gini" (recommended) or "entropy".
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node; depth 1 means
+                         1 internal node + 2 leaf nodes. (default: 4)
+        :param maxBins: maximum number of bins used for splitting features (default: 100)
+        :param seed:  Random seed for bootstrapping and choosing feature subsets.
+        :return: WeightedEnsembleModel that can be used for prediction
+
+        Example usage:
+
+        >>> from pyspark.mllib.regression import LabeledPoint
+        >>> from pyspark.mllib.tree import RandomForest
+        >>>
+        >>> data = [
+        ...     LabeledPoint(0.0, [0.0]),
+        ...     LabeledPoint(0.0, [1.0]),
+        ...     LabeledPoint(1.0, [4.0]),
+        ...     LabeledPoint(1.0, [5.0])
+        ... ]
+        >>> model = RandomForest.trainClassifier(sc.parallelize(data), 2, {}, 2, seed=42)
+        >>> model.numWeakHypotheses()
+        2
+        >>> model.totalNumNodes()
+        4
+        >>> print model,
+        WeightedEnsembleModel classifier with 2 trees
+        >>> print model.toDebugString(),
+        WeightedEnsembleModel classifier with 2 trees
+        <BLANKLINE>
+          Tree 0:
+            Predict: 1.0
+          Tree 1:
+            If (feature 0 <= 1.0)
+             Predict: 0.0
+            Else (feature 0 > 1.0)
+             Predict: 1.0
+        >>> model.predict([2.0])
+        1.0
+        >>> model.predict([0.0])  #TODO: will fix it later
+        1.0
+        >>> rdd = sc.parallelize([[1.0], [0.0]])
+        >>> model.predict(rdd).collect()
+        [1.0, 1.0]
+        """
+        return cls._train(data, "classification", numClassesForClassification,
+                          categoricalFeaturesInfo, impurity, maxDepth, maxBins, numTrees,
+                          featureSubsetStrategy, seed)
+
+    @classmethod
+    def trainRegressor(cls, data, categoricalFeaturesInfo, numTrees, featureSubsetStrategy="auto",
+                       impurity="variance", maxDepth=4, maxBins=32, seed=None):
+        """
+        Method to train a decision tree model for regression.
+
+        :param data: Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+                     Labels are real numbers.
+        :param categoricalFeaturesInfo: Map storing arity of categorical features.
+                                     E.g., an entry (n -> k) indicates that feature n is categorical
+                                     with k categories indexed from 0: {0, 1, ..., k-1}.
+        :param numTrees: Number of trees in the random forest.
+        :param featureSubsetStrategy: Number of features to consider for splits at each node.
+                                   Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+                                   If "auto" is set, this parameter is set based on numTrees:
+                                   if numTrees == 1, set to "all";
+                                   if numTrees > 1 (forest) set to "sqrt" for classification and
+                                   to "onethird" for regression.
+        :param impurity: Criterion used for information gain calculation.
+                         Supported values: "variance".
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node; depth 1 means
+                         1 internal node + 2 leaf nodes.(default: 4)
+        :param maxBins: maximum number of bins used for splitting features (default: 100)
+        :param seed:  Random seed for bootstrapping and choosing feature subsets.
+        :return: WeightedEnsembleModel that can be used for prediction
+
+        Example usage:
+
+        >>> from pyspark.mllib.regression import LabeledPoint
+        >>> from pyspark.mllib.tree import RandomForest
+        >>> from pyspark.mllib.linalg import SparseVector
+        >>>
+        >>> sparse_data = [
+        ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
+        ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+        ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
+        ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
+        ... ]
+        >>>
+        >>> model = RandomForest.trainRegressor(sc.parallelize(sparse_data), {}, 2, seed=42)
+        >>> model.numWeakHypotheses()
+        2
+        >>> model.totalNumNodes()
+        4
+        >>> model.predict(SparseVector(2, {1: 1.0}))
+        1.0
+        >>> model.predict(SparseVector(2, {0: 1.0}))
+        0.5
+        >>> rdd = sc.parallelize([[0.0, 1.0], [1.0, 0.0]])
+        >>> model.predict(rdd).collect()
+        [1.0, 0.5]
+        """
+        return cls._train(data, "regression", 0, categoricalFeaturesInfo, impurity,
+                          maxDepth, maxBins, numTrees, featureSubsetStrategy, seed)
 
 
 def _test():

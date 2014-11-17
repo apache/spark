@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
@@ -117,6 +118,17 @@ class WeightedEnsembleModel(
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
   def predict(features: RDD[Vector]): RDD[Double] = features.map(x => predict(x))
+
+
+  /**
+   * Predict values for the given data set.
+   *
+   * @param features JavaRDD representing data points to be predicted
+   * @return JavaRDD[Double] where each entry contains the corresponding prediction
+   */
+  def predict(features: JavaRDD[Vector]): RDD[Double] = {
+    features.rdd.map(x => predict(x)).toJavaRDD()
+  }
 
   /**
    * Print a summary of the model.
