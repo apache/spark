@@ -1781,7 +1781,7 @@ private[spark] class WritableConverter[T](
     val convert: Writable => T)
   extends Serializable
 
-private[spark] object WritableConverter {
+object WritableConverter {
 
   // Helper objects for converting common types to Writable
   private[spark] def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
