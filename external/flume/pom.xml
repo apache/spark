@@ -21,12 +21,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.2.1-SNAPSHOT</version>
+    <version>1.2.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-flume_2.11</artifactId>
+  <artifactId>spark-streaming-flume_2.10</artifactId>
   <properties>
     <sbt.project.name>streaming-flume</sbt.project.name>
   </properties>

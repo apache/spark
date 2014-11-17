@@ -22,12 +22,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.2.1-SNAPSHOT</version>
+    <version>1.2.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-sql_2.11</artifactId>
+  <artifactId>spark-sql_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
   <url>http://spark.apache.org/</url>
