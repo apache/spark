@@ -38,7 +38,7 @@ class LinearBinaryClassificationModel(LinearModel):
     """
     def __init__(self, weights, intercept):
         super(LinearBinaryClassificationModel, self).__init__(weights, intercept)
-        self._threshold = 0.5
+        self._threshold = None
 
     def setThreshold(self, value):
         """
@@ -118,10 +118,13 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
         if self._threshold is None:
             return prob
         else:
-            return 1 if prob >= self._threshold else 0
+            return 1 if prob > self._threshold else 0
 
 
 class LogisticRegressionWithSGD(object):
+    def __init__(self, weights, intercept):
+        super(LogisticRegressionWithSGD, self).__init__(weights, intercept)
+        self._threshold = 0.5
 
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
@@ -207,7 +210,7 @@ class SVMModel(LinearBinaryClassificationModel):
         if self._threshold is None:
             return margin
         else:
-            return 1 if margin >= self._threshold else 0
+            return 1 if margin > self._threshold else 0
 
 
 class SVMWithSGD(object):
