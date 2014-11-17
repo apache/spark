@@ -482,8 +482,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
     import parquet.filter2.compat.FilterCompat.Filter
     import parquet.filter2.compat.RowGroupFilter
-
-import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.blockLocationCache
+    import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.blockLocationCache
 
     val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)
 
