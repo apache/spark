@@ -85,6 +85,12 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val jobData: JobUIData =
       new JobUIData(jobStart.jobId, Some(System.currentTimeMillis), None, jobStart.stageIds,
         jobGroup, JobExecutionStatus.RUNNING)
+    // Compute (a potential underestimate of) the number of tasks that will be run by this job:
+    jobData.numTasks = {
+      val allStages = jobStart.stageInfos
+      val missingStages = allStages.filter(_.completionTime.isEmpty)
+      missingStages.map(_.numTasks).sum
+    }
     jobIdToData(jobStart.jobId) = jobData
     activeJobs(jobStart.jobId) = jobData
     for (stageId <- jobStart.stageIds) {
@@ -189,7 +195,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       jobId <- activeJobsDependentOnStage;
       jobData <- jobIdToData.get(jobId)
     ) {
-      jobData.numTasks += stage.numTasks
       jobData.numActiveStages += 1
     }
   }
@@ -245,8 +250,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       execSummary.taskTime += info.duration
       stageData.numActiveTasks -= 1
 
-      val isRecomputation = stageData.completedIndices.contains(info.index)
-
       val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
         taskEnd.reason match {
           case org.apache.spark.Success =>
@@ -279,9 +282,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
           case Success =>
-            if (!isRecomputation) {
-              jobData.numCompletedTasks += 1
-            }
+            jobData.numCompletedTasks += 1
           case _ =>
             jobData.numFailedTasks += 1
         }

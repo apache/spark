@@ -46,6 +46,8 @@ private[jobs] object UIData {
     var jobGroup: Option[String] = None,
     var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
     /* Tasks */
+    // `numTasks` is a potential underestimate of the true number of tasks that this job will run
+    // see https://github.com/apache/spark/pull/3009 for an extensive discussion of this
     var numTasks: Int = 0,
     var numActiveTasks: Int = 0,
     var numCompletedTasks: Int = 0,
