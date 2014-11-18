@@ -101,7 +101,7 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
-    if (System.getProperty("scala-2.11") != null && System.getProperty("scala-2.11") == "") {
+    if (System.getProperty("scala-2.11") == "") {
       System.setProperty("scala-2.11", "true")
     }
     profiles
