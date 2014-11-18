@@ -439,7 +439,7 @@ private[sql] object JsonRDD extends Logging {
     val gen = jsonFactory.createGenerator(writer)
 
     def valWriter: (DataType, Any) => Unit = {
-      case (_, null) => gen.writeNull() // writing null could break some parsers
+      case (_, null) | (NullType, _)  => gen.writeNull()
       case (StringType, v: String) => gen.writeString(v)
       case (TimestampType, v: java.sql.Timestamp) => gen.writeString(v.toString)
       case (IntegerType, v: Int) => gen.writeNumber(v)
@@ -447,6 +447,7 @@ private[sql] object JsonRDD extends Logging {
       case (FloatType, v: Float) => gen.writeNumber(v)
       case (DoubleType, v: Double) => gen.writeNumber(v)
       case (LongType, v: Long) => gen.writeNumber(v)
+      case (DecimalType(), v: scala.math.BigDecimal) => gen.writeNumber(v.bigDecimal)
       case (DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
       case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
       case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)
