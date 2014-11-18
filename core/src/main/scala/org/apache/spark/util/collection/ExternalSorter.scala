@@ -288,6 +288,7 @@ private[spark] class ExternalSorter[K, V, C](
     myMemoryThreshold = 0
 
     _memoryBytesSpilled += memorySize
+    elementsRead = 0
   }
 
   /**
