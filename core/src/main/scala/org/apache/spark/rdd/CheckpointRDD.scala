@@ -59,7 +59,7 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
     Array.tabulate(numPartitions)(i => new CheckpointRDDPartition(i))
   }
 
-  checkpointData = Some(new RDDCheckpointData[T](this))
+  checkpointData = Some(new RDDCheckpointData[T](this, None))
   checkpointData.get.cpFile = Some(checkpointPath)
 
   override def getPreferredLocations(split: Partition): Seq[String] = {

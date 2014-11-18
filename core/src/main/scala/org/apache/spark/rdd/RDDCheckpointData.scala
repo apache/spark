@@ -35,12 +35,16 @@ private[spark] object CheckpointState extends Enumeration {
 
 /**
  * This class contains all the information related to RDD checkpointing. Each instance of this
- * class is associated with a RDD. It manages process of checkpointing of the associated RDD,
- * as well as, manages the post-checkpoint state by providing the updated partitions,
- * iterator and preferred locations of the checkpointed RDD.
+ * class is associated with an RDD. It manages process of checkpointing of the associated RDD,
+ * as well as, manages the post-checkpoint state by providing the updated partitions, iterator
+ * and preferred locations of the checkpointed RDD. The default save and reload implementation
+ * can be overridden by providing a custom saveAndReloadRDD function that can return any kind
+ * of RDD, not only a CheckpointRDD.
  */
-private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
-  extends Logging with Serializable {
+private[spark] class RDDCheckpointData[T: ClassTag](
+    @transient rdd: RDD[T],
+    @transient saveAndReloadRDD: Option[RDD[T] => RDD[T]]
+  ) extends Logging with Serializable {
 
   import CheckpointState._
 
@@ -82,32 +86,46 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       }
     }
 
-    // Create the output path for the checkpoint
-    val path = new Path(rdd.context.checkpointDir.get, "rdd-" + rdd.id)
-    val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
-    if (!fs.mkdirs(path)) {
-      throw new SparkException("Failed to create checkpoint path " + path)
-    }
+    if (saveAndReloadRDD.isEmpty) {
+      // Default implementation
+      // Create the output path for the checkpoint
+      val path = new Path(rdd.context.checkpointDir.get, "rdd-" + rdd.id)
+      val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
+      if (!fs.mkdirs(path)) {
+        throw new SparkException("Failed to create checkpoint path " + path)
+      }
 
-    // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(
-      new SerializableWritable(rdd.context.hadoopConfiguration))
-    rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, broadcastedConf) _)
-    val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
-    if (newRDD.partitions.size != rdd.partitions.size) {
-      throw new SparkException(
-        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.size + ") has different " +
-          "number of partitions than original RDD " + rdd + "(" + rdd.partitions.size + ")")
-    }
+      // Save to file, and reload it as an RDD
+      val broadcastedConf = rdd.context.broadcast(
+        new SerializableWritable(rdd.context.hadoopConfiguration))
+      rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, broadcastedConf) _)
+      val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
+      if (newRDD.partitions.size != rdd.partitions.size) {
+        throw new SparkException(
+          "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.size + ") has different " +
+            "number of partitions than original RDD " + rdd + "(" + rdd.partitions.size + ")")
+      }
 
-    // Change the dependencies and partitions of the RDD
-    RDDCheckpointData.synchronized {
-      cpFile = Some(path.toString)
-      cpRDD = Some(newRDD)
-      rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
-      cpState = Checkpointed
+      // Change the dependencies and partitions of the RDD
+      RDDCheckpointData.synchronized {
+        cpFile = Some(path.toString)
+        cpRDD = Some(newRDD)
+        rdd.markCheckpointed(newRDD) // Update the RDD's dependencies and partitions
+        cpState = Checkpointed
+      }
+
+      logInfo(
+        "Done checkpointing RDD " + rdd.id + " to " + path + ", new parent is RDD " + newRDD.id)
+    } else {
+      val newRDD = saveAndReloadRDD.get(rdd)
+      RDDCheckpointData.synchronized {
+        cpRDD = Some(newRDD)
+        rdd.markCheckpointed(newRDD) // Update the RDD's dependencies and partitions
+        cpState = Checkpointed
+      }
+
+      logInfo("Done custom checkpointing RDD " + rdd.id + ", new parent is RDD " + newRDD.id)
     }
-    logInfo("Done checkpointing RDD " + rdd.id + " to " + path + ", new parent is RDD " + newRDD.id)
   }
 
   // Get preferred location of a split after checkpointing
