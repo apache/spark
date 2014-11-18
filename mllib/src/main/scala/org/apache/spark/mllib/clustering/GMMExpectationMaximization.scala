@@ -81,6 +81,9 @@ class GMMExpectationMaximization private (
   private type DenseDoubleVector = BreezeVector[Double]
   private type DenseDoubleMatrix = BreezeMatrix[Double]
   
+  // number of samples per cluster to use when initializing Gaussians
+  private val nSamples = 5;
+  
   // A default instance, 2 Gaussians, 100 iterations, 0.01 log-likelihood threshold
   def this() = this(2, 0.01, 100)
   
@@ -118,15 +121,15 @@ class GMMExpectationMaximization private (
     // Get length of the input vectors
     val d = breezeData.first.length 
     
-    // For each Gaussian, we will initialize the mean as some random
-    // point from the data.  (This could be improved)
-    val samples = breezeData.takeSample(true, k, scala.util.Random.nextInt)
+    // For each Gaussian, we will initialize the mean as the average
+    // of some random samples from the data
+    val samples = breezeData.takeSample(true, k * nSamples, scala.util.Random.nextInt)
     
     // C will be array of (weight, mean, covariance) tuples
     // we start with uniform weights, a random mean from the data, and
     // identity matrices for covariance 
     var C = (0 until k).map(i => (1.0/k, 
-                                  samples(i), 
+                                  vec_mean(samples.slice(i * nSamples, (i + 1) * nSamples)), 
                                   BreezeMatrix.eye[Double](d))).toArray
     
     val acc_w     = new Array[Accumulator[Double]](k)
@@ -148,7 +151,7 @@ class GMMExpectationMaximization private (
       }
       
       val log_likelihood = ctx.accumulator(0.0)
-      
+            
       // broadcast the current weights and distributions to all nodes
       val dists = ctx.broadcast((0 until k).map(i => 
                                   new MultivariateGaussian(C(i)._2, C(i)._3)).toArray)
@@ -164,11 +167,12 @@ class GMMExpectationMaximization private (
         log_likelihood += math.log(norm)  
           
         // accumulate weighted sums  
+        val xxt = x * new Transpose(x)
         for(i <- 0 until k){
           p(i) /= norm
           acc_w(i) += p(i)
           acc_mu(i) += x * p(i)
-          acc_sigma(i) += x * new Transpose(x) * p(i)
+          acc_sigma(i) += xxt * p(i)
         }  
       })
       
@@ -203,6 +207,13 @@ class GMMExpectationMaximization private (
     var s : Double = 0.0
     (0 until x.length).foreach(j => s += x(j))
     s
+  }
+  
+  /** Average of dense breeze vectors */
+  private def vec_mean(x : Array[DenseDoubleVector]) : DenseDoubleVector = {
+    val v = BreezeVector.zeros[Double](x(0).length)
+    (0 until x.length).foreach(j => v += x(j))
+    v / x.length.asInstanceOf[Double] 
   }
   
   /** AccumulatorParam for Dense Breeze Vectors */

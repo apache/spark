@@ -20,10 +20,10 @@ package org.apache.spark.mllib.clustering
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Vectors, Matrices}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class GMMExpectationMaximizationSuite extends FunSuite with LocalSparkContext {
+class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContext {
   test("single cluster") {
     val data = sc.parallelize(Array(
         Vectors.dense(6.0, 9.0),
