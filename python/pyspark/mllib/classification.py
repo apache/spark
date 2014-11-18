@@ -137,8 +137,10 @@ class LogisticRegressionWithLBFGS(object):
                                or not of the augmented representation for
                                training data (i.e. whether bias features
                                are activated or not).
-        :param corrections:    The number of corrections used in the LBFGS update (default: 10).
-        :param tolerance:      The convergence tolerance of iterations for L-BFGS (default: 1e-4).
+        :param corrections:    The number of corrections used in the LBFGS
+                               update (default: 10).
+        :param tolerance:      The convergence tolerance of iterations for
+                               L-BFGS (default: 1e-4).
 
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
