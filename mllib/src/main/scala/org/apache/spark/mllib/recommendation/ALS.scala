@@ -797,6 +797,7 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
+   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
     : MatrixFactorizationModel = {
