@@ -292,38 +292,40 @@ class DenseVector(val values: Array[Double]) extends Vector {
 
   private[spark] override def activeIterator(skippingZeros: Boolean) = new Iterator[(Int, Double)] {
     private var i = 0
-    private val valuesSize = values.size
 
     // If zeros are asked to be explicitly skipped, the parent `size` method is called to count
     // the number of nonzero elements using `hasNext` and `next` methods.
-    override lazy val size: Int = if (skippingZeros) super.size else valuesSize
+    final override lazy val size: Int = if (skippingZeros) super.size else values.size
 
-    override def hasNext = {
+    final override def hasNext = {
       if (skippingZeros) {
         var found = false
-        while (!found && i < valuesSize) if (values(i) != 0.0) found = true else i += 1
+        while (!found && i < values.size) if (values(i) != 0.0) found = true else i += 1
       }
-      i < valuesSize
+      i < values.size
     }
 
-    override def next = {
+    final override def next = {
       val result = (i, values(i))
       i += 1
       result
     }
 
-    override def foreach[@specialized(Unit) U](f: ((Int, Double)) => U) {
+    final override def foreach[@specialized(Unit) U](f: ((Int, Double)) => U) {
       var i = 0
+      val localValuesSize = values.size
+      val localValues = values
+
       if (skippingZeros) {
-        while (i < valuesSize) {
-          if (values(i) != 0.0) {
-            f(i, values(i))
+        while (i < localValuesSize) {
+          if (localValues(i) != 0.0) {
+            f(i, localValues(i))
           }
           i += 1
         }
       } else {
-        while (i < valuesSize) {
-          f(i, values(i))
+        while (i < localValuesSize) {
+          f(i, localValues(i))
           i += 1
         }
       }
@@ -369,38 +371,41 @@ class SparseVector(
 
   private[spark] override def activeIterator(skippingZeros: Boolean) = new Iterator[(Int, Double)] {
     private var i = 0
-    private val valuesSize = values.size
 
     // If zeros are asked to be explicitly skipped, the parent `size` method is called to count
     // the number of nonzero elements using `hasNext` and `next` methods.
-    override lazy val size: Int = if (skippingZeros) super.size else valuesSize
+    final override lazy val size: Int = if (skippingZeros) super.size else values.size
 
-    def hasNext = {
+    final override def hasNext = {
       if (skippingZeros) {
         var found = false
-        while (!found && i < valuesSize) if (values(i) != 0.0) found = true else i += 1
+        while (!found && i < values.size) if (values(i) != 0.0) found = true else i += 1
       }
-      i < valuesSize
+      i < values.size
     }
 
-    def next = {
+    final override def next = {
       val result = (indices(i), values(i))
       i += 1
       result
     }
 
-    override def foreach[@specialized(Unit) U](f: ((Int, Double)) => U) {
+    final override def foreach[@specialized(Unit) U](f: ((Int, Double)) => U) {
       var i = 0
+      val localValuesSize = values.size
+      val localIndices = indices
+      val localValues = values
+
       if (skippingZeros) {
-        while (i < valuesSize) {
-          if (values(i) != 0.0) {
-            f(indices(i), values(i))
+        while (i < localValuesSize) {
+          if (localValues(i) != 0.0) {
+            f(localIndices(i), localValues(i))
           }
           i += 1
         }
       } else {
-        while (i < valuesSize) {
-          f(indices(i), values(i))
+        while (i < localValuesSize) {
+          f(localIndices(i), localValues(i))
           i += 1
         }
       }
