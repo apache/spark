@@ -32,9 +32,8 @@ __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'SVMModel',
 
 class LinearBinaryClassificationModel(LinearModel):
     """
-    Represents a linear binary classification model that predicts to which
-    of a set of categories an example belongs. The categories are represented
-    by double values: 0.0, 1.0, 2.0, etc.
+    Represents a linear binary classification model that predicts to whether an
+    example is positive (1.0) or negative (0.0).
     """
     def __init__(self, weights, intercept):
         super(LinearBinaryClassificationModel, self).__init__(weights, intercept)
@@ -44,9 +43,9 @@ class LinearBinaryClassificationModel(LinearModel):
         """
         :: Experimental ::
 
-        Sets the threshold that separates positive predictions from negative predictions. An example
-        with prediction score greater than or equal to this threshold is identified as an positive,
-        and negative otherwise. The default value is 0.5.
+        Sets the threshold that separates positive predictions from negative
+        predictions. An example with prediction score greater than or equal
+        to this threshold is identified as an positive, and negative otherwise.
         """
         self._threshold = value
 
@@ -60,7 +59,8 @@ class LinearBinaryClassificationModel(LinearModel):
 
     def predict(self, test):
         """
-        Predict values for a single data point or an RDD of points using the model trained.
+        Predict values for a single data point or an RDD of points using
+        the model trained.
         """
         raise NotImplementedError
 
@@ -106,7 +106,8 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
 
     def predict(self, x):
         """
-        Predict values for a single data point or an RDD of points using the model trained.
+        Predict values for a single data point or an RDD of points using
+        the model trained.
         """
         if isinstance(x, RDD):
             return x.map(lambda v: self.predict(v))
@@ -114,7 +115,7 @@ class LogisticRegressionModel(LinearBinaryClassificationModel):
         x = _convert_to_vector(x)
         margin = self.weights.dot(x) + self._intercept
         if margin > 0:
-            prob = 1 / (1.0 + exp(-margin))
+            prob = 1 / (1 + exp(-margin))
         else:
             exp_margin = exp(margin)
             prob = exp_margin / (1 + exp_margin)
@@ -200,7 +201,8 @@ class SVMModel(LinearBinaryClassificationModel):
 
     def predict(self, x):
         """
-        Predict values for a single data point or an RDD of points using the model trained.
+        Predict values for a single data point or an RDD of points using
+        the model trained.
         """
         if isinstance(x, RDD):
             return x.map(lambda v: self.predict(v))
