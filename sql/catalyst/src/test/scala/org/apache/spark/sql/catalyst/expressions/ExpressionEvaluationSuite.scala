@@ -745,6 +745,34 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substring(0), "example", row)
   }
 
+  test("Concatenation") {
+    val row = new GenericRow(Array[Any](
+      "hello ", "spark", true, 10.asInstanceOf[Byte],
+      20.asInstanceOf[Short], 100, 300L, BigDecimal("1000000000000000000000"),
+      Date.valueOf("2001-03-03"), Timestamp.valueOf("2001-03-03 05:00:00")
+    ))
+    val strc1 = 'a.string.at(0)
+    val strc2 = 'a.string.at(1)
+    val boolc = 'a.boolean.at(2)
+    val bytec = 'a.byte.at(3)
+    val shortc = 'a.short.at(4)
+    val intc = 'a.int.at(5)
+    val longc = 'a.long.at(6)
+    val decimalc = 'a.decimal.at(7)
+    val datec = 'a.date.at(8)
+    val timestampc = 'a.timestamp.at(9)
+
+    checkEvaluation(strc1 concat strc2, "hello spark", row)
+    checkEvaluation(strc1 concat boolc, "hello true", row)
+    checkEvaluation(strc1 concat bytec, "hello 10", row)
+    checkEvaluation(strc1 concat shortc, "hello 20", row)
+    checkEvaluation(strc1 concat intc, "hello 100", row)
+    checkEvaluation(strc1 concat longc, "hello 300", row)
+    checkEvaluation(strc1 concat decimalc, "hello 1000000000000000000000")
+    checkEvaluation(strc1 concat datec, "hello 2001-03-03", row)
+    checkEvaluation(strc1 concat timestampc, "hello 2001-03-03 05:00:00.0", row)
+  }
+
   test("SQRT") {
     val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
     val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))

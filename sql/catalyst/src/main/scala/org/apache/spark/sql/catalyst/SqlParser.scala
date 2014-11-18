@@ -259,12 +259,12 @@ class SqlParser extends AbstractSparkSQLParser {
     productExpression *
       ( "+" ^^^ { (e1: Expression, e2: Expression) => Add(e1, e2) }
       | "-" ^^^ { (e1: Expression, e2: Expression) => Subtract(e1, e2) }
+      | "||" ^^^ { (e1: Expression, e2: Expression) => Concat(e1, e2)}
       )
 
   protected lazy val productExpression: Parser[Expression] =
     baseExpression *
-      ( "||" ^^^ { e1: Expression, e2: Expression) => Concat(e1, e2) }
-      | "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
+      ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
       | "/" ^^^ { (e1: Expression, e2: Expression) => Divide(e1, e2) }
       | "%" ^^^ { (e1: Expression, e2: Expression) => Remainder(e1, e2) }
       | "&" ^^^ { (e1: Expression, e2: Expression) => BitwiseAnd(e1, e2) }

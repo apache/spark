@@ -154,8 +154,6 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def toString() = s"Lower($child)"
 }
 
-case class Concat(child: Expresson) extends BinaryExpression
-
 /** A base trait for functions that compare two strings, returning a boolean. */
 trait StringComparison {
   self: BinaryExpression =>
@@ -273,4 +271,32 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
     case _ => s"SUBSTR($str, $pos, $len)"
   }
+}
+
+/**
+ * A function that concatenates two strings.
+  */
+case class Concat(left: Expression, right: Expression) extends BinaryExpression {
+
+  type EvaluatedType = Any
+
+  def nullable: Boolean = left.nullable
+  override def dataType: DataType = StringType
+
+  override def eval(input: Row): Any = {
+    val leftEvaled = left.eval(input)
+    val rightEvaled = right.eval(input)
+
+    if (leftEvaled == null) {
+      null
+    } else {
+      val leftStr = leftEvaled.toString
+      val rightStr = rightEvaled.toString
+      leftStr + rightStr
+    }
+  }
+
+  def symbol: String = "||"
+
+  override def toString() = s"$left $nodeName $right"
 }

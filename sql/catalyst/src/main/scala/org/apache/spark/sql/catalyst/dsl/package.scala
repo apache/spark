@@ -98,6 +98,7 @@ package object dsl {
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)) =
       Substring(expr, pos, len)
+    def concat(right: Expression) = Concat(expr, right)
 
     def isNull = IsNull(expr)
     def isNotNull = IsNotNull(expr)
