@@ -116,7 +116,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             <ul style="list-style-type:none">
               <li>
                   <input type="checkbox" id="select-all-metrics"/>
-                  <span class="additional-metric-title">(De)select All</span>
+                  <span class="additional-metric-title"><em>(De)select All</em></span>
               </li>
               <li>
                 <span data-toggle="tooltip"
