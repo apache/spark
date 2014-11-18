@@ -17,6 +17,7 @@ exportMethods(
               "flatMap",
               "flatMapValues",
               "groupByKey",
+              "join",
               "keys",
               "length",
               "lapply",
