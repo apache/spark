@@ -471,16 +471,16 @@ class PythonMLLibAPI extends Serializable {
    * see the Py4J documentation.
    */
   def trainRandomForestModel(
-    data: JavaRDD[LabeledPoint],
-    algoStr: String,
-    numClasses: Int,
-    categoricalFeaturesInfo: JMap[Int, Int],
-    impurityStr: String,
-    maxDepth: Int,
-    maxBins: Int,
-    numTrees: Int,
-    featureSubsetStrategy: String,
-    seed: Int): WeightedEnsembleModel = {
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      numClasses: Int,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      impurityStr: String,
+      maxDepth: Int,
+      maxBins: Int,
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      seed: Int): WeightedEnsembleModel = {
 
     val algo = Algo.fromString(algoStr)
     val impurity = Impurities.fromString(impurityStr)
