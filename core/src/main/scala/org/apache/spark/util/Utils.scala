@@ -1665,15 +1665,15 @@ private[spark] object Utils extends Logging {
       serviceName: String = "",
       maxRetries: Int = portMaxRetries): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val startPort = conf.getInt("spark.port.min", 0)
+    val startPort = conf.getInt("spark.port.min", 1024)
     val endPort = conf.getInt("spark.port.max", 65536)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if port is 0, which is treated as a special port
       val tryPort = if (port == 0) {
         (startPort + Math.random() * (endPort - startPort)).toInt
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((port + offset - 1024) % (65536 - 1024)) + 1024
+        // If the new port wraps around, ensure it is in range(startPort, endPort)
+        ((port + offset - startPort) % (endPort - startPort)) + startPort
       }
       try {
         val (service, port) = startService(tryPort)

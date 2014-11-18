@@ -183,6 +183,20 @@ of the most common options to set are:
     Logs the effective SparkConf as INFO when a SparkContext is started.
   </td>
 </tr>
+<tr>
+  <td><code>spark.port.min</code></td>
+  <td>1024</td>
+  <td>
+    Min port for spark(UI, HttpServer. ConnectionManager, Akka)
+  </td>
+</tr>
+<tr>
+  <td><code>spark.port.max</code></td>
+  <td>65536</td>
+  <td>
+    Max port for spark(UI, HttpServer. ConnectionManager, Akka)
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
