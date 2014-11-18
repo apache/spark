@@ -1,6 +1,8 @@
 import logging
 import subprocess
 import sys
+from tempfile import NamedTemporaryFile
+
 from airflow.models import DatabaseConnection
 from airflow.configuration import getconf
 from airflow import settings
@@ -96,14 +98,19 @@ class HiveHook(BaseHook):
     def run_cli(self, hql, schema=None):
         if schema:
             hql = "USE {schema};\n{hql}".format(**locals())
+
+        f = NamedTemporaryFile()
+        f.write(hql)
+        f.flush()
         sp = subprocess.Popen(
-                ['hive', '-e', hql],
+                ['hive', '-f', f.name],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         all_err = ''
         for line in iter(sp.stdout.readline, ''):
             logging.info(line.strip())
         sp.wait()
+        f.close()
 
         if sp.returncode:
             raise Exception(all_err)
