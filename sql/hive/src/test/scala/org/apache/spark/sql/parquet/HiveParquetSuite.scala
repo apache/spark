@@ -107,8 +107,8 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
   }
 
   test("String issue for Parquet Table") {
-    sql("CREATE TABLE parquet_string(key STRING)")
-    sql("INSERT OVERWRITE TABLE parquet_string SELECT mystring FROM testsource")
+    sql("CREATE TABLE parquet_string(key INT, value STRING)")
+    sql("INSERT OVERWRITE TABLE parquet_string SELECT * FROM src")
     sql("SELECT * FROM parquet_string").collect.foreach(println)
   }
 
