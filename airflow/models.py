@@ -10,6 +10,7 @@ import pickle
 import re
 from time import sleep
 
+import sqlalchemy
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text,
     ForeignKey, func
@@ -17,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.serializer import loads, dumps
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.mysql import LONGTEXT
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.configuration import getconf
 from airflow import settings
@@ -152,7 +154,7 @@ class DagPickle(Base):
     the database.
     """
     id = Column(Integer, primary_key=True)
-    pickle = Column(Text())
+    pickle = Column(LONGTEXT())
 
     __tablename__ = "dag_pickle"
 
@@ -461,6 +463,7 @@ class TaskInstance(Base):
                     self.state = State.FAILED
                 session.merge(self)
                 session.commit()
+                logging.error(str(e))
                 raise e
 
             self.end_date = datetime.now()
@@ -594,7 +597,7 @@ class BackfillJob(BaseJob):
         # Triggering what is ready to get triggered
         while task_instances:
             for key, ti in task_instances.items():
-                if ti.state == State.SUCCESS:
+                if ti.state == State.SUCCESS and key in task_instances:
                     del task_instances[key]
                 elif ti.is_runnable():
                     executor.queue_command(
@@ -622,7 +625,8 @@ class BackfillJob(BaseJob):
                     del task_instances[key]
                     for task_id in downstream:
                         key = (ti.dag_id, task_id, execution_date)
-                        del task_instances[key]
+                        if key in task_instances:
+                            del task_instances[key]
                 elif ti.state == State.SUCCESS:
                     del task_instances[key]
         executor.end()

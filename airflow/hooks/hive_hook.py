@@ -57,17 +57,13 @@ class HiveHook(BaseHook):
         return self.hive
 
     def check_for_partition(self, schema, table, partition):
-        try:
-            self.hive._oprot.trans.open()
-            partitions = self.hive.get_partitions_by_filter(
-                schema, table, partition, 1)
-            self.hive._oprot.trans.close()
-            if partitions:
-                return True
-            else:
-                return False
-        except Exception as e:
-            logging.error(e)
+        self.hive._oprot.trans.open()
+        partitions = self.hive.get_partitions_by_filter(
+            schema, table, partition, 1)
+        self.hive._oprot.trans.close()
+        if partitions:
+            return True
+        else:
             return False
 
     def get_records(self, hql, schema=None):
