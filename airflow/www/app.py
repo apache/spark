@@ -189,8 +189,8 @@ class Airflow(BaseView):
     @expose('/tree')
     def tree(self):
         dag_id = request.args.get('dag_id')
-        dag = dagbag.dags[dag_id]
         action = request.args.get('action')
+        dag = dagbag.dags[dag_id]
 
         base_date = request.args.get('base_date')
         if not base_date:
