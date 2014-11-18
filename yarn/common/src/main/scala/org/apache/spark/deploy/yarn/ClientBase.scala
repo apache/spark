@@ -229,21 +229,20 @@ private[spark] trait ClientBase extends Logging {
      * Do the same for datanucleus jars, if they exist in spark home. Find all datanucleus-* jars,
      * copy them to the remote fs, and add them to the class path.
      */
-    val sparkHomeOpt = sparkConf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME"))
-    for (sparkHome <- sparkHomeOpt) {
-      val libs = sparkHome + Path.SEPARATOR + "lib"
-      val jars = new File(libs).listFiles(new FilenameFilter() {
-        override def accept(dir: File, name: String) = name.startsWith("datanucleus-")
-      })
-      // copy to remote and add to classpath
-      jars.foreach { jar =>
-        val localURI = new URI(jar.getAbsolutePath)
-        val destName = jar.getName
-        val src = getQualifiedLocalPath(localURI)
-        val destPath = copyFileToRemote(dst, src, replication)
-        distCacheMgr.addResource(fs, hadoopConf,
-          destPath, localResources, LocalResourceType.FILE, destName, statCache)
-        cachedSecondaryJarLinks += destName
+    for (libsDir <- sparkDatanucleusJars(sparkConf)) {
+      val libsURI = getQualifiedLocalPath(new URI(libsDir)).toUri()
+      val jars = FileSystem.get(libsURI, hadoopConf).listFiles(new Path(libsURI.getPath), false)
+      while (jars.hasNext) {
+        val jar = jars.next()
+        val name = jar.getPath.getName
+        if (name.startsWith("datanucleus-")) {
+          // copy to remote and add to classpath
+          val src = jar.getPath
+          val destPath = copyFileToRemote(dst, src, replication)
+          distCacheMgr.addResource(fs, hadoopConf, destPath,
+            localResources, LocalResourceType.FILE, name, statCache)
+          cachedSecondaryJarLinks += name
+        }
       }
     }
 
@@ -575,6 +574,9 @@ private[spark] object ClientBase extends Logging {
   // Internal config to propagate the location of the user's jar to the driver/executors
   val CONF_SPARK_USER_JAR = "spark.yarn.user.jar"
 
+  // Location of the datanucleus jars
+  val CONF_SPARK_DATANUCLEUS_DIR = "spark.yarn.datanucleus.dir"
+
   // Internal config to propagate the locations of any extra jars to add to the classpath
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
@@ -604,6 +606,19 @@ private[spark] object ClientBase extends Logging {
       System.getenv(ENV_SPARK_JAR)
     } else {
       SparkContext.jarOfClass(this.getClass).head
+    }
+  }
+
+  /**
+   * Find the user-defined provided jars directory if configured, or return SPARK_HOME/lib if not.
+   *
+   * This method first looks for $CONF_SPARK_DATANUCLEUS_DIR inside the SparkConf, then looks for
+   * Spark home inside the the SparkConf and the user environment.
+   */
+  private def sparkDatanucleusJars(conf: SparkConf): Option[String] = {
+    conf.getOption(CONF_SPARK_DATANUCLEUS_DIR).orElse {
+      val sparkHome = conf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME"))
+      sparkHome.map(path => path + Path.SEPARATOR + "lib")
     }
   }
 
