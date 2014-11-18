@@ -21,13 +21,14 @@ import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Internal representation of a datapoint which belongs to several subsamples of the same dataset,
  * particularly for bagging (e.g., for random forests).
  *
  * This holds one instance, as well as an array of weights which represent the (weighted)
- * number of times which this instance appears in each subsample.
+ * number of times which this instance appears in each subsamplingRate.
  * E.g., (datum, [1, 0, 4]) indicates that there are 3 subsamples of the dataset and that
  * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
  *
@@ -44,22 +45,65 @@ private[tree] object BaggedPoint {
 
   /**
    * Convert an input dataset into its BaggedPoint representation,
-   * choosing subsample counts for each instance.
-   * Each subsample has the same number of instances as the original dataset,
-   * and is created by subsampling with replacement.
-   * @param input     Input dataset.
-   * @param numSubsamples  Number of subsamples of this RDD to take.
-   * @param seed   Random seed.
-   * @return  BaggedPoint dataset representation
+   * choosing subsamplingRate counts for each instance.
+   * Each subsamplingRate has the same number of instances as the original dataset,
+   * and is created by subsampling without replacement.
+   * @param input Input dataset.
+   * @param subsamplingRate Fraction of the training data used for learning decision tree.
+   * @param numSubsamples Number of subsamples of this RDD to take.
+   * @param withReplacement Sampling with/without replacement.
+   * @param seed Random seed.
+   * @return BaggedPoint dataset representation.
    */
-  def convertToBaggedRDD[Datum](
+  def convertToBaggedRDD[Datum] (
       input: RDD[Datum],
+      subsamplingRate: Double,
       numSubsamples: Int,
+      withReplacement: Boolean,
       seed: Int = Utils.random.nextInt()): RDD[BaggedPoint[Datum]] = {
+    if (withReplacement) {
+      convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
+    } else {
+      if (numSubsamples == 1 && subsamplingRate == 1.0) {
+        convertToBaggedRDDWithoutSampling(input)
+      } else {
+        convertToBaggedRDDSamplingWithoutReplacement(input, subsamplingRate, numSubsamples, seed)
+      }
+    }
+  }
+
+  private def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
+      input: RDD[Datum],
+      subsamplingRate: Double,
+      numSubsamples: Int,
+      seed: Int): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
-      // TODO: Support different sampling rates, and sampling without replacement.
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
-      val poisson = new PoissonDistribution(1.0)
+      val rng = new XORShiftRandom
+      rng.setSeed(seed + partitionIndex + 1)
+      instances.map { instance =>
+        val subsampleWeights = new Array[Double](numSubsamples)
+        var subsampleIndex = 0
+        while (subsampleIndex < numSubsamples) {
+          val x = rng.nextDouble()
+          subsampleWeights(subsampleIndex) = {
+            if (x < subsamplingRate) 1.0 else 0.0
+          }
+          subsampleIndex += 1
+        }
+        new BaggedPoint(instance, subsampleWeights)
+      }
+    }
+  }
+
+  private def convertToBaggedRDDSamplingWithReplacement[Datum] (
+      input: RDD[Datum],
+      subsample: Double,
+      numSubsamples: Int,
+      seed: Int): RDD[BaggedPoint[Datum]] = {
+    input.mapPartitionsWithIndex { (partitionIndex, instances) =>
+      // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
+      val poisson = new PoissonDistribution(subsample)
       poisson.reseedRandomGenerator(seed + partitionIndex + 1)
       instances.map { instance =>
         val subsampleWeights = new Array[Double](numSubsamples)
@@ -73,7 +117,8 @@ private[tree] object BaggedPoint {
     }
   }
 
-  def convertToBaggedRDDWithoutSampling[Datum](input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
+  private def convertToBaggedRDDWithoutSampling[Datum] (
+      input: RDD[Datum]): RDD[BaggedPoint[Datum]] = {
     input.map(datum => new BaggedPoint(datum, Array(1.0)))
   }
 

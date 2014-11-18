@@ -28,7 +28,7 @@
 # - SPARK_YARN_DIST_FILES, Comma separated list of files to be distributed with the job.
 # - SPARK_YARN_DIST_ARCHIVES, Comma separated list of archives to be distributed with the job.
 
-# Options for the daemons used in the standalone deploy mode:
+# Options for the daemons used in the standalone deploy mode
 # - SPARK_MASTER_IP, to bind the master to a different IP address or hostname
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports for the master
 # - SPARK_MASTER_OPTS, to set config properties only for the master (e.g. "-Dx=y")
@@ -41,3 +41,10 @@
 # - SPARK_HISTORY_OPTS, to set config properties only for the history server (e.g. "-Dx=y")
 # - SPARK_DAEMON_JAVA_OPTS, to set config properties for all daemons (e.g. "-Dx=y")
 # - SPARK_PUBLIC_DNS, to set the public dns name of the master or workers
+
+# Generic options for the daemons used in the standalone deploy mode
+# - SPARK_CONF_DIR      Alternate conf dir. (Default: ${SPARK_HOME}/conf)
+# - SPARK_LOG_DIR       Where log files are stored.  (Default: ${SPARK_HOME}/logs)
+# - SPARK_PID_DIR       Where the pid file is stored. (Default: /tmp)
+# - SPARK_IDENT_STRING  A string representing this instance of spark. (Default: $USER)
+# - SPARK_NICENESS      The scheduling priority for daemons. (Default: 0)

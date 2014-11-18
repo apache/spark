@@ -25,7 +25,7 @@ import org.apache.spark.Logging
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
-private[mllib] object BLAS extends Serializable with Logging {
+private[spark] object BLAS extends Serializable with Logging {
 
   @transient private var _f2jBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _

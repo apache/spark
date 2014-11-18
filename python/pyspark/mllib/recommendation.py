@@ -32,7 +32,7 @@ class Rating(object):
         return Rating, (self.user, self.product, self.rating)
 
     def __repr__(self):
-        return "Rating(%d, %d, %d)" % (self.user, self.product, self.rating)
+        return "Rating(%d, %d, %s)" % (self.user, self.product, self.rating)
 
 
 class MatrixFactorizationModel(JavaModelWrapper):
@@ -44,34 +44,42 @@ class MatrixFactorizationModel(JavaModelWrapper):
     >>> r2 = (1, 2, 2.0)
     >>> r3 = (2, 1, 2.0)
     >>> ratings = sc.parallelize([r1, r2, r3])
-    >>> model = ALS.trainImplicit(ratings, 1)
-    >>> model.predict(2,2) is not None
-    True
+    >>> model = ALS.trainImplicit(ratings, 1, seed=10)
+    >>> model.predict(2,2)
+    0.4473...
 
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
-    >>> model = ALS.train(ratings, 1)
-    >>> model.predictAll(testset).count() == 2
-    True
+    >>> model = ALS.train(ratings, 1, seed=10)
+    >>> model.predictAll(testset).collect()
+    [Rating(1, 1, 1.0471...), Rating(1, 2, 1.9679...)]
 
-    >>> model = ALS.train(ratings, 4)
-    >>> model.userFeatures().count() == 2
-    True
+    >>> model = ALS.train(ratings, 4, seed=10)
+    >>> model.userFeatures().collect()
+    [(2, array('d', [...])), (1, array('d', [...]))]
 
     >>> first_user = model.userFeatures().take(1)[0]
     >>> latents = first_user[1]
     >>> len(latents) == 4
     True
 
-    >>> model.productFeatures().count() == 2
-    True
+    >>> model.productFeatures().collect()
+    [(2, array('d', [...])), (1, array('d', [...]))]
 
     >>> first_product = model.productFeatures().take(1)[0]
     >>> latents = first_product[1]
     >>> len(latents) == 4
     True
+
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
+    >>> model.predict(2,2)
+    3.735...
+
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
+    >>> model.predict(2,2)
+    0.4473...
     """
     def predict(self, user, product):
-        return self._java_model.predict(user, product)
+        return self._java_model.predict(int(user), int(product))
 
     def predictAll(self, user_product):
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
@@ -101,15 +109,17 @@ class ALS(object):
         return _to_java_object_rdd(ratings, True)
 
     @classmethod
-    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
+    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
+              seed=None):
         model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
-                              lambda_, blocks)
+                              lambda_, blocks, nonnegative, seed)
         return MatrixFactorizationModel(model)
 
     @classmethod
-    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
+    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
+                      nonnegative=False, seed=None):
         model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
-                              iterations, lambda_, blocks, alpha)
+                              iterations, lambda_, blocks, alpha, nonnegative, seed)
         return MatrixFactorizationModel(model)
 
 
@@ -117,7 +127,7 @@ def _test():
     import doctest
     import pyspark.mllib.recommendation
     globs = pyspark.mllib.recommendation.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

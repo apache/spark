@@ -35,9 +35,11 @@ import static org.junit.Assert.*;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
-import org.apache.spark.network.server.DefaultStreamManager;
+import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class RpcIntegrationSuite {
@@ -61,8 +63,11 @@ public class RpcIntegrationSuite {
           throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
+
+      @Override
+      public StreamManager getStreamManager() { return new OneForOneStreamManager(); }
     };
-    TransportContext context = new TransportContext(conf, new DefaultStreamManager(), rpcHandler);
+    TransportContext context = new TransportContext(conf, rpcHandler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }

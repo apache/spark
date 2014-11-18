@@ -101,7 +101,13 @@ function post_message () {
 function send_archived_logs () {
   echo "Archiving unit tests logs..."
 
-  local log_files=$(find . -name "unit-tests.log")
+  local log_files=$(
+    find .\
+      -name "unit-tests.log" -o\
+      -path "./sql/hive/target/HiveCompatibilitySuite.failed" -o\
+      -path "./sql/hive/target/HiveCompatibilitySuite.hiveFailed" -o\
+      -path "./sql/hive/target/HiveCompatibilitySuite.wrong"
+  )
 
   if [ -z "$log_files" ]; then
     echo "> No log files found." >&2

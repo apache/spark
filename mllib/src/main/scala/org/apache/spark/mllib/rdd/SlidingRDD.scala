@@ -45,15 +45,16 @@ class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T]
  */
 private[mllib]
 class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
-  extends RDD[Seq[T]](parent) {
+  extends RDD[Array[T]](parent) {
 
   require(windowSize > 1, s"Window size must be greater than 1, but got $windowSize.")
 
-  override def compute(split: Partition, context: TaskContext): Iterator[Seq[T]] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[Array[T]] = {
     val part = split.asInstanceOf[SlidingRDDPartition[T]]
     (firstParent[T].iterator(part.prev, context) ++ part.tail)
       .sliding(windowSize)
       .withPartial(false)
+      .map(_.toArray)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] =

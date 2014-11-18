@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
 
@@ -161,7 +161,11 @@ private[hive] trait HiveStrategies {
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+        execution.InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case hive.InsertIntoHiveTable(table: MetastoreRelation, partition, child, overwrite) =>
+        execution.InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.CreateTableAsSelect(
              Some(database), tableName, child, allowExisting, Some(extra: ASTNode)) =>
         CreateTableAsSelect(

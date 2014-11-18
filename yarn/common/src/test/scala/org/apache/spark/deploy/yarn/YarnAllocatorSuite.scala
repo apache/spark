@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.spark.deploy.yarn.MemLimitLogger._
+import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.scalatest.FunSuite
 
 class YarnAllocatorSuite extends FunSuite {

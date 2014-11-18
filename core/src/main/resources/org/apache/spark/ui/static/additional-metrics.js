@@ -39,6 +39,8 @@ $(function() {
         var column = "table ." + $(this).attr("name");
         $(column).hide();
     });
+    // Stripe table rows after rows have been hidden to ensure correct striping.
+    stripeTables();
 
     $("input:checkbox").click(function() {
         var column = "table ." + $(this).attr("name");

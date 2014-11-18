@@ -30,10 +30,14 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   val conf = new SparkConf(loadDefaults = false)
 
+  // Ensure that the DAGScheduler doesn't retry stages whose fetches fail, so that we accurately
+  // test that the shuffle works (rather than retrying until all blocks are local to one Executor).
+  conf.set("spark.test.noStageRetry", "true")
+
   test("groupByKey without compression") {
     try {
       System.setProperty("spark.shuffle.compress", "false")
-      sc = new SparkContext("local", "test")
+      sc = new SparkContext("local", "test", conf)
       val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
       val groups = pairs.groupByKey(4).collect()
       assert(groups.size === 2)
@@ -47,7 +51,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   }
 
   test("shuffle non-zero block size") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val NUM_BLOCKS = 3
 
     val a = sc.parallelize(1 to 10, 2)
@@ -73,7 +77,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("shuffle serializer") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (x, new NonJavaSerializableClass(x * 2))
@@ -89,7 +93,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("zero sized blocks") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
     // 10 partitions from 4 keys
     val NUM_BLOCKS = 10
@@ -116,7 +120,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("zero sized blocks without kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
 
     // 10 partitions from 4 keys
     val NUM_BLOCKS = 10
@@ -141,7 +145,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
@@ -154,7 +158,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   test("sorting on mutable pairs") {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
@@ -168,7 +172,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("cogroup using mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
@@ -195,7 +199,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("subtract mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1), p(3, 33))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"))
@@ -209,11 +213,8 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("sort with Java non serializable class - Kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .setAppName("test")
-      .setMaster("local-cluster[2,1,512]")
-    sc = new SparkContext(conf)
+    val myConf = conf.clone().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    sc = new SparkContext("local-cluster[2,1,512]", "test", myConf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (new NonJavaSerializableClass(x), x)
@@ -226,10 +227,7 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
 
   test("sort with Java non serializable class - Java") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    val conf = new SparkConf()
-      .setAppName("test")
-      .setMaster("local-cluster[2,1,512]")
-    sc = new SparkContext(conf)
+    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (new NonJavaSerializableClass(x), x)
