@@ -38,7 +38,9 @@ RC_NAME=${RC_NAME:-rc2}
 
 M2_REPO=~/.m2/repository
 SPARK_REPO=$M2_REPO/org/apache/spark
-NEXUS_REPOSITORY=https://repository.apache.org/service/local/staging/deploy/maven2
+NEXUS_ROOT=https://repository.apache.org/service/local/staging
+NEXUS_UPLOAD=$NEXUS_ROOT/deploy/maven2
+NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 
 if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
@@ -78,10 +80,16 @@ if [[ ! "$@" =~ --package-only ]]; then
   git push origin $GIT_TAG
   git push origin HEAD:$GIT_BRANCH
   git checkout -f $GIT_TAG 
- 
-  # TODO: Programatically create and close Maven repo:
-  #curl -X POST -d @file.xml -u USER:PASS -H "Content-Type:application/xml" -v https://repository.apache.org/service/local/staging/profiles/d63f592e7eac0/start
+  
+  # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
+  echo "Creating Nexus staging repository"
+  repo_request="<promoteRequest><data><description>Apache Spark $GIT_TAG</description></data></promoteRequest>"
+  out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    -H "Content-Type:application/xml" -v \
+    $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
+  staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
+  echo "Created Nexus staging repository: $staged_repo_id"
 
   rm -rf $SPARK_REPO
 
@@ -110,17 +118,24 @@ if [[ ! "$@" =~ --package-only ]]; then
     gpg --print-md SHA1 $file > $file.sha1
   done
 
-  echo "Uplading files to $NEXUS_REPOSITORY"
+  echo "Uplading files to $NEXUS_UPLOAD"
   for file in $(find . -type f)
   do
     # strip leading ./
     file_short=$(echo $file | sed -e "s/\.\///")
-    dest_url="$NEXUS_REPOSITORY/org/apache/spark/$file_short"
+    dest_url="$NEXUS_UPLOAD/org/apache/spark/$file_short"
     echo "  Uploading $file_short"
     curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
   done
-  popd
 
+  echo "Closing nexus staging repository"
+  repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $GIT_TAG</description></data></promoteRequest>"
+  out=$(curl -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
+    -H "Content-Type:application/xml" -v \
+    $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
+  echo "Closed Nexus staging repository: $staged_repo_id"
+
+  popd
   popd
   rm -rf spark
 fi
