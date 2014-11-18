@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.joins
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.expressions._
 
@@ -28,7 +29,21 @@ case class IntJoin(
 case class JoinSequence(
     inputSchema: Seq[Attribute],
     outputProjection: Seq[Attribute],
-    joins: Seq[IntJoin])
+    joins: Seq[IntJoin]) {
+  override def equals(other: Any) = other match {
+    case JoinSequence(oi, op, oj) =>
+      inputSchema.map(_.name) == oi.map(_.name) &&
+      outputProjection.map(_.name) == op.map(_.name)
+    case _ => false
+  }
+
+  override def hashCode(): Int =
+    inputSchema.map(_.name).hashCode() *  37 +
+    outputProjection.map(_.name).hashCode()
+
+  override def toString =
+    s"JoinSequence ${inputSchema.map(_.name).mkString("[", ",", "]")} ${outputProjection.map(_.name).mkString("[", ",", "]")}"
+}
 
 object GenerateInnerJoin extends CodeGenerator[JoinSequence, Iterator[Row] => Iterator[Row]] {
   import scala.reflect.runtime.{universe => ru}
@@ -39,7 +54,10 @@ object GenerateInnerJoin extends CodeGenerator[JoinSequence, Iterator[Row] => It
    * Canonicalizes an input expression. Used to avoid double caching expressions that differ only
    * cosmetically.
    */
-  override protected def canonicalize(in: JoinSequence): JoinSequence = in  // TODO
+  override protected def canonicalize(in: JoinSequence): JoinSequence = in
+  //  in.copy(
+  //    inputSchema = in.inputSchema.map(f => UnresolvedAttribute(f.name)),
+  //    outputProjection = in.outputProjection.map(f => UnresolvedAttribute(f.name)))
 
   /** Binds an input expression to a given input schema */
   override protected def bind(in: JoinSequence, inputSchema: Seq[Attribute]): JoinSequence = in
@@ -99,8 +117,11 @@ object GenerateInnerJoin extends CodeGenerator[JoinSequence, Iterator[Row] => It
       }
     """
 
-    println(s"code for $in:\n$code")
-    toolBox.eval(code).asInstanceOf[(Iterator[Row]) => Iterator[Row]]
+    //println(s"code for $in:\n$code")
+    val startTime = System.currentTimeMillis
+    val result = toolBox.eval(code).asInstanceOf[(Iterator[Row]) => Iterator[Row]]
+    println(s"Generated in ${System.currentTimeMillis - startTime}ms $in")
+    result
   }
 
   protected def copyAvailableAttributes(
