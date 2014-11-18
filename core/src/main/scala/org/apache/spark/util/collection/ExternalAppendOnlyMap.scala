@@ -130,7 +130,7 @@ class ExternalAppendOnlyMap[K, V, C](
         currentMap = new SizeTrackingAppendOnlyMap[K, C]
       }
       currentMap.changeValue(curEntry._1, update)
-      addElementsRead
+      addElementsRead()
     }
   }
 

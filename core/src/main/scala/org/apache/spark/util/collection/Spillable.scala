@@ -36,11 +36,11 @@ private[spark] trait Spillable[C] {
   protected def spill(collection: C): Unit
 
   // Number of elements read from input since last spill
-  protected def elementsRead = _elementsRead
+  protected def elementsRead: Long = _elementsRead
 
   // Called by subclasses every time a record is read
   // It's used for checking spilling frequency
-  protected def addElementsRead() = { _elementsRead += 1 }
+  protected def addElementsRead(): Unit = { _elementsRead += 1 }
 
   // Memory manager that can be used to acquire/release memory
   private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
