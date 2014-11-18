@@ -24,7 +24,7 @@ from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 
-__all__ = ['DecisionTreeModel', 'DecisionTree', 'WeightedEnsembleModel', 'RandomForest']
+__all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel', 'RandomForest']
 
 
 class DecisionTreeModel(JavaModelWrapper):
@@ -185,11 +185,6 @@ class DecisionTree(object):
 
 
 class WeightedEnsembleModel(JavaModelWrapper):
-    """
-    A model trained by :class:`RandomForest`
-
-    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
-    """
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points using the model trained.
@@ -217,8 +212,16 @@ class WeightedEnsembleModel(JavaModelWrapper):
         return self._java_model.toString()
 
     def toDebugString(self):
-        """Full model """
+        """ Full model """
         return self._java_model.toDebugString()
+
+
+class RandomForestModel(WeightedEnsembleModel):
+    """
+    A model trained by :class:`RandomForest`
+
+    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    """
 
 
 class RandomForest(object):
@@ -241,7 +244,7 @@ class RandomForest(object):
             seed = random.randint(0, 1 << 30)
         model = callMLlibFunc("trainRandomForestModel", data, type, numClasses, features,
                               impurity, maxDepth, maxBins, numTrees, featureSubsetStrategy, seed)
-        return WeightedEnsembleModel(model)
+        return RandomForestModel(model)
 
     @classmethod
     def trainClassifier(cls, data, numClassesForClassification, categoricalFeaturesInfo, numTrees,
@@ -250,7 +253,7 @@ class RandomForest(object):
         """
         Method to train a decision tree model for binary or multiclass classification.
 
-        :param data: Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+        :param data: Training dataset: RDD of LabeledPoint.
                      Labels should take values {0, 1, ..., numClasses-1}.
         :param numClassesForClassification: number of classes for classification.
         :param categoricalFeaturesInfo: Map storing arity of categorical features.
@@ -317,11 +320,12 @@ class RandomForest(object):
         """
         Method to train a decision tree model for regression.
 
-        :param data: Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+        :param data: Training dataset: RDD of LabeledPoint.
                      Labels are real numbers.
         :param categoricalFeaturesInfo: Map storing arity of categorical features.
-                                     E.g., an entry (n -> k) indicates that feature n is categorical
-                                     with k categories indexed from 0: {0, 1, ..., k-1}.
+                                     E.g., an entry (n -> k) indicates that feature
+                                     n is categorical with k categories indexed from 0:
+                                     {0, 1, ..., k-1}.
         :param numTrees: Number of trees in the random forest.
         :param featureSubsetStrategy: Number of features to consider for splits at each node.
                                    Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
@@ -331,8 +335,8 @@ class RandomForest(object):
                                    to "onethird" for regression.
         :param impurity: Criterion used for information gain calculation.
                          Supported values: "variance".
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node; depth 1 means
-                         1 internal node + 2 leaf nodes.(default: 4)
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
+                         depth 1 means 1 internal node + 2 leaf nodes.(default: 4)
         :param maxBins: maximum number of bins used for splitting features (default: 100)
         :param seed:  Random seed for bootstrapping and choosing feature subsets.
         :return: WeightedEnsembleModel that can be used for prediction
