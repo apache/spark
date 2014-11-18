@@ -746,7 +746,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param alpha      confidence parameter
    * @param seed       random seed
    */
   def trainImplicit(
@@ -773,7 +773,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param alpha      confidence parameter
    */
   def trainImplicit(
       ratings: RDD[Rating],
@@ -797,6 +797,7 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
+   * @param alpha      confidence parameter
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
     : MatrixFactorizationModel = {
