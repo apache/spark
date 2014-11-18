@@ -144,7 +144,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
-        jobData.numCompletedStages += 1
+        jobData.completedStageIndices.add(stage.stageId)
       } else {
         jobData.numFailedStages += 1
       }

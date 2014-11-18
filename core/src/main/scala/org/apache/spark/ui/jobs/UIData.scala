@@ -52,7 +52,7 @@ private[jobs] object UIData {
     var numFailedTasks: Int = 0,
     /* Stages */
     var numActiveStages: Int = 0,
-    var numCompletedStages: Int = 0,
+    var completedStageIndices: OpenHashSet[Int] = new OpenHashSet[Int](),
     var numFailedStages: Int = 0
   )
 

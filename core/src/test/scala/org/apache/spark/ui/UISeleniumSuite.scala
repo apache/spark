@@ -187,9 +187,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       mappedData.count()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
-        find(cssSelector(".stage-progress-cell .completed-stages")).get.text should be ("2")
-        find(cssSelector(".stage-progress-cell .total-stages")).get.text should be ("2")
-        find(cssSelector(".stage-progress-cell .failed-stages")).get.text should be ("(1 failed)")
+        find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
       }
     }
   }
