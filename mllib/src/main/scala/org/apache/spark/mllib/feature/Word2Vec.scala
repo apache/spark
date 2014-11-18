@@ -463,7 +463,7 @@ class Word2VecModel private[mllib] (
   }
   
   /**
-   * Returns the strings with it's raw vectors for further processing
+   * Returns the strings with its raw vectors for further processing
    * (e.g. clustering)
    * @return map of string to vector
    */
