@@ -1872,7 +1872,6 @@ class SchemaRDD(RDD):
 
     def toJSON(self, use_unicode=False):
         rdd = self._jschema_rdd.baseSchemaRDD().toJSON()
-        #return this using unicode
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def saveAsParquetFile(self, path):
