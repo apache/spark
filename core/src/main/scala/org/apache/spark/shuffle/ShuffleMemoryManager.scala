@@ -93,7 +93,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   }
 
   /** Release numBytes bytes for the current thread. */
-  def release(numBytes: Long): Unit =  synchronized {
+  def release(numBytes: Long): Unit = synchronized {
     val threadId = Thread.currentThread().getId
     val curMem = threadMemory.getOrElse(threadId, 0L)
     if (curMem < numBytes) {

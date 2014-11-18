@@ -126,7 +126,7 @@ final class ShuffleRawBlockFetcherIterator(
    * Current [[FetchResult]] being processed. We track this so we can release the current buffer
    * in case of a runtime exception when processing the current buffer.
    */
-  private[spark] var currentResult: FetchResult = null
+  @volatile private[spark] var currentResult: FetchResult = null
 
   /**
    * Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
