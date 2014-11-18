@@ -20,13 +20,13 @@ package org.apache.spark.mllib.feature
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
 import org.apache.spark.rdd.RDD
 
-class StandardScalerSuite extends FunSuite with LocalSparkContext {
+class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
 
   private def computeSummary(data: RDD[Vector]): MultivariateStatisticalSummary = {
     data.treeAggregate(new MultivariateOnlineSummarizer)(

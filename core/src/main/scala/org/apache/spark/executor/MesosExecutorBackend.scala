@@ -19,6 +19,8 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
+import scala.collection.JavaConversions._
+
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver, MesosNativeLibrary}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
@@ -50,14 +52,23 @@ private[spark] class MesosExecutorBackend
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
       slaveInfo: SlaveInfo) {
-    logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
+
+    // Get num cores for this task from ExecutorInfo, created in MesosSchedulerBackend.
+    val cpusPerTask = executorInfo.getResourcesList
+      .find(_.getName == "cpus")
+      .map(_.getScalar.getValue.toInt)
+      .getOrElse(0)
+    val executorId = executorInfo.getExecutorId.getValue
+
+    logInfo(s"Registered with Mesos as executor ID $executorId with $cpusPerTask cpus")
     this.driver = driver
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     executor = new Executor(
-      executorInfo.getExecutorId.getValue,
+      executorId,
       slaveInfo.getHostname,
-      properties)
+      properties,
+      cpusPerTask)
   }
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {

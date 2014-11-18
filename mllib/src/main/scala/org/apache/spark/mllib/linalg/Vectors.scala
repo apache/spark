@@ -115,6 +115,9 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def deserialize(datum: Any): Vector = {
     datum match {
+      // TODO: something wrong with UDT serialization
+      case v: Vector =>
+        v
       case row: Row =>
         require(row.length == 4,
           s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
@@ -234,7 +237,7 @@ object Vectors {
   private[mllib] def fromBreeze(breezeVector: BV[Double]): Vector = {
     breezeVector match {
       case v: BDV[Double] =>
-        if (v.offset == 0 && v.stride == 1) {
+        if (v.offset == 0 && v.stride == 1 && v.length == v.data.length) {
           new DenseVector(v.data)
         } else {
           new DenseVector(v.toArray)  // Can't use underlying array directly, so make a new one
