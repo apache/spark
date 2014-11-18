@@ -121,6 +121,7 @@ private[spark] object JsonProtocol {
     val properties = propertiesToJson(jobStart.properties)
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
+    ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~
     ("Stage IDs" -> jobStart.stageIds) ~
     ("Properties" -> properties)
   }
@@ -455,7 +456,9 @@ private[spark] object JsonProtocol {
     val jobId = (json \ "Job ID").extract[Int]
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
-    SparkListenerJobStart(jobId, stageIds, properties)
+    val stageInfos = Utils.jsonOption(json \ "Stage Infos")
+      .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse(Seq.empty)
+    SparkListenerJobStart(jobId, stageInfos, stageIds, properties)
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {

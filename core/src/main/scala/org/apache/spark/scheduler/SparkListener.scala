@@ -56,7 +56,11 @@ case class SparkListenerTaskEnd(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
+case class SparkListenerJobStart(
+    jobId: Int,
+    stageInfos: Seq[StageInfo],
+    stageIds: Seq[Int],  // Note: this is here for backwards-compatibility
+    properties: Properties = null)
   extends SparkListenerEvent
 
 @DeveloperApi

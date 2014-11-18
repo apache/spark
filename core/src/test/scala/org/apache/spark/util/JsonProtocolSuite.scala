@@ -47,7 +47,12 @@ class JsonProtocolSuite extends FunSuite {
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
-    val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
+    val jobStart = {
+      val stageIds = Seq[Int](1, 2, 3, 4)
+      val stageInfos = stageIds.map(x =>
+        makeStageInfo(x * 100, x * 200, x * 300, x * 400L, x * 500L))
+      SparkListenerJobStart(10, stageInfos, stageIds, properties)
+    }
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
       "JVM Information" -> Seq(("GC speed", "9999 objects/s"), ("Java home", "Land of coffee")),
@@ -222,6 +227,19 @@ class JsonProtocolSuite extends FunSuite {
       .removeField({ _._1 == "Executor ID" })
     val expectedExecutorLostFailure = ExecutorLostFailure("Unknown")
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("SparkListenerJobStart backward compatibility") {
+    // Prior to Spark 1.2.0, SparkListenerJobStart did not have a "Stage Infos" property.
+    val jobStart = {
+      val stageIds = Seq[Int](1, 2, 3, 4)
+      val stageInfos = stageIds.map(x =>
+        makeStageInfo(x * 100, x * 200, x * 300, x * 400L, x * 500L))
+      SparkListenerJobStart(10, stageInfos, stageIds, properties)
+    }
+    val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
+    val expectedJobStart = SparkListenerJobStart(10, Seq.empty, Seq[Int](1, 2, 3, 4), properties)
+    assert(expectedJobStart === JsonProtocol.jobStartFromJson(oldEvent))
   }
 
   /** -------------------------- *
@@ -1051,6 +1069,104 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerJobStart",
       |  "Job ID": 10,
+      |  "Stage Infos": [
+      |    {
+      |      "Stage ID": 100,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 200,
+      |      "RDD Info": [
+      |
+      |      ],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2"
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1"
+      |        }
+      |      ]
+      |    },
+      |    {
+      |      "Stage ID": 200,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 400,
+      |      "RDD Info": [
+      |
+      |      ],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2"
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1"
+      |        }
+      |      ]
+      |    },
+      |    {
+      |      "Stage ID": 300,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 600,
+      |      "RDD Info": [
+      |
+      |      ],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2"
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1"
+      |        }
+      |      ]
+      |    },
+      |    {
+      |      "Stage ID": 400,
+      |      "Stage Attempt ID": 0,
+      |      "Stage Name": "greetings",
+      |      "Number of Tasks": 800,
+      |      "RDD Info": [
+      |
+      |      ],
+      |      "Details": "details",
+      |      "Accumulables": [
+      |        {
+      |          "ID": 2,
+      |          "Name": " Accumulable 2",
+      |          "Update": "delta2",
+      |          "Value": "val2"
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": " Accumulable 1",
+      |          "Update": "delta1",
+      |          "Value": "val1"
+      |        }
+      |      ]
+      |    }
+      |  ],
       |  "Stage IDs": [
       |    1,
       |    2,
