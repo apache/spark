@@ -32,6 +32,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   override def nullable = (child.dataType, dataType) match {
     case (StringType, _: NumericType) => true
     case (StringType, TimestampType)  => true
+    case (DoubleType, TimestampType)  => true
+    case (FloatType, TimestampType)   => true
     case (StringType, DateType)       => true
     case (_: NumericType, DateType)   => true
     case (BooleanType, DateType)      => true
@@ -117,10 +119,18 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => decimalToTimestamp(Decimal(d)))
+      buildCast[Double](_, d => try {
+        decimalToTimestamp(Decimal(d))
+      } catch {
+        case _: NumberFormatException => null
+      })
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => decimalToTimestamp(Decimal(f)))
+      buildCast[Float](_, f => try {
+        decimalToTimestamp(Decimal(f))
+      } catch {
+        case _: NumberFormatException => null
+      })
   }
 
   private[this]  def decimalToTimestamp(d: Decimal) = {
