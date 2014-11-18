@@ -114,8 +114,8 @@ class LogisticRegressionWithSGD(object):
 class LogisticRegressionWithLBFGS(object):
 
     @classmethod
-    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, intercept=False,
-              corrections=10, tolerance=1e-4):
+    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
+              intercept=False, corrections=10, tolerance=1e-4):
         """
         Train a logistic regression model on the given data.
 
@@ -123,6 +123,16 @@ class LogisticRegressionWithLBFGS(object):
         :param iterations:     The number of iterations (default: 100).
         :param initialWeights: The initial weights (default: None).
         :param regParam:       The regularizer parameter (default: 0.01).
+        :param regType:        The type of regularizer used for training
+                               our model.
+
+                               :Allowed values:
+                                 - "l1" for using L1 regularization
+                                 - "l2" for using L2 regularization
+                                 - None for no regularization
+
+                                 (default: "l2")
+
         :param intercept:      Boolean parameter which indicates the use
                                or not of the augmented representation for
                                training data (i.e. whether bias features
@@ -142,7 +152,7 @@ class LogisticRegressionWithLBFGS(object):
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
-                                 float(regParam), bool(intercept), int(corrections),
+                                 float(regParam), str(regType), bool(intercept), int(corrections),
                                  float(tolerance))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
