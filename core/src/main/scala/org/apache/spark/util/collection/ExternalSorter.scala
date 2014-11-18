@@ -119,10 +119,6 @@ private[spark] class ExternalSorter[K, V, C](
   private var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
   private var buffer = new SizeTrackingPairBuffer[(Int, K), C]
 
-  // Number of pairs read from input since last spill; note that we count them even if a value is
-  // merged with a previous key in case we're doing something like groupBy where the result grows
-  protected[this] var elementsRead = 0L
-
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
 
@@ -204,7 +200,7 @@ private[spark] class ExternalSorter[K, V, C](
         if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
       }
       while (records.hasNext) {
-        elementsRead += 1
+        addElementsRead
         kv = records.next()
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
@@ -212,7 +208,7 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       // Stick values into our buffer
       while (records.hasNext) {
-        elementsRead += 1
+        addElementsRead
         val kv = records.next()
         buffer.insert((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
@@ -233,12 +229,10 @@ private[spark] class ExternalSorter[K, V, C](
     if (usingMap) {
       if (maybeSpill(map, map.estimateSize())) {
         map = new SizeTrackingAppendOnlyMap[(Int, K), C]
-        elementsRead = 0L
       }
     } else {
       if (maybeSpill(buffer, buffer.estimateSize())) {
         buffer = new SizeTrackingPairBuffer[(Int, K), C]
-        elementsRead = 0L
       }
     }
   }
