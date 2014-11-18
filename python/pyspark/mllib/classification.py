@@ -114,21 +114,21 @@ class LogisticRegressionWithSGD(object):
 class LogisticRegressionWithLBFGS(object):
 
     @classmethod
-    def train(cls, data, iterations=100, initialWeights=None, corrections=10, tolerance=1e-4,
-              regParam=0.01, intercept=False):
+    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, intercept=False,
+              corrections=10, tolerance=1e-4):
         """
         Train a logistic regression model on the given data.
 
         :param data:           The training data, an RDD of LabeledPoint.
         :param iterations:     The number of iterations (default: 100).
         :param initialWeights: The initial weights (default: None).
-        :param corrections:    The number of corrections used in the LBFGS update (default: 10).
-        :param tolerance:      The convergence tolerance of iterations for L-BFGS (default: 1e-4).
         :param regParam:       The regularizer parameter (default: 0.01).
         :param intercept:      Boolean parameter which indicates the use
                                or not of the augmented representation for
                                training data (i.e. whether bias features
                                are activated or not).
+        :param corrections:    The number of corrections used in the LBFGS update (default: 10).
+        :param tolerance:      The convergence tolerance of iterations for L-BFGS (default: 1e-4).
 
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
@@ -142,8 +142,8 @@ class LogisticRegressionWithLBFGS(object):
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
-                                 int(corrections), float(tolerance), float(regParam),
-                                 bool(intercept))
+                                 float(regParam), bool(intercept), int(corrections),
+                                 float(tolerance))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 

@@ -236,17 +236,17 @@ class PythonMLLibAPI extends Serializable {
      data: JavaRDD[LabeledPoint],
      numIterations: Int,
      initialWeights: Vector,
-     corrections: Int,
-     tolerance: Double,
      regParam: Double,
-     intercept: Boolean): JList[Object] = {
+     intercept: Boolean,
+     corrections: Int,
+     tolerance: Double): JList[Object] = {
     val LogRegAlg = new LogisticRegressionWithLBFGS()
     LogRegAlg.setIntercept(intercept)
     LogRegAlg.optimizer
       .setNumIterations(numIterations)
+      .setRegParam(regParam)
       .setNumCorrections(corrections)
       .setConvergenceTol(tolerance)
-      .setRegParam(regParam)
     trainRegressionModel(
       LogRegAlg,
       data,
