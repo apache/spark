@@ -461,18 +461,13 @@ trait HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case g @ GetItem(c, o @ IntegralType()) if o.dataType != IntegerType =>
-	GetItem(c, Cast(o, IntegerType)) 
+        GetItem(c, Cast(o, IntegerType)) 
 
       case s @ Substring(r, p @ IntegralType(), l @ IntegralType()) =>
-	var new_p = p
-	var new_l = l
-	if (p.dataType != IntegerType) {
-	  new_p = Cast(p, IntegerType)
-        }
-	if (l.dataType != IntegerType) {
-	  new_l = Cast(l, IntegerType)
-	}
-	Substring(r, new_p, new_l)
+        Substring(r,
+          { if (p.dataType != IntegerType) Cast(p, IntegerType) else p },
+          { if (l.dataType != IntegerType) Cast(l, IntegerType) else l }
+        ) 
 
       case a @ CreateArray(children) if !a.resolved =>
         val commonType = a.childTypes.reduce(
