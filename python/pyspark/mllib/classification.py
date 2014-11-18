@@ -26,8 +26,8 @@ from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
 
-__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'SVMModel',
-           'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
 
 
 class LinearBinaryClassificationModel(LinearModel):
@@ -151,7 +151,7 @@ class LogisticRegressionWithSGD(object):
 
                                      (default: "l2")
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
@@ -160,6 +160,55 @@ class LogisticRegressionWithSGD(object):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
                                  bool(intercept))
+
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
+
+
+class LogisticRegressionWithLBFGS(object):
+
+    @classmethod
+    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
+              intercept=False, corrections=10, tolerance=1e-4):
+        """
+        Train a logistic regression model on the given data.
+
+        :param data:           The training data, an RDD of LabeledPoint.
+        :param iterations:     The number of iterations (default: 100).
+        :param initialWeights: The initial weights (default: None).
+        :param regParam:       The regularizer parameter (default: 0.01).
+        :param regType:        The type of regularizer used for training
+                               our model.
+
+                               :Allowed values:
+                                 - "l1" for using L1 regularization
+                                 - "l2" for using L2 regularization
+                                 - None for no regularization
+
+                                 (default: "l2")
+
+        :param intercept:      Boolean parameter which indicates the use
+                               or not of the augmented representation for
+                               training data (i.e. whether bias features
+                               are activated or not).
+        :param corrections:    The number of corrections used in the LBFGS
+                               update (default: 10).
+        :param tolerance:      The convergence tolerance of iterations for
+                               L-BFGS (default: 1e-4).
+
+        >>> data = [
+        ...     LabeledPoint(0.0, [0.0, 1.0]),
+        ...     LabeledPoint(1.0, [1.0, 0.0]),
+        ... ]
+        >>> lrm = LogisticRegressionWithLBFGS.train(sc.parallelize(data))
+        >>> lrm.predict([1.0, 0.0])
+        1
+        >>> lrm.predict([0.0, 1.0])
+        0
+        """
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
+                                 float(regParam), str(regType), bool(intercept), int(corrections),
+                                 float(tolerance))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -241,7 +290,7 @@ class SVMWithSGD(object):
 
                                      (default: "l2")
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
