@@ -347,8 +347,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     // - Because of this, casts to fixed-precision decimals should be nullable
 
     assert(Cast(Literal(123), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === false)
+    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === true)
+    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === true)
     assert(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable === false)
 
     assert(Cast(Literal(123), DecimalType(2, 1)).nullable === true)
@@ -396,6 +396,16 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(-9.95), DecimalType(1, 0)), null)
     checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(3, 1)), Decimal(-10.0))
     checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(1, 0)), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType.Unlimited), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType(2, 1)), null)
   }
 
   test("timestamp") {
