@@ -343,6 +343,21 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
     Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
+	
+	@Test
+  public void keyByOnPairRDD() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
+    Function<scala.Tuple2<Integer, Integer>, String> areOdd = new Function<scala.Tuple2<Integer, Integer>, String>() {
+      @Override
+      public String call(scala.Tuple2<Integer, Integer> x) {
+        return ""+(x._1 +x._2);
+      }
+    };
+		JavaPairRDD<Integer, Integer> pairrdd = rdd.zip(rdd);
+		JavaPairRDD<String, scala.Tuple2<Integer, Integer>> keyed = pairrdd.keyBy(areOdd);
+    Assert.assertEquals(7, keyed.count());
+    Assert.assertEquals(1, (long)keyed.lookup("2").get(0)._1);
+  }
 
   @SuppressWarnings("unchecked")
   @Test
