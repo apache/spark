@@ -57,7 +57,7 @@
 
     // Assigning css classes based on state to nodes for border coloring
     $.each(task_instances, function(task_id, ti) {
-      $("tspan:contains(" + task_id + ")")
+      $('tspan').filter(function(index) { return $(this).text() === task_id; })
         .parent().parent().parent()
         .attr("class", "node enter " + ti.state)
         .attr("data-toggle", "tooltip")
