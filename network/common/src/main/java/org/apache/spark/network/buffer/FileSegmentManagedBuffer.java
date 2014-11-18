@@ -154,6 +154,6 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public boolean isDirect() {
-    return length >= MIN_MEMORY_MAP_BYTES;
+    return length >= conf.memoryMapBytes();
   }
 }
