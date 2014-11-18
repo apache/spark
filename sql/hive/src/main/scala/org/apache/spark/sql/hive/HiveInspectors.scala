@@ -86,13 +86,41 @@ private[hive] trait HiveInspectors {
    * @param data the data in Hive type
    * @param oi   the ObjectInspector associated with the Hive Type
    * @return     convert the data into catalyst type
+   * TODO return the function of (data => Any) instead for performance consideration
    */
   def unwrap(data: Any, oi: ObjectInspector): Any = oi match {
     case _ if data == null => null
-    case hvoi: HiveVarcharObjectInspector =>
-      if (data == null) null else hvoi.getPrimitiveJavaObject(data).getValue
-    case hdoi: HiveDecimalObjectInspector =>
-      if (data == null) null else HiveShim.toCatalystDecimal(hdoi, data)
+    case poi: VoidObjectInspector => null
+    case poi: WritableConstantHiveVarcharObjectInspector =>
+      poi.getWritableConstantValue.getHiveVarchar.getValue
+    case poi: WritableConstantHiveDecimalObjectInspector =>
+      HiveShim.toCatalystDecimal(
+        PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
+        poi.getWritableConstantValue.getHiveDecimal)
+    case poi: WritableConstantTimestampObjectInspector =>
+      poi.getWritableConstantValue.getTimestamp.clone()
+    case poi: WritableConstantIntObjectInspector => 
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantDoubleObjectInspector => 
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantBooleanObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantLongObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantFloatObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantShortObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantByteObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantBinaryObjectInspector =>
+      val writable = poi.getWritableConstantValue
+      val temp = new Array[Byte](writable.getLength)
+      System.arraycopy(writable.getBytes, 0, temp, 0, temp.length)
+      temp
+    case poi: WritableConstantDateObjectInspector => poi.getWritableConstantValue.get()
+    case hvoi: HiveVarcharObjectInspector => hvoi.getPrimitiveJavaObject(data).getValue
+    case hdoi: HiveDecimalObjectInspector => HiveShim.toCatalystDecimal(hdoi, data)
     // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
     // if next timestamp is null, so Timestamp object is cloned
     case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
