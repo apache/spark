@@ -75,7 +75,8 @@ private[spark] class ClientArguments(args: Array[String]) {
 
       if (!ClientArguments.isValidJarUrl(_jarUrl)) {
         println(s"Jar url '${_jarUrl}' is not in valid format.")
-        println(s"Must be a jar file path in URL format (e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
+        println(s"Must be a jar file path in URL format " +
+          "(e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
         printUsageAndExit(-1)
       }
 
