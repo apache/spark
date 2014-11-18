@@ -41,8 +41,7 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   }
 
   @transient override lazy val statistics = Statistics(
-    // TODO: Allow datasources to provide statistics as well.
-    sizeInBytes = BigInt(relation.sqlContext.defaultSizeInBytes)
+    sizeInBytes = BigInt(relation.sizeInBytes)
   )
 
   /** Used to lookup original attribute capitalization */

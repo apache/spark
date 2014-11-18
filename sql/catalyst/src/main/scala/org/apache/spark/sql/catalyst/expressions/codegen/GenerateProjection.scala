@@ -53,8 +53,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val nullFunctions =
       q"""
         private[this] var nullBits = new Array[Boolean](${expressions.size})
-        final def setNullAt(i: Int) = { nullBits(i) = true }
-        final def isNullAt(i: Int) = nullBits(i)
+        override def setNullAt(i: Int) = { nullBits(i) = true }
+        override def isNullAt(i: Int) = nullBits(i)
       """.children
 
     val tupleElements = expressions.zipWithIndex.flatMap {
@@ -82,7 +82,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         val iLit = ru.Literal(Constant(i))
         q"if(isNullAt($iLit)) { null } else { ${newTermName(s"c$i")} }"
       }
-      q"final def iterator = Iterator[Any](..$allColumns)"
+      q"override def iterator = Iterator[Any](..$allColumns)"
     }
 
     val accessorFailure = q"""scala.sys.error("Invalid ordinal:" + i)"""
@@ -94,7 +94,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
         q"if(i == $ordinal) { if(isNullAt($i)) return null else return $elementName }"
       }
-      q"final def apply(i: Int): Any = { ..$cases; $accessorFailure }"
+      q"override def apply(i: Int): Any = { ..$cases; $accessorFailure }"
     }
 
     val updateFunction = {
@@ -114,7 +114,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
             return
           }"""
       }
-      q"final def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
+      q"override def update(i: Int, value: Any): Unit = { ..$cases; $accessorFailure }"
     }
 
     val specificAccessorFunctions = NativeType.all.map { dataType =>
@@ -128,7 +128,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
 
       q"""
-      final def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
+      override def ${accessorForType(dataType)}(i: Int):${termForType(dataType)} = {
         ..$ifStatements;
         $accessorFailure
       }"""
@@ -145,7 +145,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
 
       q"""
-      final def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
+      override def ${mutatorForType(dataType)}(i: Int, value: ${termForType(dataType)}): Unit = {
         ..$ifStatements;
         $accessorFailure
       }"""
@@ -193,7 +193,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val copyFunction =
       q"""
-        final def copy() = new $genericRowType(this.toArray)
+        override def copy() = new $genericRowType(this.toArray)
       """
 
     val classBody =

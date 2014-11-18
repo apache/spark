@@ -207,7 +207,7 @@ abstract class VertexRDD[VD](
   def reverseRoutingTables(): VertexRDD[VD]
 
   /** Prepares this VertexRDD for efficient joins with the given EdgeRDD. */
-  def withEdges(edges: EdgeRDD[_, _]): VertexRDD[VD]
+  def withEdges(edges: EdgeRDD[_]): VertexRDD[VD]
 
   /** Replaces the vertex partitions while preserving all other properties of the VertexRDD. */
   private[graphx] def withPartitionsRDD[VD2: ClassTag](
@@ -269,7 +269,7 @@ object VertexRDD {
    * @param defaultVal the vertex attribute to use when creating missing vertices
    */
   def apply[VD: ClassTag](
-      vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_, _], defaultVal: VD): VertexRDD[VD] = {
+      vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_], defaultVal: VD): VertexRDD[VD] = {
     VertexRDD(vertices, edges, defaultVal, (a, b) => a)
   }
 
@@ -286,7 +286,7 @@ object VertexRDD {
    * @param mergeFunc the commutative, associative duplicate vertex attribute merge function
    */
   def apply[VD: ClassTag](
-      vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_, _], defaultVal: VD, mergeFunc: (VD, VD) => VD
+      vertices: RDD[(VertexId, VD)], edges: EdgeRDD[_], defaultVal: VD, mergeFunc: (VD, VD) => VD
     ): VertexRDD[VD] = {
     val vPartitioned: RDD[(VertexId, VD)] = vertices.partitioner match {
       case Some(p) => vertices
@@ -314,7 +314,7 @@ object VertexRDD {
    * @param defaultVal the vertex attribute to use when creating missing vertices
    */
   def fromEdges[VD: ClassTag](
-      edges: EdgeRDD[_, _], numPartitions: Int, defaultVal: VD): VertexRDD[VD] = {
+      edges: EdgeRDD[_], numPartitions: Int, defaultVal: VD): VertexRDD[VD] = {
     val routingTables = createRoutingTables(edges, new HashPartitioner(numPartitions))
     val vertexPartitions = routingTables.mapPartitions({ routingTableIter =>
       val routingTable =
@@ -325,7 +325,7 @@ object VertexRDD {
   }
 
   private[graphx] def createRoutingTables(
-      edges: EdgeRDD[_, _], vertexPartitioner: Partitioner): RDD[RoutingTablePartition] = {
+      edges: EdgeRDD[_], vertexPartitioner: Partitioner): RDD[RoutingTablePartition] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
     val vid2pid = edges.partitionsRDD.mapPartitions(_.flatMap(
       Function.tupled(RoutingTablePartition.edgePartitionToMsgs)))

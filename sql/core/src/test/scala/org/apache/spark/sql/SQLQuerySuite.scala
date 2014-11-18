@@ -72,6 +72,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       2.5)
   }
 
+  test("aggregation with codegen") {
+    val originalValue = codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sql("SELECT key FROM testData GROUP BY key").collect()
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
+  }
+
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
       sql("SELECT LAST(n) FROM lowerCaseData"),
@@ -189,7 +196,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Seq("1")))
   }
 
-  test("sorting") {
+  def sortTest() = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
@@ -229,6 +236,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "false")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
+  }
+
+  test("external sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
   test("limit") {
@@ -544,7 +565,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
- test("INTERSECT") {
+  test("INTERSECT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       (1, "a") ::
@@ -941,5 +962,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
     checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
         (1 to 99).map(i => Seq(i)))
+  }
+
+  test("SPARK-4322 Grouping field with struct field as sub expression") {
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), 1)
+    dropTempTable("data")
+
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
+    dropTempTable("data")
   }
 }
