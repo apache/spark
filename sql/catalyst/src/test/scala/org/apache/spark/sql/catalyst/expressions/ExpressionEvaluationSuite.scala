@@ -450,6 +450,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
+
+    checkEvaluation(Cast(Literal(Double.NaN), TimestampType), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), TimestampType), null)
+    checkEvaluation(Cast(Literal(Float.NaN), TimestampType), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), TimestampType), null)
   }
 
   test("null checking") {
