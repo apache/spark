@@ -459,8 +459,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
    */
-  def keyBy[K](f: JFunction[T, K]): JavaPairRDD[K, T] = {
-    implicit val ctag: ClassTag[K] = fakeClassTag
+  def keyBy[U](f: JFunction[T, U]): JavaPairRDD[U, T] = {
+    implicit val ctag: ClassTag[U] = fakeClassTag
     JavaPairRDD.fromRDD(rdd.keyBy(f))
   }
 
