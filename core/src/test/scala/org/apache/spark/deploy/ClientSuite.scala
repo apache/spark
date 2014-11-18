@@ -23,7 +23,14 @@ import org.scalatest.Matchers
 class ClientSuite extends FunSuite with Matchers {
   test("correctly validates driver jar URL's") {
     ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
-    ClientArguments.isValidJarUrl("file://some/path/to/a/jarFile.jar") should be (true)
+
+    // file scheme with authority is valid.
+    ClientArguments.isValidJarUrl("file://somehost/path/to/a/jarFile.jar") should be (true)
+
+    // file scheme without authority is not valid.
+    ClientArguments.isValidJarUrl("file://jarFile.jar") should be (false)
+
+    // file scheme without authority but with triple slash is valid.
     ClientArguments.isValidJarUrl("file:///some/path/to/a/jarFile.jar") should be (true)
     ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo.jar") should be (true)
 
