@@ -4,8 +4,10 @@ require 'capistrano_recipes/deploy/packserv'
 set :application, "spark"
 set :user, "deploy"
 
+BROKEN = ["dn04.chi.shopify.com", "dn06.chi.shopify.com", "dn07.chi.shopify.com", "dn08.chi.shopify.com", "dn09.chi.shopify.com", "dn10.chi.shopify.com"]
+
 task :production do
-  role :app, *((4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn05.chi.shopify.com"])
+  role :app, *((4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn05.chi.shopify.com"] - BROKEN)
   role :master, "dn05.chi.shopify.com"
   role :history, "dn05.chi.shopify.com"
   role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "platfora2.chi.shopify.com"
