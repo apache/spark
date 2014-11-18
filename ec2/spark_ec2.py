@@ -652,7 +652,7 @@ def is_cluster_ssh_available(cluster_instances, opts):
         return True
 
 
-def wait_for_cluster_state(cluster_instances, cluster_state, opts):
+def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
     """
     Wait for all the instances in the cluster to reach a designated state.
 
@@ -668,8 +668,6 @@ def wait_for_cluster_state(cluster_instances, cluster_state, opts):
     sys.stdout.flush()
 
     start_time = datetime.now()
-
-    conn = ec2.connect_to_region(opts.region)
 
     while True:
         time.sleep(5)  # seconds
@@ -976,9 +974,10 @@ def real_main():
         else:
             (master_nodes, slave_nodes) = launch_cluster(conn, opts, cluster_name)
         wait_for_cluster_state(
+            conn=conn,
+            opts=opts,
             cluster_instances=(master_nodes + slave_nodes),
-            cluster_state='ssh-ready',
-            opts=opts
+            cluster_state='ssh-ready'
         )
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
@@ -1009,9 +1008,10 @@ def real_main():
                     group_names = [opts.security_group_prefix + "-master",
                                    opts.security_group_prefix + "-slaves"]
                 wait_for_cluster_state(
+                    conn=conn,
+                    opts=opts,
                     cluster_instances=(master_nodes + slave_nodes),
-                    cluster_state='terminated',
-                    opts=opts
+                    cluster_state='terminated'
                 )
                 attempt = 1
                 while attempt <= 3:
@@ -1113,9 +1113,10 @@ def real_main():
             if inst.state not in ["shutting-down", "terminated"]:
                 inst.start()
         wait_for_cluster_state(
+            conn=conn,
+            opts=opts,
             cluster_instances=(master_nodes + slave_nodes),
-            cluster_state='ssh-ready',
-            opts=opts
+            cluster_state='ssh-ready'
         )
         setup_cluster(conn, master_nodes, slave_nodes, opts, False)
 
