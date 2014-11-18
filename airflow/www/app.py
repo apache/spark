@@ -57,6 +57,11 @@ class GraphForm(Form):
 def index():
     return redirect(url_for('admin.index'))
 
+@app.route('/health')
+def health():
+    """ We can add an array of tests here to check the server's health """
+    content = Markup(markdown.markdown("The server is healthy!"))
+    return content;
 
 class HomeView(AdminIndexView):
     """
@@ -504,7 +509,7 @@ class DagModelView(ModelViewOnly):
         'filepath': filepath_formatter,
     }
     column_list = ('dag_id', 'task_count', 'filepath')
-mv = DagModelView(models.DAG, session, name="DAGs")
+mv = DagModelView(models.DAG, session, name="DAGs", endpoint="dags")
 admin.add_view(mv)
 
 
@@ -570,6 +575,14 @@ class LogModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'execution_date')
 mv = LogModelView(models.Log, session, name="Logs", category="Admin")
 admin.add_view(mv)
+
+class ReloadTaskView(BaseView):
+    @expose('/')
+    def index(self):
+        logging.info("Reloading the dags")
+        bag = models.DagBag();
+        return redirect(url_for('dags.index_view'))
+admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
 
 if __name__ == "__main__":
     logging.info("Starting the web server.")
