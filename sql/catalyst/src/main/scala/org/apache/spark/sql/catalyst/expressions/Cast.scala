@@ -37,6 +37,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case (BooleanType, DateType)      => true
     case (DateType, _: NumericType)   => true
     case (DateType, BooleanType)      => true
+    case (DoubleType, _: DecimalType) => true
+    case (FloatType, _: DecimalType)  => true
     case (_, DecimalType.Fixed(_, _)) => true  // TODO: not all upcasts here can really give null
     case _                            => child.nullable
   }
