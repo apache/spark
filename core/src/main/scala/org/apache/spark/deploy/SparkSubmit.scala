@@ -340,7 +340,7 @@ object SparkSubmit {
         e.printStackTrace(printStream)
         if (childMainClass.contains("thriftserver")) {
           println(s"Failed to load main class $childMainClass.")
-          println("You need to build Spark with -Phive.")
+          println("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }

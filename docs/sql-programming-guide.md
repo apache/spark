@@ -14,7 +14,7 @@ title: Spark SQL Programming Guide
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/scala/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed of
-[Row](api/scala/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects, along with
+[Row](api/scala/index.html#org.apache.spark.sql.package@Row:org.apache.spark.sql.catalyst.expressions.Row.type) objects, along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, a [Parquet](http://parquet.io)
 file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
@@ -728,7 +728,7 @@ anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
-In order to use Hive you must first run "`sbt/sbt -Phive assembly/assembly`" (or use `-Phive` for maven).
+Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
 This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.

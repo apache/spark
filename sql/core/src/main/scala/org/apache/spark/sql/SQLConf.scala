@@ -22,7 +22,6 @@ import scala.collection.JavaConversions._
 
 import java.util.Properties
 
-
 private[spark] object SQLConf {
   val COMPRESS_CACHED = "spark.sql.inMemoryColumnarStorage.compressed"
   val COLUMN_BATCH_SIZE = "spark.sql.inMemoryColumnarStorage.batchSize"
@@ -32,10 +31,17 @@ private[spark] object SQLConf {
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
   val CODEGEN_ENABLED = "spark.sql.codegen"
   val DIALECT = "spark.sql.dialect"
+
   val PARQUET_BINARY_AS_STRING = "spark.sql.parquet.binaryAsString"
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
+  val PARQUET_FILTER_PUSHDOWN_ENABLED = "spark.sql.parquet.filterPushdown"
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
+
+  // Options that control which operators can be chosen by the query planner.  These should be
+  // considered hints and may be ignored by future versions of Spark SQL.
+  val EXTERNAL_SORT = "spark.sql.planner.externalSort"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -89,6 +95,13 @@ private[sql] trait SQLConf {
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS, "200").toInt
+
+  /** When true predicates will be passed to the parquet record reader when possible. */
+  private[spark] def parquetFilterPushDown =
+    getConf(PARQUET_FILTER_PUSHDOWN_ENABLED, "false").toBoolean
+
+  /** When true the planner will use the external sort, which may spill to disk. */
+  private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode

@@ -32,26 +32,25 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
-
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat => NewFileOutputFormat}
 import parquet.hadoop._
+import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.hadoop.api.{InitContext, ReadSupport}
 import parquet.hadoop.metadata.GlobalMetaData
-import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.hadoop.util.ContextUtil
 import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row, _}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
+ * :: DeveloperApi ::
  * Parquet table scan operator. Imports the file that backs the given
  * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
@@ -79,8 +78,6 @@ case class ParquetTableScan(
 
   override def execute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
-    import parquet.filter2.compat.FilterCompat.Filter
-    import parquet.filter2.predicate.FilterPredicate
 
     val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
@@ -108,18 +105,11 @@ case class ParquetTableScan(
     // Note 1: the input format ignores all predicates that cannot be expressed
     // as simple column predicate filters in Parquet. Here we just record
     // the whole pruning predicate.
-    // Note 2: you can disable filter predicate pushdown by setting
-    // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
-    if (columnPruningPred.length > 0 &&
-      sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-      
+    ParquetFilters
+      .createRecordFilter(columnPruningPred)
+      .map(_.asInstanceOf[FilterPredicateCompat].getFilterPredicate)
       // Set this in configuration of ParquetInputFormat, needed for RowGroupFiltering
-      val filter: Filter = ParquetFilters.createRecordFilter(columnPruningPred)
-      if (filter != null){
-        val filterPredicate = filter.asInstanceOf[FilterPredicateCompat].getFilterPredicate()
-        ParquetInputFormat.setFilterPredicate(conf, filterPredicate)  
-      }
-    }
+      .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.set(
@@ -160,7 +150,7 @@ case class ParquetTableScan(
       }
     } else {
       baseRDD.map(_._2)
-    }.filter(_ != null) // Parquet's record filters may produce null values
+    }
   }
 
   /**
@@ -193,6 +183,7 @@ case class ParquetTableScan(
 }
 
 /**
+ * :: DeveloperApi ::
  * Operator that acts as a sink for queries on RDDs and can be used to
  * store the output inside a directory of Parquet files. This operator
  * is similar to Hive's INSERT INTO TABLE operation in the sense that
@@ -208,6 +199,7 @@ case class ParquetTableScan(
  * cause unpredicted behaviour and therefore results in a RuntimeException
  * (only detected via filename pattern so will not catch all cases).
  */
+@DeveloperApi
 case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
@@ -316,7 +308,7 @@ case class InsertIntoParquetTable(
       }
       writer.close(hadoopContext)
       committer.commitTask(hadoopContext)
-      return 1
+      1
     }
     val jobFormat = new AppendingParquetOutputFormat(taskIdOffset)
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
@@ -374,9 +366,8 @@ private[parquet] class FilteringParquetRowInputFormat
   override def createRecordReader(
       inputSplit: InputSplit,
       taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
-    
+
     import parquet.filter2.compat.FilterCompat.NoOpFilter
-    import parquet.filter2.compat.FilterCompat.Filter
 
     val readSupport: ReadSupport[Row] = new RowReadSupport()
 
@@ -391,7 +382,7 @@ private[parquet] class FilteringParquetRowInputFormat
   }
 
   override def getFooters(jobContext: JobContext): JList[Footer] = {
-    import FilteringParquetRowInputFormat.footerCache
+    import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.footerCache
 
     if (footers eq null) {
       val conf = ContextUtil.getConfiguration(jobContext)
@@ -441,13 +432,13 @@ private[parquet] class FilteringParquetRowInputFormat
     val taskSideMetaData = configuration.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
     val maxSplitSize: JLong = configuration.getLong("mapred.max.split.size", Long.MaxValue)
     val minSplitSize: JLong =
-      Math.max(getFormatMinSplitSize(), configuration.getLong("mapred.min.split.size", 0L))
+      Math.max(getFormatMinSplitSize, configuration.getLong("mapred.min.split.size", 0L))
     if (maxSplitSize < 0 || minSplitSize < 0) {
       throw new ParquetDecodingException(
         s"maxSplitSize or minSplitSie should not be negative: maxSplitSize = $maxSplitSize;" +
           s" minSplitSize = $minSplitSize")
     }
-    
+
     // Uses strict type checking by default
     val getGlobalMetaData =
       classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
@@ -457,29 +448,29 @@ private[parquet] class FilteringParquetRowInputFormat
     if (globalMetaData == null) {
      val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
      return splits
-    }   
- 
+    }
+
     val readContext = getReadSupport(configuration).init(
       new InitContext(configuration,
-        globalMetaData.getKeyValueMetaData(),
-        globalMetaData.getSchema()))
-    
+        globalMetaData.getKeyValueMetaData,
+        globalMetaData.getSchema))
+
     if (taskSideMetaData){
       logInfo("Using Task Side Metadata Split Strategy")
-      return getTaskSideSplits(configuration,
+      getTaskSideSplits(configuration,
         footers,
         maxSplitSize,
         minSplitSize,
         readContext)
     } else {
       logInfo("Using Client Side Metadata Split Strategy")
-      return getClientSideSplits(configuration,
+      getClientSideSplits(configuration,
         footers,
         maxSplitSize,
         minSplitSize,
         readContext)
     }
-    
+
   }
 
   def getClientSideSplits(
@@ -488,12 +479,11 @@ private[parquet] class FilteringParquetRowInputFormat
     maxSplitSize: JLong,
     minSplitSize: JLong,
     readContext: ReadContext): JList[ParquetInputSplit] = {
-    
-    import FilteringParquetRowInputFormat.blockLocationCache
-    import parquet.filter2.compat.FilterCompat;
-    import parquet.filter2.compat.FilterCompat.Filter;
-    import parquet.filter2.compat.RowGroupFilter;
-   
+
+    import parquet.filter2.compat.FilterCompat.Filter
+    import parquet.filter2.compat.RowGroupFilter
+    import org.apache.spark.sql.parquet.FilteringParquetRowInputFormat.blockLocationCache
+
     val cacheMetadata = configuration.getBoolean(SQLConf.PARQUET_CACHE_METADATA, true)
 
     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
@@ -502,7 +492,7 @@ private[parquet] class FilteringParquetRowInputFormat
     var totalRowGroups: Long  = 0
 
     // Ugly hack, stuck with it until PR:
-    // https://github.com/apache/incubator-parquet-mr/pull/17 
+    // https://github.com/apache/incubator-parquet-mr/pull/17
     // is resolved
     val generateSplits =
       Class.forName("parquet.hadoop.ClientSideMetadataSplitStrategy")
@@ -522,7 +512,7 @@ private[parquet] class FilteringParquetRowInputFormat
         blocks,
         parquetMetaData.getFileMetaData.getSchema)
       rowGroupsDropped = rowGroupsDropped + (blocks.size - filteredBlocks.size)
-      
+
       if (!filteredBlocks.isEmpty){
           var blockLocations: Array[BlockLocation] = null
           if (!cacheMetadata) {
@@ -565,7 +555,7 @@ private[parquet] class FilteringParquetRowInputFormat
     readContext: ReadContext): JList[ParquetInputSplit] = {
 
     val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
-    
+
     // Ugly hack, stuck with it until PR:
     // https://github.com/apache/incubator-parquet-mr/pull/17
     // is resolved
@@ -575,7 +565,7 @@ private[parquet] class FilteringParquetRowInputFormat
          sys.error(
            s"Failed to reflectively invoke TaskSideMetadataSplitStrategy.generateTaskSideMDSplits"))
     generateSplits.setAccessible(true)
- 
+
     for (footer <- footers) {
       val file = footer.getFile
       val fs = file.getFileSystem(configuration)
@@ -593,7 +583,7 @@ private[parquet] class FilteringParquetRowInputFormat
     }
 
     splits
-  } 
+  }
 
 }
 
@@ -635,11 +625,9 @@ private[parquet] object FileSystemHelper {
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt
       case hiddenFileP() => 0
-      case other: String => {
+      case other: String =>
         sys.error("ERROR: attempting to append to set of Parquet files and found file" +
           s"that does not match name pattern: $other")
-        0
-      }
       case _ => 0
     }.reduceLeft((a, b) => if (a < b) b else a)
   }

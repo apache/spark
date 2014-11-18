@@ -166,29 +166,16 @@ private[spark] class MesosSchedulerBackend(
     execArgs
   }
 
-  private def setClassLoader(): ClassLoader = {
-    val oldClassLoader = Thread.currentThread.getContextClassLoader
-    Thread.currentThread.setContextClassLoader(classLoader)
-    oldClassLoader
-  }
-
-  private def restoreClassLoader(oldClassLoader: ClassLoader) {
-    Thread.currentThread.setContextClassLoader(oldClassLoader)
-  }
-
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       appId = frameworkId.getValue
       logInfo("Registered as framework ID " + appId)
       registeredLock.synchronized {
         isRegistered = true
         registeredLock.notifyAll()
       }
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
@@ -197,6 +184,16 @@ private[spark] class MesosSchedulerBackend(
       while (!isRegistered) {
         registeredLock.wait()
       }
+    }
+  }
+
+  private def inClassLoader()(fun: => Unit) = {
+    val oldClassLoader = Thread.currentThread.getContextClassLoader
+    Thread.currentThread.setContextClassLoader(classLoader)
+    try {
+      fun
+    } finally {
+      Thread.currentThread.setContextClassLoader(oldClassLoader)
     }
   }
 
@@ -210,66 +207,57 @@ private[spark] class MesosSchedulerBackend(
    * tasks are balanced across the cluster.
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
-    val oldClassLoader = setClassLoader()
-    try {
-      synchronized {
-        // Build a big list of the offerable workers, and remember their indices so that we can
-        // figure out which Offer to reply to for each worker
-        val offerableWorkers = new ArrayBuffer[WorkerOffer]
-        val offerableIndices = new HashMap[String, Int]
-
-        def sufficientOffer(o: Offer) = {
-          val mem = getResource(o.getResourcesList, "mem")
-          val cpus = getResource(o.getResourcesList, "cpus")
-          val slaveId = o.getSlaveId.getValue
-          (mem >= MemoryUtils.calculateTotalMemory(sc) &&
-            // need at least 1 for executor, 1 for task
-            cpus >= 2 * scheduler.CPUS_PER_TASK) ||
-            (slaveIdsWithExecutors.contains(slaveId) &&
-              cpus >= scheduler.CPUS_PER_TASK)
-        }
-
-        for ((offer, index) <- offers.zipWithIndex if sufficientOffer(offer)) {
-          val slaveId = offer.getSlaveId.getValue
-          offerableIndices.put(slaveId, index)
-          val cpus = if (slaveIdsWithExecutors.contains(slaveId)) {
-            getResource(offer.getResourcesList, "cpus").toInt
-          } else {
-            // If the executor doesn't exist yet, subtract CPU for executor
-            getResource(offer.getResourcesList, "cpus").toInt -
-              scheduler.CPUS_PER_TASK
-          }
-          offerableWorkers += new WorkerOffer(
-            offer.getSlaveId.getValue,
-            offer.getHostname,
-            cpus)
-        }
-
-        // Call into the TaskSchedulerImpl
-        val taskLists = scheduler.resourceOffers(offerableWorkers)
-
-        // Build a list of Mesos tasks for each slave
-        val mesosTasks = offers.map(o => new JArrayList[MesosTaskInfo]())
-        for ((taskList, index) <- taskLists.zipWithIndex) {
-          if (!taskList.isEmpty) {
-            for (taskDesc <- taskList) {
-              val slaveId = taskDesc.executorId
-              val offerNum = offerableIndices(slaveId)
-              slaveIdsWithExecutors += slaveId
-              taskIdToSlaveId(taskDesc.taskId) = slaveId
-              mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
-            }
-          }
-        }
-
-        // Reply to the offers
-        val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
-        for (i <- 0 until offers.size) {
-          d.launchTasks(Collections.singleton(offers(i).getId), mesosTasks(i), filters)
-        }
+    inClassLoader() {
+      val (acceptedOffers, declinedOffers) = offers.partition { o =>
+        val mem = getResource(o.getResourcesList, "mem")
+        val cpus = getResource(o.getResourcesList, "cpus")
+        val slaveId = o.getSlaveId.getValue
+        (mem >= MemoryUtils.calculateTotalMemory(sc) &&
+          // need at least 1 for executor, 1 for task
+          cpus >= 2 * scheduler.CPUS_PER_TASK) ||
+          (slaveIdsWithExecutors.contains(slaveId) &&
+            cpus >= scheduler.CPUS_PER_TASK)
       }
-    } finally {
-      restoreClassLoader(oldClassLoader)
+
+      val offerableWorkers = acceptedOffers.map { o =>
+        val cpus = if (slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
+          getResource(o.getResourcesList, "cpus").toInt
+        } else {
+          // If the executor doesn't exist yet, subtract CPU for executor
+          getResource(o.getResourcesList, "cpus").toInt -
+            scheduler.CPUS_PER_TASK
+        }
+        new WorkerOffer(
+          o.getSlaveId.getValue,
+          o.getHostname,
+          cpus)
+      }
+
+      val slaveIdToOffer = acceptedOffers.map(o => o.getSlaveId.getValue -> o).toMap
+
+      val mesosTasks = new HashMap[String, JArrayList[MesosTaskInfo]]
+
+      // Call into the TaskSchedulerImpl
+      scheduler.resourceOffers(offerableWorkers)
+        .filter(!_.isEmpty)
+        .foreach { offer =>
+          offer.foreach { taskDesc =>
+            val slaveId = taskDesc.executorId
+            slaveIdsWithExecutors += slaveId
+            taskIdToSlaveId(taskDesc.taskId) = slaveId
+            mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+              .add(createMesosTask(taskDesc, slaveId))
+          }
+        }
+
+      // Reply to the offers
+      val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
+
+      mesosTasks.foreach { case (slaveId, tasks) =>
+        d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
+      }
+
+      declinedOffers.foreach(o => d.declineOffer(o.getId))
     }
   }
 
@@ -308,8 +296,7 @@ private[spark] class MesosSchedulerBackend(
   }
 
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       val tid = status.getTaskId.getValue.toLong
       val state = TaskState.fromMesos(status.getState)
       synchronized {
@@ -322,18 +309,13 @@ private[spark] class MesosSchedulerBackend(
         }
       }
       scheduler.statusUpdate(tid, state, status.getData.asReadOnlyByteBuffer)
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
   override def error(d: SchedulerDriver, message: String) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       logError("Mesos error: " + message)
       scheduler.error(message)
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
@@ -350,15 +332,12 @@ private[spark] class MesosSchedulerBackend(
   override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
 
   private def recordSlaveLost(d: SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       logInfo("Mesos slave lost: " + slaveId.getValue)
       synchronized {
         slaveIdsWithExecutors -= slaveId.getValue
       }
       scheduler.executorLost(slaveId.getValue, reason)
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
