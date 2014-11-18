@@ -1195,7 +1195,7 @@ abstract class RDD[T: ClassTag](
 
   /** A private method to execute checkpointing with the provided f function */
   private[spark] def checkpoint(f: Option[RDD[T] => RDD[T]]) {
-    if (context.checkpointDir.isEmpty) {
+    if (f.isEmpty && context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new RDDCheckpointData(this, f))
@@ -1212,15 +1212,14 @@ abstract class RDD[T: ClassTag](
    * Not providing any parameters invokes the default implementation. 
    */
   def checkpoint(): Unit = checkpoint(None)
-  
+
   /**
-   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
-   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * Mark this RDD for checkpointing. Its saving and RDD reloading logic will be defined
+   * by function f (ie. save to a custom file format) and all references to its parent
    * RDDs will be removed. This function must be called before any job has been executed
    * on this RDD. It is strongly recommended that this RDD is persisted in memory,
    * otherwise saving it on a file will require recomputation.
-   * By providing the f function the file saving and RDD reloading logic can be
-   * altered (ie. save to Parquet file etc.)
+   * f should not break the deterministic behavior of RDDs.
    */
   def checkpoint(f: RDD[T] => RDD[T]): Unit = checkpoint(Some(f))
 
