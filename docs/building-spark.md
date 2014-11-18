@@ -115,7 +115,7 @@ mvn -Pyarn -Phive -Phive-thriftserver-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0
 # Building for Scala 2.11
 ### For SBT users just start the console as 
 
-`sbt/sbt -Pscala-2.11`
+`sbt/sbt -Dscala-2.11="1"`
 
 And then run the commands as usual, e.g. clean, assembly or test etc..
 
