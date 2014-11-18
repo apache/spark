@@ -20,16 +20,24 @@ package org.apache.spark.ml.classification
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
-class LogisticRegressionSuite extends FunSuite with LocalSparkContext {
+class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
-  import sqlContext._
+  @transient var sqlContext: SQLContext = _
+  @transient var dataset: SchemaRDD = _
 
-  val dataset: SchemaRDD = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlContext = new SQLContext(sc)
+    dataset = sqlContext.createSchemaRDD(
+      sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
+  }
 
   test("logistic regression") {
+    val sqlContext = this.sqlContext
+    import sqlContext._
     val lr = new LogisticRegression
     val model = lr.fit(dataset)
     model.transform(dataset)
@@ -38,6 +46,8 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext {
   }
 
   test("logistic regression with setters") {
+    val sqlContext = this.sqlContext
+    import sqlContext._
     val lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0)
@@ -48,6 +58,8 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext {
   }
 
   test("logistic regression fit and transform with varargs") {
+    val sqlContext = this.sqlContext
+    import sqlContext._
     val lr = new LogisticRegression
     val model = lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
     model.transform(dataset, model.threshold -> 0.8, model.scoreCol -> "probability")

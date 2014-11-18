@@ -181,6 +181,9 @@ echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DI
 # Copy jars
 cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
+# This will fail if the -Pyarn profile is not provided
+# In this case, silence the error and ignore the return code of this command
+cp "$FWDIR"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"

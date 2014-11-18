@@ -43,7 +43,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   /** Default constructor is provided to support serialization */
   protected def this() = this(null, null)
 
-  @transient override val edges: EdgeRDD[ED, VD] = replicatedVertexView.edges
+  @transient override val edges: EdgeRDDImpl[ED, VD] = replicatedVertexView.edges
 
   /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override lazy val triplets: RDD[EdgeTriplet[VD, ED]] = {
@@ -218,30 +218,30 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
           case Some(EdgeDirection.Both) =>
             if (activeFraction < 0.8) {
               edgePartition.aggregateMessagesIndexScan(sendMsg, mergeMsg, tripletFields,
-                true, true, false)
+                EdgeActiveness.Both)
             } else {
               edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-                true, true, false)
+                EdgeActiveness.Both)
             }
           case Some(EdgeDirection.Either) =>
             // TODO: Because we only have a clustered index on the source vertex ID, we can't filter
             // the index here. Instead we have to scan all edges and then do the filter.
             edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-              true, true, true)
+              EdgeActiveness.Either)
           case Some(EdgeDirection.Out) =>
             if (activeFraction < 0.8) {
               edgePartition.aggregateMessagesIndexScan(sendMsg, mergeMsg, tripletFields,
-                true, false, false)
+                EdgeActiveness.SrcOnly)
             } else {
               edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-                true, false, false)
+                EdgeActiveness.SrcOnly)
             }
           case Some(EdgeDirection.In) =>
             edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-              false, true, false)
+              EdgeActiveness.DstOnly)
           case _ => // None
             edgePartition.aggregateMessagesEdgeScan(sendMsg, mergeMsg, tripletFields,
-              false, false, false)
+              EdgeActiveness.Neither)
         }
     }).setName("GraphImpl.aggregateMessages - preAgg")
 
@@ -323,9 +323,10 @@ object GraphImpl {
    */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
-      edges: EdgeRDD[ED, _]): GraphImpl[VD, ED] = {
+      edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
     // Convert the vertex partitions in edges to the correct type
-    val newEdges = edges.mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
+    val newEdges = edges.asInstanceOf[EdgeRDDImpl[ED, _]]
+      .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD])
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
 
@@ -336,8 +337,8 @@ object GraphImpl {
    */
   def fromExistingRDDs[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
-      edges: EdgeRDD[ED, VD]): GraphImpl[VD, ED] = {
-    new GraphImpl(vertices, new ReplicatedVertexView(edges))
+      edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
+    new GraphImpl(vertices, new ReplicatedVertexView(edges.asInstanceOf[EdgeRDDImpl[ED, VD]]))
   }
 
   /**
@@ -345,7 +346,7 @@ object GraphImpl {
    * `defaultVertexAttr`. The vertices will have the same number of partitions as the EdgeRDD.
    */
   private def fromEdgeRDD[VD: ClassTag, ED: ClassTag](
-      edges: EdgeRDD[ED, VD],
+      edges: EdgeRDDImpl[ED, VD],
       defaultVertexAttr: VD,
       edgeStorageLevel: StorageLevel,
       vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {

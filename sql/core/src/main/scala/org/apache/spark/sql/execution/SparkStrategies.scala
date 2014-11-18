@@ -208,23 +208,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
         val prunePushedDownFilters =
-          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-            (filters: Seq[Expression]) => {
-              filters.filter { filter =>
-                // Note: filters cannot be pushed down to Parquet if they contain more complex
-                // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
-                // all filters that have been pushed down. Note that a predicate such as
-                // "(A AND B) OR C" can result in "A OR C" being pushed down.
-                val recordFilter = ParquetFilters.createFilter(filter)
-                if (!recordFilter.isDefined) {
-                  // First case: the pushdown did not result in any record filter.
-                  true
-                } else {
-                  // Second case: a record filter was created; here we are conservative in
-                  // the sense that even if "A" was pushed and we check for "A AND B" we
-                  // still want to keep "A AND B" in the higher-level filter, not just "B".
-                  !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
-                }
+          if (sqlContext.parquetFilterPushDown) {
+            (predicates: Seq[Expression]) => {
+              // Note: filters cannot be pushed down to Parquet if they contain more complex
+              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove all
+              // filters that have been pushed down. Note that a predicate such as "(A AND B) OR C"
+              // can result in "A OR C" being pushed down. Here we are conservative in the sense
+              // that even if "A" was pushed and we check for "A AND B" we still want to keep
+              // "A AND B" in the higher-level filter, not just "B".
+              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
+                case (predicate, None) => predicate
               }
             }
           } else {
@@ -234,7 +227,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           prunePushedDownFilters,
-          ParquetTableScan(_, relation, filters)) :: Nil
+          ParquetTableScan(
+            _,
+            relation,
+            if (sqlContext.parquetFilterPushDown) filters else Nil)) :: Nil
 
       case _ => Nil
     }
@@ -260,9 +256,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         execution.Distinct(partial = false,
           execution.Distinct(partial = true, planLater(child))) :: Nil
+
+      case logical.Sort(sortExprs, child) if sqlContext.externalSortEnabled =>
+        execution.ExternalSort(sortExprs, global = true, planLater(child)):: Nil
       case logical.Sort(sortExprs, child) =>
-        // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
         execution.Sort(sortExprs, global = true, planLater(child)):: Nil
+
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.

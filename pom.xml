@@ -413,7 +413,7 @@
       <dependency>
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
-        <version>1.1.1.3</version>
+        <version>1.1.1.6</version>
       </dependency>
       <dependency>
         <groupId>net.jpountz.lz4</groupId>
@@ -978,6 +978,7 @@
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
+              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
           </configuration>
           <executions>
@@ -1296,9 +1297,6 @@
 
     <profile>
       <id>mapr3</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
         <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
@@ -1309,9 +1307,6 @@
 
     <profile>
       <id>mapr4</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hadoop.version>2.3.0-mapr-4.0.0-FCS</hadoop.version>
         <yarn.version>2.3.0-mapr-4.0.0-FCS</yarn.version>
@@ -1341,9 +1336,6 @@
     <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -1390,18 +1382,12 @@
     </profile>
     <profile>
       <id>hive-thriftserver</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
     <profile>
       <id>hive-0.12.0</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hive.version>0.12.0-protobuf-2.5</hive.version>
         <hive.version.short>0.12.0</hive.version.short>
@@ -1410,9 +1396,6 @@
     </profile>
     <profile>
       <id>hive-0.13.1</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
       <properties>
         <hive.version>0.13.1a</hive.version>
         <hive.version.short>0.13.1</hive.version.short>
@@ -1423,7 +1406,7 @@
     <profile>
       <id>scala-2.10</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property><name>!scala-2.11</name></property>
       </activation>
       <properties>
         <scala.version>2.10.4</scala.version>
@@ -1439,7 +1422,7 @@
     <profile>
       <id>scala-2.11</id>
       <activation>
-        <activeByDefault>false</activeByDefault>
+        <property><name>scala-2.11</name></property>
       </activation>
       <properties>
         <scala.version>2.11.2</scala.version>

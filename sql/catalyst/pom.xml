@@ -100,10 +100,11 @@
     </plugins>
   </build>
   <profiles>
+    <!-- Quasiquotes are merged into scala reflect from scala 2.11 onwards. -->
     <profile>
       <id>scala-2.10</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property><name>!scala-2.11</name></property>
       </activation>
       <dependencies>
         <dependency>
@@ -113,13 +114,5 @@
         </dependency>
       </dependencies>
     </profile>
-    <profile>
-      <id>scala-2.11</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <!-- Quasiquotes are merged into scala reflect from scala 2.11 onwards. -->
-    </profile>
-
   </profiles>
 </project>
