@@ -45,7 +45,7 @@ class LocalWorker(multiprocessing.Process):
 
 class LocalExecutor(BaseExecutor):
 
-    def __init__(self, parallelism=8):
+    def __init__(self, parallelism=4):
         super(LocalExecutor, self).__init__()
         self.parallelism = parallelism
 

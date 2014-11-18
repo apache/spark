@@ -137,8 +137,9 @@ def master(args):
             sq = session.query(
                 TI.task_id,
                 func.max(TI.execution_date).label('max_ti')
-            ).filter(
-                TI.dag_id == dag.dag_id).group_by(TI.task_id).subquery('sq')
+            ).filter(TI.dag_id == dag.dag_id).group_by(TI.task_id).subquery(
+                'sq')
+
             qry = session.query(TI).filter(
                 TI.dag_id == dag.dag_id,
                 TI.task_id == sq.c.task_id,
@@ -151,6 +152,7 @@ def master(args):
             for task in dag.tasks:
                 if task.task_id not in ti_dict:
                     # Brand new task, let's get started
+                    print "SD:" + str(task.start_date)
                     ti = TI(task, task.start_date)
                     executor.queue_command(ti.key, ti.command())
                 else:
@@ -227,7 +229,7 @@ def initdb(args):
 
 if __name__ == '__main__':
 
-
+    logging.root.handlers = []
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
