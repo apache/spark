@@ -54,15 +54,15 @@ class Graph(object):
     def edges(self):
         return self._edge_jrdd
 
-    # TODO
-    def partitionBy(self, partitionStrategy):
-        return
-
     def numEdges(self):
         return self._edge_jrdd.count()
 
     def numVertices(self):
         return self._vertex_jrdd.count()
+
+    # TODO
+    def partitionBy(self, partitionStrategy):
+        return
 
     # TODO
     def inDegrees(self):
@@ -86,13 +86,10 @@ class Graph(object):
         return
 
     def mapVertices(self, f):
-        def func(f):
-            return itertools.imap(f)
-        return self._vertex_jrdd.mapValues(func)
+        return self._vertex_jrdd.mapValues(f)
 
-    # TODO
     def mapEdges(self, f):
-        return
+        return self._vertex_jrdd.mapValues(f)
 
     # TODO
     def mapTriplets(self, f):

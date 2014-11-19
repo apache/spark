@@ -18,12 +18,18 @@
 package org.apache.spark.graphx.api.python
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.graphx.api.java.{JavaEdgeRDD, JavaVertexRDD, JavaGraph}
 
 @DeveloperApi
-abstract private[graphx] class PythonGraph (
+private[graphx] class PythonGraph (
     @transient val vertexRDD: PythonVertexRDD,
     @transient val edgeRDD: PythonEdgeRDD)
 //  extends Graph[Array[Byte], Array[Byte]] with Serializable {
     extends Serializable {
+
+  val asJavaGraph = JavaGraph.fromRDD(vertexRDD.asJavaRDD, edgeRDD.asJavaEdgeRDD)
+
+
 }
 

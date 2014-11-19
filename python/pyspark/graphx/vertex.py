@@ -83,8 +83,11 @@ class VertexRDD(object):
                  jrdd_deserializer = BatchedSerializer(PickleSerializer())):
         """
         Constructor
-        :param jrdd:
-        :param jrdd_deserializer:
+        :param jrdd:               A JavaRDD reference passed from the parent
+                                   RDD object
+        :param jrdd_deserializer:  The deserializer used in Python workers
+                                   created from PythonRDD to execute a
+                                   serialized Python function and RDD
 
         """
 
@@ -101,22 +104,48 @@ class VertexRDD(object):
         self._bypass_serializer = False
 
 
+    def id(self):
+        """
+        VertexRDD has a unique id
+        """
+        return self._id
+
     # TODO: Does not work
     def __repr__(self):
         return self._jrdd.toString()
 
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
-        return self._jrdd.persist(storageLevel)
+    def context(self):
+        return self._ctx
 
     def cache(self):
-        self._jrdd.cache()
+        """
+        Persist this vertex RDD with the default storage level (C{MEMORY_ONLY_SER}).
+        """
+        self.is_cached = True
+        self.persist(StorageLevel.MEMORY_ONLY_SER)
+        return self
+
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+        self._is_cached = True
+        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
+        self._jrdd.persist(javaStorageLevel)
+        return self
+
+    def unpersist(self):
+        self._is_cached = False
+        self._jrdd.unpersist()
+        return self
+
+    def checkpoint(self):
+        self.is_checkpointed = True
+        self._jrdd.rdd().checkpoint()
 
     def count(self):
         return self._jrdd.count()
 
     def collect(self):
         """
-        Return a list that contains all of the elements in this RDD.
+        Return all of the elements in this vertex RDD as a list
         """
         with SCCallSiteSync(self._ctx) as css:
             bytesInJava = self._jrdd.collect().iterator()
@@ -141,88 +170,84 @@ class VertexRDD(object):
     def sum(self):
         self._jrdd.sum()
 
-    def mapValues(self, f, preservesPartitioning=False):
+    def mapValues(self, f, preserves_partitioning=False):
         """
-        Return a new RDD by applying a function to each element of this RDD.
+        Return a new vertex RDD by applying a function to each vertex attributes,
+        preserving the index
 
-        >>> rdd = sc.parallelize(["b", "a", "c"])
-        >>> sorted(rdd.map(lambda x: (x, 1)).collect())
-        [('a', 1), ('b', 1), ('c', 1)]
+        >>> rdd = sc.parallelize([(1, "b"), (2, "a"), (3, "c")])
+        >>> vertices = VertexRDD(rdd)
+        >>> sorted(vertices.mapValues(lambda x: (x + ":" + x)).collect())
+        [(1, 'a:a'), (2, 'b:b'), (3, 'c:c')]
         """
+        map_func = lambda (k, v): (k, f(v))
         def func(_, iterator):
-            return itertools.imap(f, iterator)
-        return self.mapVertexPartitions(func, preservesPartitioning)
+            return itertools.imap(map_func, iterator)
+        return PipelinedVertexRDD(self, func, preserves_partitioning)
 
-    def filter(self, f):
-        return self._jrdd.filter(f)
-
-    def diff(self, other):
-        """
-        Return a new RDD containing only the elements that satisfy a predicate.
-
-        >>> rdd1 = sc.parallelize([1, 2, 3, 4, 5])
-        >>> rdd2 = sc.parallelize([2, 3, 4])
-        >>> rdd1.diff(rdd2).collect()
-        [1, 5]
-        """
-        self._jrdd = self._jrdd._jvm.org.apache.spark.PythonVertexRDD()
-        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.diff(other)
-
-    def leftJoin(self, other):
-        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.leftJoin()
-
-    def innerJoin(self, other, func):
-        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.innerJoin()
-
-    def aggregateUsingIndex(self, other, reduceFunc):
-        return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.aggregateUsingIndex()
-
-    def mapVertexPartitions(self, f, preservesPartitioning=False):
-        """
-        Return a new RDD by applying a function to each partition of this RDD.
-
-        >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
-        >>> def f(iterator): yield sum(iterator)
-        >>> rdd.mapPartitions(f).collect()
-        [3, 7]
-        """
+    def mapVertexPartitions(self, f, preserve_partitioning=False):
         def func(s, iterator):
             return f(iterator)
-        return self._jrdd.mapPartitionsWithIndex(func, preservesPartitioning)
+        return PipelinedVertexRDD(self, func, preserve_partitioning)
 
-    def reduce(self, f):
+    def filter(self, f):
         """
-        Reduces the elements of this RDD using the specified commutative and
-        associative binary operator. Currently reduces partitions locally.
+        Return a new vertex RDD containing only the elements that satisfy a predicate.
 
-        >>> from operator import add
-        >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)
-        15
-        >>> sc.parallelize((2 for _ in range(10))).map(lambda x: 1).cache().reduce(add)
-        10
-        >>> sc.parallelize([]).reduce(add)
-        Traceback (most recent call last):
-            ...
-        ValueError: Can not reduce() empty RDD
+        >>> rdd = sc.parallelize([(1, "b"), (2, "a"), (3, "c")])
+        >>> vertices = VertexRDD(rdd)
+        >>> vertices.filter(lambda x: x._1 % 2 == 0).collect()
+        [2]
         """
         def func(iterator):
-            iterator = iter(iterator)
-            try:
-                initial = next(iterator)
-            except StopIteration:
-                return
-            yield reduce(f, iterator, initial)
+            return itertools.ifilter(f, iterator)
+        return self.mapVertexPartitions(func, True)
 
-        vals = self.mapVertexPartitions(func).collect()
-        if vals:
-            return reduce(f, vals)
-        raise ValueError("Can not reduce() empty RDD")
+    def diff(self, other, numPartitions=2):
+        """
+        Hides vertices that are the same between `this` and `other`.
+        For vertices that are different, keeps the values from `other`.
 
-    def id(self):
+        TODO: give an example
         """
-        A unique ID for this RDD (within its SparkContext).
-        """
-        return self._id
+        if (isinstance(other, RDD)):
+            vs = self.map(lambda (k, v): (k, (1, v)))
+            ws = other.map(lambda (k, v): (k, (2, v)))
+        return vs.union(ws).groupByKey(numPartitions).mapValues(lambda x: x.diff(x.__iter__()))
+
+    def leftJoin(self, other, numPartitions=None):
+        def dispatch(seq):
+            vbuf, wbuf = [], []
+            for (n, v) in seq:
+                if n == 1:
+                    vbuf.append(v)
+                elif n == 2:
+                    wbuf.append(v)
+            if not wbuf:
+                wbuf.append(None)
+            return [(v, w) for v in vbuf for w in wbuf]
+        vs = self.map(lambda (k, v): (k, (1, v)))
+        ws = other.map(lambda (k, v): (k, (2, v)))
+        return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x: dispatch(x.__iter__()))
+
+
+    def innerJoin(self, other, numPartitions=None):
+        def dispatch(seq):
+            vbuf, wbuf = [], []
+            for (n, v) in seq:
+                if n == 1:
+                    vbuf.append(v)
+                elif n == 2:
+                    wbuf.append(v)
+            return [(v, w) for v in vbuf for w in wbuf]
+        vs = self.map(lambda (k, v): (k, (1, v)))
+        ws = other.map(lambda (k, v): (k, (2, v)))
+        return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x: dispatch(x.__iter__()))
+
+
+
+    # def aggregateUsingIndex(self, other, reduceFunc):
+    #     return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.aggregateUsingIndex()
 
 
 class PipelinedVertexRDD(VertexRDD):
