@@ -62,7 +62,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
   }
 
   private def assertActiveJobsStateIsEmpty(listener: JobProgressListener) {
-    listener.getSizesOfActiveJobDataStructures.foreach { case (fieldName, size) =>
+    listener.getSizesOfActiveStateTrackingCollections.foreach { case (fieldName, size) =>
       assert(size === 0, s"$fieldName was not empty")
     }
   }
@@ -98,14 +98,14 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     }
     assertActiveJobsStateIsEmpty(listener)
     // Snapshot the sizes of various soft- and hard-size-limited collections:
-    val softLimitSizes = listener.getSizesOfSoftSizeLimitedDataStructures
-    val hardLimitSizes = listener.getSizesOfHardSizeLimitedDataStructures
+    val softLimitSizes = listener.getSizesOfSoftSizeLimitedCollections
+    val hardLimitSizes = listener.getSizesOfHardSizeLimitedCollections
     // Run some more jobs:
     for (jobId <- 11 to 50) {
       runJob(listener, jobId, shouldFail = false)
       // We shouldn't exceed the hard / soft limit sizes after the jobs have finished:
-      listener.getSizesOfSoftSizeLimitedDataStructures should be (softLimitSizes)
-      listener.getSizesOfHardSizeLimitedDataStructures should be (hardLimitSizes)
+      listener.getSizesOfSoftSizeLimitedCollections should be (softLimitSizes)
+      listener.getSizesOfHardSizeLimitedCollections should be (hardLimitSizes)
     }
 
     listener.completedJobs.size should be (5)
@@ -114,8 +114,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     for (jobId <- 51 to 100) {
       runJob(listener, jobId, shouldFail = true)
       // We shouldn't exceed the hard / soft limit sizes after the jobs have finished:
-      listener.getSizesOfSoftSizeLimitedDataStructures should be (softLimitSizes)
-      listener.getSizesOfHardSizeLimitedDataStructures should be (hardLimitSizes)
+      listener.getSizesOfSoftSizeLimitedCollections should be (softLimitSizes)
+      listener.getSizesOfHardSizeLimitedCollections should be (hardLimitSizes)
     }
     assertActiveJobsStateIsEmpty(listener)
 

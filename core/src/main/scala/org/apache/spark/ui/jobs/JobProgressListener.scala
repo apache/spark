@@ -82,16 +82,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val retainedStages = conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", DEFAULT_RETAINED_JOBS)
 
-  // We can test for memory leaks by ensuring that data structures that track non-active jobs and
-  // stages do not grow without bound and that structures for active jobs/stages eventually become
-  // empty once Spark is idle.  Let's partition our data structures into ones that should be empty
-  // once Spark is idle and ones that should have a bounded size.  These methods are used by unit
-  // tests, but they're defined here so that people don't forget to update the tests when adding
-  // new fields.  Some data structures have multiple levels of nesting, etc, so this lets us
-  // customize our notion of "size" for each structure:
+  // We can test for memory leaks by ensuring that collections that track non-active jobs and
+  // stages do not grow without bound and that collections for active jobs/stages eventually become
+  // empty once Spark is idle.  Let's partition our collections into ones that should be empty
+  // once Spark is idle and ones that should have a hard- or soft-limited sizes.
+  // These methods are used by unit tests, but they're defined here so that people don't forget to
+  // update the tests when adding new collections.  Some collections have multiple levels of
+  // nesting, etc, so this lets us customize our notion of "size" for each structure:
 
-  // These sizes should all be 0 once Spark is idle (no active stages / jobs):
-  private[spark] def getSizesOfActiveJobDataStructures: Map[String, Int] = {
+  // These collections should all be empty once Spark is idle (no active stages / jobs):
+  private[spark] def getSizesOfActiveStateTrackingCollections: Map[String, Int] = {
     Map(
       "activeStages" -> activeStages.size,
       "activeJobs" -> activeJobs.size,
@@ -99,9 +99,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     )
   }
 
-  // These sizes should stop growing once we have run at least `spark.ui.retainedStages` stages
-  // and `spark.ui.retainedJobs` jobs:
-  private[spark] def getSizesOfHardSizeLimitedDataStructures: Map[String, Int] = {
+  // These collections should stop growing once we have run at least `spark.ui.retainedStages`
+  // stages and `spark.ui.retainedJobs` jobs:
+  private[spark] def getSizesOfHardSizeLimitedCollections: Map[String, Int] = {
     Map(
       "completedJobs" -> completedJobs.size,
       "failedJobs" -> failedJobs.size,
@@ -110,9 +110,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     )
   }
   
-  // These sizes may grow arbitrarily, but once Spark becomes idle they should shrink back to
+  // These collections may grow arbitrarily, but once Spark becomes idle they should shrink back to
   // some bound based on the `spark.ui.retainedStages` and `spark.ui.retainedJobs` settings:
-  private[spark] def getSizesOfSoftSizeLimitedDataStructures: Map[String, Int] = {
+  private[spark] def getSizesOfSoftSizeLimitedCollections: Map[String, Int] = {
     Map(
       "jobIdToData" -> jobIdToData.size,
       "stageIdToData" -> stageIdToData.size,
