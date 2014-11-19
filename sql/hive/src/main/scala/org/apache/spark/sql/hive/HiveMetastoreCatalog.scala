@@ -447,6 +447,8 @@ private[hive] case class MetastoreRelation
 
   @transient override lazy val statistics = Statistics(
     sizeInBytes = {
+      val totalSize = hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstTotalSize)
+      val rawDataSize = hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstRawDataSize)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.  An
@@ -454,9 +456,12 @@ private[hive] case class MetastoreRelation
       // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
       // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
       BigInt(
-        Option(hiveQlTable.getParameters.get(HiveShim.getStatsSetupConstTotalSize))
-          .map(_.toLong)
-          .getOrElse(sqlContext.defaultSizeInBytes))
+        // When table is external,`totalSize` is always zero, which will influence join strategy
+        // so when `totalSize` is zero, use `rawDataSize` instead
+        // if the size is still less than zero, we use default size
+        Option(totalSize).map(_.toLong).filter(_ > 0)
+          .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
+          .getOrElse(sqlContext.defaultSizeInBytes)))
     }
   )
 
