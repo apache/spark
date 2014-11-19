@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.2.0-SNAPSHOT</version>
+    <version>1.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -104,6 +104,11 @@
       <scope>${hbase.deps.scope}</scope>
       <exclusions>
         <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>org.jruby</groupId>
           <artifactId>jruby-complete</artifactId>
         </exclusion>
@@ -120,6 +125,13 @@
       <artifactId>hbase-common</artifactId>
       <version>${hbase.version}</version>
       <scope>${hbase.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -127,6 +139,11 @@
       <version>${hbase.version}</version>
       <scope>${hbase.deps.scope}</scope>
       <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
        <exclusion>
         <groupId>io.netty</groupId>
         <artifactId>netty</artifactId>
@@ -139,6 +156,11 @@
       <version>${hbase.version}</version>
       <scope>${hbase.deps.scope}</scope>
       <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
@@ -399,7 +421,7 @@
       </properties>
     </profile>
     <profile>
-      <!-- We add a source directory specific to Scala 2.10 since Kafka 
+      <!-- We add a source directory specific to Scala 2.10 since Kafka
            only works with it -->
       <id>scala-2.10</id>
       <activation>

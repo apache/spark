@@ -33,6 +33,16 @@ import com.typesafe.tools.mima.core._
 object MimaExcludes {
     def excludes(version: String) =
       version match {
+        case v if v.startsWith("1.3") =>
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx"),
+            // These are needed if checking against the sbt build, since they are part of
+            // the maven-generated artifacts in the 1.2 build.
+            MimaBuild.excludeSparkPackage("unused"),
+            ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
+          )
+
         case v if v.startsWith("1.2") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
