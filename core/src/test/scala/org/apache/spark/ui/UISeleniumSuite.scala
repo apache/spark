@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import org.openqa.selenium.WebDriver
+import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
@@ -164,7 +164,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
     }
   }
 
-  test("stage failures / recomputations should not cause stages to be overcounted on job page") {
+  test("job progress bars should handle stage / task failures") {
     withSpark(newSparkContext()) { sc =>
       val data = sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity)
       val shuffleHandle =
@@ -188,12 +188,36 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
-        // Ideally, the following test would pass, but currently we over-count completed tasks
+        // Ideally, the following test would pass, but currently we overcount completed tasks
         // if task recomputations occur:
         // find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
         // Instead, we guarantee that the total number of tasks is always correct, while the number
         // of completed tasks may be higher:
         find(cssSelector(".progress-cell .progress")).get.text should be ("3/2 (1 failed)")
+      }
+    }
+  }
+
+  test("job details page should display useful information for stages that haven't started") {
+    withSpark(newSparkContext()) { sc =>
+      // Create a multi-stage job with a long delay in the first stage:
+      val rdd = sc.parallelize(Seq(1, 2, 3)).map { x =>
+        // This long sleep call won't slow down the tests because we don't actually need to wait
+        // for the job to finish.
+        Thread.sleep(20000)
+      }.groupBy(identity).map(identity).groupBy(identity).map(identity)
+      // Start the job:
+      rdd.countAsync()
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/?id=0")
+        // Essentially, we want to check that none of the stage rows show
+        // "No data available for this stage". Checking for the absence of that string is brittle
+        // because someone could change the error message and cause this test to pass by accident.
+        // Instead, it's safer to check that each row contains a link to a stage details page.
+        findAll(cssSelector("tbody tr")).foreach { row =>
+          val link = row.underlying.findElement(By.xpath(".//a"))
+          link.getAttribute("href") should include ("stage")
+        }
       }
     }
   }
