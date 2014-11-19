@@ -1632,8 +1632,8 @@ class RDD(object):
             a.extend(b)
             return a
 
-        return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-            numPartitions, mapSideCombine).mapValues(lambda x: ResultIterable(x))
+        return self.combineByKey(createCombiner, mergeValue, mergeCombiners, numPartitions,
+                                 mapSideCombine).mapValues(lambda x: ResultIterable(x))
 
     def flatMapValues(self, f):
         """
