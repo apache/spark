@@ -60,17 +60,17 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
-        val rdd = sc.parallelize(arr)
+        val rdd = sc.parallelize(arr, 2)
 
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
           categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
         val boostingStrategy =
-          new BoostingStrategy(treeStrategy, SquaredError, numIterations, learningRate)
+          new BoostingStrategy(treeStrategy, AbsoluteError, numIterations, learningRate)
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
         assert(gbt.trees.size === numIterations)
-        EnsembleTestHelper.validateRegressor(gbt, arr, 0.03)
+        EnsembleTestHelper.validateRegressor(gbt, arr, 0.85, "mae")
 
         val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         val dt = DecisionTree.train(remappedInput, treeStrategy)
@@ -84,7 +84,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
-        val rdd = sc.parallelize(arr)
+        val rdd = sc.parallelize(arr, 2)
 
         val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
           numClassesForClassification = 2, categoricalFeaturesInfo = Map.empty,

@@ -125,6 +125,7 @@ object GradientBoostedTrees extends Logging {
     val baseLearnerWeights = new Array[Double](numIterations)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
+    // Prepare strategy for tree ensembles. Tree ensembles use regression with variance impurity.
     val ensembleStrategy = boostingStrategy.treeStrategy.copy
     ensembleStrategy.algo = Regression
     ensembleStrategy.impurity = impurity.Variance

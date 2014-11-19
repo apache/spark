@@ -72,7 +72,6 @@ object EnsembleTestHelper {
     val errors = predictions.zip(input.map(_.label)).map { case (prediction, label) =>
       prediction - label
     }
-    println(predictions.zip(input.map(_.label)).toSeq)
     val metric = metricName match {
       case "mse" =>
         errors.map(err => err * err).sum / errors.size

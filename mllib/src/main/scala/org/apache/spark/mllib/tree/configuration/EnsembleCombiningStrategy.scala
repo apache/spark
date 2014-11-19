@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.configuration
 import org.apache.spark.annotation.DeveloperApi
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  * Enum to select ensemble combining strategy for base learners
  */
 @DeveloperApi
