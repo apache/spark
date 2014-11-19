@@ -196,28 +196,6 @@ case class HashOuterJoin(
   override def execute() = {
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
-      /*
-      val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
-      val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
-
-      joinType match {
-        case LeftOuter => leftHashTable.keysIterator.flatMap { key =>
-          leftOuterIterator(key, leftHashTable.getOrElse(key, EMPTY_LIST),
-            rightHashTable.getOrElse(key, EMPTY_LIST))
-        }
-        case RightOuter => rightHashTable.keysIterator.flatMap { key =>
-          rightOuterIterator(key, leftHashTable.getOrElse(key, EMPTY_LIST),
-            rightHashTable.getOrElse(key, EMPTY_LIST))
-        }
-        case FullOuter => (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
-          fullOuterIterator(key,
-            leftHashTable.getOrElse(key, EMPTY_LIST),
-            rightHashTable.getOrElse(key, EMPTY_LIST))
-        }
-        case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
-      }
-      */
-
 
       joinType match {
         case LeftOuter => {
