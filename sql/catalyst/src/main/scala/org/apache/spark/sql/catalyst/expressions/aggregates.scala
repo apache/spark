@@ -304,7 +304,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 
     child.dataType match {
       case DecimalType.Fixed(_, _) =>
-        // Turn the results to unlimited decimals for the divsion, before going back to fixed
+        // Turn the results to unlimited decimals for the division, before going back to fixed
         val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
         val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
         SplitEvaluation(
