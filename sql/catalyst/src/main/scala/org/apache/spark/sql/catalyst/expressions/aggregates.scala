@@ -299,12 +299,12 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
   override def toString = s"AVG($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialSum = Alias(Sum(child), "PartialSum")()
-    val partialCount = Alias(Count(child), "PartialCount")()
-
     child.dataType match {
       case DecimalType.Fixed(_, _) =>
-        // Turn the results to unlimited decimals for the divsion, before going back to fixed
+        // Turn the child to unlimited decimals for calculation, before going back to fixed
+        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        val partialCount = Alias(Count(child), "PartialCount")()
+
         val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
         val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
         SplitEvaluation(
@@ -312,6 +312,9 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
           partialCount :: partialSum :: Nil)
 
       case _ =>
+        val partialSum = Alias(Sum(child), "PartialSum")()
+        val partialCount = Alias(Count(child), "PartialCount")()
+
         val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
         val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
         SplitEvaluation(
@@ -339,10 +342,19 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def toString = s"SUM($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialSum = Alias(Sum(child), "PartialSum")()
-    SplitEvaluation(
-      Sum(partialSum.toAttribute),
-      partialSum :: Nil)
+    child.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        SplitEvaluation(
+          Cast(Sum(partialSum.toAttribute), dataType),
+          partialSum :: Nil)
+
+      case _ =>
+        val partialSum = Alias(Sum(child), "PartialSum")()
+        SplitEvaluation(
+          Sum(partialSum.toAttribute),
+          partialSum :: Nil)
+    }
   }
 
   override def newInstance() = new SumFunction(child, this)
@@ -401,26 +413,35 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 
   def this() = this(null, null) // Required for serialization.
 
-  private val zero = Cast(Literal(0), expr.dataType)
+  private val calcType =
+    expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        DecimalType.Unlimited
+      case _ =>
+        expr.dataType
+    }
+
+  private val zero = Cast(Literal(0), calcType)
 
   private var count: Long = _
-  private val sum = MutableLiteral(zero.eval(null), expr.dataType)
+  private val sum = MutableLiteral(zero.eval(null), calcType)
 
-  private def addFunction(value: Any) = Add(sum, Literal(value, expr.dataType))
+  private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
 
   override def eval(input: Row): Any = {
     if (count == 0L) {
       null
     } else {
-      val calcType =
-        if (DecimalType.isFixed(expr.dataType)) {
-          DecimalType.Unlimited
-        } else {
-          base.dataType
-        }
-      Cast(Divide(
-        Cast(sum, calcType),
-        Cast(Literal(count), calcType)), base.dataType).eval(null)
+      expr.dataType match {
+        case DecimalType.Fixed(_, _) =>
+          Cast(Divide(
+            Cast(sum, DecimalType.Unlimited),
+            Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
+        case _ =>
+          Divide(
+            Cast(sum, dataType),
+            Cast(Literal(count), dataType)).eval(null)
+      }
     }
   }
 
@@ -487,17 +508,31 @@ case class ApproxCountDistinctMergeFunction(
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  private val zero = Cast(Literal(0), expr.dataType)
+  private val calcType =
+    expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        DecimalType.Unlimited
+      case _ =>
+        expr.dataType
+    }
 
-  private val sum = MutableLiteral(null, expr.dataType)
+  private val zero = Cast(Literal(0), calcType)
 
-  private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), expr), sum))
+  private val sum = MutableLiteral(null, calcType)
+
+  private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
 
   override def update(input: Row): Unit = {
     sum.update(addFunction, input)
   }
 
-  override def eval(input: Row): Any = Cast(sum, base.dataType).eval(null)
+  override def eval(input: Row): Any = {
+    expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        Cast(sum, dataType).eval(null)
+      case _ => sum.eval(null)
+    }
+  }
 }
 
 case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
@@ -520,8 +555,8 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
     } else {
       Cast(Literal(
         seen.reduceLeft(
-          base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
-        base.dataType).eval(null)
+          dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
+        dataType).eval(null)
     }
   }
 }
