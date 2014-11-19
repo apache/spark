@@ -23,104 +23,95 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity.Variance
-import org.apache.spark.mllib.tree.loss.{SquaredError, LogLoss}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError, SquaredError, LogLoss}
 
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
- * Test suite for [[GradientBoosting]].
+ * Test suite for [[GradientBoostedTrees]].
  */
-class GradientBoostingSuite extends FunSuite with MLlibTestSparkContext {
+class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Regression with continuous features: SquaredError") {
-    GradientBoostingSuite.testCombinations.foreach {
+    GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
-        val rdd = sc.parallelize(arr)
-        val categoricalFeaturesInfo = Map.empty[Int, Int]
+        val rdd = sc.parallelize(arr, 2)
 
-        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
-          subsamplingRate = subsamplingRate)
+          categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
+        val boostingStrategy =
+          new BoostingStrategy(treeStrategy, SquaredError, numIterations, learningRate)
 
-        val dt = DecisionTree.train(remappedInput, treeStrategy)
+        val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        val boostingStrategy = new BoostingStrategy(Regression, numIterations, SquaredError,
-          learningRate, 1, treeStrategy)
-
-        val gbt = GradientBoosting.trainRegressor(rdd, boostingStrategy)
-        assert(gbt.weakHypotheses.size === numIterations)
-        val gbtTree = gbt.weakHypotheses(0)
-
+        assert(gbt.trees.size === numIterations)
         EnsembleTestHelper.validateRegressor(gbt, arr, 0.03)
 
+        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+        val dt = DecisionTree.train(remappedInput, treeStrategy)
+
         // Make sure trees are the same.
-        assert(gbtTree.toString == dt.toString)
+        assert(gbt.trees.head.toString == dt.toString)
     }
   }
 
   test("Regression with continuous features: Absolute Error") {
-    GradientBoostingSuite.testCombinations.foreach {
+    GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
         val rdd = sc.parallelize(arr)
-        val categoricalFeaturesInfo = Map.empty[Int, Int]
 
-        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
-          subsamplingRate = subsamplingRate)
+          categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
+        val boostingStrategy =
+          new BoostingStrategy(treeStrategy, SquaredError, numIterations, learningRate)
 
-        val dt = DecisionTree.train(remappedInput, treeStrategy)
+        val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        val boostingStrategy = new BoostingStrategy(Regression, numIterations, SquaredError,
-          learningRate, numClassesForClassification = 2, treeStrategy)
-
-        val gbt = GradientBoosting.trainRegressor(rdd, boostingStrategy)
-        assert(gbt.weakHypotheses.size === numIterations)
-        val gbtTree = gbt.weakHypotheses(0)
-
+        assert(gbt.trees.size === numIterations)
         EnsembleTestHelper.validateRegressor(gbt, arr, 0.03)
 
+        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+        val dt = DecisionTree.train(remappedInput, treeStrategy)
+
         // Make sure trees are the same.
-        assert(gbtTree.toString == dt.toString)
+        assert(gbt.trees.head.toString == dt.toString)
     }
   }
 
   test("Binary classification with continuous features: Log Loss") {
-    GradientBoostingSuite.testCombinations.foreach {
+    GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
         val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
         val rdd = sc.parallelize(arr)
-        val categoricalFeaturesInfo = Map.empty[Int, Int]
 
-        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+        val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
+          numClassesForClassification = 2, categoricalFeaturesInfo = Map.empty,
           subsamplingRate = subsamplingRate)
+        val boostingStrategy =
+          new BoostingStrategy(treeStrategy, LogLoss, numIterations, learningRate)
 
-        val dt = DecisionTree.train(remappedInput, treeStrategy)
+        val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        val boostingStrategy = new BoostingStrategy(Classification, numIterations, LogLoss,
-          learningRate, numClassesForClassification = 2, treeStrategy)
-
-        val gbt = GradientBoosting.trainClassifier(rdd, boostingStrategy)
-        assert(gbt.weakHypotheses.size === numIterations)
-        val gbtTree = gbt.weakHypotheses(0)
-
+        assert(gbt.trees.size === numIterations)
         EnsembleTestHelper.validateClassifier(gbt, arr, 0.9)
 
+        val remappedInput = rdd.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+        val ensembleStrategy = treeStrategy.copy
+        ensembleStrategy.algo = Regression
+        ensembleStrategy.impurity = Variance
+        val dt = DecisionTree.train(remappedInput, ensembleStrategy)
+
         // Make sure trees are the same.
-        assert(gbtTree.toString == dt.toString)
+        assert(gbt.trees.head.toString == dt.toString)
     }
   }
 
 }
 
-object GradientBoostingSuite {
+object GradientBoostedTreesSuite {
 
   // Combinations for estimators, learning rates and subsamplingRate
   val testCombinations = Array((10, 1.0, 1.0), (10, 0.1, 1.0), (10, 1.0, 0.75), (10, 0.1, 0.75))
-
 }

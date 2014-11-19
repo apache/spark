@@ -21,7 +21,7 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.tree.GradientBoosting
+import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Algo}
 import org.apache.spark.util.Utils
 
@@ -103,14 +103,14 @@ object GradientBoostedTrees {
       params.dataFormat, params.testInput, Algo.withName(params.algo), params.fracTest)
 
     val boostingStrategy = BoostingStrategy.defaultParams(params.algo)
-    boostingStrategy.numClassesForClassification = numClasses
+    boostingStrategy.treeStrategy.numClassesForClassification = numClasses
     boostingStrategy.numIterations = params.numIterations
-    boostingStrategy.weakLearnerParams.maxDepth = params.maxDepth
+    boostingStrategy.treeStrategy.maxDepth = params.maxDepth
 
     val randomSeed = Utils.random.nextInt()
     if (params.algo == "Classification") {
       val startTime = System.nanoTime()
-      val model = GradientBoosting.trainClassifier(training, boostingStrategy)
+      val model = GradientBoostedTrees.train(training, boostingStrategy)
       val elapsedTime = (System.nanoTime() - startTime) / 1e9
       println(s"Training time: $elapsedTime seconds")
       if (model.totalNumNodes < 30) {
@@ -127,7 +127,7 @@ object GradientBoostedTrees {
       println(s"Test accuracy = $testAccuracy")
     } else if (params.algo == "Regression") {
       val startTime = System.nanoTime()
-      val model = GradientBoosting.trainRegressor(training, boostingStrategy)
+      val model = GradientBoostedTrees.trainRegressor(training, boostingStrategy)
       val elapsedTime = (System.nanoTime() - startTime) / 1e9
       println(s"Training time: $elapsedTime seconds")
       if (model.totalNumNodes < 30) {

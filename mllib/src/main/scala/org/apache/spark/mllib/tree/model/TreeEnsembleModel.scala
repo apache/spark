@@ -17,23 +17,32 @@
 
 package org.apache.spark.mllib.tree.model
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
 import org.apache.spark.rdd.RDD
 
-import scala.collection.mutable
-
+/**
+ * :: Experimental ::
+ * Represents a tree ensemble model.
+ *
+ * @param trees tree ensembles
+ * @param treeWeights tree ensemble weights
+ * @param algo algorithm for the ensemble model, either Classification or Regression
+ * @param combiningStrategy strategy for combining the predictions
+ */
 @Experimental
-class WeightedEnsembleModel(
-    val weakHypotheses: Array[DecisionTreeModel],
-    val weakHypothesisWeights: Array[Double],
+class TreeEnsembleModel(
+    val trees: Array[DecisionTreeModel],
+    val treeWeights: Array[Double],
     val algo: Algo,
     val combiningStrategy: EnsembleCombiningStrategy) extends Serializable {
 
-  require(numWeakHypotheses > 0, s"WeightedEnsembleModel cannot be created without weakHypotheses" +
-    s". Number of weakHypotheses = $weakHypotheses")
+  require(numTrees > 0, s"WeightedEnsembleModel cannot be created without weakHypotheses" +
+    s". Number of weakHypotheses = $trees")
 
   /**
    * Predict values for a single data point using the model trained.
@@ -42,14 +51,14 @@ class WeightedEnsembleModel(
    * @return predicted category from the trained model
    */
   private def predictRaw(features: Vector): Double = {
-    val treePredictions = weakHypotheses.map(learner => learner.predict(features))
-    if (numWeakHypotheses == 1){
+    val treePredictions = trees.map(learner => learner.predict(features))
+    if (numTrees == 1){
       treePredictions(0)
     } else {
       var prediction = treePredictions(0)
       var index = 1
-      while (index < numWeakHypotheses) {
-        prediction += weakHypothesisWeights(index) * treePredictions(index)
+      while (index < numTrees) {
+        prediction += treeWeights(index) * treePredictions(index)
         index += 1
       }
       prediction
@@ -84,13 +93,13 @@ class WeightedEnsembleModel(
     algo match {
       case Classification =>
         val predictionToCount = new mutable.HashMap[Int, Int]()
-        weakHypotheses.foreach { learner =>
+        trees.foreach { learner =>
           val prediction = learner.predict(features).toInt
           predictionToCount(prediction) = predictionToCount.getOrElse(prediction, 0) + 1
         }
         predictionToCount.maxBy(_._2)._1
       case Regression =>
-        weakHypotheses.map(_.predict(features)).sum / weakHypotheses.size
+        trees.map(_.predict(features)).sum / trees.size
     }
   }
 
@@ -124,9 +133,9 @@ class WeightedEnsembleModel(
   override def toString: String = {
     algo match {
       case Classification =>
-        s"WeightedEnsembleModel classifier with $numWeakHypotheses trees\n"
+        s"WeightedEnsembleModel classifier with $numTrees trees\n"
       case Regression =>
-        s"WeightedEnsembleModel regressor with $numWeakHypotheses trees\n"
+        s"WeightedEnsembleModel regressor with $numTrees trees\n"
       case _ => throw new IllegalArgumentException(
         s"WeightedEnsembleModel given unknown algo parameter: $algo.")
     }
@@ -137,7 +146,7 @@ class WeightedEnsembleModel(
    */
   def toDebugString: String = {
     val header = toString + "\n"
-    header + weakHypotheses.zipWithIndex.map { case (tree, treeIndex) =>
+    header + trees.zipWithIndex.map { case (tree, treeIndex) =>
       s"  Tree $treeIndex:\n" + tree.topNode.subtreeToString(4)
     }.fold("")(_ + _)
   }
@@ -145,7 +154,7 @@ class WeightedEnsembleModel(
   /**
    * Get number of trees in forest.
    */
-  def numWeakHypotheses: Int = weakHypotheses.size
+  def numTrees: Int = trees.size
 
   // TODO: Remove these helpers methods once class is generalized to support any base learning
   // algorithms.
@@ -153,6 +162,6 @@ class WeightedEnsembleModel(
   /**
    * Get total number of nodes, summed over all trees in the forest.
    */
-  def totalNumNodes: Int = weakHypotheses.map(tree => tree.numNodes).sum
+  def totalNumNodes: Int = trees.map(tree => tree.numNodes).sum
 
 }

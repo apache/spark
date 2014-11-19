@@ -27,9 +27,9 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.GradientBoosting;
+import org.apache.spark.mllib.tree.GradientBoostedTrees;
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
-import org.apache.spark.mllib.tree.model.WeightedEnsembleModel;
+import org.apache.spark.mllib.tree.model.TreeEnsembleModel;
 import org.apache.spark.mllib.util.MLUtils;
 
 /**
@@ -64,7 +64,7 @@ public final class JavaGradientBoostedTrees {
     //  Note: All features are treated as continuous.
     BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(algo);
     boostingStrategy.setNumIterations(10);
-    boostingStrategy.weakLearnerParams().setMaxDepth(5);
+    boostingStrategy.treeStrategy().setMaxDepth(5);
 
     if (algo.equals("Classification")) {
       // Compute the number of classes from the data.
@@ -76,7 +76,7 @@ public final class JavaGradientBoostedTrees {
       boostingStrategy.setNumClassesForClassification(numClasses); // ignored for Regression
 
       // Train a GradientBoosting model for classification.
-      final WeightedEnsembleModel model = GradientBoosting.trainClassifier(data, boostingStrategy);
+      final TreeEnsembleModel model = GradientBoostedTrees.trainClassifier(data, boostingStrategy);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
@@ -95,7 +95,7 @@ public final class JavaGradientBoostedTrees {
       System.out.println("Learned classification tree model:\n" + model);
     } else if (algo.equals("Regression")) {
       // Train a GradientBoosting model for classification.
-      final WeightedEnsembleModel model = GradientBoosting.trainRegressor(data, boostingStrategy);
+      final TreeEnsembleModel model = GradientBoostedTrees.trainRegressor(data, boostingStrategy);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =

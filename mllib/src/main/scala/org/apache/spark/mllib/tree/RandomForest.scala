@@ -81,7 +81,7 @@ private class RandomForest (
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return WeightedEnsembleModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
+  def train(input: RDD[LabeledPoint]): TreeEnsembleModel = {
 
     val timer = new TimeTracker()
 
@@ -213,7 +213,7 @@ private class RandomForest (
 
     val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))
     val treeWeights = Array.fill[Double](numTrees)(1.0)
-    new WeightedEnsembleModel(trees, treeWeights, strategy.algo, Average)
+    new TreeEnsembleModel(trees, treeWeights, strategy.algo, Average)
   }
 
 }
@@ -241,7 +241,7 @@ object RandomForest extends Serializable with Logging {
       strategy: Strategy,
       numTrees: Int,
       featureSubsetStrategy: String,
-      seed: Int): WeightedEnsembleModel = {
+      seed: Int): TreeEnsembleModel = {
     require(strategy.algo == Classification,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
@@ -283,7 +283,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int = Utils.random.nextInt()): WeightedEnsembleModel = {
+      seed: Int = Utils.random.nextInt()): TreeEnsembleModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(Classification, impurityType, maxDepth,
       numClassesForClassification, maxBins, Sort, categoricalFeaturesInfo)
@@ -302,7 +302,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): WeightedEnsembleModel = {
+      seed: Int): TreeEnsembleModel = {
     trainClassifier(input.rdd, numClassesForClassification,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
@@ -329,7 +329,7 @@ object RandomForest extends Serializable with Logging {
       strategy: Strategy,
       numTrees: Int,
       featureSubsetStrategy: String,
-      seed: Int): WeightedEnsembleModel = {
+      seed: Int): TreeEnsembleModel = {
     require(strategy.algo == Regression,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
@@ -369,7 +369,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int = Utils.random.nextInt()): WeightedEnsembleModel = {
+      seed: Int = Utils.random.nextInt()): TreeEnsembleModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(Regression, impurityType, maxDepth,
       0, maxBins, Sort, categoricalFeaturesInfo)
@@ -387,7 +387,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): WeightedEnsembleModel = {
+      seed: Int): TreeEnsembleModel = {
     trainRegressor(input.rdd,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
