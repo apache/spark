@@ -17,7 +17,11 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.api.java.JavaRDD
+
 import scala.collection.mutable
+
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
@@ -27,82 +31,77 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
- * Represents a tree ensemble model.
+ * Represents a random forest model.
  *
- * @param trees tree ensembles
- * @param treeWeights tree ensemble weights
  * @param algo algorithm for the ensemble model, either Classification or Regression
- * @param combiningStrategy strategy for combining the predictions
+ * @param trees tree ensembles
  */
 @Experimental
-class TreeEnsembleModel(
-    val trees: Array[DecisionTreeModel],
-    val treeWeights: Array[Double],
-    val algo: Algo,
-    val combiningStrategy: EnsembleCombiningStrategy) extends Serializable {
+class RandomForestModel(override val algo: Algo, override val trees: Array[DecisionTreeModel])
+  extends TreeEnsembleModel(algo, trees, Array.fill(trees.size)(1.0),
+    combiningStrategy = if (algo == Classification) Vote else Average) {
 
-  require(numTrees > 0, s"WeightedEnsembleModel cannot be created without weakHypotheses" +
-    s". Number of weakHypotheses = $trees")
+  require(trees.forall(_.algo == algo))
+}
+
+/**
+ * :: Experimental ::
+ * Represents a gradient boosted trees model.
+ *
+ * @param algo algorithm for the ensemble model, either Classification or Regression
+ * @param trees tree ensembles
+ * @param treeWeights tree ensemble weights
+ */
+@Experimental
+class GradientBoostedTreesModel(
+    override val algo: Algo,
+    override val trees: Array[DecisionTreeModel],
+    override val treeWeights: Array[Double])
+  extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = Sum) {
+
+  require(trees.size == treeWeights.size)
+}
+
+/**
+ * Represents a tree ensemble model.
+ *
+ * @param algo algorithm for the ensemble model, either Classification or Regression
+ * @param trees tree ensembles
+ * @param treeWeights tree ensemble weights
+ * @param combiningStrategy strategy for combining the predictions, not used for regression.
+ */
+private[tree] sealed class TreeEnsembleModel(
+    protected val algo: Algo,
+    protected val trees: Array[DecisionTreeModel],
+    protected val treeWeights: Array[Double],
+    protected val combiningStrategy: EnsembleCombiningStrategy) extends Serializable {
+
+  require(numTrees > 0, "TreeEnsembleModel cannot be created without trees.")
+
+  private val sumWeights = math.max(treeWeights.sum, 1e-15)
 
   /**
-   * Predict values for a single data point using the model trained.
-   *
-   * @param features array representing a single data point
-   * @return predicted category from the trained model
-   */
-  private def predictRaw(features: Vector): Double = {
-    val treePredictions = trees.map(learner => learner.predict(features))
-    if (numTrees == 1){
-      treePredictions(0)
-    } else {
-      var prediction = treePredictions(0)
-      var index = 1
-      while (index < numTrees) {
-        prediction += treeWeights(index) * treePredictions(index)
-        index += 1
-      }
-      prediction
-    }
-  }
-
-  /**
-   * Predict values for a single data point using the model trained.
+   * Predicts for a single data point using the weighted sum of ensemble predictions.
    *
    * @param features array representing a single data point
    * @return predicted category from the trained model
    */
   private def predictBySumming(features: Vector): Double = {
-    algo match {
-      case Regression => predictRaw(features)
-      case Classification => {
-        // TODO: predicted labels are +1 or -1 for GBT. Need a better way to store this info.
-        if (predictRaw(features) > 0 ) 1.0 else 0.0
-      }
-      case _ => throw new IllegalArgumentException(
-        s"WeightedEnsembleModel given unknown algo parameter: $algo.")
-    }
+    val treePredictions = trees.map(learner => learner.predict(features))
+    blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
   }
 
   /**
-   * Predict values for a single data point.
-   *
-   * @param features array representing a single data point
-   * @return Double prediction from the trained model
+   * Classifies a single data point based on (weighted) majority votes.
    */
-  private def predictByAveraging(features: Vector): Double = {
-    algo match {
-      case Classification =>
-        val predictionToCount = new mutable.HashMap[Int, Int]()
-        trees.foreach { learner =>
-          val prediction = learner.predict(features).toInt
-          predictionToCount(prediction) = predictionToCount.getOrElse(prediction, 0) + 1
-        }
-        predictionToCount.maxBy(_._2)._1
-      case Regression =>
-        trees.map(_.predict(features)).sum / trees.size
+  private def predictByVoting(features: Vector): Double = {
+    val votes = mutable.Map.empty[Int, Double]
+    trees.view.zip(treeWeights).foreach { case (tree, weight) =>
+      val prediction = tree.predict(features).toInt
+      votes(prediction) = votes.getOrElse(prediction, 0.0) + weight
     }
+    votes.maxBy(_._2)._1
   }
-
 
   /**
    * Predict values for a single data point using the model trained.
@@ -111,11 +110,21 @@ class TreeEnsembleModel(
    * @return predicted category from the trained model
    */
   def predict(features: Vector): Double = {
-    combiningStrategy match {
-      case Sum => predictBySumming(features)
-      case Average => predictByAveraging(features)
-      case _ => throw new IllegalArgumentException(
-        s"WeightedEnsembleModel given unknown combining parameter: $combiningStrategy.")
+    (algo, combiningStrategy) match {
+      case (Regression, Sum) =>
+        predictBySumming(features)
+      case (Regression, Average) =>
+        predictBySumming(features) / sumWeights
+      case (Classification, Sum) => // binary classification
+        val prediction = predictBySumming(features)
+        // TODO: predicted labels are +1 or -1 for GBT. Need a better way to store this info.
+        if (prediction > 0.0) 1.0 else 0.0
+      case (Classification, Vote) =>
+        predictByVoting(features)
+      case _ =>
+        throw new IllegalArgumentException(
+          "TreeEnsembleModel given unsupported (algo, combiningStrategy) combination: " +
+            s"($algo, $combiningStrategy).")
     }
   }
 
@@ -128,16 +137,23 @@ class TreeEnsembleModel(
   def predict(features: RDD[Vector]): RDD[Double] = features.map(x => predict(x))
 
   /**
+   * Java-friendly version of [[org.apache.spark.mllib.tree.model.TreeEnsembleModel#predict]].
+   */
+  def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
+    predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
+  }
+
+  /**
    * Print a summary of the model.
    */
   override def toString: String = {
     algo match {
       case Classification =>
-        s"WeightedEnsembleModel classifier with $numTrees trees\n"
+        s"TreeEnsembleModel classifier with $numTrees trees\n"
       case Regression =>
-        s"WeightedEnsembleModel regressor with $numTrees trees\n"
+        s"TreeEnsembleModel regressor with $numTrees trees\n"
       case _ => throw new IllegalArgumentException(
-        s"WeightedEnsembleModel given unknown algo parameter: $algo.")
+        s"TreeEnsembleModel given unknown algo parameter: $algo.")
     }
   }
 
@@ -163,5 +179,4 @@ class TreeEnsembleModel(
    * Get total number of nodes, summed over all trees in the forest.
    */
   def totalNumNodes: Int = trees.map(tree => tree.numNodes).sum
-
 }

@@ -23,9 +23,8 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Sum
 import org.apache.spark.mllib.tree.impl.TimeTracker
-import org.apache.spark.mllib.tree.model.{DecisionTreeModel, TreeEnsembleModel}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -53,9 +52,9 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return WeightedEnsembleModel that can be used for prediction
+   * @return a gradient boosted trees model that can be used for prediction
    */
-  def run(input: RDD[LabeledPoint]): TreeEnsembleModel = {
+  def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case Regression => GradientBoostedTrees.boost(input, boostingStrategy)
@@ -71,7 +70,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#run]].
    */
-  def run(input: JavaRDD[LabeledPoint]): TreeEnsembleModel = {
+  def run(input: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
     run(input.rdd)
   }
 }
@@ -86,11 +85,11 @@ object GradientBoostedTrees extends Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return a tree ensemble model that can be used for prediction
+   * @return a gradient boosted trees model that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): TreeEnsembleModel = {
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
     new GradientBoostedTrees(boostingStrategy).run(input)
   }
 
@@ -99,7 +98,7 @@ object GradientBoostedTrees extends Logging {
    */
   def train(
       input: JavaRDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): TreeEnsembleModel = {
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
     train(input.rdd, boostingStrategy)
   }
 
@@ -107,11 +106,11 @@ object GradientBoostedTrees extends Logging {
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
    * @param boostingStrategy boosting parameters
-   * @return a tree ensemble model that can be used for prediction
+   * @return a gradient boosted trees model that can be used for prediction
    */
   private def boost(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): TreeEnsembleModel = {
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
 
     val timer = new TimeTracker()
     timer.start("total")
@@ -148,7 +147,7 @@ object GradientBoostedTrees extends Logging {
     val firstTreeModel = new DecisionTree(ensembleStrategy).run(data)
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
-    val startingModel = new TreeEnsembleModel(Array(firstTreeModel), Array(1.0), Regression, Sum)
+    val startingModel = new GradientBoostedTreesModel(Regression, Array(firstTreeModel), Array(1.0))
     logDebug("error of gbt = " + loss.computeError(startingModel, input))
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
@@ -172,8 +171,8 @@ object GradientBoostedTrees extends Logging {
       //       However, the behavior should be reasonable, though not optimal.
       baseLearnerWeights(m) = learningRate
       // Note: A model of type regression is used since we require raw prediction
-      val partialModel = new TreeEnsembleModel(baseLearners.slice(0, m + 1),
-        baseLearnerWeights.slice(0, m + 1), Regression, Sum)
+      val partialModel = new GradientBoostedTreesModel(
+        Regression, baseLearners.slice(0, m + 1), baseLearnerWeights.slice(0, m + 1))
       logDebug("error of gbt = " + loss.computeError(partialModel, input))
       // Update data with pseudo-residuals
       data = input.map(point => LabeledPoint(-loss.gradient(partialModel, point),
@@ -186,6 +185,7 @@ object GradientBoostedTrees extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    new TreeEnsembleModel(baseLearners, baseLearnerWeights, boostingStrategy.treeStrategy.algo, Sum)
+    new GradientBoostedTreesModel(
+      boostingStrategy.treeStrategy.algo, baseLearners, baseLearnerWeights)
   }
 }

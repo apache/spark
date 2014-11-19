@@ -29,7 +29,7 @@ import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.tree.GradientBoostedTrees;
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
-import org.apache.spark.mllib.tree.model.TreeEnsembleModel;
+import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel;
 import org.apache.spark.mllib.util.MLUtils;
 
 /**
@@ -76,7 +76,7 @@ public final class JavaGradientBoostedTreesRunner {
       boostingStrategy.treeStrategy().setNumClassesForClassification(numClasses);
 
       // Train a GradientBoosting model for classification.
-      final TreeEnsembleModel model = GradientBoostedTrees.train(data, boostingStrategy);
+      final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
@@ -95,7 +95,7 @@ public final class JavaGradientBoostedTreesRunner {
       System.out.println("Learned classification tree model:\n" + model);
     } else if (algo.equals("Regression")) {
       // Train a GradientBoosting model for classification.
-      final TreeEnsembleModel model = GradientBoostedTrees.train(data, boostingStrategy);
+      final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
