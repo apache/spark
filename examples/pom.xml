@@ -107,6 +107,11 @@
         <version>${hbase.version}</version>
         <exclusions>
           <exclusion>
+            <!-- SPARK-4455 -->
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-annotations</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jruby</groupId>
             <artifactId>jruby-complete</artifactId>
           </exclusion>
@@ -121,12 +126,24 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <!-- SPARK-4455 -->
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-annotations</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-client</artifactId>
         <version>${hbase.version}</version>
         <exclusions>
+          <exclusion>
+            <!-- SPARK-4455 -->
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-annotations</artifactId>
+          </exclusion>
          <exclusion>
           <groupId>io.netty</groupId>
           <artifactId>netty</artifactId>
@@ -157,6 +174,11 @@
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-auth</artifactId>
+          </exclusion>
+          <exclusion>
+            <!-- SPARK-4455 -->
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-annotations</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
