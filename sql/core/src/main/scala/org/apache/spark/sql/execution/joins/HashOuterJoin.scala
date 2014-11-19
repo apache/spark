@@ -72,53 +72,54 @@ case class HashOuterJoin(
   // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
-      key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row]): Iterator[Row] = {
+      key: Row, leftRow: Row, rightIter: Iterable[Row]): Iterator[Row] = {
     val joinedRow = new JoinedRow()
     val rightNullRow = new GenericRow(right.output.length)
     val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
-    leftIter.iterator.flatMap { l =>
-      joinedRow.withLeft(l)
-      var matched = false
-      (if (!key.anyNull) rightIter.collect { case r if (boundCondition(joinedRow.withRight(r))) =>
-        matched = true
-        joinedRow.copy
-      } else {
-        Nil
-      }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
-        // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-        // as we don't know whether we need to append it until finish iterating all of the
-        // records in right side.
-        // If we didn't get any proper row, then append a single row with empty right
-        joinedRow.withRight(rightNullRow).copy
-      })
-    }
+    joinedRow.withLeft(leftRow)
+    var matched = false
+    val ret = (if (!key.anyNull) rightIter.collect {
+      case r if (boundCondition(joinedRow.withRight(r))) =>
+      matched = true
+      joinedRow.copy
+    } else {
+      Nil
+    }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
+      // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
+      // as we don't know whether we need to append it until finish iterating all of the
+      // records in right side.
+      // If we didn't get any proper row, then append a single row with empty right
+      joinedRow.withRight(rightNullRow).copy
+    })
+    ret.iterator
   }
 
   private[this] def rightOuterIterator(
-      key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row]): Iterator[Row] = {
+      key: Row, leftIter: Iterable[Row], rightRow: Row): Iterator[Row] = {
     val joinedRow = new JoinedRow()
-    val leftNullRow = new GenericRow(left.output.length)
+    val leftNullRow = new GenericRow(right.output.length)
     val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
-    rightIter.iterator.flatMap { r =>
-      joinedRow.withRight(r)
-      var matched = false
-      (if (!key.anyNull) leftIter.collect { case l if (boundCondition(joinedRow.withLeft(l))) =>
+    joinedRow.withRight(rightRow)
+    var matched = false
+    val ret = (if (!key.anyNull) leftIter.collect {
+      case l if (boundCondition(joinedRow.withLeft(l))) => {
         matched = true
         joinedRow.copy
-      } else {
-        Nil
-      }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
-        // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-        // as we don't know whether we need to append it until finish iterating all of the
-        // records in left side.
-        // If we didn't get any proper row, then append a single row with empty left.
-        joinedRow.withLeft(leftNullRow).copy
-      })
-    }
+      }
+    } else {
+      Nil
+    }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
+      // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
+      // as we don't know whether we need to append it until finish iterating all of the
+      // records in right side.
+      // If we didn't get any proper row, then append a single row with empty right
+      joinedRow.withLeft(leftNullRow).copy
+    })
+    ret.iterator
   }
 
   private[this] def fullOuterIterator(
@@ -195,12 +196,10 @@ case class HashOuterJoin(
   override def execute() = {
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
-      // Build HashMap for current partition in left relation
+      /*
       val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
-      // Build HashMap for current partition in right relation
       val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
-      val boundCondition =
-        condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
+
       joinType match {
         case LeftOuter => leftHashTable.keysIterator.flatMap { key =>
           leftOuterIterator(key, leftHashTable.getOrElse(key, EMPTY_LIST),
@@ -214,6 +213,35 @@ case class HashOuterJoin(
           fullOuterIterator(key,
             leftHashTable.getOrElse(key, EMPTY_LIST),
             rightHashTable.getOrElse(key, EMPTY_LIST))
+        }
+        case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
+      }
+      */
+
+
+      joinType match {
+        case LeftOuter => {
+          val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
+          leftIter.flatMap( currentRow => {
+            val rowKey = newProjection(leftKeys, left.output)(currentRow)
+            leftOuterIterator(rowKey, currentRow, rightHashTable.getOrElse(rowKey, EMPTY_LIST))
+          })
+        }
+        case RightOuter => {
+          val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
+          rightIter.flatMap ( currentRow => {
+            val rowKey = newProjection(rightKeys, right.output)(currentRow)
+            rightOuterIterator(rowKey, leftHashTable.getOrElse(rowKey, EMPTY_LIST), currentRow)
+          })
+        }
+        case FullOuter => {
+          val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
+          val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
+          (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
+            fullOuterIterator(key,
+              leftHashTable.getOrElse(key, EMPTY_LIST),
+              rightHashTable.getOrElse(key, EMPTY_LIST))
+          }
         }
         case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
       }
