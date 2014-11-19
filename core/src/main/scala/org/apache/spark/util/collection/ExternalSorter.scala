@@ -28,6 +28,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark._
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.storage.{BlockObjectWriter, BlockId}
 
 /**
@@ -134,8 +135,9 @@ private[spark] class ExternalSorter[K, V, C](
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
 
-  // How much of the shared memory pool this collection has claimed
-  private var myMemoryThreshold = 0L
+  // Threshold for the collection's size in bytes before we start tracking its memory usage
+  // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
+  private var myMemoryThreshold = ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD
 
   // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't need
   // local aggregation and sorting, write numPartitions files directly and just concatenate them
@@ -284,8 +286,12 @@ private[spark] class ExternalSorter[K, V, C](
     }
 
     // Release our memory back to the shuffle pool so that other threads can grab it
-    shuffleMemoryManager.release(myMemoryThreshold)
-    myMemoryThreshold = 0
+    // The amount we requested does not include the initial memory tracking threshold
+    shuffleMemoryManager.release(
+      myMemoryThreshold - ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD)
+
+    // Reset this to the initial threshold to avoid spilling many small files
+    myMemoryThreshold = ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD
 
     _memoryBytesSpilled += memorySize
     elementsRead = 0

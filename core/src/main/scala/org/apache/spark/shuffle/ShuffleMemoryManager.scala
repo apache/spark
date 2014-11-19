@@ -111,7 +111,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
   }
 }
 
-private object ShuffleMemoryManager {
+private[spark] object ShuffleMemoryManager {
   /**
    * Figure out the shuffle memory limit from a SparkConf. We currently have both a fraction
    * of the memory pool and a safety factor since collections can sometimes grow bigger than
@@ -122,4 +122,7 @@ private object ShuffleMemoryManager {
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
+
+  // Initial threshold for the size of a collection before we start tracking its memory usage
+  val INITIAL_MEMORY_TRACKING_THRESHOLD: Long = 5 * 1024 * 1024
 }

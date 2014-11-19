@@ -28,10 +28,11 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{DeserializationStream, Serializer}
+import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
-import org.apache.spark.executor.ShuffleWriteMetrics
 
 /**
  * :: DeveloperApi ::
@@ -81,8 +82,9 @@ class ExternalAppendOnlyMap[K, V, C](
   // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
   private val trackMemoryThreshold = 1000
 
-  // How much of the shared memory pool this collection has claimed
-  private var myMemoryThreshold = 0L
+  // Threshold for the collection's size in bytes before we start tracking its memory usage
+  // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
+  private var myMemoryThreshold = ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD
 
   /**
    * Size of object batches when reading/writing from serializers.
@@ -235,8 +237,12 @@ class ExternalAppendOnlyMap[K, V, C](
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
 
     // Release our memory back to the shuffle pool so that other threads can grab it
-    shuffleMemoryManager.release(myMemoryThreshold)
-    myMemoryThreshold = 0L
+    // The amount we requested does not include the initial memory tracking threshold
+    shuffleMemoryManager.release(
+      myMemoryThreshold - ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD)
+
+    // Reset this to the initial threshold to avoid spilling many small files
+    myMemoryThreshold = ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD
 
     elementsRead = 0
     _memoryBytesSpilled += mapSize
