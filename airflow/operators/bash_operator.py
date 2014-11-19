@@ -1,6 +1,8 @@
 import logging
-from airflow.models import BaseOperator
 from subprocess import Popen, PIPE
+
+from airflow.models import BaseOperator
+from airflow.utils import apply_defaults
 
 
 class BashOperator(BaseOperator):
@@ -12,6 +14,7 @@ class BashOperator(BaseOperator):
         'polymorphic_identity': 'BashOperator'
     }
 
+    @apply_defaults
     def __init__(self, bash_command, *args, **kwargs):
         super(BashOperator, self).__init__(*args, **kwargs)
         self.bash_command = bash_command

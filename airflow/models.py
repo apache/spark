@@ -22,7 +22,8 @@ from airflow.configuration import getconf
 from airflow import settings
 from airflow import utils
 import socket
-from utils import State
+from airflow.utils import State
+from airflow.utils import apply_defaults
 
 Base = declarative_base()
 ID_LEN = getconf().getint('misc', 'ID_LEN')
@@ -700,6 +701,7 @@ class BaseOperator(Base):
         'polymorphic_identity': 'BaseOperator'
     }
 
+    @apply_defaults
     def __init__(
             self,
             task_id,
@@ -712,6 +714,7 @@ class BaseOperator(Base):
             depends_on_past=False,
             dag=None,
             params=None,
+            default_args=None,
             *args,
             **kwargs):
 
