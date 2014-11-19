@@ -36,13 +36,20 @@ private[spark] trait Spillable[C] {
   protected def spill(collection: C): Unit
 
   // Number of elements read from input since last spill
-  protected var elementsRead: Long
+  protected def elementsRead: Long = _elementsRead
+
+  // Called by subclasses every time a record is read
+  // It's used for checking spilling frequency
+  protected def addElementsRead(): Unit = { _elementsRead += 1 }
 
   // Memory manager that can be used to acquire/release memory
   private[this] val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
 
   // What threshold of elementsRead we start estimating collection size at
   private[this] val trackMemoryThreshold = 1000
+
+  // Number of elements read from input since last spill
+  private[this] var _elementsRead = 0L
 
   // How much of the shared memory pool this collection has claimed
   private[this] var myMemoryThreshold = 0L
@@ -76,6 +83,7 @@ private[spark] trait Spillable[C] {
 
         spill(collection)
 
+        _elementsRead = 0
         // Keep track of spills, and release memory
         _memoryBytesSpilled += currentMemory
         releaseMemoryForThisThread()
