@@ -48,6 +48,15 @@ by looking for the "Name" tag of the instance in the Amazon EC2 Console.
     key pair, `<num-slaves>` is the number of slave nodes to launch (try
     1 at first), and `<cluster-name>` is the name to give to your
     cluster.
+
+    For example:
+
+    ```bash
+    export AWS_SECRET_ACCESS_KEY=AaBbCcDdEeFGgHhIiJjKkLlMmNnOoPpQqRrSsTtU
+export AWS_ACCESS_KEY_ID=ABCDEFG1234567890123
+./spark-ec2 --key-pair=awskey --identity-file=awskey.pem --region=us-west-1 --zone=us-west-1a --spark-version=1.1.0 launch my-spark-cluster
+    ```
+
 -   After everything launches, check that the cluster scheduler is up and sees
     all the slaves by going to its web UI, which will be printed at the end of
     the script (typically `http://<master-hostname>:8080`).
@@ -55,27 +64,27 @@ by looking for the "Name" tag of the instance in the Amazon EC2 Console.
 You can also run `./spark-ec2 --help` to see more usage options. The
 following options are worth pointing out:
 
--   `--instance-type=<INSTANCE_TYPE>` can be used to specify an EC2
+-   `--instance-type=<instance-type>` can be used to specify an EC2
 instance type to use. For now, the script only supports 64-bit instance
 types, and the default type is `m1.large` (which has 2 cores and 7.5 GB
 RAM). Refer to the Amazon pages about [EC2 instance
 types](http://aws.amazon.com/ec2/instance-types) and [EC2
 pricing](http://aws.amazon.com/ec2/#pricing) for information about other
 instance types. 
--    `--region=<EC2_REGION>` specifies an EC2 region in which to launch
+-    `--region=<ec2-region>` specifies an EC2 region in which to launch
 instances. The default region is `us-east-1`.
--    `--zone=<EC2_ZONE>` can be used to specify an EC2 availability zone
+-    `--zone=<ec2-zone>` can be used to specify an EC2 availability zone
 to launch instances in. Sometimes, you will get an error because there
 is not enough capacity in one zone, and you should try to launch in
 another.
--    `--ebs-vol-size=GB` will attach an EBS volume with a given amount
+-    `--ebs-vol-size=<GB>` will attach an EBS volume with a given amount
      of space to each node so that you can have a persistent HDFS cluster
      on your nodes across cluster restarts (see below).
--    `--spot-price=PRICE` will launch the worker nodes as
+-    `--spot-price=<price>` will launch the worker nodes as
      [Spot Instances](http://aws.amazon.com/ec2/spot-instances/),
      bidding for the given maximum price (in dollars).
--    `--spark-version=VERSION` will pre-load the cluster with the
-     specified version of Spark. VERSION can be a version number
+-    `--spark-version=<version>` will pre-load the cluster with the
+     specified version of Spark. The `<version>` can be a version number
      (e.g. "0.7.3") or a specific git hash. By default, a recent
      version will be used.
 -    If one of your launches fails due to e.g. not having the right
@@ -137,11 +146,11 @@ cost you any EC2 cycles, but ***will*** continue to cost money for EBS
 storage.
 
 - To stop one of your clusters, go into the `ec2` directory and run
-`./spark-ec2 stop <cluster-name>`.
+`./spark-ec2 --region=<ec2-region> stop <cluster-name>`.
 - To restart it later, run
-`./spark-ec2 -i <key-file> start <cluster-name>`.
+`./spark-ec2 -i <key-file> --region=<ec2-region> start <cluster-name>`.
 - To ultimately destroy the cluster and stop consuming EBS space, run
-`./spark-ec2 destroy <cluster-name>` as described in the previous
+`./spark-ec2 --region=<ec2-region> destroy <cluster-name>` as described in the previous
 section.
 
 # Limitations

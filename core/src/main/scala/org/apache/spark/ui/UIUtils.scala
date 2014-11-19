@@ -20,12 +20,13 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Locale, Date}
 
-import scala.xml.Node
+import scala.xml.{Node, Text}
+
 import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS = "table table-bordered table-striped table-condensed sortable"
+  val TABLE_CLASS = "table table-bordered table-striped-custom table-condensed sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -159,6 +160,8 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+    <script src={prependBaseUri("/static/table.js")}></script>
+    <script src={prependBaseUri("/static/additional-metrics.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -169,9 +172,10 @@ private[spark] object UIUtils extends Logging {
       refreshInterval: Option[Int] = None): Seq[Node] = {
 
     val appName = activeTab.appName
+    val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix)}>{tab.name}</a>
+        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
 
@@ -187,7 +191,9 @@ private[spark] object UIUtils extends Logging {
               <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
             <ul class="nav">{header}</ul>
-            <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
+            <p class="navbar-text pull-right">
+              <strong title={appName}>{shortAppName}</strong> application UI
+            </p>
           </div>
         </div>
         <div class="container-fluid">
@@ -216,8 +222,10 @@ private[spark] object UIUtils extends Logging {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
-                     style="margin-right: 15px;" />
+                <a style="text-decoration: none" href={prependBaseUri("/")}>
+                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
+                       style="margin-right: 15px;" />
+                </a>
                 {title}
               </h3>
             </div>
@@ -233,7 +241,9 @@ private[spark] object UIUtils extends Logging {
       headers: Seq[String],
       generateDataRow: T => Seq[Node],
       data: Iterable[T],
-      fixedWidth: Boolean = false): Seq[Node] = {
+      fixedWidth: Boolean = false,
+      id: Option[String] = None,
+      headerClasses: Seq[String] = Seq.empty): Seq[Node] = {
 
     var listingTableClass = TABLE_CLASS
     if (fixedWidth) {
@@ -241,23 +251,32 @@ private[spark] object UIUtils extends Logging {
     }
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
-    val headerRow: Seq[Node] = {
-      // if none of the headers have "\n" in them
-      if (headers.forall(!_.contains("\n"))) {
-        // represent header as simple text
-        headers.map(h => <th width={colWidthAttr}>{h}</th>)
+
+    def getClass(index: Int): String = {
+      if (index < headerClasses.size) {
+        headerClasses(index)
       } else {
-        // represent header text as list while respecting "\n"
-        headers.map { case h =>
-          <th width={colWidthAttr}>
-            <ul class ="unstyled">
-              { h.split("\n").map { case t => <li> {t} </li> } }
-            </ul>
-          </th>
-        }
+        ""
       }
     }
-    <table class={listingTableClass}>
+
+    val newlinesInHeader = headers.exists(_.contains("\n"))
+    def getHeaderContent(header: String): Seq[Node] = {
+      if (newlinesInHeader) {
+        <ul class="unstyled">
+          { header.split("\n").map { case t => <li> {t} </li> } }
+        </ul>
+      } else {
+        Text(header)
+      }
+    }
+
+    val headerRow: Seq[Node] = {
+      headers.view.zipWithIndex.map { x =>
+        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+      }
+    }
+    <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}

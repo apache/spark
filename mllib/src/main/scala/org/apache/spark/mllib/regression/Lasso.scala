@@ -67,9 +67,9 @@ class LassoWithSGD private (
 
   /**
    * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParam: 1.0, miniBatchFraction: 1.0}.
+   * regParam: 0.01, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 1.0, 1.0)
+  def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LassoModel(weights, intercept)
@@ -161,6 +161,6 @@ object LassoWithSGD {
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int): LassoModel = {
-    train(input, numIterations, 1.0, 1.0, 1.0)
+    train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }

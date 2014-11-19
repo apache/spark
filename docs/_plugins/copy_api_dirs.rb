@@ -63,19 +63,20 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   puts "cp -r " + source + "/. " + dest
   cp_r(source + "/.", dest)
 
-  # Build Epydoc for Python
-  puts "Moving to python directory and building epydoc."
-  cd("../python")
-  puts `epydoc --config epydoc.conf`
+  # Build Sphinx docs for Python
 
-  puts "Moving back into docs dir."
-  cd("../docs")
+  puts "Moving to python/docs directory and building sphinx."
+  cd("../python/docs")
+  puts `make html`
+
+  puts "Moving back into home dir."
+  cd("../../")
 
   puts "Making directory api/python"
-  mkdir_p "api/python"
+  mkdir_p "docs/api/python"
 
-  puts "cp -r ../python/docs/. api/python"
-  cp_r("../python/docs/.", "api/python")
+  puts "cp -r python/docs/_build/html/. docs/api/python"
+  cp_r("python/docs/_build/html/.", "docs/api/python")
 
   cd("..")
 end

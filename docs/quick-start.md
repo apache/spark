@@ -8,7 +8,7 @@ title: Quick Start
 
 This tutorial provides a quick introduction to using Spark. We will first introduce the API through Spark's
 interactive shell (in Python or Scala),
-then show how to write standalone applications in Java, Scala, and Python.
+then show how to write applications in Java, Scala, and Python.
 See the [programming guide](programming-guide.html) for a more complete reference.
 
 To follow along with this guide, first download a packaged release of Spark from the
@@ -215,8 +215,8 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 </div>
 </div>
 
-# Standalone Applications
-Now say we wanted to write a standalone application using the Spark API. We will walk through a
+# Self-Contained Applications
+Now say we wanted to write a self-contained application using the Spark API. We will walk through a
 simple application in both Scala (with SBT), Java (with Maven), and Python.
 
 <div class="codetabs">
@@ -387,7 +387,7 @@ Lines with a: 46, Lines with b: 23
 </div>
 <div data-lang="python" markdown="1">
 
-Now we will show how to write a standalone application using the Python API (PySpark).
+Now we will show how to write an application using the Python API (PySpark).
 
 As an example, we'll create a simple Spark application, `SimpleApp.py`:
 

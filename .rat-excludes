@@ -1,5 +1,6 @@
 target
 .gitignore
+.gitattributes
 .project
 .classpath
 .mima-excludes
@@ -19,6 +20,7 @@ log4j.properties
 log4j.properties.template
 metrics.properties.template
 slaves
+slaves.template
 spark-env.sh
 spark-env.cmd
 spark-env.sh.template
@@ -42,11 +44,13 @@ SparkImports.scala
 SparkJLineCompletion.scala
 SparkJLineReader.scala
 SparkMemberHandlers.scala
+SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
 work
 .*\.q
+.*\.qv
 golden
 test.out/*
 .*iml

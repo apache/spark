@@ -193,11 +193,13 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(grouped2.join(grouped4).partitioner === grouped4.partitioner)
     assert(grouped2.leftOuterJoin(grouped4).partitioner === grouped4.partitioner)
     assert(grouped2.rightOuterJoin(grouped4).partitioner === grouped4.partitioner)
+    assert(grouped2.fullOuterJoin(grouped4).partitioner === grouped4.partitioner)
     assert(grouped2.cogroup(grouped4).partitioner === grouped4.partitioner)
 
     assert(grouped2.join(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.rightOuterJoin(reduced2).partitioner === grouped2.partitioner)
+    assert(grouped2.fullOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.cogroup(reduced2).partitioner === grouped2.partitioner)
 
     assert(grouped2.map(_ => 1).partitioner === None)
@@ -218,6 +220,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.fullOuterJoin(arrPairs) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("array"))

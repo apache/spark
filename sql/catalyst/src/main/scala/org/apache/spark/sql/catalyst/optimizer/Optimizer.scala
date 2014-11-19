@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -26,8 +27,11 @@ import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
-object Optimizer extends RuleExecutor[LogicalPlan] {
+abstract class Optimizer extends RuleExecutor[LogicalPlan]
+
+object DefaultOptimizer extends Optimizer {
   val batches =
     Batch("Combine Limits", FixedPoint(100),
       CombineLimits) ::
@@ -38,7 +42,10 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions,
+      OptimizeIn) ::
+    Batch("Decimal Optimizations", FixedPoint(100),
+      DecimalAggregates) ::
     Batch("Filter Pushdown", FixedPoint(100),
       UnionPushdown,
       CombineFilters,
@@ -274,6 +281,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
+ * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
+ * which is much faster
+ */
+object OptimizeIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+          val hSet = list.map(e => e.eval(null))
+          InSet(v, HashSet() ++ hSet)
+    }
+  }
+}
+
+/**
  * Simplifies boolean expressions where the answer can be determined without evaluating both sides.
  * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
  * is only safe when evaluations of expressions does not result in side effects.
@@ -297,6 +318,18 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (Literal(false, BooleanType), r) => r
           case (l, Literal(false, BooleanType)) => l
           case (_, _) => or
+        }
+
+      case not @ Not(exp) =>
+        exp match {
+          case Literal(true, BooleanType) => Literal(false)
+          case Literal(false, BooleanType) => Literal(true)
+          case GreaterThan(l, r) => LessThanOrEqual(l, r)
+          case GreaterThanOrEqual(l, r) => LessThan(l, r)
+          case LessThan(l, r) => GreaterThanOrEqual(l, r)
+          case LessThanOrEqual(l, r) => GreaterThan(l, r)
+          case Not(e) => e
+          case _ => not
         }
 
       // Turn "if (true) a else b" into "a", and if (false) a else b" into "b".
@@ -360,9 +393,9 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
  * evaluated using only the attributes of the left or right side of a join.  Other
  * [[Filter]] conditions are moved into the `condition` of the [[Join]].
  *
- * And also Pushes down the join filter, where the `condition` can be evaluated using only the 
- * attributes of the left or right side of sub query when applicable. 
- * 
+ * And also Pushes down the join filter, where the `condition` can be evaluated using only the
+ * attributes of the left or right side of sub query when applicable.
+ *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
@@ -374,7 +407,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
         condition.partition(_.references subsetOf left.outputSet)
-    val (rightEvaluateCondition, commonCondition) = 
+    val (rightEvaluateCondition, commonCondition) =
         rest.partition(_.references subsetOf right.outputSet)
 
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
@@ -383,7 +416,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
-      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) = 
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
 
       joinType match {
@@ -421,7 +454,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
     // push down the join filter into sub query scanning if applicable
     case f @ Join(left, right, joinType, joinCondition) =>
-      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) = 
+      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
@@ -487,5 +520,28 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
       case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
+  }
+}
+
+/**
+ * Speeds up aggregates on fixed-precision decimals by executing them on unscaled Long values.
+ *
+ * This uses the same rules for increasing the precision and scale of the output as
+ * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.DecimalPrecision]].
+ */
+object DecimalAggregates extends Rule[LogicalPlan] {
+  import Decimal.MAX_LONG_DIGITS
+
+  /** Maximum number of decimal digits representable precisely in a Double */
+  val MAX_DOUBLE_DIGITS = 15
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
+      MakeDecimal(Sum(UnscaledValue(e)), prec + 10, scale)
+
+    case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+      Cast(
+        Divide(Average(UnscaledValue(e)), Literal(math.pow(10.0, scale), DoubleType)),
+        DecimalType(prec + 4, scale + 4))
   }
 }

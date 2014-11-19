@@ -37,11 +37,6 @@
 
   <dependencies>
     <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>parquet-hive-bundle</artifactId>
-      <version>1.5.0</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -69,6 +64,10 @@
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.esotericsoftware.kryo</groupId>
+          <artifactId>kryo</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -116,7 +115,6 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
   <profiles>
     <profile>
       <id>hive</id>
@@ -144,6 +142,16 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+      <id>hive-0.12.0</id>
+      <dependencies>
+         <dependency>
+           <groupId>com.twitter</groupId>
+           <artifactId>parquet-hive-bundle</artifactId>
+           <version>1.5.0</version>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
   <build>
@@ -153,6 +161,24 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+         <groupId>org.codehaus.mojo</groupId>
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+             <id>add-default-sources</id>
+             <phase>generate-sources</phase>
+             <goals>
+               <goal>add-source</goal>
+             </goals>
+             <configuration>
+               <sources>
+                 <source>v${hive.version.short}/src/main/scala</source>
+               </sources>
+             </configuration>
+           </execution>
+         </executions>
       </plugin>
 
       <!-- Deploy datanucleus jars to the spark/lib_managed/jars directory -->

@@ -46,7 +46,7 @@ import org.apache.spark.streaming.receiver.Receiver
  * org.apache.spark.api.java.JavaSparkContext (see core Spark documentation) can be accessed
  * using `context.sparkContext`. After creating and transforming DStreams, the streaming
  * computation can be started and stopped using `context.start()` and `context.stop()`,
- * respectively. `context.awaitTransformation()` allows the current thread to wait for the
+ * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
  */
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {

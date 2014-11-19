@@ -40,7 +40,7 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
       serializer.get().deserialize[TaskResult[_]](serializedData) match {
-        case IndirectTaskResult(blockId) =>
+        case IndirectTaskResult(blockId, size) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
         case directResult: DirectTaskResult[_] =>
           taskSetManager.abort("Internal error: expect only indirect results")

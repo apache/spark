@@ -46,6 +46,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
@@ -57,7 +62,7 @@
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
-      <version>0.9</version>
+      <version>0.10</version>
       <exclusions>
         <!-- This is included as a compile-scoped dependency by jtransforms, which is
              a dependency of breeze. -->
@@ -70,6 +75,10 @@
           <artifactId>commons-math3</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-math3</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -89,6 +98,11 @@
     <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-all</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

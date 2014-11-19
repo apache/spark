@@ -26,16 +26,17 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") {
-  private val live = parent.live
   private val sc = parent.sc
   private val listener = parent.listener
-  private lazy val isFairScheduler = parent.isFairScheduler
+  private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeStages = listener.activeStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
+      val numCompletedStages = listener.numCompletedStages
       val failedStages = listener.failedStages.reverse.toSeq
+      val numFailedStages = listener.numFailedStages
       val now = System.currentTimeMillis
 
       val activeStagesTable =
@@ -47,17 +48,17 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
       // For now, pool information is only accessible in live UIs
-      val pools = if (live) sc.getAllPools else Seq[Schedulable]()
+      val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])
       val poolTable = new PoolTable(pools, parent)
 
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (live) {
+            {if (sc.isDefined) {
               // Total duration is not meaningful unless the UI is live
               <li>
                 <strong>Total Duration: </strong>
-                {UIUtils.formatDuration(now - sc.startTime)}
+                {UIUtils.formatDuration(now - sc.get.startTime)}
               </li>
             }}
             <li>
@@ -70,26 +71,26 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
             </li>
             <li>
               <a href="#completed"><strong>Completed Stages:</strong></a>
-              {completedStages.size}
+              {numCompletedStages}
             </li>
              <li>
              <a href="#failed"><strong>Failed Stages:</strong></a>
-              {failedStages.size}
+              {numFailedStages}
             </li>
           </ul>
         </div>
 
       val content = summary ++
-        {if (live && isFairScheduler) {
+        {if (sc.isDefined && isFairScheduler) {
           <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
           Seq[Node]()
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
-        <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
+        <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
         completedStagesTable.toNodeSeq ++
-        <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
+        <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
         failedStagesTable.toNodeSeq
 
       UIUtils.headerSparkPage("Spark Stages", content, parent)

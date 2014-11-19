@@ -45,6 +45,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
         <th>Failed Tasks</th>
         <th>Succeeded Tasks</th>
         <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.OUTPUT}>Output</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
         <th>Shuffle Spill (Memory)</th>
@@ -71,19 +72,21 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
           <tr>
             <td>{k}</td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
-            <td sorttable_customekey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
+            <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
             <td>{v.failedTasks + v.succeededTasks}</td>
             <td>{v.failedTasks}</td>
             <td>{v.succeededTasks}</td>
-            <td sorttable_customekey={v.inputBytes.toString}>
+            <td sorttable_customkey={v.inputBytes.toString}>
               {Utils.bytesToString(v.inputBytes)}</td>
-            <td sorttable_customekey={v.shuffleRead.toString}>
+            <td sorttable_customkey={v.outputBytes.toString}>
+              {Utils.bytesToString(v.outputBytes)}</td>
+            <td sorttable_customkey={v.shuffleRead.toString}>
               {Utils.bytesToString(v.shuffleRead)}</td>
-            <td sorttable_customekey={v.shuffleWrite.toString}>
+            <td sorttable_customkey={v.shuffleWrite.toString}>
               {Utils.bytesToString(v.shuffleWrite)}</td>
-            <td sorttable_customekey={v.memoryBytesSpilled.toString}>
+            <td sorttable_customkey={v.memoryBytesSpilled.toString}>
               {Utils.bytesToString(v.memoryBytesSpilled)}</td>
-            <td sorttable_customekey={v.diskBytesSpilled.toString}>
+            <td sorttable_customkey={v.diskBytesSpilled.toString}>
               {Utils.bytesToString(v.diskBytesSpilled)}</td>
           </tr>
         }

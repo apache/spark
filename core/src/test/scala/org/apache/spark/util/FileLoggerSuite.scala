@@ -21,7 +21,6 @@ import java.io.{File, IOException}
 
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -44,7 +43,7 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
   private var logDirPathString: String = _
 
   before {
-    testDir = Files.createTempDir()
+    testDir = Utils.createTempDir()
     logDirPath = Utils.getFilePath(testDir, "test-file-logger")
     logDirPathString = logDirPath.toString
   }
@@ -75,13 +74,13 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
 
   test("Logging when directory already exists") {
     // Create the logging directory multiple times
-    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
-    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
-    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = true).start()
 
     // If overwrite is not enabled, an exception should be thrown
     intercept[IOException] {
-      new FileLogger(logDirPathString, new SparkConf, overwrite = false).start()
+      new FileLogger(logDirPathString, new SparkConf, compress = false, overwrite = false).start()
     }
   }
 

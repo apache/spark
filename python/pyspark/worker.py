@@ -23,6 +23,8 @@ import sys
 import time
 import socket
 import traceback
+import cProfile
+import pstats
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -55,7 +57,7 @@ def main(infile, outfile):
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
-            return
+            exit(-1)
 
         # initialize global state
         shuffle.MemoryBytesSpilled = 0
@@ -90,15 +92,25 @@ def main(infile, outfile):
         command = pickleSer._read_with_length(infile)
         if isinstance(command, Broadcast):
             command = pickleSer.loads(command.value)
-        (func, deserializer, serializer) = command
+        (func, stats, deserializer, serializer) = command
         init_time = time.time()
-        iterator = deserializer.load_stream(infile)
-        serializer.dump_stream(func(split_index, iterator), outfile)
+
+        def process():
+            iterator = deserializer.load_stream(infile)
+            serializer.dump_stream(func(split_index, iterator), outfile)
+
+        if stats:
+            p = cProfile.Profile()
+            p.runcall(process)
+            st = pstats.Stats(p)
+            st.stream = None  # make it picklable
+            stats.add(st.strip_dirs())
+        else:
+            process()
     except Exception:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
             write_with_length(traceback.format_exc(), outfile)
-            outfile.flush()
         except IOError:
             # JVM close the socket
             pass
@@ -117,6 +129,14 @@ def main(infile, outfile):
     write_int(len(_accumulatorRegistry), outfile)
     for (aid, accum) in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
+
+    # check end of stream
+    if read_int(infile) == SpecialLengths.END_OF_STREAM:
+        write_int(SpecialLengths.END_OF_STREAM, outfile)
+    else:
+        # write a different value to tell JVM to not reuse this worker
+        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
+        exit(-1)
 
 
 if __name__ == '__main__':

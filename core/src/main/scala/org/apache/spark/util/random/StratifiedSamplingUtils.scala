@@ -22,8 +22,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import cern.jet.random.Poisson
-import cern.jet.random.engine.DRand
+import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
@@ -209,7 +208,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       samplingRateByKey = computeThresholdByKey(finalResult, fractions)
     }
     (idx: Int, iter: Iterator[(K, V)]) => {
-      val rng = new RandomDataGenerator
+      val rng = new RandomDataGenerator()
       rng.reSeed(seed + idx)
       // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
       // in order to generate the same sequence of random numbers when creating the sample
@@ -245,9 +244,9 @@ private[spark] object StratifiedSamplingUtils extends Logging {
           // Must use the same invoke pattern on the rng as in getSeqOp for with replacement
           // in order to generate the same sequence of random numbers when creating the sample
           val copiesAccepted = if (acceptBound == 0) 0L else rng.nextPoisson(acceptBound)
-          val copiesWailisted = rng.nextPoisson(finalResult(key).waitListBound)
+          val copiesWaitlisted = rng.nextPoisson(finalResult(key).waitListBound)
           val copiesInSample = copiesAccepted +
-            (0 until copiesWailisted).count(i => rng.nextUniform() < thresholdByKey(key))
+            (0 until copiesWaitlisted).count(i => rng.nextUniform() < thresholdByKey(key))
           if (copiesInSample > 0) {
             Iterator.fill(copiesInSample.toInt)(item)
           } else {
@@ -261,10 +260,10 @@ private[spark] object StratifiedSamplingUtils extends Logging {
         rng.reSeed(seed + idx)
         iter.flatMap { item =>
           val count = rng.nextPoisson(fractions(item._1))
-          if (count > 0) {
-            Iterator.fill(count)(item)
-          } else {
+          if (count == 0) {
             Iterator.empty
+          } else {
+            Iterator.fill(count)(item)
           }
         }
       }
@@ -274,15 +273,24 @@ private[spark] object StratifiedSamplingUtils extends Logging {
   /** A random data generator that generates both uniform values and Poisson values. */
   private class RandomDataGenerator {
     val uniform = new XORShiftRandom()
-    var poisson = new Poisson(1.0, new DRand)
+    // commons-math3 doesn't have a method to generate Poisson from an arbitrary mean;
+    // maintain a cache of Poisson(m) distributions for various m
+    val poissonCache = mutable.Map[Double, PoissonDistribution]()
+    var poissonSeed = 0L
 
-    def reSeed(seed: Long) {
+    def reSeed(seed: Long): Unit = {
       uniform.setSeed(seed)
-      poisson = new Poisson(1.0, new DRand(seed.toInt))
+      poissonSeed = seed
+      poissonCache.clear()
     }
 
     def nextPoisson(mean: Double): Int = {
-      poisson.nextInt(mean)
+      val poisson = poissonCache.getOrElseUpdate(mean, {
+        val newPoisson = new PoissonDistribution(mean)
+        newPoisson.reseedRandomGenerator(poissonSeed)
+        newPoisson
+      })
+      poisson.sample()
     }
 
     def nextUniform(): Double = {

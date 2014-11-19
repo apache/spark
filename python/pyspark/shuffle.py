@@ -25,7 +25,7 @@ import itertools
 import random
 
 import pyspark.heapq3 as heapq
-from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 
 try:
     import psutil
@@ -213,8 +213,7 @@ class ExternalMerger(Merger):
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
         # default serializer is only used for tests
-        self.serializer = serializer or \
-            BatchedSerializer(PickleSerializer(), 1024)
+        self.serializer = serializer or AutoBatchedSerializer(PickleSerializer())
         self.localdirs = localdirs or _get_local_dirs(str(id(self)))
         # number of partitions when spill data into disks
         self.partitions = partitions
@@ -396,7 +395,6 @@ class ExternalMerger(Merger):
                 for v in self.data.iteritems():
                     yield v
                 self.data.clear()
-                gc.collect()
 
                 # remove the merged partition
                 for j in range(self.spills):
@@ -428,7 +426,7 @@ class ExternalMerger(Merger):
             subdirs = [os.path.join(d, "parts", str(i))
                        for d in self.localdirs]
             m = ExternalMerger(self.agg, self.memory_limit, self.serializer,
-                               subdirs, self.scale * self.partitions)
+                               subdirs, self.scale * self.partitions, self.partitions)
             m.pdata = [{} for _ in range(self.partitions)]
             limit = self._next_limit()
 
@@ -471,7 +469,7 @@ class ExternalSorter(object):
     def __init__(self, memory_limit, serializer=None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
-        self.serializer = serializer or BatchedSerializer(PickleSerializer(), 1024)
+        self.serializer = serializer or AutoBatchedSerializer(PickleSerializer())
 
     def _get_path(self, n):
         """ Choose one directory for spill by number n """
@@ -486,7 +484,7 @@ class ExternalSorter(object):
         goes above the limit.
         """
         global MemoryBytesSpilled, DiskBytesSpilled
-        batch = 10
+        batch = 100
         chunks, current_chunk = [], []
         iterator = iter(iterator)
         while True:
