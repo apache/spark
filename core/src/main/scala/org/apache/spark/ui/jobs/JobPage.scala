@@ -69,6 +69,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
+            <li>
+              <Strong>Status:</Strong>
+              {jobData.status}
+            </li>
             {
               if (jobData.jobGroup.isDefined) {
                 <li>
