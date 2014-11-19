@@ -204,6 +204,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
             executorsPendingToRemove -= executorId
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
+          totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, SlaveLost(reason))
         case None => logError(s"Asked to remove non-existent executor $executorId")
       }
