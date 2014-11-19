@@ -30,14 +30,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
   private val startTime: Option[Long] = parent.sc.map(_.startTime)
   private val listener = parent.listener
 
-  private def getSubmissionTime(job: JobUIData): Option[Long] = {
-    for (
-      firstStageId <- job.stageIds.headOption;
-      firstStageInfo <- listener.stageIdToInfo.get(firstStageId);
-      submitTime <- firstStageInfo.submissionTime
-    ) yield submitTime
-  }
-
   private def jobsTable(jobs: Seq[JobUIData]): Seq[Node] = {
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
 
@@ -107,11 +99,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val now = System.currentTimeMillis
 
       val activeJobsTable =
-        jobsTable(activeJobs.sortBy(getSubmissionTime(_).getOrElse(-1L)).reverse)
+        jobsTable(activeJobs.sortBy(_.startTime.getOrElse(-1L)).reverse)
       val completedJobsTable =
-        jobsTable(completedJobs.sortBy(getSubmissionTime(_).getOrElse(-1L)).reverse)
+        jobsTable(completedJobs.sortBy(_.endTime.getOrElse(-1L)).reverse)
       val failedJobsTable =
-        jobsTable(failedJobs.sortBy(getSubmissionTime(_).getOrElse(-1L)).reverse)
+        jobsTable(failedJobs.sortBy(_.endTime.getOrElse(-1L)).reverse)
 
       val summary: NodeSeq =
         <div>
