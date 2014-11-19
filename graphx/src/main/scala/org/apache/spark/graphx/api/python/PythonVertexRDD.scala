@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx.api.python
 
+import java.io.{DataOutputStream, FileOutputStream}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import org.apache.spark.Accumulator
@@ -43,8 +44,30 @@ private[graphx] class PythonVertexRDD(
 
   val asJavaVertexRDD = JavaVertexRDD.fromVertexRDD(VertexRDD(parent.asInstanceOf))
 
-  def writeToFile(): = {
+  def writeToFile[T](items: java.util.Iterator[T], filename: String) {
+    import scala.collection.JavaConverters._
+    writeToFile(items.asScala, filename)
+  }
 
+  def writeToFile[T](items: Iterator[T], filename: String) {
+    val file = new DataOutputStream(new FileOutputStream(filename))
+    writeIteratorToStream(items, file)
+    file.close()
+  }
+
+  /** A data stream is written to a given file so that the collect() method
+    * of class VertexRDD in Python can read it back in the client and
+    * display the contents of the VertexRDD as a list
+    */
+  def writeIteratorToStream[T](items: Iterator[T], stream: DataOutputStream) = {
+    if (items.hasNext) {
+      val first = items.next()
+      val newIter = Seq(first).iterator ++ items
+      // Assuming the type of this RDD will always be Array[Byte]
+      newIter.asInstanceOf[Iterator[Array[Byte]]].foreach { bytes =>
+      stream.writeInt(bytes.length)
+      stream.write(bytes)
+    }
   }
 
 }

@@ -79,13 +79,10 @@ class VertexRDD(object):
     in PythonVertexRDD class in [[org.apache.spark.graphx.api.python package]]
     """
 
-    def __init__(self, vertex_property, jrdd,
+    def __init__(self, jrdd,
                  jrdd_deserializer = BatchedSerializer(PickleSerializer())):
         """
         Constructor
-        :param vertex_property: A tuple of the vertex properties, e.g.
-               vd=sc.parallelize([(3, ("rxin", "student")), (7, ("jgonzal", "postdoc"))])
-               vertices=VertexRDD(vd,("String", "String"))
         :param jrdd:
         :param jrdd_deserializer:
 
@@ -102,8 +99,6 @@ class VertexRDD(object):
         self._partitionFunc = None
         self._jrdd_val = None
         self._bypass_serializer = False
-        self._schema = VertexPropertySchema(vertex_property)
-        self._jrdd_val = self.toVertexRDD(self._jrdd, self._ctx, self._jrdd_deserializer, self._schema)
 
 
     # TODO: Does not work
@@ -119,16 +114,12 @@ class VertexRDD(object):
     def count(self):
         return self._jrdd.count()
 
-    # def collect(self):
-    #     return self._jrdd.collect()
-
     def collect(self):
-        print "in collect() of vertex.py"
         """
         Return a list that contains all of the elements in this RDD.
         """
-        # with SCCallSiteSync(self._ctx) as css:
-        bytesInJava = self._jrdd.collect().iterator()
+        with SCCallSiteSync(self._ctx) as css:
+            bytesInJava = self._jrdd.collect().iterator()
         return list(self._collect_iterator_through_file(bytesInJava))
 
     def _collect_iterator_through_file(self, iterator):
@@ -226,14 +217,6 @@ class VertexRDD(object):
         if vals:
             return reduce(f, vals)
         raise ValueError("Can not reduce() empty RDD")
-
-    def toVertexRDD(self, jrdd, ctx, jrdd_deserializer, schema):
-
-        sc = jrdd.context
-        python_rdd = sc._jvm.PythonVertexRDD(bytearray(" ".join(x for x in schema.schema)))
-        print "in toVertexRDD"
-
-        return python_rdd.asJavaVertexRDD()
 
     def id(self):
         """
