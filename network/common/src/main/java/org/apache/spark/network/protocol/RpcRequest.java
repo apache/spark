@@ -44,21 +44,18 @@ public final class RpcRequest implements RequestMessage {
 
   @Override
   public int encodedLength() {
-    return 8 + 4 + message.length;
+    return 8 + Encoders.ByteArrays.encodedLength(message);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
-    buf.writeInt(message.length);
-    buf.writeBytes(message);
+    Encoders.ByteArrays.encode(buf, message);
   }
 
   public static RpcRequest decode(ByteBuf buf) {
     long requestId = buf.readLong();
-    int messageLen = buf.readInt();
-    byte[] message = new byte[messageLen];
-    buf.readBytes(message);
+    byte[] message = Encoders.ByteArrays.decode(buf);
     return new RpcRequest(requestId, message);
   }
 

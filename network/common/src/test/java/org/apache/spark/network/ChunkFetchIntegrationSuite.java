@@ -41,10 +41,13 @@ import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
+import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ChunkFetchIntegrationSuite {
@@ -59,6 +62,8 @@ public class ChunkFetchIntegrationSuite {
 
   static ManagedBuffer bufferChunk;
   static ManagedBuffer fileChunk;
+
+  private TransportConf transportConf;
 
   @BeforeClass
   public static void setUp() throws Exception {
@@ -77,9 +82,10 @@ public class ChunkFetchIntegrationSuite {
     new Random().nextBytes(fileContent);
     fp.write(fileContent);
     fp.close();
-    fileChunk = new FileSegmentManagedBuffer(testFile, 10, testFile.length() - 25);
 
-    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    final TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    fileChunk = new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
+
     streamManager = new StreamManager() {
       @Override
       public ManagedBuffer getChunk(long streamId, int chunkIndex) {
@@ -87,13 +93,24 @@ public class ChunkFetchIntegrationSuite {
         if (chunkIndex == BUFFER_CHUNK_INDEX) {
           return new NioManagedBuffer(buf);
         } else if (chunkIndex == FILE_CHUNK_INDEX) {
-          return new FileSegmentManagedBuffer(testFile, 10, testFile.length() - 25);
+          return new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
         } else {
           throw new IllegalArgumentException("Invalid chunk index: " + chunkIndex);
         }
       }
     };
-    TransportContext context = new TransportContext(conf, streamManager, new NoOpRpcHandler());
+    RpcHandler handler = new RpcHandler() {
+      @Override
+      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public StreamManager getStreamManager() {
+        return streamManager;
+      }
+    };
+    TransportContext context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }

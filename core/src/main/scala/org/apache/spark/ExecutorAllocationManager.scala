@@ -28,7 +28,9 @@ import org.apache.spark.scheduler._
  * the scheduler queue is not drained in N seconds, then new executors are added. If the queue
  * persists for another M seconds, then more executors are added and so on. The number added
  * in each round increases exponentially from the previous round until an upper bound on the
- * number of executors has been reached.
+ * number of executors has been reached. The upper bound is based both on a configured property
+ * and on the number of tasks pending: the policy will never increase the number of executor
+ * requests past the number needed to handle all pending tasks.
  *
  * The rationale for the exponential increase is twofold: (1) Executors should be added slowly
  * in the beginning in case the number of extra executors needed turns out to be small. Otherwise,
@@ -66,7 +68,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Lower and upper bounds on the number of executors. These are required.
   private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
   private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", -1)
-  verifyBounds()
 
   // How long there must be backlogged tasks for before an addition is triggered
   private val schedulerBacklogTimeout = conf.getLong(
@@ -77,8 +78,19 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", schedulerBacklogTimeout)
 
   // How long an executor must be idle for before it is removed
-  private val removeThresholdSeconds = conf.getLong(
+  private val executorIdleTimeout = conf.getLong(
     "spark.dynamicAllocation.executorIdleTimeout", 600)
+
+  // During testing, the methods to actually kill and add executors are mocked out
+  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
+
+  // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
+  // allocation is only supported for YARN and the default number of cores per executor in YARN is
+  // 1, but it might need to be attained differently for different cluster managers
+  private val tasksPerExecutor =
+    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+
+  validateSettings()
 
   // Number of executors to add in the next round
   private var numExecutorsToAdd = 1
@@ -103,17 +115,17 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   // Polling loop interval (ms)
   private val intervalMillis: Long = 100
 
-  // Whether we are testing this class. This should only be used internally.
-  private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
-
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new RealClock
 
+  // Listener for Spark events that impact the allocation policy
+  private val listener = new ExecutorAllocationListener(this)
+
   /**
-   * Verify that the lower and upper bounds on the number of executors are valid.
+   * Verify that the settings specified through the config are valid.
    * If not, throw an appropriate exception.
    */
-  private def verifyBounds(): Unit = {
+  private def validateSettings(): Unit = {
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException("spark.dynamicAllocation.{min/max}Executors must be set!")
     }
@@ -123,6 +135,25 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     if (minNumExecutors > maxNumExecutors) {
       throw new SparkException(s"spark.dynamicAllocation.minExecutors ($minNumExecutors) must " +
         s"be less than or equal to spark.dynamicAllocation.maxExecutors ($maxNumExecutors)!")
+    }
+    if (schedulerBacklogTimeout <= 0) {
+      throw new SparkException("spark.dynamicAllocation.schedulerBacklogTimeout must be > 0!")
+    }
+    if (sustainedSchedulerBacklogTimeout <= 0) {
+      throw new SparkException(
+        "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
+    }
+    if (executorIdleTimeout <= 0) {
+      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
+    }
+    // Require external shuffle service for dynamic allocation
+    // Otherwise, we may lose shuffle files when killing executors
+    if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
+      throw new SparkException("Dynamic allocation of executors requires the external " +
+        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
+    }
+    if (tasksPerExecutor == 0) {
+      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.cores")
     }
   }
 
@@ -137,7 +168,6 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * Register for scheduler callbacks to decide when to add and remove executors.
    */
   def start(): Unit = {
-    val listener = new ExecutorAllocationListener(this)
     sc.addSparkListener(listener)
     startPolling()
   }
@@ -201,13 +231,27 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
       return 0
     }
 
-    // Request executors with respect to the upper bound
-    val actualNumExecutorsToAdd =
-      if (numExistingExecutors + numExecutorsToAdd <= maxNumExecutors) {
-        numExecutorsToAdd
-      } else {
-        maxNumExecutors - numExistingExecutors
-      }
+    // The number of executors needed to satisfy all pending tasks is the number of tasks pending
+    // divided by the number of tasks each executor can fit, rounded up.
+    val maxNumExecutorsPending =
+      (listener.totalPendingTasks() + tasksPerExecutor - 1) / tasksPerExecutor
+    if (numExecutorsPending >= maxNumExecutorsPending) {
+      logDebug(s"Not adding executors because there are already $numExecutorsPending " +
+        s"pending and pending tasks could only fill $maxNumExecutorsPending")
+      numExecutorsToAdd = 1
+      return 0
+    }
+
+    // It's never useful to request more executors than could satisfy all the pending tasks, so
+    // cap request at that amount.
+    // Also cap request with respect to the configured upper bound.
+    val maxNumExecutorsToAdd = math.min(
+      maxNumExecutorsPending - numExecutorsPending,
+      maxNumExecutors - numExistingExecutors)
+    assert(maxNumExecutorsToAdd > 0)
+
+    val actualNumExecutorsToAdd = math.min(numExecutorsToAdd, maxNumExecutorsToAdd)
+
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
     val addRequestAcknowledged = testing || sc.requestExecutors(actualNumExecutorsToAdd)
     if (addRequestAcknowledged) {
@@ -254,7 +298,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     val removeRequestAcknowledged = testing || sc.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
-        s"$removeThresholdSeconds seconds (new desired total will be ${numExistingExecutors - 1})")
+        s"$executorIdleTimeout seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
       true
     } else {
@@ -329,8 +373,8 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
   private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
       logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-        s"scheduled to run on the executor (to expire in $removeThresholdSeconds seconds)")
-      removeTimes(executorId) = clock.getTimeMillis + removeThresholdSeconds * 1000
+        s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
+      removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
     }
   }
 
@@ -427,6 +471,16 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     override def onBlockManagerRemoved(
         blockManagerRemoved: SparkListenerBlockManagerRemoved): Unit = {
       allocationManager.onExecutorRemoved(blockManagerRemoved.blockManagerId.executorId)
+    }
+
+    /**
+     * An estimate of the total number of pending tasks remaining for currently running stages. Does
+     * not account for tasks which may have failed and been resubmitted.
+     */
+    def totalPendingTasks(): Int = {
+      stageIdToNumTasks.map { case (stageId, numTasks) =>
+        numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
+      }.sum
     }
   }
 

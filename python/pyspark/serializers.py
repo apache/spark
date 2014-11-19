@@ -33,9 +33,8 @@ The serializer is chosen when creating L{SparkContext}:
 [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
 >>> sc.stop()
 
-By default, PySpark serialize objects in batches; the batch size can be
-controlled through SparkContext's C{batchSize} parameter
-(the default size is 1024 objects):
+PySpark serialize objects in batches; By default, the batch size is chosen based
+on the size of objects, also configurable by SparkContext's C{batchSize} parameter:
 
 >>> sc = SparkContext('local', 'test', batchSize=2)
 >>> rdd = sc.parallelize(range(16), 4).map(lambda x: x)
@@ -48,16 +47,6 @@ which contains two batches of two objects:
 >>> rdd._jrdd.count()
 8L
 >>> sc.stop()
-
-A batch size of -1 uses an unlimited batch size, and a size of 1 disables
-batching:
-
->>> sc = SparkContext('local', 'test', batchSize=1)
->>> rdd = sc.parallelize(range(16), 4).map(lambda x: x)
->>> rdd.glom().collect()
-[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
->>> rdd._jrdd.count()
-16L
 """
 
 import cPickle
@@ -73,7 +62,7 @@ import itertools
 from pyspark import cloudpickle
 
 
-__all__ = ["PickleSerializer", "MarshalSerializer"]
+__all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
 
 
 class SpecialLengths(object):
@@ -113,7 +102,7 @@ class Serializer(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return "<%s object>" % self.__class__.__name__
+        return "%s()" % self.__class__.__name__
 
     def __hash__(self):
         return hash(str(self))
@@ -144,6 +133,8 @@ class FramedSerializer(Serializer):
 
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
+        if len(serialized) > (1 << 31):
+            raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
         if self._only_write_strings:
             stream.write(str(serialized))
@@ -181,6 +172,7 @@ class BatchedSerializer(Serializer):
     """
 
     UNLIMITED_BATCH_SIZE = -1
+    UNKNOWN_BATCH_SIZE = 0
 
     def __init__(self, serializer, batchSize=UNLIMITED_BATCH_SIZE):
         self.serializer = serializer
@@ -213,10 +205,10 @@ class BatchedSerializer(Serializer):
 
     def __eq__(self, other):
         return (isinstance(other, BatchedSerializer) and
-                other.serializer == self.serializer)
+                other.serializer == self.serializer and other.batchSize == self.batchSize)
 
     def __repr__(self):
-        return "BatchedSerializer<%s>" % str(self.serializer)
+        return "BatchedSerializer(%s, %d)" % (str(self.serializer), self.batchSize)
 
 
 class AutoBatchedSerializer(BatchedSerializer):
@@ -225,7 +217,7 @@ class AutoBatchedSerializer(BatchedSerializer):
     """
 
     def __init__(self, serializer, bestSize=1 << 16):
-        BatchedSerializer.__init__(self, serializer, -1)
+        BatchedSerializer.__init__(self, serializer, self.UNKNOWN_BATCH_SIZE)
         self.bestSize = bestSize
 
     def dump_stream(self, iterator, stream):
@@ -248,10 +240,10 @@ class AutoBatchedSerializer(BatchedSerializer):
 
     def __eq__(self, other):
         return (isinstance(other, AutoBatchedSerializer) and
-                other.serializer == self.serializer)
+                other.serializer == self.serializer and other.bestSize == self.bestSize)
 
     def __str__(self):
-        return "AutoBatchedSerializer<%s>" % str(self.serializer)
+        return "AutoBatchedSerializer(%s)" % str(self.serializer)
 
 
 class CartesianDeserializer(FramedSerializer):
@@ -284,7 +276,7 @@ class CartesianDeserializer(FramedSerializer):
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __repr__(self):
-        return "CartesianDeserializer<%s, %s>" % \
+        return "CartesianDeserializer(%s, %s)" % \
                (str(self.key_ser), str(self.val_ser))
 
 
@@ -311,7 +303,7 @@ class PairDeserializer(CartesianDeserializer):
                 self.key_ser == other.key_ser and self.val_ser == other.val_ser)
 
     def __repr__(self):
-        return "PairDeserializer<%s, %s>" % (str(self.key_ser), str(self.val_ser))
+        return "PairDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
 
 
 class NoOpSerializer(FramedSerializer):
@@ -430,7 +422,7 @@ class MarshalSerializer(FramedSerializer):
 class AutoSerializer(FramedSerializer):
 
     """
-    Choose marshal or cPickle as serialization protocol autumatically
+    Choose marshal or cPickle as serialization protocol automatically
     """
 
     def __init__(self):
@@ -456,20 +448,184 @@ class AutoSerializer(FramedSerializer):
             raise ValueError("invalid sevialization type: %s" % _type)
 
 
-class CompressedSerializer(FramedSerializer):
+class SizeLimitedStream(object):
+    """
+    Read at most `limit` bytes from underlying stream
+
+    >>> from StringIO import StringIO
+    >>> io = StringIO()
+    >>> io.write("Hello world")
+    >>> io.seek(0)
+    >>> lio = SizeLimitedStream(io, 5)
+    >>> lio.read()
+    'Hello'
+    """
+    def __init__(self, stream, limit):
+        self.stream = stream
+        self.limit = limit
+
+    def read(self, n=0):
+        if n > self.limit or n == 0:
+            n = self.limit
+        buf = self.stream.read(n)
+        self.limit -= len(buf)
+        return buf
+
+
+class CompressedStream(object):
+    """
+    Compress the data using zlib
+
+    >>> from StringIO import StringIO
+    >>> io = StringIO()
+    >>> wio = CompressedStream(io, 'w')
+    >>> wio.write("Hello world")
+    >>> wio.flush()
+    >>> io.seek(0)
+    >>> rio = CompressedStream(io, 'r')
+    >>> rio.read()
+    'Hello world'
+    >>> rio.read()
+    ''
+    """
+    MAX_BATCH = 1 << 20  # 1MB
+
+    def __init__(self, stream, mode='w', level=1):
+        self.stream = stream
+        self.mode = mode
+        if mode == 'w':
+            self.compresser = zlib.compressobj(level)
+        elif mode == 'r':
+            self.decompresser = zlib.decompressobj()
+            self.buf = ''
+        else:
+            raise ValueError("can only support mode 'w' or 'r' ")
+
+    def write(self, buf):
+        assert self.mode == 'w', "It's not opened for write"
+        if len(buf) > self.MAX_BATCH:
+            # zlib can not compress string larger than 2G
+            batches = len(buf) / self.MAX_BATCH + 1  # last one may be empty
+            for i in xrange(batches):
+                self.write(buf[i * self.MAX_BATCH:(i + 1) * self.MAX_BATCH])
+        else:
+            compressed = self.compresser.compress(buf)
+            self.stream.write(compressed)
+
+    def flush(self, mode=zlib.Z_FULL_FLUSH):
+        if self.mode == 'w':
+            d = self.compresser.flush(mode)
+            self.stream.write(d)
+            self.stream.flush()
+
+    def close(self):
+        if self.mode == 'w':
+            self.flush(zlib.Z_FINISH)
+            self.stream.close()
+
+    def read(self, size=0):
+        assert self.mode == 'r', "It's not opened for read"
+        if not size:
+            data = self.stream.read()
+            result = self.decompresser.decompress(data)
+            last = self.decompresser.flush()
+            return self.buf + result + last
+
+        # fast path for small read()
+        if size <= len(self.buf):
+            result = self.buf[:size]
+            self.buf = self.buf[size:]
+            return result
+
+        result = [self.buf]
+        size -= len(self.buf)
+        self.buf = ''
+        while size:
+            need = min(size, self.MAX_BATCH)
+            input = self.stream.read(need)
+            if input:
+                buf = self.decompresser.decompress(input)
+            else:
+                buf = self.decompresser.flush()
+
+            if len(buf) >= size:
+                self.buf = buf[size:]
+                result.append(buf[:size])
+                return ''.join(result)
+
+            size -= len(buf)
+            result.append(buf)
+            if not input:
+                return ''.join(result)
+
+    def readline(self):
+        """
+        This is needed for pickle, but not used in protocol 2
+        """
+        line = []
+        b = self.read(1)
+        while b and b != '\n':
+            line.append(b)
+            b = self.read(1)
+        line.append(b)
+        return ''.join(line)
+
+
+class LargeObjectSerializer(Serializer):
+    """
+    Serialize large object which could be larger than 2G
+
+    It uses cPickle to serialize the objects
+    """
+    def dump_stream(self, iterator, stream):
+        stream = CompressedStream(stream, 'w')
+        for value in iterator:
+            if isinstance(value, basestring):
+                if isinstance(value, unicode):
+                    stream.write('U')
+                    value = value.encode("utf-8")
+                else:
+                    stream.write('S')
+                write_long(len(value), stream)
+                stream.write(value)
+            else:
+                stream.write('P')
+                cPickle.dump(value, stream, 2)
+        stream.flush()
+
+    def load_stream(self, stream):
+        stream = CompressedStream(stream, 'r')
+        while True:
+            type = stream.read(1)
+            if not type:
+                return
+            if type in ('S', 'U'):
+                length = read_long(stream)
+                value = stream.read(length)
+                if type == 'U':
+                    value = value.decode('utf-8')
+                yield value
+            elif type == 'P':
+                yield cPickle.load(stream)
+            else:
+                raise ValueError("unknown type: %s" % type)
+
+
+class CompressedSerializer(Serializer):
     """
     Compress the serialized data
     """
-
     def __init__(self, serializer):
-        FramedSerializer.__init__(self)
         self.serializer = serializer
 
-    def dumps(self, obj):
-        return zlib.compress(self.serializer.dumps(obj), 1)
+    def load_stream(self, stream):
+        stream = CompressedStream(stream, "r")
+        return self.serializer.load_stream(stream)
 
-    def loads(self, obj):
-        return self.serializer.loads(zlib.decompress(obj))
+    def dump_stream(self, iterator, stream):
+        stream = CompressedStream(stream, "w")
+        self.serializer.dump_stream(iterator, stream)
+        stream.flush()
 
 
 class UTF8Deserializer(Serializer):
@@ -527,3 +683,8 @@ def write_int(value, stream):
 def write_with_length(obj, stream):
     write_int(len(obj), stream)
     stream.write(obj)
+
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()

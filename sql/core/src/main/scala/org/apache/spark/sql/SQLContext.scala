@@ -32,10 +32,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{Optimizer, DefaultOptimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.catalyst.types.UserDefinedType
 import org.apache.spark.sql.execution.{SparkStrategies, _}
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources.{DataSourceStrategy, BaseRelation, DDLParser, LogicalRelation}
 
 /**
  * :: AlphaComponent ::
@@ -70,12 +71,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
 
   @transient
+  protected[sql] val ddlParser = new DDLParser
+
+  @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
     new catalyst.SparkSQLParser(fallback(_))
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = {
+    ddlParser(sql).getOrElse(sqlParser(sql))
+  }
+
   protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
@@ -101,8 +108,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
     SparkPlan.currentContext.set(self)
-    new SchemaRDD(this,
-      LogicalRDD(ScalaReflection.attributesFor[A], RDDConversions.productToRowRdd(rdd))(self))
+    val attributeSeq = ScalaReflection.attributesFor[A]
+    val schema = StructType.fromAttributes(attributeSeq)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    new SchemaRDD(this, LogicalRDD(attributeSeq, rowRDD)(self))
+  }
+
+  implicit def baseRelationToSchemaRDD(baseRelation: BaseRelation): SchemaRDD = {
+    logicalPlanToSparkQuery(LogicalRelation(baseRelation))
   }
 
   /**
@@ -267,6 +280,19 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Drops the temporary table with the given table name in the catalog. If the table has been
+   * cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the name of the table to be unregistered.
+   *
+   * @group userf
+   */
+  def dropTempTable(tableName: String): Unit = {
+    tryUncacheQuery(table(tableName))
+    catalog.unregisterTable(None, tableName)
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
@@ -284,6 +310,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def table(tableName: String): SchemaRDD =
     new SchemaRDD(this, catalog.lookupRelation(None, tableName))
 
+  /**
+   * :: DeveloperApi ::
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @DeveloperApi
+  var extraStrategies: Seq[Strategy] = Nil
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
 
@@ -294,7 +328,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
+      extraStrategies ++ (
       CommandStrategy(self) ::
+      DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
       LeftSemiJoin ::
@@ -303,7 +339,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil
+      BroadcastNestedLoopJoin :: Nil)
 
     /**
      * Used to build table scan operators where complex projection and filtering are done using
@@ -408,7 +444,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
-         |Code Generation: ${executedPlan.codegenEnabled}
+         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
          |== RDD ==
       """.stripMargin.trim
   }
@@ -448,6 +484,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case ArrayType(_, _) => true
       case MapType(_, _, _) => true
       case StructType(_) => true
+      case udt: UserDefinedType[_] => needsConversion(udt.sqlType)
       case other => false
     }
 

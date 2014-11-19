@@ -107,7 +107,7 @@ private[spark] class HashShuffleWriter[K, V](
       writer.commitAndClose()
       writer.fileSegment().length
     }
-    MapStatus(blockManager.blockManagerId, sizes)
+    MapStatus(blockManager.shuffleServerId, sizes)
   }
 
   private def revertWrites(): Unit = {

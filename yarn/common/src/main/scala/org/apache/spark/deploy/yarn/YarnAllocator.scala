@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.util.{List => JList}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.regex.Pattern
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -62,6 +63,8 @@ private[yarn] abstract class YarnAllocator(
     preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
     securityMgr: SecurityManager)
   extends Logging {
+
+  import YarnAllocator._
 
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
   // allocatedHostToContainersMap : containers which are running : host, Set<containerid>
@@ -375,12 +378,22 @@ private[yarn] abstract class YarnAllocator(
           logInfo("Completed container %s (state: %s, exit status: %s)".format(
             containerId,
             completedContainer.getState,
-            completedContainer.getExitStatus()))
+            completedContainer.getExitStatus))
           // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
           // there are some exit status' we shouldn't necessarily count against us, but for
           // now I think its ok as none of the containers are expected to exit
-          if (completedContainer.getExitStatus() != 0) {
-            logInfo("Container marked as failed: " + containerId)
+          if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
+            logWarning(memLimitExceededLogMessage(
+              completedContainer.getDiagnostics,
+              VMEM_EXCEEDED_PATTERN))
+          } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
+            logWarning(memLimitExceededLogMessage(
+              completedContainer.getDiagnostics,
+              PMEM_EXCEEDED_PATTERN))
+          } else if (completedContainer.getExitStatus != 0) {
+            logInfo("Container marked as failed: " + containerId +
+              ". Exit status: " + completedContainer.getExitStatus +
+              ". Diagnostics: " + completedContainer.getDiagnostics)
             numExecutorsFailed.incrementAndGet()
           }
         }
@@ -507,4 +520,19 @@ private[yarn] abstract class YarnAllocator(
 
   }
 
+}
+
+private object YarnAllocator {
+  val MEM_REGEX = "[0-9.]+ [KMG]B"
+  val PMEM_EXCEEDED_PATTERN =
+    Pattern.compile(s"$MEM_REGEX of $MEM_REGEX physical memory used")
+  val VMEM_EXCEEDED_PATTERN =
+    Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
+
+  def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
+    val matcher = pattern.matcher(diagnostics)
+    val diag = if (matcher.find()) " " + matcher.group() + "." else ""
+    ("Container killed by YARN for exceeding memory limits." + diag
+      + " Consider boosting spark.yarn.executor.memoryOverhead.")
+  }
 }
