@@ -280,14 +280,14 @@ case class Concat(left: Expression, right: Expression) extends BinaryExpression 
 
   type EvaluatedType = Any
 
-  def nullable: Boolean = left.nullable
+  def nullable: Boolean = left.nullable || right.nullable
   override def dataType: DataType = StringType
 
   override def eval(input: Row): Any = {
     val leftEvaled = left.eval(input)
     val rightEvaled = right.eval(input)
 
-    if (leftEvaled == null) {
+    if (leftEvaled == null || rightEvaled == null) {
       null
     } else {
       val leftStr = leftEvaled.toString

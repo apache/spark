@@ -157,6 +157,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)
+            println("referencestart")
+            result.foreach(println)
+            println("refereneend")
             logDebug(s"Resolving $u to $result")
             result
         }
@@ -175,13 +178,15 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
         val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
-
+        println("requiredstart")
+        requiredAttributes.foreach(println)
+        println("requiredend")
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
           Project(projectList,
             Sort(ordering,
-              Project(projectList ++ missingInProject, child)))
+              Project(projectList ++ missingInProject ++ child.inputSet, child)))
         } else {
           logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
