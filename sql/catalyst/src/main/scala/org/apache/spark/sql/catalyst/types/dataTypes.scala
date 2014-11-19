@@ -171,6 +171,27 @@ object DataType {
       case _ =>
     }
   }
+
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
+   */
+  def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+    (left, right) match {
+      case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
+        equalsIgnoreNullability(leftElementType, rightElementType)
+      case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
+        equalsIgnoreNullability(leftKeyType, rightKeyType) &&
+        equalsIgnoreNullability(leftValueType, rightValueType)
+      case (StructType(leftFields), StructType(rightFields)) =>
+        leftFields.size == rightFields.size &&
+        leftFields.zip(rightFields)
+          .forall{
+            case (left, right) =>
+              left.name == right.name && equalsIgnoreNullability(left.dataType, right.dataType)
+          }
+      case (left, right) => left == right
+    }
+  }
 }
 
 abstract class DataType {

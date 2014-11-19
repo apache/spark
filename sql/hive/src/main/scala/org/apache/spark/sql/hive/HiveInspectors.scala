@@ -86,12 +86,41 @@ private[hive] trait HiveInspectors {
    * @param data the data in Hive type
    * @param oi   the ObjectInspector associated with the Hive Type
    * @return     convert the data into catalyst type
+   * TODO return the function of (data => Any) instead for performance consideration
    */
   def unwrap(data: Any, oi: ObjectInspector): Any = oi match {
-    case hvoi: HiveVarcharObjectInspector =>
-      if (data == null) null else hvoi.getPrimitiveJavaObject(data).getValue
-    case hdoi: HiveDecimalObjectInspector =>
-      if (data == null) null else HiveShim.toCatalystDecimal(hdoi, data)
+    case _ if data == null => null
+    case poi: VoidObjectInspector => null
+    case poi: WritableConstantHiveVarcharObjectInspector =>
+      poi.getWritableConstantValue.getHiveVarchar.getValue
+    case poi: WritableConstantHiveDecimalObjectInspector =>
+      HiveShim.toCatalystDecimal(
+        PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
+        poi.getWritableConstantValue.getHiveDecimal)
+    case poi: WritableConstantTimestampObjectInspector =>
+      poi.getWritableConstantValue.getTimestamp.clone()
+    case poi: WritableConstantIntObjectInspector => 
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantDoubleObjectInspector => 
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantBooleanObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantLongObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantFloatObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantShortObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantByteObjectInspector =>
+      poi.getWritableConstantValue.get()
+    case poi: WritableConstantBinaryObjectInspector =>
+      val writable = poi.getWritableConstantValue
+      val temp = new Array[Byte](writable.getLength)
+      System.arraycopy(writable.getBytes, 0, temp, 0, temp.length)
+      temp
+    case poi: WritableConstantDateObjectInspector => poi.getWritableConstantValue.get()
+    case hvoi: HiveVarcharObjectInspector => hvoi.getPrimitiveJavaObject(data).getValue
+    case hdoi: HiveDecimalObjectInspector => HiveShim.toCatalystDecimal(hdoi, data)
     // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
     // if next timestamp is null, so Timestamp object is cloned
     case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
@@ -250,46 +279,53 @@ private[hive] trait HiveInspectors {
   }
 
   def toInspector(expr: Expression): ObjectInspector = expr match {
-    case Literal(value: String, StringType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Int, IntegerType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Double, DoubleType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Boolean, BooleanType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Long, LongType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Float, FloatType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Short, ShortType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Byte, ByteType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Array[Byte], BinaryType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: java.sql.Date, DateType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: java.sql.Timestamp, TimestampType) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: BigDecimal, DecimalType()) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value)
-    case Literal(value: Decimal, DecimalType()) =>
-      HiveShim.getPrimitiveWritableConstantObjectInspector(value.toBigDecimal)
+    case Literal(value, StringType) =>
+      HiveShim.getStringWritableConstantObjectInspector(value)
+    case Literal(value, IntegerType) =>
+      HiveShim.getIntWritableConstantObjectInspector(value)
+    case Literal(value, DoubleType) =>
+      HiveShim.getDoubleWritableConstantObjectInspector(value)
+    case Literal(value, BooleanType) =>
+      HiveShim.getBooleanWritableConstantObjectInspector(value)
+    case Literal(value, LongType) =>
+      HiveShim.getLongWritableConstantObjectInspector(value)
+    case Literal(value, FloatType) =>
+      HiveShim.getFloatWritableConstantObjectInspector(value)
+    case Literal(value, ShortType) =>
+      HiveShim.getShortWritableConstantObjectInspector(value)
+    case Literal(value, ByteType) =>
+      HiveShim.getByteWritableConstantObjectInspector(value)
+    case Literal(value, BinaryType) =>
+      HiveShim.getBinaryWritableConstantObjectInspector(value)
+    case Literal(value, DateType) =>
+      HiveShim.getDateWritableConstantObjectInspector(value)
+    case Literal(value, TimestampType) =>
+      HiveShim.getTimestampWritableConstantObjectInspector(value)
+    case Literal(value, DecimalType()) =>
+      HiveShim.getDecimalWritableConstantObjectInspector(value)
     case Literal(_, NullType) =>
       HiveShim.getPrimitiveNullWritableConstantObjectInspector
-    case Literal(value: Seq[_], ArrayType(dt, _)) =>
+    case Literal(value, ArrayType(dt, _)) =>
       val listObjectInspector = toInspector(dt)
-      val list = new java.util.ArrayList[Object]()
-      value.foreach(v => list.add(wrap(v, listObjectInspector)))
-      ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
-    case Literal(map: Map[_, _], MapType(keyType, valueType, _)) =>
-      val value = new java.util.HashMap[Object, Object]()
+      if (value == null) {
+        ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, null)
+      } else {
+        val list = new java.util.ArrayList[Object]()
+        value.asInstanceOf[Seq[_]].foreach(v => list.add(wrap(v, listObjectInspector)))
+        ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
+      }
+    case Literal(value, MapType(keyType, valueType, _)) =>
       val keyOI = toInspector(keyType)
       val valueOI = toInspector(valueType)
-      map.foreach (entry => value.put(wrap(entry._1, keyOI), wrap(entry._2, valueOI)))
-      ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, value)
-    case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
+      if (value == null) {
+        ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, null)
+      } else {
+        val map = new java.util.HashMap[Object, Object]()
+        value.asInstanceOf[Map[_, _]].foreach (entry => {
+          map.put(wrap(entry._1, keyOI), wrap(entry._2, valueOI))
+        })
+        ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, map)
+      }
     case _ => toInspector(expr.dataType)
   }
 
