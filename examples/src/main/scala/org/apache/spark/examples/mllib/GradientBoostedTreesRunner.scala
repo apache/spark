@@ -28,14 +28,14 @@ import org.apache.spark.util.Utils
 /**
  * An example runner for Gradient Boosting using decision trees as weak learners. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.GradientBoostedTrees [options]
+ * ./bin/run-example mllib.GradientBoostedTreesRunner [options]
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  *
  * Note: This script treats all features as real-valued (not categorical).
  *       To include categorical features, modify categoricalFeaturesInfo.
  */
-object GradientBoostedTrees {
+object GradientBoostedTreesRunner {
 
   case class Params(
       input: String = null,
@@ -93,10 +93,10 @@ object GradientBoostedTrees {
 
   def run(params: Params) {
 
-    val conf = new SparkConf().setAppName(s"GradientBoostedTrees with $params")
+    val conf = new SparkConf().setAppName(s"GradientBoostedTreesRunner with $params")
     val sc = new SparkContext(conf)
 
-    println(s"GradientBoostedTrees with parameters:\n$params")
+    println(s"GradientBoostedTreesRunner with parameters:\n$params")
 
     // Load training and test data and cache it.
     val (training, test, numClasses) = DecisionTreeRunner.loadDatasets(sc, params.input,
@@ -127,7 +127,7 @@ object GradientBoostedTrees {
       println(s"Test accuracy = $testAccuracy")
     } else if (params.algo == "Regression") {
       val startTime = System.nanoTime()
-      val model = GradientBoostedTrees.trainRegressor(training, boostingStrategy)
+      val model = GradientBoostedTrees.train(training, boostingStrategy)
       val elapsedTime = (System.nanoTime() - startTime) / 1e9
       println(s"Training time: $elapsedTime seconds")
       if (model.totalNumNodes < 30) {

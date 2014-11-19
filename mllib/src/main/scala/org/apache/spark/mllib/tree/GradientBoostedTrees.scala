@@ -47,15 +47,15 @@ import org.apache.spark.storage.StorageLevel
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */
 @Experimental
-class GradientBoostedTrees (
-    private val boostingStrategy: BoostingStrategy) extends Serializable with Logging {
+class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
+  extends Serializable with Logging {
 
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return WeightedEnsembleModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): TreeEnsembleModel = {
+  def run(input: RDD[LabeledPoint]): TreeEnsembleModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case Regression => GradientBoostedTrees.boost(input, boostingStrategy)
@@ -66,6 +66,13 @@ class GradientBoostedTrees (
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
+  }
+
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#run]].
+   */
+  def run(input: JavaRDD[LabeledPoint]): TreeEnsembleModel = {
+    run(input.rdd)
   }
 }
 
@@ -84,7 +91,7 @@ object GradientBoostedTrees extends Logging {
   def train(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): TreeEnsembleModel = {
-    new GradientBoostedTrees(boostingStrategy).train(input)
+    new GradientBoostedTrees(boostingStrategy).run(input)
   }
 
   /**
@@ -137,7 +144,7 @@ object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTreeModel = new DecisionTree(ensembleStrategy).train(data)
+    val firstTreeModel = new DecisionTree(ensembleStrategy).run(data)
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
     val startingModel = new TreeEnsembleModel(Array(firstTreeModel), Array(1.0), Regression, Sum)
@@ -155,7 +162,7 @@ object GradientBoostedTrees extends Logging {
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
-      val model = new DecisionTree(ensembleStrategy).train(data)
+      val model = new DecisionTree(ensembleStrategy).run(data)
       timer.stop(s"building tree $m")
       // Create partial model
       baseLearners(m) = model

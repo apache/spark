@@ -81,7 +81,7 @@ private class RandomForest (
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return WeightedEnsembleModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): TreeEnsembleModel = {
+  def run(input: RDD[LabeledPoint]): TreeEnsembleModel = {
 
     val timer = new TimeTracker()
 
@@ -245,7 +245,7 @@ object RandomForest extends Serializable with Logging {
     require(strategy.algo == Classification,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
-    rf.train(input)
+    rf.run(input)
   }
 
   /**
@@ -333,7 +333,7 @@ object RandomForest extends Serializable with Logging {
     require(strategy.algo == Regression,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
-    rf.train(input)
+    rf.run(input)
   }
 
   /**

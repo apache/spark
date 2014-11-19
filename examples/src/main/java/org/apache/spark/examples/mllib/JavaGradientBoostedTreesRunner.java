@@ -35,10 +35,10 @@ import org.apache.spark.mllib.util.MLUtils;
 /**
  * Classification and regression using gradient-boosted decision trees.
  */
-public final class JavaGradientBoostedTrees {
+public final class JavaGradientBoostedTreesRunner {
 
   private static void usage() {
-    System.err.println("Usage: JavaGradientBoostedTrees <libsvm format data file>" +
+    System.err.println("Usage: JavaGradientBoostedTreesRunner <libsvm format data file>" +
         " <Classification/Regression>");
     System.exit(-1);
   }
@@ -55,7 +55,7 @@ public final class JavaGradientBoostedTrees {
     if (args.length > 2) {
       usage();
     }
-    SparkConf sparkConf = new SparkConf().setAppName("JavaGradientBoostedTrees");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaGradientBoostedTreesRunner");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
@@ -73,10 +73,10 @@ public final class JavaGradientBoostedTrees {
           return p.label();
         }
       }).countByValue().size();
-      boostingStrategy.setNumClassesForClassification(numClasses); // ignored for Regression
+      boostingStrategy.treeStrategy().setNumClassesForClassification(numClasses);
 
       // Train a GradientBoosting model for classification.
-      final TreeEnsembleModel model = GradientBoostedTrees.trainClassifier(data, boostingStrategy);
+      final TreeEnsembleModel model = GradientBoostedTrees.train(data, boostingStrategy);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
@@ -95,7 +95,7 @@ public final class JavaGradientBoostedTrees {
       System.out.println("Learned classification tree model:\n" + model);
     } else if (algo.equals("Regression")) {
       // Train a GradientBoosting model for classification.
-      final TreeEnsembleModel model = GradientBoostedTrees.trainRegressor(data, boostingStrategy);
+      final TreeEnsembleModel model = GradientBoostedTrees.train(data, boostingStrategy);
 
       // Evaluate model on training instances and compute training error
       JavaPairRDD<Double, Double> predictionAndLabel =
