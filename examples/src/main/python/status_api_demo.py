@@ -19,7 +19,7 @@ import time
 import threading
 import Queue
 
-from pyspark import SparkContext
+from pyspark import SparkConf, SparkContext
 
 
 def delayed(seconds):
@@ -38,26 +38,26 @@ def call_in_background(f, *args):
 
 
 def main():
-    sc = SparkContext(appName="PythonStatusAPIDemo")
+    conf = SparkConf().set("spark.ui.showConsoleProgress", "false")
+    sc = SparkContext(appName="PythonStatusAPIDemo", conf=conf)
 
     def run():
-        sc.setJobGroup("demo", "demo status api")
         rdd = sc.parallelize(range(10), 10).map(delayed(2))
         reduced = rdd.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
         return reduced.map(delayed(2)).collect()
 
     result = call_in_background(run)
-
+    status = sc.statusTracker()
     while result.empty():
-        ids = sc.getJobIdsForGroup("demo")
+        ids = status.getJobIdsForGroup()
         for id in ids:
-            job = sc.getJobInfo(id)
-            print "Job", id, "status: ", job.status()
-            for sid in job.stageIds():
-                info = sc.getStageInfo(sid)
+            job = status.getJobInfo(id)
+            print "Job", id, "status: ", job.status
+            for sid in job.stageIds:
+                info = status.getStageInfo(sid)
                 if info:
                     print "Stage %d: %d tasks total (%d active, %d complete)" % \
-                          (sid, info.numTasks(), info.numActiveTasks(), info.numCompletedTasks())
+                          (sid, info.numTasks, info.numActiveTasks, info.numCompletedTasks)
         time.sleep(1)
 
     print "Job results are:", result.get()
