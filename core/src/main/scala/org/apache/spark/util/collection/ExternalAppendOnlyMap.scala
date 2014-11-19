@@ -174,8 +174,9 @@ class ExternalAppendOnlyMap[K, V, C](
   private def spill(mapSize: Long): Unit = {
     spillCount += 1
     val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
-      .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+    logInfo("Thread %d spilling in-memory batch of %s to disk (%d times%s so far)"
+      .format(threadId, org.apache.spark.util.Utils.bytesToString(mapSize),
+        spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize,
