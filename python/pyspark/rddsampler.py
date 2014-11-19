@@ -70,7 +70,7 @@ class RDDSampler(RDDSamplerBase):
                     yield obj
         else:
             for obj in iterator:
-                if self.getUniformSample() <= self._fraction:
+                if self.getUniformSample() < self._fraction:
                     yield obj
 
 
@@ -106,5 +106,5 @@ class RDDStratifiedSampler(RDDSamplerBase):
                     yield key, val
         else:
             for key, val in iterator:
-                if self.getUniformSample() <= self._fractions[key]:
+                if self.getUniformSample() < self._fractions[key]:
                     yield key, val
