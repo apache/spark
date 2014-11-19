@@ -41,6 +41,12 @@ object MimaExcludes {
             // the maven-generated artifacts in the 1.2 build.
             MimaBuild.excludeSparkPackage("unused"),
             ProblemFilters.exclude[MissingClassProblem]("com.google.common.base.Optional")
+          ) ++ Seq(
+            // SPARK-2321
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkStageInfoImpl.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkStageInfo.submissionTime")
           )
 
         case v if v.startsWith("1.2") =>
