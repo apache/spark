@@ -41,7 +41,7 @@ private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
     twitterAuth: Option[Authorization],
-    filters: Seq[String],
+    query: Option[FilterQuery],
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
 
@@ -52,14 +52,14 @@ class TwitterInputDStream(
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
 
   override def getReceiver(): Receiver[Status] = {
-    new TwitterReceiver(authorization, filters, storageLevel)
+    new TwitterReceiver(authorization, query, storageLevel)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
     twitterAuth: Authorization,
-    filters: Seq[String],
+    query: Option[FilterQuery],
     storageLevel: StorageLevel
   ) extends Receiver[Status](storageLevel) with Logging {
 
@@ -85,13 +85,11 @@ class TwitterReceiver(
         }
       })
 
-      val query = new FilterQuery
-      if (filters.size > 0) {
-        query.track(filters.toArray)
-        newTwitterStream.filter(query)
-      } else {
-        newTwitterStream.sample()
+      query match {
+        case Some(q) => newTwitterStream.filter(q)
+        case None => newTwitterStream.sample()
       }
+
       setTwitterStream(newTwitterStream)
       logInfo("Twitter receiver started")
       stopped = false
