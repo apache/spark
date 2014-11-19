@@ -29,9 +29,10 @@ import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
+import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite {
+class UtilsSuite extends FunSuite with Logging {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
@@ -205,18 +206,18 @@ class UtilsSuite extends FunSuite {
     child1.setLastModified(System.currentTimeMillis() - (1000 * 30))
 
     // although child1 is old, child2 is still new so return true
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child2.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     parent.setLastModified(System.currentTimeMillis - (1000 * 30))
     // although parent and its immediate children are new, child3 is still old
     // we expect a full recursive search for new files.
-    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(Utils.doesDirectoryContainAnyNewFiles(parent, 5))
 
     child3.setLastModified(System.currentTimeMillis - (1000 * 30))
-    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5)) 
+    assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
   }
 
   test("resolveURI") {
@@ -327,6 +328,15 @@ class UtilsSuite extends FunSuite {
       Option(server1).foreach(_.close())
       Option(server2).foreach(_.close())
     }
+  }
+
+  // Test for using the util function to change our log levels.
+  test("log4j log level change") {
+    Utils.setLoggingLevel(org.apache.log4j.Level.ALL)
+    assert(log.isInfoEnabled())
+    Utils.setLoggingLevel(org.apache.log4j.Level.ERROR)
+    assert(!log.isInfoEnabled())
+    assert(log.isErrorEnabled())
   }
 
   test("deleteRecursively") {

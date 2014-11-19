@@ -269,6 +269,12 @@ class SparkContext(config: SparkConf) extends Logging {
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
 
+  /** Control our logLevel. This overrides any user-defined log settings.
+   * @param logLevel The desired log level as a string.
+   */
+  def setLoggingLevel(logLevel: String) = {
+    Utils.setLoggingLevel(org.apache.log4j.Level.toLevel(logLevel))
+  }
   val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
