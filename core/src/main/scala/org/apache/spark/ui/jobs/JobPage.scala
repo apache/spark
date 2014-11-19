@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.collection.mutable
 import scala.xml.{NodeSeq, Node}
 
 import javax.servlet.http.HttpServletRequest
@@ -49,15 +50,32 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, "Unknown"))
       }
 
-      val (completedOrFailedStages, activeStages) =
-        stages.sortBy(_.stageId).reverse.partition(_.completionTime.isDefined)
-      val (failedStages, completedStages) =
-        completedOrFailedStages.partition(_.failureReason.isDefined)
+      val pendingStages = mutable.Buffer[StageInfo]()
+      val activeStages = mutable.Buffer[StageInfo]()
+      val completedStages = mutable.Buffer[StageInfo]()
+      val failedStages = mutable.Buffer[StageInfo]()
+      for (stage <- stages) {
+        if (stage.submissionTime.isEmpty) {
+          pendingStages += stage
+        } else if (stage.completionTime.isDefined) {
+          if (stage.failureReason.isDefined) {
+            failedStages += stage
+          } else {
+            completedStages += stage
+          }
+        } else {
+          activeStages += stage
+        }
+      }
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
+      val pendingStagesTable =
+        new StageTableBase(pendingStages.sortBy(_.stageId).reverse,
+          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
           parent.listener, isFairScheduler = parent.isFairScheduler,
@@ -86,6 +104,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
               {activeStages.size}
             </li>
             <li>
+              <a href="#pending"><strong>Pending Stages:</strong></a>
+              {pendingStages.size}
+            </li>
+            <li>
               <a href="#completed"><strong>Completed Stages:</strong></a>
               {completedStages.size}
             </li>
@@ -99,6 +121,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val content = summary ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
+        <h4 id="pending">Pending Stages ({pendingStages.size})</h4> ++
+        pendingStagesTable.toNodeSeq ++
         <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
         completedStagesTable.toNodeSeq ++
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
