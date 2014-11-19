@@ -399,8 +399,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * the given function on the previous state of the key and the new values of each key.
    * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. Note, that this function may generate a different
-   *                   tuple with a different key than the input key. It is up to the developer
-   *                   to decide whether to remember the partitioner despite the key being changed.
+   *                   tuple with a different key than the input key. Therefore keys may be removed
+   *                   or added in this way. It is up to the developer to decide whether to
+   *                   remember the partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
@@ -441,8 +442,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * the given function on the previous state of the key and the new values of each key.
    * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. Note, that this function may generate a different
-   *                   tuple with a different key than the input key. It is up to the developer
-   *                   to decide whether to remember the partitioner despite the key being changed.
+   *                   tuple with a different key than the input key. Therefore keys may be removed
+   *                   or added in this way. It is up to the developer to decide whether to
+   *                   remember the  partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
