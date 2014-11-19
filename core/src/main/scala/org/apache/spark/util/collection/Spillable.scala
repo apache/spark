@@ -25,8 +25,6 @@ import org.apache.spark.SparkEnv
  * has been exceeded.
  */
 private[spark] trait Spillable[C] extends Logging {
-  import Spillable._
-
   /**
    * Spills the current in-memory collection to disk, and releases the memory.
    *
@@ -43,9 +41,14 @@ private[spark] trait Spillable[C] extends Logging {
   // Threshold for `elementsRead` before we start tracking this collection's memory usage
   private[this] val trackMemoryThreshold = 1000
 
+  // Initial threshold for the size of a collection before we start tracking its memory usage
+  // Exposed for testing
+  private[this] val initialMemoryThreshold: Long =
+    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
-  private[this] var myMemoryThreshold = INITIAL_MEMORY_TRACKING_THRESHOLD
+  private[this] var myMemoryThreshold = initialMemoryThreshold
 
   // Number of bytes spilled in total
   private[this] var _memoryBytesSpilled = 0L
@@ -95,8 +98,8 @@ private[spark] trait Spillable[C] extends Logging {
    */
   private def releaseMemoryForThisThread(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    shuffleMemoryManager.release(myMemoryThreshold - INITIAL_MEMORY_TRACKING_THRESHOLD)
-    myMemoryThreshold = INITIAL_MEMORY_TRACKING_THRESHOLD
+    shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold)
+    myMemoryThreshold = initialMemoryThreshold
   }
 
   /**
@@ -110,9 +113,4 @@ private[spark] trait Spillable[C] extends Logging {
       .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
         _spillCount, if (_spillCount > 1) "s" else ""))
   }
-}
-
-private object Spillable {
-  // Initial threshold for the size of a collection before we start tracking its memory usage
-  val INITIAL_MEMORY_TRACKING_THRESHOLD: Long = 5 * 1024 * 1024
 }
