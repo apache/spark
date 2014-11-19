@@ -1564,7 +1564,7 @@ class RDD(object):
             merger.mergeCombiners(iterator)
             return merger.iteritems()
 
-        if mapSideCombine == True:
+        if mapSideCombine:
             locally_combined = self.mapPartitions(combineLocally)
             shuffled = locally_combined.partitionBy(numPartitions)
             return shuffled.mapPartitions(_mergeCombiners)
