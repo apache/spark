@@ -202,7 +202,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.extra.cores</code></td>
   <td>0</td>
   <td>
-    Set the extra amount of cpus to request per task.
+    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
+    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
+    Note that total amount of cores the executor will request in total will not exceed the spark.cores.max setting.
   </td>
 </tr>
 <tr>
