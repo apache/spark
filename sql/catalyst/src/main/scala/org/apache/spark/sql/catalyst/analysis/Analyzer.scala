@@ -181,7 +181,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
           // Add missing attributes and then project them away after the sort.
           Project(projectList,
             Sort(ordering,
-              Project(projectList ++ missingInProject, child)))
+              Project(projectList ++ missingInProject ++ child.inputSet, child)))
         } else {
           logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
