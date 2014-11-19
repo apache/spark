@@ -268,8 +268,9 @@ private[spark] class ExternalSorter[K, V, C](
 
     spillCount += 1
     val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory batch of %d MB to disk (%d spill%s so far)"
-      .format(threadId, memorySize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+    logInfo("Thread %d spilling in-memory batch of %s to disk (%d spill%s so far)"
+      .format(threadId, org.apache.spark.util.Utils.bytesToString(memorySize),
+        spillCount, if (spillCount > 1) "s" else ""))
 
     if (bypassMergeSort) {
       spillToPartitionFiles(collection)
