@@ -210,14 +210,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
 
   test("local metrics") {
     val listener = new SaveStageAndTaskInfo
-    val conf = new SparkConf()
-    conf.setMaster("local")
-    conf.setAppName("SparkListenerSuite")
-    conf.set("spark.serializer", "org.apache.spark.scheduler.SlowSerializer")
-    val sc2 = new SparkContext(conf)
 
-    sc2.addSparkListener(listener)
-    sc2.addSparkListener(new StatsReportListener)
+    sc.addSparkListener(listener)
+    sc.addSparkListener(new StatsReportListener)
     // just to make sure some of the tasks take a noticeable amount of time
     val w = { i: Int =>
       if (i == 0)
@@ -225,9 +220,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       i
     }
 
-    val d = sc2.parallelize(0 to 1e4.toInt, 64).map(w)
+    val d = sc.parallelize(0 to 1e4.toInt, 64).map(w)
     d.count()
-    assert(sc2.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)
 
     val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
@@ -238,7 +233,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     d4.setName("A Cogroup")
     d4.collectAsMap()
 
-    assert(sc2.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (4)
     listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
       /**
@@ -251,12 +246,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorDeserializeTime),
         stageInfo + " executorDeserializeTime")
-
-      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
-        checkNonZeroAvg(
-          taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
-          stageInfo + " fetchWaitTime")
-      }
 
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
@@ -275,6 +264,76 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
           sm.remoteBlocksFetched should be (0)
           sm.remoteBytesRead should be (0l)
         }
+      }
+    }
+  }
+
+  test("local metrics with zero fetchWaitTime") {
+    val listener = new SaveStageAndTaskInfo
+    sc.addSparkListener(listener)
+    sc.addSparkListener(new StatsReportListener)
+    // just to make sure some of the tasks take a noticeable amount of time
+    val w = { i: Int =>
+      if (i == 0)
+        Thread.sleep(100)
+      i
+    }
+
+    val d = sc.parallelize(0 to 1e4.toInt, 64).map(w)
+    d.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be (1)
+
+    val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
+    val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
+    val d4 = d2.cogroup(d3, Runtime.getRuntime().availableProcessors()).map { case (k, (v1, v2)) =>
+      w(k) -> (v1.size, v2.size)
+    }
+    d4.setName("A Cogroup")
+    d4.collectAsMap()
+
+    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
+      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
+        val m = taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime)
+        assert(m.sum / m.size.toDouble == 0.0, stageInfo + " fetchWaitTime")
+      }
+    }
+  }
+
+  test("local metrics with fetchWaitTime") {
+    val listener = new SaveStageAndTaskInfo
+    val conf = new SparkConf()
+    conf.setMaster("local")
+    conf.setAppName("SparkListenerSuite")
+    conf.set("spark.serializer", "org.apache.spark.scheduler.SlowSerializer")
+    val sc2 = new SparkContext(conf)
+    sc2.addSparkListener(listener)
+    sc2.addSparkListener(new StatsReportListener)
+    // just to make sure some of the tasks take a noticeable amount of time
+    val w = { i: Int =>
+      if (i == 0)
+        Thread.sleep(100)
+      i
+    }
+
+    val d = sc2.parallelize(0 to 1e4.toInt, 64).map(w)
+    d.count()
+    assert(sc2.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be (1)
+
+    val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
+    val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
+    val d4 = d2.cogroup(d3, Runtime.getRuntime().availableProcessors()).map { case (k, (v1, v2)) =>
+      w(k) -> (v1.size, v2.size)
+    }
+    d4.setName("A Cogroup")
+    d4.collectAsMap()
+
+    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
+      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
+        checkNonZeroAvg(
+          taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
+          stageInfo + " fetchWaitTime")
       }
     }
   }
