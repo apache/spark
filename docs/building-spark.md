@@ -121,9 +121,9 @@ And then run the commands as usual, e.g. clean, assembly or test etc..
 
 ### For maven users it is a two step process.
 
-Step 1: First run `dev/change-version-to-2.11.sh` script from `$SPARK_HOME`.
+Step 1: First run `dev/change-version-to-2.11.sh`.
 
-Step 2: Produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
+Step 2: To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
 
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
