@@ -3,6 +3,71 @@ Spark Change Log
 
 Release 1.1.1
 
+  [SPARK-4480] Avoid many small spills in external data structures (1.1)
+  Andrew Or <andrew@databricks.com>
+  2014-11-19 10:45:42 -0800
+  Commit: 16bf5f3, github.com/apache/spark/pull/3354
+
+  [SPARK-4380] Log more precise number of bytes spilled (1.1)
+  Andrew Or <andrew@databricks.com>
+  2014-11-18 20:15:00 -0800
+  Commit: e22a759, github.com/apache/spark/pull/3355
+
+  [SPARK-4468][SQL] Backports #3334 to branch-1.1
+  Cheng Lian <lian@databricks.com>
+  2014-11-18 17:40:24 -0800
+  Commit: f9739b9, github.com/apache/spark/pull/3338
+
+  [SPARK-4433] fix a racing condition in zipWithIndex
+  Xiangrui Meng <meng@databricks.com>
+  2014-11-18 16:25:44 -0800
+  Commit: ae9b1f6, github.com/apache/spark/pull/3291
+
+  [SPARK-4393] Fix memory leak in ConnectionManager ACK timeout TimerTasks; use HashedWheelTimer (For branch-1.1)
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-11-18 12:09:18 -0800
+  Commit: 91b5fa8, github.com/apache/spark/pull/3321
+
+  [SPARK-4467] Partial fix for fetch failure in sort-based shuffle (1.1)
+  Andrew Or <andrew@databricks.com>
+  2014-11-17 18:10:49 -0800
+  Commit: aa9ebda, github.com/apache/spark/pull/3330
+
+  Revert "[SPARK-4075] [Deploy] Jar url validation is not enough for Jar file"
+  Andrew Or <andrew@databricks.com>
+  2014-11-17 11:25:38 -0800
+  Commit: b528367
+
+  [branch-1.1][SPARK-4355] OnlineSummarizer doesn't merge mean correctly
+  Xiangrui Meng <meng@databricks.com>
+  2014-11-13 15:36:03 -0800
+  Commit: 4b1c77c, github.com/apache/spark/pull/3251
+
+  [Release] Correct make-distribution.sh log path
+  Andrew Or <andrew@databricks.com>
+  2014-11-12 13:46:26 -0800
+  Commit: ba6d81d
+
+  [Release] Bring audit scripts up-to-date
+  Andrew Or <andrewor14@gmail.com>
+  2014-11-13 00:30:58 +0000
+  Commit: 88bc482
+
+  [Release] Log build output for each distribution
+  Andrew Or <andrew@databricks.com>
+  2014-11-11 18:02:59 -0800
+  Commit: e3a5ee9
+
+  Revert "SPARK-3039: Allow spark to be built using avro-mapred for hadoop2"
+  Andrew Or <andrew@databricks.com>
+  2014-11-12 00:04:30 -0800
+  Commit: 45a01b6
+
+  Update CHANGES.txt
+  Andrew Or <andrewor14@gmail.com>
+  2014-11-11 23:11:32 +0000
+  Commit: 131c626
+
   [SPARK-4295][External]Fix exception in SparkSinkSuite
   maji2014 <maji3@asiainfo.com>
   2014-11-11 02:18:27 -0800
