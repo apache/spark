@@ -15,21 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.streaming;
 
-private class SparkJobInfoImpl (
-  val jobId: Int,
-  val stageIds: Array[Int],
-  val status: JobExecutionStatus)
- extends SparkJobInfo
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.junit.After;
+import org.junit.Before;
 
-private class SparkStageInfoImpl(
-  val stageId: Int,
-  val currentAttemptId: Int,
-  val submissionTime: Long,
-  val name: String,
-  val numTasks: Int,
-  val numActiveTasks: Int,
-  val numCompletedTasks: Int,
-  val numFailedTasks: Int)
- extends SparkStageInfo
+public abstract class LocalJavaStreamingContext {
+
+    protected transient JavaStreamingContext ssc;
+
+    @Before
+    public void setUp() {
+        System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
+        ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+        ssc.checkpoint("checkpoint");
+    }
+
+    @After
+    public void tearDown() {
+        ssc.stop();
+        ssc = null;
+    }
+}
