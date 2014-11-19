@@ -17,29 +17,48 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.collection.JavaConverters._
-
+import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.tree.configuration.{Strategy, BoostingStrategy}
-import org.apache.spark.Logging
-import org.apache.spark.mllib.tree.impl.TimeTracker
-import org.apache.spark.mllib.tree.loss.Losses
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Sum
+import org.apache.spark.mllib.tree.impl.TimeTracker
+import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
- * A class that implements gradient boosting for regression and binary classification problems.
+ * A class that implements Stochastic Gradient Boosting
+ * for regression and binary classification problems.
+ *
+ * The implementation is based upon:
+ *   J.H. Friedman.  "Stochastic Gradient Boosting."  1999.
+ *
+ * Notes:
+ *  - This currently can be run with several loss functions.  However, only SquaredError is
+ *    fully supported.  Specifically, the loss function should be used to compute the gradient
+ *    (to re-label training instances on each iteration) and to weight weak hypotheses.
+ *    Currently, gradients are computed correctly for the available loss functions,
+ *    but weak hypothesis weights are not computed correctly for LogLoss or AbsoluteError.
+ *    Running with those losses will likely behave reasonably, but lacks the same guarantees.
+ *
  * @param boostingStrategy Parameters for the gradient boosting algorithm
  */
 @Experimental
 class GradientBoosting (
     private val boostingStrategy: BoostingStrategy) extends Serializable with Logging {
+
+  boostingStrategy.weakLearnerParams.algo = Regression
+  boostingStrategy.weakLearnerParams.impurity = impurity.Variance
+
+  // Ensure values for weak learner are the same as what is provided to the boosting algorithm.
+  boostingStrategy.weakLearnerParams.numClassesForClassification =
+    boostingStrategy.numClassesForClassification
+
+  boostingStrategy.assertValid()
 
   /**
    * Method to train a gradient boosting model
@@ -51,6 +70,7 @@ class GradientBoosting (
     algo match {
       case Regression => GradientBoosting.boost(input, boostingStrategy)
       case Classification =>
+        // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoosting.boost(remappedInput, boostingStrategy)
       case _ =>
@@ -118,119 +138,31 @@ object GradientBoosting extends Logging {
   }
 
   /**
-   * Method to train a gradient boosting binary classification model.
-   *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param numEstimators Number of estimators used in boosting stages. In other words,
-   *                      number of boosting iterations performed.
-   * @param loss Loss function used for minimization during gradient boosting.
-   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
-   *                     learning rate should be between in the interval (0, 1]
-   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
-   * @param numClassesForClassification Number of classes for classification.
-   *                                    (Ignored for regression.)
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
-   *                                the number of discrete values they take. For example,
-   *                                an entry (n -> k) implies the feature n is categorical with k
-   *                                categories 0, 1, 2, ... , k-1. It's important to note that
-   *                                features are zero-indexed.
-   * @param weakLearnerParams Parameters for the weak learner. (Currently only decision tree is
-   *                          supported.)
-   * @return WeightedEnsembleModel that can be used for prediction
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#train]]
    */
-  def trainClassifier(
-      input: RDD[LabeledPoint],
-      numEstimators: Int,
-      loss: String,
-      learningRate: Double,
-      subsamplingRate: Double,
-      numClassesForClassification: Int,
-      categoricalFeaturesInfo: Map[Int, Int],
-      weakLearnerParams: Strategy): WeightedEnsembleModel = {
-    val lossType = Losses.fromString(loss)
-    val boostingStrategy = new BoostingStrategy(Classification, numEstimators, lossType,
-      learningRate, subsamplingRate, numClassesForClassification, categoricalFeaturesInfo,
-      weakLearnerParams)
-    new GradientBoosting(boostingStrategy).train(input)
-  }
-
-  /**
-   * Method to train a gradient boosting regression model.
-   *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param numEstimators Number of estimators used in boosting stages. In other words,
-   *                      number of boosting iterations performed.
-   * @param loss Loss function used for minimization during gradient boosting.
-   * @param learningRate Learning rate for shrinking the contribution of each estimator. The
-   *                     learning rate should be between in the interval (0, 1]
-   * @param subsamplingRate  Fraction of the training data used for learning the decision tree.
-   * @param numClassesForClassification Number of classes for classification.
-   *                                    (Ignored for regression.)
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
-   *                                the number of discrete values they take. For example,
-   *                                an entry (n -> k) implies the feature n is categorical with k
-   *                                categories 0, 1, 2, ... , k-1. It's important to note that
-   *                                features are zero-indexed.
-   * @param weakLearnerParams Parameters for the weak learner. (Currently only decision tree is
-   *                          supported.)
-   * @return WeightedEnsembleModel that can be used for prediction
-   */
-  def trainRegressor(
-       input: RDD[LabeledPoint],
-       numEstimators: Int,
-       loss: String,
-       learningRate: Double,
-       subsamplingRate: Double,
-       numClassesForClassification: Int,
-       categoricalFeaturesInfo: Map[Int, Int],
-       weakLearnerParams: Strategy): WeightedEnsembleModel = {
-    val lossType = Losses.fromString(loss)
-    val boostingStrategy = new BoostingStrategy(Regression, numEstimators, lossType,
-      learningRate, subsamplingRate, numClassesForClassification, categoricalFeaturesInfo,
-      weakLearnerParams)
-    new GradientBoosting(boostingStrategy).train(input)
+  def train(
+    input: JavaRDD[LabeledPoint],
+    boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
+    train(input.rdd, boostingStrategy)
   }
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#trainClassifier]]
    */
   def trainClassifier(
-      input: RDD[LabeledPoint],
-      numEstimators: Int,
-      loss: String,
-      learningRate: Double,
-      subsamplingRate: Double,
-      numClassesForClassification: Int,
-      categoricalFeaturesInfo:java.util.Map[java.lang.Integer, java.lang.Integer],
-      weakLearnerParams: Strategy): WeightedEnsembleModel = {
-    trainClassifier(input, numEstimators, loss, learningRate, subsamplingRate,
-      numClassesForClassification,
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      weakLearnerParams)
+      input: JavaRDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
+    trainClassifier(input.rdd, boostingStrategy)
   }
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#trainRegressor]]
    */
   def trainRegressor(
-      input: RDD[LabeledPoint],
-      numEstimators: Int,
-      loss: String,
-      learningRate: Double,
-      subsamplingRate: Double,
-      numClassesForClassification: Int,
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
-      weakLearnerParams: Strategy): WeightedEnsembleModel = {
-    trainRegressor(input, numEstimators, loss, learningRate, subsamplingRate,
-      numClassesForClassification,
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
-      weakLearnerParams)
+      input: JavaRDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
+    trainRegressor(input.rdd, boostingStrategy)
   }
-
 
   /**
    * Internal method for performing regression using trees as base learners.
@@ -247,15 +179,17 @@ object GradientBoosting extends Logging {
     timer.start("init")
 
     // Initialize gradient boosting parameters
-    val numEstimators = boostingStrategy.numEstimators
-    val baseLearners = new Array[DecisionTreeModel](numEstimators)
-    val baseLearnerWeights = new Array[Double](numEstimators)
+    val numIterations = boostingStrategy.numIterations
+    val baseLearners = new Array[DecisionTreeModel](numIterations)
+    val baseLearnerWeights = new Array[Double](numIterations)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
     val strategy = boostingStrategy.weakLearnerParams
 
     // Cache input
-    input.persist(StorageLevel.MEMORY_AND_DISK)
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      input.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     timer.stop("init")
 
@@ -264,7 +198,7 @@ object GradientBoosting extends Logging {
     logDebug("##########")
     var data = input
 
-    // 1. Initialize tree
+    // Initialize tree
     timer.start("building tree 0")
     val firstTreeModel = new DecisionTree(strategy).train(data)
     baseLearners(0) = firstTreeModel
@@ -280,7 +214,7 @@ object GradientBoosting extends Logging {
       point.features))
 
     var m = 1
-    while (m < numEstimators) {
+    while (m < numIterations) {
       timer.start(s"building tree $m")
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
@@ -289,6 +223,9 @@ object GradientBoosting extends Logging {
       timer.stop(s"building tree $m")
       // Create partial model
       baseLearners(m) = model
+      // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
+      //       Technically, the weight should be optimized for the particular loss.
+      //       However, the behavior should be reasonable, though not optimal.
       baseLearnerWeights(m) = learningRate
       // Note: A model of type regression is used since we require raw prediction
       val partialModel = new WeightedEnsembleModel(baseLearners.slice(0, m + 1),
@@ -305,8 +242,6 @@ object GradientBoosting extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-
-    // 3. Output classifier
     new WeightedEnsembleModel(baseLearners, baseLearnerWeights, boostingStrategy.algo, Sum)
 
   }

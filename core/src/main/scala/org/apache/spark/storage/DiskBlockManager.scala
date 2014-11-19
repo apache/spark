@@ -38,12 +38,13 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   extends Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  private val subDirsPerLocalDir = blockManager.conf.getInt("spark.diskStore.subDirectories", 64)
+  private[spark]
+  val subDirsPerLocalDir = blockManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
-  val localDirs: Array[File] = createLocalDirs(conf)
+  private[spark] val localDirs: Array[File] = createLocalDirs(conf)
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
@@ -52,6 +53,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
   addShutdownHook()
 
+  /** Looks up a file by hashing it into one of our local subdirectories. */
+  // This method should be kept in sync with
+  // org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getFile().
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
@@ -159,13 +163,16 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
-    localDirs.foreach { localDir =>
-      if (localDir.isDirectory() && localDir.exists()) {
-        try {
-          if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
-        } catch {
-          case e: Exception =>
-            logError(s"Exception while deleting local spark dir: $localDir", e)
+    // Only perform cleanup if an external service is not serving our shuffle files.
+    if (!blockManager.externalShuffleServiceEnabled) {
+      localDirs.foreach { localDir =>
+        if (localDir.isDirectory() && localDir.exists()) {
+          try {
+            if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
+          } catch {
+            case e: Exception =>
+              logError(s"Exception while deleting local spark dir: $localDir", e)
+          }
         }
       }
     }

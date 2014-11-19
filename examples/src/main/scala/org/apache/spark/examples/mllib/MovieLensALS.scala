@@ -47,7 +47,7 @@ object MovieLensALS {
     numUserBlocks: Int = -1,
     numProductBlocks: Int = -1,
     implicitPrefs: Boolean = false,
-    validateRecommendation: Double = 0.0) extends AbstractParams[Params]
+    validateRecommendation: Boolean = false) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -75,9 +75,9 @@ object MovieLensALS {
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
-      opt[Double]("validateRecommendation")
-        .text("ratio for topN product recommendation validation, default : 0.0*numProducts")
-        .action((x, c) => c.copy(validateRecommendation = x))
+      opt[Unit]("validateRecommendation")
+        .text("validate recommendation using MAP measures")
+        .action((_, c) => c.copy(validateRecommendation = true))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -141,9 +141,8 @@ object MovieLensALS {
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
-    val training = ratings.map { x => (x.user, x) }.sample(false, 0.8, 1L).map { x => x._2 }
-    val testSplit = ratings.subtract(training)
-    
+    val splits = ratings.randomSplit(Array(0.8, 0.2))
+    val training = splits(0).cache()
     val test = if (params.implicitPrefs) {
       /*
        * 0 means "don't know" and positive values mean "confident that the prediction should be 1".
@@ -152,13 +151,10 @@ object MovieLensALS {
        * the confidence. The error is the difference between prediction and either 1 or 0,
        * depending on whether r is positive or negative.
        */
-      testSplit.map(x => Rating(x.user, x.product, if (x.rating > 0) 1.0 else 0.0))
+      splits(1).map(x => Rating(x.user, x.product, if (x.rating > 0) 1.0 else 0.0))
     } else {
-      testSplit
+      splits(1)
     }.cache()
-
-    training.cache
-    test.cache
 
     val numTraining = training.count()
     val numTest = test.count()
@@ -179,18 +175,10 @@ object MovieLensALS {
 
     println(s"Test RMSE = $rmse.")
 
-    val n = (numMovies * params.validateRecommendation).toInt
-
-    if (n > 0) {
-      val userMapAPI = computeRecommendationMetricsAPI(model,
-        training, test, n)
-      
-      println(s"Test userMapAPI = $userMapAPI")
-      
-      val userMap = computeRecommendationMetrics(model, 
-          training, test, n)
-      
-      println(s"Test userMap = $userMap")
+    if (params.validateRecommendation) {
+      val (map, users) = computeRankingMetrics(model,
+        training, test, numMovies.toInt)
+      println(s"Test users $users MAP $map")
     }
     
     sc.stop()
@@ -209,74 +197,40 @@ object MovieLensALS {
     if (implicitPrefs) math.max(math.min(r, 1.0), 0.0)
     else r
   }
-  
+
   /**
    * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
    */
-  def computeRecommendationMetrics(model: MatrixFactorizationModel,
+  def computeRankingMetrics(model: MatrixFactorizationModel,
     train: RDD[Rating], test: RDD[Rating], n: Int) = {
 
-    val testProductLabels = test.map {
+    val ord = Ordering.by[(Int, Double), Double](x => x._2)
+
+    val testUserLabels = test.map {
+      x => (x.user, (x.product, x.rating))
+    }.groupByKey.map {
+      case (userId, products) =>
+        val sortedProducts = products.toArray.sorted(ord.reverse)
+        (userId, sortedProducts.map { _._1 })
+    }
+
+    val trainUserLabels = train.map {
       x => (x.user, x.product)
     }.groupByKey.map {
       case (userId, products) => (userId, products.toArray)
     }
-
-    val trainProducts = train.map { x => ((x.user, x.product), x.rating) }
-
-    val rankings = model.userFeatures.cartesian(model.productFeatures).map {
-      case ((userId, userFeature), (productId, productFeature)) => {
-        val userVector = new DoubleMatrix(userFeature)
-        val productVector = new DoubleMatrix(productFeature)
-        ((userId, productId), userVector.dot(productVector))
+    
+    val rankings = model.recommendProductsForUsers(n).join(trainUserLabels).map {
+      case (userId, (pred, train)) => {
+        val predictedProducts = pred.map { _.product }
+        val trainSet = train.toSet
+        (userId, predictedProducts.filterNot { x => trainSet.contains(x) })
       }
-    }.leftOuterJoin(trainProducts).filter {
-      case ((userId, productId), (ratingAll, ratingTrain)) =>
-        ratingTrain == None
-    }.map {
-      case ((userId, productId), (ratingAll, ratingTrain)) =>
-        (userId, (productId, ratingAll))
-    }.groupByKey.map {
-      case (user, predictedProducts) =>
-        val sortedProducts = predictedProducts.toArray.sortWith(
-          (predicted1: (Int, Double), predicted2: (Int, Double)) =>
-            predicted1._2 > predicted2._2).take(n)
-        (user, sortedProducts.map { _._1 })
-    }.join(testProductLabels).map {
+    }.join(testUserLabels).map {
       case (user, (pred, lab)) => (pred, lab)
     }
-
-    val metrics = new RankingMetrics(rankings)
-    println("Using Cartesian")
-    for (i <- 0 until 10) {
-      val k = (i + 1) * 20
-      println(s"k $k prec@k ${metrics.precisionAt(k)}")
-    }
-    metrics.meanAveragePrecision
-  }
-  
-  /**
-   * Compute MAP (Mean Average Precision) statistics for top N product Recommendation
-   */
-  def computeRecommendationMetricsAPI(model: MatrixFactorizationModel,
-    train: RDD[Rating], test: RDD[Rating], n: Int) = {
-
-    val testProductLabels = test.map {
-      x => (x.user, x.product)
-    }.groupByKey.map {
-      case (userId, products) => (userId, products.toArray)
-    }
-    
-    val rankings = model.recommendAll(n, train).join(testProductLabels).map {
-      case (user, (pred, lab)) => (pred.map{_.product}, lab)
-    }
     
     val metrics = new RankingMetrics(rankings)
-    println("Using recommendAll API")
-    for (i <- 0 until 10) {
-      val k = (i + 1) * 20
-      println(s"k $k prec@k ${metrics.precisionAt(k)}")
-    }
-    metrics.meanAveragePrecision
+    (metrics.meanAveragePrecision, testUserLabels.count)
   }
 }

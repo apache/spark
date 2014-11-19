@@ -31,6 +31,7 @@ private[jobs] object UIData {
     var failedTasks : Int = 0
     var succeededTasks : Int = 0
     var inputBytes : Long = 0
+    var outputBytes : Long = 0
     var shuffleRead : Long = 0
     var shuffleWrite : Long = 0
     var memoryBytesSpilled : Long = 0
@@ -53,6 +54,7 @@ private[jobs] object UIData {
     var executorRunTime: Long = _
 
     var inputBytes: Long = _
+    var outputBytes: Long = _
     var shuffleReadBytes: Long = _
     var shuffleWriteBytes: Long = _
     var memoryBytesSpilled: Long = _
