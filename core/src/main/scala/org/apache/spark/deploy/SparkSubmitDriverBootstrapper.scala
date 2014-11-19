@@ -134,7 +134,7 @@ private[spark] object SparkSubmitDriverBootstrapper {
       override def run() = {
         if (process != null) {
           process.destroy()
-          sys.exit(process.waitFor())
+          process.waitFor()
         }
       }
     })
