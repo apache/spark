@@ -18,7 +18,8 @@
 """
 Python bindings for GraphX.
 """
-from pyspark import PickleSerializer, RDD, StorageLevel
+import itertools
+from pyspark import PickleSerializer, RDD, StorageLevel, SparkContext
 from pyspark.graphx import VertexRDD, EdgeRDD
 
 from pyspark.graphx.partitionstrategy import PartitionStrategy
@@ -28,11 +29,14 @@ from pyspark.serializers import BatchedSerializer
 __all__ = ["Graph"]
 
 class Graph(object):
-    def __init__(self, vertex_jrdd, edge_jrdd, partition_strategy=PartitionStrategy.EdgePartition1D):
-        self._vertex_jrdd = VertexRDD(vertex_jrdd, vertex_jrdd.context, BatchedSerializer(PickleSerializer()))
-        self._edge_jrdd = EdgeRDD(edge_jrdd, edge_jrdd.context, BatchedSerializer(PickleSerializer()))
+    def __init__(self, vertex_jrdd, edge_jrdd,
+                 partition_strategy=PartitionStrategy.EdgePartition1D):
+        self._vertex_jrdd = VertexRDD(vertex_jrdd, vertex_jrdd.context,
+                                      BatchedSerializer(PickleSerializer()))
+        self._edge_jrdd = EdgeRDD(edge_jrdd, edge_jrdd.context,
+                                  BatchedSerializer(PickleSerializer()))
         self._partition_strategy = partition_strategy
-        self._sc = vertex_jrdd.context
+        self._jsc = vertex_jrdd.context
 
     def persist(self, storageLevel):
         self._vertex_jrdd.persist(storageLevel)
@@ -50,11 +54,80 @@ class Graph(object):
     def edges(self):
         return self._edge_jrdd
 
+    # TODO
     def partitionBy(self, partitionStrategy):
-
         return
 
-    def subgraph(self, condition):
+    def numEdges(self):
+        return self._edge_jrdd.count()
+
+    def numVertices(self):
+        return self._vertex_jrdd.count()
+
+    # TODO
+    def inDegrees(self):
+        return
+
+    # TODO
+    def outDegrees(self):
+        return
+
+    # TODO
+    def degrees(self):
+        return
+
+    def triplets(self):
+        if (isinstance(self._jsc, SparkContext)):
+            pyGraph = self._jsc.jvm.org.apache.spark.PythonGraph()
+            return pyGraph.triplets()
+
+    # TODO
+    def unpersistVertices(self, blocking = True):
+        return
+
+    def mapVertices(self, f):
+        def func(f):
+            return itertools.imap(f)
+        return self._vertex_jrdd.mapValues(func)
+
+    # TODO
+    def mapEdges(self, f):
+        return
+
+    # TODO
+    def mapTriplets(self, f):
+        return
+
+    # TODO
+    def reverse(self):
+        return
+
+    # TODO
+    def subgraph(self, epred, pred):
+        return
+
+    # TODO
+    def groupEdges(self, mergeFunc):
+        return
+
+    # TODO
+    def joinVertices(self, mapFunc):
+        return
+
+    # TODO
+    def outerJoinVertices(self, mapFunc):
+        return
+
+    # TODO
+    def collectNeighborIds(self, edgeDirection):
+        return
+
+    # TODO
+    def collectNeighbors(self, edgeDirection):
+        return
+
+    # TODO
+    def mapReduceTriplets(self, mapFunc, reduceFunc):
         return
 
     def pagerank(self, num_iterations, reset_probability = 0.15):
@@ -85,5 +158,13 @@ class Graph(object):
             return itertools.imap(f, iterator)
         py_graph = self._sc._jvm.org.apache.PythonGraph.apply(func)
         return py_graph.asJavaRDD()
+
+    # TODO
+    def triangleCount(self):
+        return
+
+    # TODO
+    def stronglyConnectedComponents(self, iterations):
+        return
 
 

@@ -43,8 +43,8 @@ class JavaVertexRDD[VD](
 
   override def vertexRDD = VertexRDD(vertices)
 
-  override def wrapRDD(in: RDD[(VertexId, VD)]): JavaRDD[(VertexId, VD)] = {
-    JavaRDD.fromRDD(in)
+  override def wrapRDD(rdd: RDD[(VertexId, VD)]): JavaRDD[(VertexId, VD)] = {
+    JavaRDD.fromRDD(rdd)
   }
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
@@ -57,28 +57,29 @@ class JavaVertexRDD[VD](
   def persist(storageLevel: StorageLevel): JavaVertexRDD[VD] =
     vertices.persist(storageLevel).asInstanceOf[JavaVertexRDD[VD]]
 
-  def unpersist(blocking: Boolean = true) : this.type =
-    JavaVertexRDD(vertices.unpersist(blocking))
-
+  /** Generate a VertexRDD for the given duration */
   override def compute(part: Partition, context: TaskContext): Iterator[(VertexId, VD)] =
     vertexRDD.compute(part, context)
 
-
+  /** Convert [[org.apache.spark.api.java.JavaRDD]] to
+    * [[org.apache.spark.graphx.api.java.JavaVertexRDD]] instance */
   def asJavaVertexRDD = JavaRDD.fromRDD(this.vertexRDD)
 
-
-
-
-
-
+  /** Return a new VertexRDD containing only the elements that satisfy a predicate. */
+  def filter(f: JFunction[(VertexId, VD), Boolean]): JavaVertexRDD[VD] =
+    JavaVertexRDD(vertexRDD.filter(x => f.call(x).booleanValue()))
 }
 
 object JavaVertexRDD {
 
-  implicit def fromVertexRDD[VD: ClassTag](vertices: JavaRDD[(VertexId, VD)]): JavaVertexRDD[VD] =
-    new JavaVertexRDD[VD](vertices)
+  /**
+   * Convert a scala [[org.apache.spark.graphx.VertexRDD]] to a Java-friendly
+   * [[org.apache.spark.graphx.api.java.JavaVertexRDD]].
+   */
+  implicit def fromVertexRDD[VD: ClassTag](vertexRDD: VertexRDD[VD]): JavaVertexRDD[VD] =
+    new JavaVertexRDD[VD](vertexRDD)
 
-  implicit def apply[VD: ClassTag](vertices: JavaRDD[(Long, VD)]): JavaVertexRDD[VD] = {
+  implicit def apply[VD: ClassTag](vertices: JavaRDD[(VertexId, VD)]): JavaVertexRDD[VD] = {
     new JavaVertexRDD[VD](vertices)
   }
 }

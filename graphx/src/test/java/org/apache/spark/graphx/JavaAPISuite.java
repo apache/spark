@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.graphx;
 
 
@@ -23,6 +22,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.graphx.api.java.JavaEdgeRDD;
 import org.apache.spark.graphx.api.java.JavaVertexRDD;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.storage.StorageLevel;
@@ -30,21 +30,31 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import scala.Tuple2;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 import static org.junit.Assert.assertEquals;
 
 public class JavaAPISuite implements Serializable {
 
     private transient JavaSparkContext ssc;
+    private List<Tuple2<Object, VertexProperty<String, String>>> myList;
+    private ClassTag<VertexProperty<String, String>> classTag;
+
 
     @Before
     public void initialize() {
         this.ssc = new JavaSparkContext("local", "GraphX JavaAPISuite");
+
+        this.myList = new ArrayList<Tuple2<Object, VertexProperty<String, String>>>();
+        this.myList.add(new Tuple2(1L, new VertexProperty("abc", "ABC")));
+        this.myList.add(new Tuple2(2L, new VertexProperty("def", "DEF")));
+        this.myList.add(new Tuple2(3L, new VertexProperty("xyz", "XYZ")));
+
+        this.classTag = ClassTag$.MODULE$.apply(VertexProperty.class);
     }
 
     @After
@@ -53,15 +63,48 @@ public class JavaAPISuite implements Serializable {
         ssc = null;
     }
 
+    private class VertexProperty<T1, T2> implements Serializable {
+        T1 field1;
+        T2 field2;
+
+        VertexProperty(T1 field1, T2 field2) {
+            this.field1 = field1;
+            this.field2 = field2;
+        }
+
+        T1 getField1() { return field1; }
+        T2 getField2() { return field2; }
+        void setField1(T1 value) { this.field1 = value; }
+        void setField2(T2 value) { this.field2 = value; }
+    }
+
     @Test
-    public void testCount() {
-        List<Tuple2<Long, Tuple2<String, String>>> myList =
-                new ArrayList<Tuple2<Long, Tuple2<String, String>>>();
-        myList.add(new Tuple2(1L, new Tuple2("abc", "XYZ")));
-        myList.add(new Tuple2(2L, new Tuple2("def", "SFN")));
-        myList.add(new Tuple2(3L, new Tuple2("xyz", "XYZ")));
-        JavaRDD<Tuple2<Long, Tuple2<String, String>>> javaRDD = ssc.parallelize(myList);
-        JavaVertexRDD javaVertexRDD = new JavaVertexRDD(javaRDD.rdd());
-        assertEquals(javaVertexRDD.count(), 3);
+    public void testVertexRDDCount() {
+
+        JavaRDD<Tuple2<Object, VertexProperty<String, String>>>
+                javaRDD = ssc.parallelize(this.myList);
+
+        JavaVertexRDD<VertexProperty<String, String>> javaVertexRDD =
+                JavaVertexRDD.apply(javaRDD, this.classTag);
+
+        assertEquals(javaVertexRDD.count(), 3L);
+    }
+
+    @Test
+    public void testEdgeRDDMapValues() {
+
+        List<Edge<String>> edgeList = new ArrayList<Edge<String>>();
+        edgeList.add(new Edge<String>(0, 1, "abcd"));
+        edgeList.add(new Edge<String>(1, 2, "defg"));
+        edgeList.add(new Edge<String>(2, 3, "hijk"));
+        edgeList.add(new Edge<String>(1, 3, "lmno"));
+
+        JavaRDD<Edge<String>> javaRDD = ssc.parallelize(edgeList);
+
+        ClassTag<String> classTag = ClassTag$.MODULE$.apply(String.class);
+
+        JavaEdgeRDD<String, String> javaEdgeRDD = JavaEdgeRDD.apply(javaRDD, classTag);
+
+        assertEquals(javaEdgeRDD.count(), 4L);
     }
 }

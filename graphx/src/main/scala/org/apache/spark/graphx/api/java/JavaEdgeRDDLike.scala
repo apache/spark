@@ -16,17 +16,45 @@
  */
 package org.apache.spark.graphx.api.java
 
+import javax.swing.JList
+
+import java.lang.{Long => JLong}
 import org.apache.spark.api.java.JavaRDDLike
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.EdgePartition
 
-trait JavaEdgeRDDLike [ED, This <: JavaEdgeRDDLike[ED, This, R],
+import scala.reflect.ClassTag
+
+trait JavaEdgeRDDLike [ED, VD, This <: JavaEdgeRDDLike[ED, VD, This, R],
 R <: JavaRDDLike[Edge[ED], R]]
   extends Serializable {
 
   def edgeRDD: EdgeRDD[ED, VD]
 
-  def setName(name: String) =
+  def setName(name: String) = edgeRDD.setName(name)
 
+  def collect(): JList[Edge[ED]] = edgeRDD.collect().toList.asInstanceOf
 
+  def count(): Long = edgeRDD.count()
 
+  def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag]
+    (f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): JavaEdgeRDD[ED2, VD2] = {
+    JavaEdgeRDD(edgeRDD.mapEdgePartitions(f))
+  }
+
+  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): JavaEdgeRDD[ED2, VD] = {
+    JavaEdgeRDD(edgeRDD.mapValues(f))
+  }
+
+  def filter
+    (epred: EdgeTriplet[VD, ED] => Boolean,
+    vpred: (VertexId, VD) => Boolean): JavaEdgeRDD[ED, VD] = {
+    JavaEdgeRDD(edgeRDD.filter(epred, vpred))
+  }
+
+  def innerJoin[ED2: ClassTag, ED3: ClassTag]
+    (other: EdgeRDD[ED2, _])
+    (f: (VertexId, VertexId, ED, ED2) => ED3): JavaEdgeRDD[ED3, VD] = {
+    JavaEdgeRDD[ED3, VD](edgeRDD.innerJoin(other)(f))
+  }
 }

@@ -14,28 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.graphx
 
-package org.apache.spark.graphx.api.python
+import org.apache.spark.api.java.JavaSparkContext
+import java.util.{List => JList}
 
-import java.util.{List => JList, Map => JMap}
 
-import org.apache.spark.Accumulator
-import org.apache.spark.api.python.PythonRDD
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.graphx.api.java.JavaVertexRDD
 
-private[graphx] class PythonEdgeRDD(
-    @transient parent: RDD[_],
-    command: Array[Byte],
-    envVars: JMap[String, String],
-    pythonIncludes: JList[String],
-    preservePartitoning: Boolean,
-    pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Byte]]],
-    accumulator: Accumulator[JList[Array[Byte]]])
-  extends PythonRDD (parent, command, envVars,
-                     pythonIncludes, preservePartitoning,
-                     pythonExec, broadcastVars, accumulator) {
+import scala.reflect.ClassTag
 
-  def
+object JavaTestUtils {
+
+  def attachVertexRDD[VD](
+    ssc: JavaSparkContext,
+    data: JList[Tuple2[Long, VD]],
+    numPartitions: Int) = {
+
+    implicit val cm: ClassTag[VD] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[VD]]
+
+    val vertices = ssc.parallelize(data)
+    new JavaVertexRDD(vertices)
+  }
+
 }

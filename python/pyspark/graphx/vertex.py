@@ -319,12 +319,14 @@ class PipelinedVertexRDD(VertexRDD):
                                      self._ctx._gateway._gateway_client)
         includes = ListConverter().convert(self._ctx._python_includes,
                                            self._ctx._gateway._gateway_client)
+        targetStorageLevel = StorageLevel.MEMORY_ONLY
         python_rdd = self._ctx._jvm.PythonVertexRDD(self._prev_jrdd.rdd(),
                                              bytearray(pickled_command),
                                              env, includes, self.preservesPartitioning,
                                              self._ctx.pythonExec,
-                                             broadcast_vars, self._ctx._javaAccumulator)
-        self._jrdd_val = python_rdd.asJavaRDD()
+                                             broadcast_vars, self._ctx._javaAccumulator,
+                                             targetStorageLevel)
+        self._jrdd_val = python_rdd.asJavaVertexRDD()
 
         if enable_profile:
             self._id = self._jrdd_val.id()
