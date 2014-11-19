@@ -135,9 +135,14 @@ private[spark] class ExternalSorter[K, V, C](
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
 
+  // Initial threshold for the size of a collection before we start tracking its memory usage
+  private val initialMemoryThreshold =
+    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold",
+      ShuffleMemoryManager.DEFAULT_INITIAL_MEMORY_THRESHOLD)
+
   // Threshold for the collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
-  private var myMemoryThreshold = ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD
+  private var myMemoryThreshold = initialMemoryThreshold
 
   // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't need
   // local aggregation and sorting, write numPartitions files directly and just concatenate them
@@ -287,11 +292,10 @@ private[spark] class ExternalSorter[K, V, C](
 
     // Release our memory back to the shuffle pool so that other threads can grab it
     // The amount we requested does not include the initial memory tracking threshold
-    shuffleMemoryManager.release(
-      myMemoryThreshold - ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD)
+    shuffleMemoryManager.release(myMemoryThreshold - initialMemoryThreshold)
 
     // Reset this to the initial threshold to avoid spilling many small files
-    myMemoryThreshold = ShuffleMemoryManager.INITIAL_MEMORY_TRACKING_THRESHOLD
+    myMemoryThreshold = initialMemoryThreshold
 
     _memoryBytesSpilled += memorySize
     elementsRead = 0

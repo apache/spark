@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, SparkException, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 
 /**
  * Allocates a pool of memory to task threads for use in shuffle operations. Each disk-spilling
@@ -124,5 +124,5 @@ private[spark] object ShuffleMemoryManager {
   }
 
   // Initial threshold for the size of a collection before we start tracking its memory usage
-  val INITIAL_MEMORY_TRACKING_THRESHOLD: Long = 5 * 1024 * 1024
+  val DEFAULT_INITIAL_MEMORY_THRESHOLD: Long = 5 * 1024 * 1024
 }
