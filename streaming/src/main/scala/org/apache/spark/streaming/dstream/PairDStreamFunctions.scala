@@ -21,6 +21,7 @@ import org.apache.spark.streaming.StreamingContext._
 
 import org.apache.spark.{Partitioner, HashPartitioner}
 import org.apache.spark.SparkContext._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
@@ -657,7 +658,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration = new Configuration
+      conf: Configuration = SparkHadoopUtil.get.conf
     ) {
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
