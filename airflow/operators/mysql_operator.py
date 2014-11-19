@@ -1,6 +1,8 @@
 import logging
-from airflow.models import BaseOperator
+
 from airflow.hooks import MySqlHook
+from airflow.models import BaseOperator
+from airflow.utils import apply_defaults
 
 
 class MySqlOperator(BaseOperator):
@@ -14,6 +16,7 @@ class MySqlOperator(BaseOperator):
     template_fields = ('sql',)
     template_ext = ('.sql',)
 
+    @apply_defaults
     def __init__(self, sql, mysql_dbid, *args, **kwargs):
         """
         Parameters:

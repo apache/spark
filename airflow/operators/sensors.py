@@ -10,10 +10,12 @@ from airflow.models import BaseOperator
 from airflow.models import DatabaseConnection as DB
 from airflow.models import State
 from airflow.models import TaskInstance
+from airflow.utils import apply_defaults
 
 
 class BaseSensorOperator(BaseOperator):
 
+    @apply_defaults
     def __init__(self, poke_interval=5, timeout=60*60*24*7, *args, **kwargs):
         super(BaseSensorOperator, self).__init__(*args, **kwargs)
         self.poke_interval = poke_interval
@@ -45,6 +47,7 @@ class SqlSensor(BaseSensorOperator):
         'polymorphic_identity': 'SqlSensor'
     }
 
+    @apply_defaults
     def __init__(self, db_id, sql, *args, **kwargs):
 
         super(SqlSensor, self).__init__(*args, **kwargs)
@@ -82,6 +85,7 @@ class ExternalTaskSensor(BaseSensorOperator):
         'polymorphic_identity': 'ExternalTaskSensor'
     }
 
+    @apply_defaults
     def __init__(self, external_dag_id, external_task_id, *args, **kwargs):
         super(ExternalTaskSensor, self).__init__(*args, **kwargs)
         self.external_dag_id = external_dag_id
@@ -116,6 +120,7 @@ class HivePartitionSensor(BaseSensorOperator):
         'polymorphic_identity': 'HivePartitionSensor'
     }
 
+    @apply_defaults
     def __init__(
             self,
             table, partition="ds='{{ ds }}'",

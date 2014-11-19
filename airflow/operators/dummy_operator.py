@@ -1,4 +1,5 @@
 from airflow.models import BaseOperator
+from airflow.utils import apply_defaults
 
 
 class DummyOperator(BaseOperator):
@@ -13,6 +14,7 @@ class DummyOperator(BaseOperator):
         'polymorphic_identity': 'DummyOperator'
     }
 
+    @apply_defaults
     def __init__(self, *args, **kwargs):
         super(DummyOperator, self).__init__(*args, **kwargs)
 
