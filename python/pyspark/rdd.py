@@ -1319,7 +1319,7 @@ class RDD(object):
         """
         return self.map(lambda (k, v): v)
 
-    def reduceByKey(self, func, numPartitions=None):
+    def reduceByKey(self, func, numPartitions=None, mapSideCombine=True):
         """
         Merge the values for each key using an associative reduce function.
 
@@ -1334,7 +1334,7 @@ class RDD(object):
         >>> sorted(rdd.reduceByKey(add).collect())
         [('a', 2), ('b', 1)]
         """
-        return self.combineByKey(lambda x: x, func, func, numPartitions)
+        return self.combineByKey(lambda x: x, func, func, numPartitions, mapSideCombine)
 
     def reduceByKeyLocally(self, func):
         """
@@ -1516,9 +1516,8 @@ class RDD(object):
         rdd._partitionFunc = partitionFunc
         return rdd
 
-    # TODO: add control over map-side aggregation
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
-                     numPartitions=None):
+                     numPartitions=None, mapSideCombine=True):
         """
         Generic function to combine the elements for each key using a custom
         set of aggregation functions.
@@ -1559,18 +1558,21 @@ class RDD(object):
             merger.mergeValues(iterator)
             return merger.iteritems()
 
-        locally_combined = self.mapPartitions(combineLocally)
-        shuffled = locally_combined.partitionBy(numPartitions)
-
         def _mergeCombiners(iterator):
             merger = ExternalMerger(agg, memory, serializer) \
                 if spill else InMemoryMerger(agg)
             merger.mergeCombiners(iterator)
             return merger.iteritems()
 
-        return shuffled.mapPartitions(_mergeCombiners, True)
+        if mapSideCombine == True:
+            locally_combined = self.mapPartitions(combineLocally)
+            shuffled = locally_combined.partitionBy(numPartitions)
+            return shuffled.mapPartitions(_mergeCombiners)
+        else:
+            shuffled = self.partitionBy(numPartitions)
+            return shuffled.mapPartitions(combineLocally)
 
-    def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
+    def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None, mapSideCombine=True):
         """
         Aggregate the values of each key, using given combine functions and a neutral
         "zero value". This function can return a different result type, U, than the type
@@ -1584,9 +1586,9 @@ class RDD(object):
             return copy.deepcopy(zeroValue)
 
         return self.combineByKey(
-            lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions)
+            lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions, mapSideCombine)
 
-    def foldByKey(self, zeroValue, func, numPartitions=None):
+    def foldByKey(self, zeroValue, func, numPartitions=None, mapSideCombine=True):
         """
         Merge the values for each key using an associative function "func"
         and a neutral "zeroValue" which may be added to the result an
@@ -1601,10 +1603,11 @@ class RDD(object):
         def createZero():
             return copy.deepcopy(zeroValue)
 
-        return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions)
+        return self.combineByKey(
+            lambda v: func(createZero(), v), func, func, numPartitions, mapSideCombine)
 
     # TODO: support variant with custom partitioner
-    def groupByKey(self, numPartitions=None):
+    def groupByKey(self, numPartitions=None, mapSideCombine=True):
         """
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with into numPartitions partitions.
@@ -1630,7 +1633,7 @@ class RDD(object):
             return a
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                                 numPartitions).mapValues(lambda x: ResultIterable(x))
+            numPartitions, mapSideCombine).mapValues(lambda x: ResultIterable(x))
 
     def flatMapValues(self, f):
         """
