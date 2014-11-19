@@ -28,9 +28,13 @@ if "x%1"=="x" (
   goto :OptsLoopEnd
 )
 
-SET pat="\<--master\> \<--deploy-mode\> \<--class\> \<--name\> \<--jars\> \<--py-files\> \<--files\> \<--conf\> \<--properties-file\> \<--driver-memory\> \<--driver-java-options\> \<--driver-library-path\> \<--driver-class-path\> \<--executor-memory\> \<--driver-cores\> \<--total-executor-cores\> \<--executor-cores\> \<--queue\> \<--num-executors\> \<--archives\>"
+SET opts="\<--master\> \<--deploy-mode\> \<--class\> \<--name\> \<--jars\> \<--py-files\> \<--files\>"
+SET opts="%opts:~1,-1% \<--conf\> \<--properties-file\> \<--driver-memory\> \<--driver-java-options\>"
+SET opts="%opts:~1,-1% \<--driver-library-path\> \<--driver-class-path\> \<--executor-memory\>"
+SET opts="%opts:~1,-1% \<--driver-cores\> \<--total-executor-cores\> \<--executor-cores\> \<--queue\>"
+SET opts="%opts:~1,-1% \<--num-executors\> \<--archives\>"
 
-echo %1 | findstr %pat% >nul
+echo %1 | findstr %opts% >nul
 if %ERRORLEVEL% equ 0 (
   if "x%2"=="x" (
     echo "%1" requires an argument. >&2
