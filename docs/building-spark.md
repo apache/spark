@@ -113,7 +113,17 @@ mvn -Pyarn -Phive -Phive-thriftserver-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0
 {% endhighlight %}
 
 # Building for Scala 2.11
-To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
+### For SBT users just start the console as 
+
+`sbt/sbt -Dscala-2.11="1"`
+
+And then run the commands as usual, e.g. clean, assembly or test etc..
+
+### For maven users it is a two step process.
+
+Step 1: First run `dev/change-version-to-2.11.sh`.
+
+Step 2: To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
 
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
