@@ -99,6 +99,12 @@ object MimaExcludes {
             // SPARK-4062
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaReceiver#MessageHandler.this")
+          ) ++ Seq(
+            // SPARK-2321
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkStageInfoImpl.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkStageInfo.submissionTime")
           )
 
         case v if v.startsWith("1.1") =>
