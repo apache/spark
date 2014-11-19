@@ -115,6 +115,20 @@ class RDDSampler(RDDSamplerBase):
                     yield obj
 
 
+class RDDRangeSampler(RDDSamplerBase):
+
+    def __init__(self, lowerBound, upperBound, seed=None):
+        RDDSamplerBase.__init__(self, False, seed)
+        self._use_numpy = False  # no performance gain from numpy
+        self._lowerBound = lowerBound
+        self._upperBound = upperBound
+
+    def func(self, split, iterator):
+        for obj in iterator:
+            if self._lowerBound <= self.getUniformSample(split) < self._upperBound:
+                yield obj
+
+
 class RDDStratifiedSampler(RDDSamplerBase):
 
     def __init__(self, withReplacement, fractions, seed=None):
