@@ -328,7 +328,7 @@ object Unidoc {
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -380,7 +380,7 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     // This places test scope jars on the classpath of executors during tests.
-    javaOptions in Test += 
+    javaOptions in Test +=
       "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
       map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",
