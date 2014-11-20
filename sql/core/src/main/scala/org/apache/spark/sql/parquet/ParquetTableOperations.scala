@@ -287,7 +287,8 @@ case class InsertIntoParquetTable(
         1
       } else {
         FileSystemHelper
-          .findMaxTaskId(NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration) + 1
+          .findMaxTaskId(
+            NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration, "parquet") + 1
       }
 
     def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {
@@ -624,7 +625,7 @@ private[parquet] object FilteringParquetRowInputFormat {
     .build[FileStatus, Array[BlockLocation]]()
 }
 
-private[parquet] object FileSystemHelper {
+private[sql] object FileSystemHelper {
   def listFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -640,19 +641,37 @@ private[parquet] object FileSystemHelper {
     fs.listStatus(path).map(_.getPath)
   }
 
-    /**
-     * Finds the maximum taskid in the output file names at the given path.
-     */
-  def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
+  /**
+   *  List files with special extension
+   */
+  def listFiles(origPath: Path, conf: Configuration, extension: String): Seq[Path] = {
+    val fs = origPath.getFileSystem(conf)
+    if (fs == null) {
+      throw new IllegalArgumentException(
+        s"Path $origPath is incorrectly formatted")
+    }
+    val path = origPath.makeQualified(fs)
+    if (fs.exists(path)) {
+      fs.listStatus(path).map(_.getPath).filter(p => p.getName.endsWith(extension))
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
+   * Finds the maximum taskid in the output file names at the given path.
+   */
+  def findMaxTaskId(pathStr: String, conf: Configuration, extension: String): Int = {
+    // filename pattern is part-r-<int>.$extension
+    require(Seq("orc", "parquet").contains(extension), s"Unsupported extension: $extension")
+    val nameP = new scala.util.matching.Regex(s"""part-r-(\\d{1,}).$extension""", "taskid")
     val files = FileSystemHelper.listFiles(pathStr, conf)
-    // filename pattern is part-r-<int>.parquet
-    val nameP = new scala.util.matching.Regex("""part-r-(\d{1,}).parquet""", "taskid")
     val hiddenFileP = new scala.util.matching.Regex("_.*")
     files.map(_.getName).map {
       case nameP(taskid) => taskid.toInt
       case hiddenFileP() => 0
       case other: String =>
-        sys.error("ERROR: attempting to append to set of Parquet files and found file" +
+        sys.error(s"ERROR: attempting to append to set of $extension files and found file" +
           s"that does not match name pattern: $other")
       case _ => 0
     }.reduceLeft((a, b) => if (a < b) b else a)
