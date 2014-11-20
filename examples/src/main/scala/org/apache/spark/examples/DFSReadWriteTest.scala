@@ -138,8 +138,7 @@ object DFSReadWriteTest {
     if(localWordCount == dfsWordCount) {
       println("Success! Local Word Count (" + localWordCount + 
         ") and DFS Word Count (" + dfsWordCount + ") agree.")
-    }
-    else {
+    } else {
       println("Failure! Local Word Count (" + localWordCount + 
         ") and DFS Word Count (" + dfsWordCount + ") disagree.")
     }
