@@ -238,4 +238,24 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
     }
   }
+
+
+  test("jobs with stages thatare skipped should show correct link descriptions on jobs page") {
+    withSpark(newSparkContext()) { sc =>
+      // Create an RDD that involves multiple stages:
+      val rdd =
+        sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
+      // Run it twice; this will cause the second job to have two "phantom" stages that were
+      // mentioned in its job start event but which were never actually executed:
+      rdd.count()
+      rdd.count()
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
+        findAll(cssSelector("tbody tr a")).foreach { link =>
+          link.text.toLowerCase should include ("count")
+          link.text.toLowerCase should not include "unknown"
+        }
+      }
+    }
+  }
 }
