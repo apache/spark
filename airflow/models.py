@@ -70,7 +70,7 @@ class DagBag(object):
                     dag.full_filepath = filepath
                     if dag.dag_id in self.dags:
                         raise Exception(
-                            'Two DAGs with the same dag_id. No good.')
+                            'Two DAGs with the same dag_id: ' + str(dag.dag_id) + ' No good.')
                     self.dags[dag.dag_id] = dag
                     dag.dagbag = self
                     if getconf().getboolean('misc', 'RUN_AS_MASTER'):
