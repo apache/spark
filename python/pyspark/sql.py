@@ -1870,6 +1870,8 @@ class SchemaRDD(RDD):
         rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
         return SchemaRDD(rdd, self.sql_ctx)
 
+
+    def toJSON(self, use_unicode=False):
         """Convert a SchemaRDD into a MappedRDD of JSON documents; one document per row.
 
         >>> srdd1 = sqlCtx.jsonRDD(json)
@@ -1883,7 +1885,6 @@ class SchemaRDD(RDD):
         >>> srdd3.toJSON().collect() == ['{"field4":11}', '{"field4":22}', '{"field4":33}']
         True
         """
-    def toJSON(self, use_unicode=False):
         rdd = self._jschema_rdd.baseSchemaRDD().toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
