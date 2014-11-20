@@ -113,7 +113,6 @@ class JsonProtocolSuite extends FunSuite {
     // TaskEndReason
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "Some exception")
-
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskEndReason
     val exceptionFailure = new ExceptionFailure(exception, None)
