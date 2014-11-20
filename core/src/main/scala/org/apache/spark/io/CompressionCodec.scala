@@ -49,13 +49,14 @@ trait CompressionCodec {
 
 private[spark] object CompressionCodec extends Logging {
 
+  private val configKey = "spark.io.compression.codec"
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
 
   def createCodec(conf: SparkConf): CompressionCodec = {
-    createCodec(conf, conf.get("spark.io.compression.codec", DEFAULT_COMPRESSION_CODEC))
+    createCodec(conf, conf.get(configKey, DEFAULT_COMPRESSION_CODEC))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
@@ -68,9 +69,11 @@ private[spark] object CompressionCodec extends Logging {
       case e: ClassNotFoundException => None
     }
     codec.filter(_.isAvailable())
-      .getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available."))
+      .getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
+      s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
   }
 
+  val FALLBACK_COMPRESSION_CODEC = "lzf"
   val DEFAULT_COMPRESSION_CODEC = "snappy"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
