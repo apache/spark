@@ -16,6 +16,8 @@ exportMethods(
               "filterRDD",
               "flatMap",
               "flatMapValues",
+              "foreach",
+              "foreachPartition",
               "groupByKey",
               "join",
               "keys",

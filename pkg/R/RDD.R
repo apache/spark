@@ -707,6 +707,55 @@ setMethod("minimum",
             reduce(rdd, min)
           })
 
+#' Applies a function to all elements in an RDD, and force it evaluated.
+#'
+#' @param rdd The RDD to apply the function
+#' @param func The function to be applied.
+#' @export
+#' @rdname foreach
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' foreach(rdd, print)
+#'}
+setGeneric("foreach", function(rdd, func) { standardGeneric("foreach") })
+
+#' @rdname foreach
+#' @aliases foreach,RDD,function-method
+setMethod("foreach",
+          signature(rdd = "RDD", func="function"),
+          function(rdd, func) {
+            partition.func <- function(x) {
+              lapply(x, func)
+              NULL
+            }
+            invisible(collect(mapPartitions(rdd, partition.func)))
+          })
+
+#' Applies a function to each partition in an RDD, and force it evaluated.
+#'
+#' @param rdd The RDD to apply the function
+#' @param func The function to be applied to partitions.
+#' @export
+#' @rdname foreach
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' foreachPartition(rdd, function(part) { lapply(part, print); NULL })
+#'}
+setGeneric("foreachPartition", 
+           function(rdd, func) { standardGeneric("foreachPartition") })
+
+#' @rdname foreach
+#' @aliases foreachPartition,RDD,function-method
+setMethod("foreachPartition",
+          signature(rdd = "RDD", func="function"),
+          function(rdd, func) {
+            invisible(collect(mapPartitions(rdd, func)))
+          })
+
 #' Take elements from an RDD.
 #'
 #' This function takes the first NUM elements in the RDD and
