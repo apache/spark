@@ -268,8 +268,7 @@ class RandomForest(object):
                Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
                If "auto" is set, this parameter is set based on numTrees:
                if numTrees == 1, set to "all";
-               if numTrees > 1 (forest) set to "sqrt" for classification and to
-               "onethird" for regression.
+               if numTrees > 1 (forest) set to "sqrt".
         :param impurity: Criterion used for information gain calculation.
                Supported values: "gini" (recommended) or "entropy".
         :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
@@ -342,8 +341,7 @@ class RandomForest(object):
                Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
                If "auto" is set, this parameter is set based on numTrees:
                if numTrees == 1, set to "all";
-               if numTrees > 1 (forest) set to "sqrt" for classification and
-               to "onethird" for regression.
+               if numTrees > 1 (forest) set to "onethird" for regression.
         :param impurity: Criterion used for information gain calculation.
                Supported values: "variance".
         :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
