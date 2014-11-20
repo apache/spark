@@ -152,7 +152,6 @@ def master(args):
             for task in dag.tasks:
                 if task.task_id not in ti_dict:
                     # Brand new task, let's get started
-                    print "SD:" + str(task.start_date)
                     ti = TI(task, task.start_date)
                     executor.queue_command(ti.key, ti.command())
                 else:
