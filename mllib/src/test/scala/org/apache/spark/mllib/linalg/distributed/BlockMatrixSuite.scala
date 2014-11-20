@@ -66,6 +66,20 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(gridBasedMat.numCols() === n)
   }
 
+  test("partitioner and repartition") {
+    assert(colBasedMat.partitioner.name === "column")
+    assert(rowBasedMat.partitioner.name === "row")
+    assert(gridBasedMat.partitioner.name === "grid")
+
+    val colPart = new ColumnBasedPartitioner(numColBlocks, rowPerPart, colPerPart)
+    val rowPart = new RowBasedPartitioner(numRowBlocks, rowPerPart, colPerPart)
+    gridBasedMat.repartition(rowPart).asInstanceOf[BlockMatrix]
+    assert(gridBasedMat.partitioner.name === "row")
+
+    gridBasedMat.repartition(colPart).asInstanceOf[BlockMatrix]
+    assert(gridBasedMat.partitioner.name === "column")
+  }
+
   test("toBreeze and collect") {
     val expected = BDM(
       (1.0, 0.0, 0.0, 0.0),

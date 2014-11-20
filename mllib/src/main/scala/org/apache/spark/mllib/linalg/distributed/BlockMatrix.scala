@@ -155,13 +155,11 @@ class ColumnBasedPartitioner(
  * @param numRowBlocks Number of blocks that form the rows of this matrix
  * @param numColBlocks Number of blocks that form the columns of this matrix
  * @param rdd The RDD of SubMatrices (local matrices) that form this matrix
- * @param partitioner A partitioner that specifies how SubMatrices are stored in the cluster
  */
 class BlockMatrix(
     val numRowBlocks: Int,
     val numColBlocks: Int,
-    val rdd: RDD[SubMatrix],
-    val partitioner: BlockMatrixPartitioner) extends DistributedMatrix with Logging {
+    val rdd: RDD[SubMatrix]) extends DistributedMatrix with Logging {
 
   /**
    * Alternate constructor for BlockMatrix without the input of a partitioner. Will use a Grid
@@ -170,11 +168,31 @@ class BlockMatrix(
    * @param numRowBlocks Number of blocks that form the rows of this matrix
    * @param numColBlocks Number of blocks that form the columns of this matrix
    * @param rdd The RDD of SubMatrices (local matrices) that form this matrix
+   * @param partitioner A partitioner that specifies how SubMatrices are stored in the cluster
    */
-  def this(numRowBlocks: Int, numColBlocks: Int, rdd: RDD[SubMatrix]) = {
-    this(numRowBlocks, numColBlocks, rdd, new GridPartitioner(numRowBlocks, numColBlocks,
-        rdd.first().mat.numRows, rdd.first().mat.numCols))
+  def this(
+      numRowBlocks: Int,
+      numColBlocks: Int,
+      rdd: RDD[SubMatrix],
+      partitioner: BlockMatrixPartitioner) = {
+    this(numRowBlocks, numColBlocks, rdd)
+    setPartitioner(partitioner)
   }
+
+  private[mllib] var partitioner: BlockMatrixPartitioner = {
+    val firstSubMatrix = rdd.first().mat
+    new GridPartitioner(numRowBlocks, numColBlocks,
+      firstSubMatrix.numRows, firstSubMatrix.numCols)
+  }
+
+  /**
+   * Set the partitioner for the matrix. For internal use only. Users should use `repartition`.
+   * @param part A partitioner that specifies how SubMatrices are stored in the cluster
+   */
+  private def setPartitioner(part: BlockMatrixPartitioner): Unit = {
+    partitioner = part
+  }
+
   // A key-value pair RDD is required to partition properly
   private var matrixRDD: RDD[(Int, SubMatrix)] = keyBy()
 
@@ -259,8 +277,9 @@ class BlockMatrix(
    * @param part The partitioner to partition by
    * @return The repartitioned BlockMatrix
    */
-  def repartition(part: BlockMatrixPartitioner = partitioner): DistributedMatrix = {
+  def repartition(part: BlockMatrixPartitioner): DistributedMatrix = {
     matrixRDD = keyBy(part)
+    setPartitioner(part)
     this
   }
 
